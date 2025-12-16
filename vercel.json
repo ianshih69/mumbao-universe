@@ -1,6 +1,6 @@
 {
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
-  "outputDirectory": "dist/public",
+  "outputDirectory": "public",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

@@ -1,6 +1,6 @@
 {
   "installCommand": "npm ci",
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run build && (rm -rf public || true) && ( [ -d ./dist/public ] && cp -r ./dist/public ./public || cp -r ../dist/public ./public )",
   "outputDirectory": "public",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

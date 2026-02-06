@@ -1,12 +1,18 @@
 import { Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+import { useMobileViewportHeight } from "@/hooks/useMobileViewportHeight";
 
 export function Hero() {
+  const height = useMobileViewportHeight();
+
   return (
-    <section className="relative h-[60vh] md:h-screen w-full overflow-hidden">
+    <section
+      className="relative w-full overflow-hidden transition-none"
+      style={{ height: height ? `${height}px` : '100svh' }}
+    >
       {/* Background Image with Overlay - Fade In Only (No Movement) */}
-      <motion.div 
+      <motion.div
         className="absolute inset-0 z-0"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -23,12 +29,12 @@ export function Hero() {
       {/* Content */}
       <div className="relative z-10 h-full flex flex-col items-center justify-center text-white text-center px-4">
         {/* Text Content - Fade In Up with Delay */}
-        <motion.div 
+        <motion.div
           className="space-y-8"
           initial={{ opacity: 0, translateY: 30 }}
           animate={{ opacity: 1, translateY: 0 }}
-          transition={{ 
-            duration: 0.8, 
+          transition={{
+            duration: 0.8,
             ease: "easeOut",
             delay: 0.5 // Delay 0.5s so text appears after the image
           }}
@@ -36,31 +42,31 @@ export function Hero() {
           <p className="text-sm md:text-base tracking-[0.3em] uppercase opacity-90">
             Kenting, Taiwan
           </p>
-          
+
           <h2 className="font-serif text-4xl md:text-6xl lg:text-7xl font-light tracking-wider leading-tight">
             The Wandering Walls
           </h2>
-          
+
           <div className="w-24 h-[1px] bg-white/50 mx-auto my-8" />
-          
+
           <p className="font-serif italic text-lg md:text-xl opacity-90 max-w-2xl mx-auto leading-relaxed">
             "Where the wind wanders, and the walls listen."
           </p>
         </motion.div>
 
         {/* Video Play Button */}
-        <motion.div 
+        <motion.div
           className="absolute bottom-12 left-1/2 -translate-x-1/2"
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ 
-            duration: 0.6, 
+          transition={{
+            duration: 0.6,
             ease: "easeOut",
             delay: 1.1 // Appears after text animation completes
           }}
         >
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="lg"
             className="rounded-full w-16 h-16 border-white/30 bg-white/10 backdrop-blur-sm hover:bg-white/20 hover:scale-110 transition-all duration-500 group"
           >

@@ -9,9 +9,9 @@ import { BookingCTA } from "@/components/sections/BookingCTA";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-background font-sans selection:bg-[#E8A0BF] selection:text-white">
+    <div className="min-h-screen-safe bg-background font-sans selection:bg-[#E8A0BF] selection:text-white">
       <Header />
-      
+
       <main>
         <Hero />
         <About />

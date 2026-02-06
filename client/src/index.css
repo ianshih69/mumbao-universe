@@ -5,8 +5,9 @@
 
 @theme inline {
   --font-serif: "Playfair Display", serif;
-  --font-sans: "Noto Serif TC", serif; /* Using Serif as primary font for this design */
-  
+  --font-sans: "Noto Serif TC", serif;
+  /* Using Serif as primary font for this design */
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -45,49 +46,67 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+@utility min-h-screen-safe {
+  min-height: 100vh;
+  min-height: 100svh;
+}
+
+@utility h-screen-safe {
+  height: 100vh;
+  height: 100svh;
+}
+
 :root {
   /* Brutalist Zen Palette */
-  --primary: oklch(0.25 0 0); /* Dark Grey/Black */
-  --primary-foreground: oklch(0.98 0 0); /* White */
+  --primary: oklch(0.25 0 0);
+  /* Dark Grey/Black */
+  --primary-foreground: oklch(0.98 0 0);
+  /* White */
   --sidebar-primary: oklch(0.25 0 0);
   --sidebar-primary-foreground: oklch(0.98 0 0);
-  
-  --background: oklch(0.98 0 0); /* Off-white/Concrete Light */
-  --foreground: oklch(0.25 0 0); /* Dark Grey Text */
-  
+
+  --background: oklch(0.98 0 0);
+  /* Off-white/Concrete Light */
+  --foreground: oklch(0.25 0 0);
+  /* Dark Grey Text */
+
   --card: oklch(0.98 0 0);
   --card-foreground: oklch(0.25 0 0);
-  
+
   --popover: oklch(0.98 0 0);
   --popover-foreground: oklch(0.25 0 0);
-  
-  --secondary: oklch(0.95 0 0); /* Light Grey */
+
+  --secondary: oklch(0.95 0 0);
+  /* Light Grey */
   --secondary-foreground: oklch(0.25 0 0);
-  
+
   --muted: oklch(0.95 0 0);
   --muted-foreground: oklch(0.55 0 0);
-  
+
   --accent: oklch(0.95 0 0);
   --accent-foreground: oklch(0.25 0 0);
-  
-  --destructive: oklch(0.6 0.15 20); /* Muted Red */
+
+  --destructive: oklch(0.6 0.15 20);
+  /* Muted Red */
   --destructive-foreground: oklch(0.98 0 0);
-  
+
   --border: oklch(0.9 0 0);
   --input: oklch(0.9 0 0);
   --ring: oklch(0.8 0 0);
-  
-  --radius: 0rem; /* Sharp edges for Brutalist feel */
-  
+
+  --radius: 0rem;
+  /* Sharp edges for Brutalist feel */
+
   /* Custom Colors */
-  --color-pink-accent: oklch(0.85 0.1 350); /* Soft Pink for borders */
-  
+  --color-pink-accent: oklch(0.85 0.1 350);
+  /* Soft Pink for borders */
+
   --chart-1: oklch(0.4 0 0);
   --chart-2: oklch(0.5 0 0);
   --chart-3: oklch(0.6 0 0);
   --chart-4: oklch(0.7 0 0);
   --chart-5: oklch(0.8 0 0);
-  
+
   --sidebar: oklch(0.98 0 0);
   --sidebar-foreground: oklch(0.25 0 0);
   --sidebar-accent: oklch(0.95 0 0);
@@ -101,40 +120,42 @@
   --primary-foreground: oklch(0.1 0 0);
   --sidebar-primary: oklch(0.98 0 0);
   --sidebar-primary-foreground: oklch(0.1 0 0);
-  
-  --background: oklch(0.1 0 0); /* Deep Dark Grey */
-  --foreground: oklch(0.9 0 0); /* Off-white Text */
-  
+
+  --background: oklch(0.1 0 0);
+  /* Deep Dark Grey */
+  --foreground: oklch(0.9 0 0);
+  /* Off-white Text */
+
   --card: oklch(0.12 0 0);
   --card-foreground: oklch(0.9 0 0);
-  
+
   --popover: oklch(0.12 0 0);
   --popover-foreground: oklch(0.9 0 0);
-  
+
   --secondary: oklch(0.2 0 0);
   --secondary-foreground: oklch(0.9 0 0);
-  
+
   --muted: oklch(0.2 0 0);
   --muted-foreground: oklch(0.6 0 0);
-  
+
   --accent: oklch(0.2 0 0);
   --accent-foreground: oklch(0.9 0 0);
-  
+
   --destructive: oklch(0.6 0.15 20);
   --destructive-foreground: oklch(0.98 0 0);
-  
+
   --border: oklch(0.25 0 0);
   --input: oklch(0.25 0 0);
   --ring: oklch(0.4 0 0);
-  
+
   --color-pink-accent: oklch(0.85 0.1 350);
-  
+
   --chart-1: oklch(0.4 0 0);
   --chart-2: oklch(0.5 0 0);
   --chart-3: oklch(0.6 0 0);
   --chart-4: oklch(0.7 0 0);
   --chart-5: oklch(0.8 0 0);
-  
+
   --sidebar: oklch(0.12 0 0);
   --sidebar-foreground: oklch(0.9 0 0);
   --sidebar-accent: oklch(0.2 0 0);
@@ -147,9 +168,11 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
+
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
   [type="button"]:not(:disabled),
@@ -164,6 +187,7 @@
 }
 
 @layer components {
+
   /**
    * Custom container utility that centers content and adds responsive padding.
    *
@@ -181,7 +205,8 @@
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
+    padding-left: 1rem;
+    /* 16px - mobile padding */
     padding-right: 1rem;
   }
 
@@ -192,16 +217,19 @@
 
   @media (min-width: 640px) {
     .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
+      padding-left: 1.5rem;
+      /* 24px - tablet padding */
       padding-right: 1.5rem;
     }
   }
 
   @media (min-width: 1024px) {
     .container {
-      padding-left: 2rem; /* 32px - desktop padding */
+      padding-left: 2rem;
+      /* 32px - desktop padding */
       padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
+      max-width: 1280px;
+      /* Standard content width */
     }
   }
 }

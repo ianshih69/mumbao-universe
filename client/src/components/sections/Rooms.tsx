@@ -1,13 +1,14 @@
+import * as React from "react";
 import {
   Carousel,
   CarouselContent,
   CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
+  type CarouselApi,
 } from "@/components/ui/carousel";
 import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 const rooms = [
   {
@@ -36,13 +37,46 @@ const rooms = [
     desc: "Reflecting the moonlight",
     poetry: "月光灑落，倒映心靈的寧靜",
     tags: ["20 Ping", "Garden View", "Tatami"]
+  },
+  {
+    id: 4,
+    name: "Mist Valley",
+    zhName: "霧谷 · 雙人房",
+    image: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?q=80&w=3000&auto=format&fit=crop",
+    desc: "Embrace the mountain mist",
+    poetry: "山嵐繚繞，如詩如畫的仙境",
+    tags: ["24 Ping", "Mountain View", "Balcony"]
+  },
+  {
+    id: 5,
+    name: "Starry Night",
+    zhName: "星空 · 四人房",
+    image: "https://images.unsplash.com/photo-1505691938895-1758d7feb511?q=80&w=3000&auto=format&fit=crop",
+    desc: "Watch the stars from your bed",
+    poetry: "仰望星空，許下最美的願望",
+    tags: ["30 Ping", "Sky View", "Family"]
   }
 ];
 
 export function Rooms() {
+  const [api, setApi] = React.useState<CarouselApi>();
+  const [current, setCurrent] = React.useState(0);
+  const [count, setCount] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!api) return;
+
+    setCount(api.scrollSnapList().length);
+    setCurrent(api.selectedScrollSnap() + 1);
+
+    api.on("select", () => {
+      setCurrent(api.selectedScrollSnap() + 1);
+    });
+  }, [api]);
+
   return (
-    <section className="py-24 bg-white overflow-hidden">
-      <div className="container mx-auto px-4 md:px-8">
+    <section className="py-24 bg-white">
+      <div className="container mx-auto px-4 md:px-8 relative">
 
         {/* Header */}
         <motion.div
@@ -63,61 +97,26 @@ export function Rooms() {
           </p>
         </motion.div>
 
-        {/* Desktop Grid Layout */}
-        <div className="hidden md:grid grid-cols-3 gap-8">
-          {rooms.map((room, idx) => (
-            <motion.div
-              key={room.id}
-              className="group cursor-pointer"
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: idx * 0.1 }}
-              viewport={{ once: true }}
-            >
-              {/* Image Container */}
-              <div className="aspect-[4/3] overflow-hidden mb-6 bg-gray-100 rounded-none relative">
-                <img
-                  src={room.image}
-                  alt={room.name}
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                />
-              </div>
-
-              {/* Content Container (Below Image) */}
-              <div className="text-left space-y-3">
-                <h3 className="font-serif text-2xl text-gray-900 group-hover:text-gray-600 transition-colors">
-                  {room.zhName}
-                </h3>
-
-                {/* Tags */}
-                <div className="flex gap-3 text-[10px] text-gray-400 uppercase tracking-wider font-sans">
-                  {room.tags.map((tag, i) => (
-                    <span key={i} className="border border-gray-200 px-2 py-1 rounded-sm">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-
-                <p className="text-gray-500 text-sm font-serif tracking-in-widest italic pt-2 opacity-80 decoration-gray-300">
-                  "{room.poetry}"
-                </p>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-
-        {/* Mobile Swiper Layout */}
-        <div className="md:hidden">
+        {/* Carousel */}
+        <div className="relative md:px-14">
           <Carousel
+            setApi={setApi}
             opts={{
               align: "start",
               loop: true,
             }}
             className="w-full"
           >
-            <CarouselContent className="-ml-4">
+            <CarouselContent className="-ml-4 md:-ml-8">
+              {/* 
+                  CHANGE LOG: 
+                  - Removed Tags loop.
+                  - Adjusted h3 tracking-wide.
+                  - Cleaned up layout for minimalist textual look.
+                  - Added "View Room" link.
+               */}
               {rooms.map((room) => (
-                <CarouselItem key={room.id} className="pl-4 basis-[85%]">
+                <CarouselItem key={room.id} className="pl-4 md:pl-8 basis-[85%] md:basis-1/2 lg:basis-1/3">
                   <div className="group cursor-pointer">
                     {/* Image Container */}
                     <div className="aspect-[4/3] overflow-hidden mb-6 bg-gray-100 rounded-none relative">
@@ -129,33 +128,67 @@ export function Rooms() {
                     </div>
 
                     {/* Content Container (Below Image) */}
-                    <div className="text-left space-y-3 px-1">
-                      <h3 className="font-serif text-2xl text-gray-900">
+                    <div className="text-left space-y-2 px-1">
+                      <h3 className="font-serif text-2xl text-gray-900 group-hover:text-gray-600 transition-colors tracking-wide">
                         {room.zhName}
                       </h3>
 
-                      {/* Tags */}
-                      <div className="flex gap-2 text-[10px] text-gray-400 uppercase tracking-wider font-sans flex-wrap">
-                        {room.tags.map((tag, i) => (
-                          <span key={i} className="border border-gray-200 px-2 py-1 rounded-sm">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-
-                      <p className="text-gray-500 text-sm font-serif tracking-in-widest italic pt-2 opacity-80">
+                      <p className="text-gray-500 text-sm font-serif tracking-in-widest italic opacity-80 decoration-gray-300">
                         "{room.poetry}"
                       </p>
+
+                      <div className="pt-2">
+                        <span className="text-[10px] tracking-[0.2em] uppercase text-gray-400 group-hover:text-black transition-colors flex items-center gap-2">
+                          View Room <ArrowRight className="w-3 h-3" />
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </CarouselItem>
               ))}
             </CarouselContent>
           </Carousel>
+
+          {/* Navigation Buttons (Desktop Only) */}
+          <div className="hidden md:block">
+            <Button
+              variant="outline"
+              size="icon"
+              className="absolute top-[35%] left-0 rounded-full w-12 h-12 border border-gray-200 bg-white/50 backdrop-blur-sm hover:bg-black hover:text-white hover:border-black transition-all duration-300"
+              onClick={() => api?.scrollPrev()}
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="absolute top-[35%] right-0 rounded-full w-12 h-12 border border-gray-200 bg-white/50 backdrop-blur-sm hover:bg-black hover:text-white hover:border-black transition-all duration-300"
+              onClick={() => api?.scrollNext()}
+            >
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Pagination Dots */}
+        <div className="flex justify-center gap-2 mt-12 md:mt-16">
+          {Array.from({ length: count }).map((_, index) => (
+            <button
+              key={index}
+              className={cn(
+                "w-2 h-2 rounded-full transition-all duration-300",
+                current === index + 1
+                  ? "bg-gray-800 w-6"
+                  : "bg-gray-300 hover:bg-gray-400"
+              )}
+              onClick={() => api?.scrollTo(index)}
+              aria-label={`Go to slide ${index + 1}`}
+            />
+          ))}
         </div>
 
         {/* Bottom Action */}
-        <div className="text-center mt-20">
+        <div className="text-center mt-12 md:mt-16">
           <Button variant="outline" className="rounded-none px-12 py-6 uppercase tracking-widest text-xs border-gray-300 text-gray-600 hover:bg-gray-900 hover:text-white transition-all duration-500">
             View All Rooms
           </Button>

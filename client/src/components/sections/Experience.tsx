@@ -10,7 +10,7 @@ export function Experience() {
 
           {/* Card 1: Curated Flavors (慢食 · 嚴選) */}
           <motion.div
-            className="group relative overflow-hidden h-[45vh] md:h-[600px] bg-white shadow-lg hover:shadow-2xl transition-shadow duration-500"
+            className="group relative overflow-hidden w-full aspect-[4/3] md:aspect-auto md:h-[600px] bg-white shadow-lg hover:shadow-2xl transition-shadow duration-500"
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: "easeOut" }}
@@ -49,7 +49,7 @@ export function Experience() {
 
           {/* Card 2: Slow Living (慢遊 · 提案) */}
           <motion.div
-            className="group relative overflow-hidden h-[45vh] md:h-[600px] bg-white shadow-lg hover:shadow-2xl transition-shadow duration-500"
+            className="group relative overflow-hidden w-full aspect-[4/3] md:aspect-auto md:h-[600px] bg-white shadow-lg hover:shadow-2xl transition-shadow duration-500"
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}

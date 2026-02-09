@@ -39,18 +39,23 @@ export function Hero() {
             delay: 0.5 // Delay 0.5s so text appears after the image
           }}
         >
-          <p className="text-sm md:text-base tracking-[0.3em] uppercase opacity-90">
-            Kenting, Taiwan
+          {/* Top Label */}
+          <p className="text-sm md:text-base tracking-[0.3em] uppercase opacity-80 text-white/90">
+            宜蘭，台灣
           </p>
 
-          <h2 className="font-serif text-4xl md:text-6xl lg:text-7xl font-light tracking-wider leading-tight">
-            The Wandering Walls
+          {/* Main Title */}
+          <h2 className="font-serif text-3xl md:text-6xl lg:text-7xl font-light tracking-widest leading-tight">
+            什麼都不做，
+            <br className="block md:hidden" />
+            也值得被愛
           </h2>
 
           <div className="w-24 h-[1px] bg-white/50 mx-auto my-8" />
 
-          <p className="font-serif italic text-lg md:text-xl opacity-90 max-w-2xl mx-auto leading-relaxed">
-            "Where the wind wanders, and the walls listen."
+          {/* Subtitle */}
+          <p className="font-serif text-base md:text-lg lg:text-xl font-light opacity-90 max-w-2xl mx-auto leading-relaxed tracking-wide">
+            找回你的頻率，成為自己就很好了。
           </p>
         </motion.div>
 

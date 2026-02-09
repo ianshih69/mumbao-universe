@@ -98,7 +98,7 @@ export function Header() {
           <img
             src="/images/logo.webp"
             alt="STime Villa Logo"
-            className="h-12 md:h-16 object-contain"
+            className="h-12 md:h-20 lg:h-24 object-contain"
           />
         </div>
 

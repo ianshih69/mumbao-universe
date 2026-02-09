@@ -10,7 +10,7 @@ export function Experience() {
 
           {/* Card 1: Curated Flavors (慢食 · 嚴選) */}
           <motion.div
-            className="group relative overflow-hidden h-[600px] bg-white shadow-lg hover:shadow-2xl transition-shadow duration-500"
+            className="group relative overflow-hidden h-[45vh] md:h-[600px] bg-white shadow-lg hover:shadow-2xl transition-shadow duration-500"
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: "easeOut" }}
@@ -22,17 +22,17 @@ export function Experience() {
                 alt="Curated Flavors"
                 className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
               />
-              <div className="absolute inset-0 bg-black/30 group-hover:bg-black/50 transition-colors duration-500" />
+              <div className="absolute inset-0 bg-black/40 group-hover:bg-black/60 transition-colors duration-500" />
             </div>
 
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-white p-8 z-10">
               <span className="text-xs tracking-[0.3em] uppercase mb-4 opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all duration-500">
                 Service & Convenience
               </span>
-              <h3 className="font-serif text-4xl md:text-5xl mb-6">
+              <h3 className="font-serif text-3xl md:text-5xl mb-3 md:mb-6">
                 Curated Flavors <br /> <span className="text-2xl md:text-3xl mt-3 block">慢食 · 嚴選</span>
               </h3>
-              <p className="text-sm md:text-base tracking-wider opacity-90 max-w-md mb-8 transform translate-y-4 group-hover:translate-y-0 transition-all duration-500 delay-100 leading-relaxed">
+              <p className="text-sm md:text-base tracking-wider opacity-90 max-w-md mb-6 md:mb-8 transform translate-y-4 group-hover:translate-y-0 transition-all duration-500 delay-100 leading-relaxed px-4 md:px-0">
                 從宜蘭在地名店早餐，到星空下的豪華烤肉派對。
                 <br />
                 慢寶為您打點好一切食材與設備，讓美味不再需要忙碌。
@@ -49,7 +49,7 @@ export function Experience() {
 
           {/* Card 2: Slow Living (慢遊 · 提案) */}
           <motion.div
-            className="group relative overflow-hidden h-[600px] bg-white shadow-lg hover:shadow-2xl transition-shadow duration-500"
+            className="group relative overflow-hidden h-[45vh] md:h-[600px] bg-white shadow-lg hover:shadow-2xl transition-shadow duration-500"
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
@@ -61,17 +61,17 @@ export function Experience() {
                 alt="Slow Living"
                 className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
               />
-              <div className="absolute inset-0 bg-black/30 group-hover:bg-black/50 transition-colors duration-500" />
+              <div className="absolute inset-0 bg-black/40 group-hover:bg-black/60 transition-colors duration-500" />
             </div>
 
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-white p-8 z-10">
               <span className="text-xs tracking-[0.3em] uppercase mb-4 opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all duration-500">
                 Local Depth
               </span>
-              <h3 className="font-serif text-4xl md:text-5xl mb-6">
+              <h3 className="font-serif text-3xl md:text-5xl mb-3 md:mb-6">
                 Slow Living <br /> <span className="text-2xl md:text-3xl mt-3 block">慢遊 · 提案</span>
               </h3>
-              <p className="text-sm md:text-base tracking-wider opacity-90 max-w-md mb-8 transform translate-y-4 group-hover:translate-y-0 transition-all duration-500 delay-100 leading-relaxed">
+              <p className="text-sm md:text-base tracking-wider opacity-90 max-w-md mb-6 md:mb-8 transform translate-y-4 group-hover:translate-y-0 transition-all duration-500 delay-100 leading-relaxed px-4 md:px-0">
                 避開人潮，走進在地人的私房路徑。
                 <br />
                 無論是田間散步或是職人手作，讓我們帶你找回生活的節奏。

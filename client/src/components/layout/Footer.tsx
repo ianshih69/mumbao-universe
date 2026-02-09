@@ -1,82 +1,112 @@
-import { Facebook, Instagram, Mail, Phone, MapPin } from "lucide-react";
+import { Facebook, Instagram, Phone, MapPin, MessageCircle } from "lucide-react";
 
 export function Footer() {
   return (
-    <footer className="bg-[#F5F5F5] pt-20 pb-10 text-primary">
-      <div className="container mx-auto px-4 md:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-16">
-          {/* Contact Info */}
-          <div className="space-y-6">
-            <h3 className="font-serif text-xl tracking-widest mb-6 border-b border-primary/10 pb-4 inline-block">
-              CONTACT
-            </h3>
-            <div className="space-y-4 text-sm tracking-wide opacity-80">
-              <a href="tel:+88688899270" className="flex items-center gap-3 hover:text-[#E8A0BF] transition-colors">
-                <Phone className="w-4 h-4" />
-                <span>+886 987274888</span>
-              </a>
-              <div className="flex items-start gap-3">
-                <MapPin className="w-4 h-4 mt-1" />
-                <span>946 屏東縣恆春鎮崁頭路270號</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="font-bold text-xs border border-primary/30 px-2 py-0.5">統編</span>
-                <span>85582148</span>
-              </div>
-            </div>
+    <footer className="bg-[#EAE8E4] py-16 text-gray-800 border-t border-stone-300">
+      <div className="container mx-auto px-4 md:px-8 max-w-5xl">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-12 lg:gap-16 items-start mb-12">
+
+          {/* Column 1: Brand Identity */}
+          <div className="space-y-4 md:text-left text-center">
+            <h2 className="font-serif text-3xl md:text-4xl tracking-widest text-[#2C2C2C] font-medium">
+              MUMBAO
+            </h2>
+            <p className="text-base text-stone-600 tracking-wide font-serif italic font-medium">
+              "什麼都不做，也值得被愛"
+            </p>
           </div>
 
-          {/* Social Links */}
-          <div className="space-y-6">
-            <h3 className="font-serif text-xl tracking-widest mb-6 border-b border-primary/10 pb-4 inline-block">
-              FOLLOW US
+          {/* Column 2: Navigation */}
+          <div className="space-y-6 text-center md:text-left">
+            <h3 className="font-sans text-xs tracking-[0.25em] font-semibold text-stone-500 uppercase mb-4 border-b border-stone-300 pb-2 inline-block md:block">
+              Explore
             </h3>
-            <div className="flex gap-6">
-              <a href="#" className="hover:text-[#E8A0BF] transition-colors transform hover:-translate-y-1 duration-300">
-                <Facebook className="w-6 h-6" />
-              </a>
-              <a href="#" className="hover:text-[#E8A0BF] transition-colors transform hover:-translate-y-1 duration-300">
-                <Instagram className="w-6 h-6" />
-              </a>
-              <a href="#" className="hover:text-[#E8A0BF] transition-colors transform hover:-translate-y-1 duration-300">
-                <Mail className="w-6 h-6" />
-              </a>
-            </div>
-          </div>
-
-          {/* Quick Links */}
-          <div className="space-y-6">
-             <h3 className="font-serif text-xl tracking-widest mb-6 border-b border-primary/10 pb-4 inline-block">
-              EXPLORE
-            </h3>
-            <ul className="space-y-3 text-sm tracking-wide opacity-80">
-              <li><a href="#" className="hover:text-[#E8A0BF] transition-colors">About Us</a></li>
-              <li><a href="#" className="hover:text-[#E8A0BF] transition-colors">Rooms</a></li>
-              <li><a href="#" className="hover:text-[#E8A0BF] transition-colors">Dining</a></li>
-              <li><a href="#" className="hover:text-[#E8A0BF] transition-colors">News</a></li>
+            <ul className="space-y-3 text-base tracking-wide text-stone-700 font-serif leading-relaxed">
+              <li>
+                <a href="#" className="group flex items-baseline justify-center md:justify-start gap-2">
+                  <span className="block font-medium group-hover:text-black transition-colors">About Us</span>
+                  <span className="block text-xs text-stone-500 group-hover:text-stone-700 transition-colors">/ 關於慢寶</span>
+                </a>
+              </li>
+              <li>
+                <a href="#" className="group flex items-baseline justify-center md:justify-start gap-2">
+                  <span className="block font-medium group-hover:text-black transition-colors">Rooms</span>
+                  <span className="block text-xs text-stone-500 group-hover:text-stone-700 transition-colors">/ 空間棲息</span>
+                </a>
+              </li>
+              <li>
+                <a href="#" className="group flex items-baseline justify-center md:justify-start gap-2">
+                  <span className="block font-medium group-hover:text-black transition-colors">Experience</span>
+                  <span className="block text-xs text-stone-500 group-hover:text-stone-700 transition-colors">/ 慢食慢遊</span>
+                </a>
+              </li>
+              <li>
+                <a href="#" className="group flex items-baseline justify-center md:justify-start gap-2">
+                  <span className="block font-medium group-hover:text-black transition-colors">News</span>
+                  <span className="block text-xs text-stone-500 group-hover:text-stone-700 transition-colors">/ 最新消息</span>
+                </a>
+              </li>
             </ul>
           </div>
-          
-           {/* Newsletter */}
-          <div className="space-y-6">
-             <h3 className="font-serif text-xl tracking-widest mb-6 border-b border-primary/10 pb-4 inline-block">
-              NEWSLETTER
+
+          {/* Column 3: Contact & Social (Horizontal Layout) */}
+          <div className="space-y-6 text-center md:text-left">
+            <h3 className="font-sans text-xs tracking-[0.25em] font-semibold text-stone-500 uppercase mb-4 border-b border-stone-300 pb-2 inline-block md:block">
+              Contact
             </h3>
-            <p className="text-sm opacity-60 mb-4">Subscribe to receive updates and special offers.</p>
-            <div className="flex border-b border-primary/30 pb-2">
-                <input type="email" placeholder="Your Email" className="bg-transparent w-full outline-none text-sm" />
-                <button className="text-xs font-bold uppercase tracking-widest hover:text-[#E8A0BF] transition-colors">Send</button>
+
+            <div className="flex flex-col md:flex-row gap-6 items-start justify-center md:justify-start">
+              {/* Left: Info & Icons */}
+              <div className="space-y-3 text-base tracking-wide text-stone-700 font-serif leading-relaxed flex-1">
+                <div className="space-y-2">
+                  <div className="flex items-start justify-center md:justify-start gap-3">
+                    <MapPin className="w-4 h-4 mt-1 text-stone-500" />
+                    <span>宜蘭縣員山鄉深洲二路158號</span>
+                  </div>
+                  <a href="tel:+886987274888" className="flex items-center justify-center md:justify-start gap-3 hover:text-black transition-colors">
+                    <Phone className="w-4 h-4 text-stone-500" />
+                    <span>+886 987-274-888</span>
+                  </a>
+                </div>
+
+                <div className="flex items-center justify-center md:justify-start gap-4 pt-2">
+                  <a href="#" className="text-stone-500 hover:text-stone-900 transition-colors duration-300">
+                    <Facebook className="w-5 h-5" />
+                  </a>
+                  <a href="#" className="text-stone-500 hover:text-stone-900 transition-colors duration-300">
+                    <Instagram className="w-5 h-5" />
+                  </a>
+                  <a href="#" className="text-stone-500 hover:text-[#00C300] transition-colors duration-300" title="LINE">
+                    <MessageCircle className="w-5 h-5" />
+                  </a>
+                </div>
+                <div className="pt-1 text-xs text-stone-500">
+                  統編：12345678
+                </div>
+              </div>
+
+              {/* Right: QR Code (Horizontal) */}
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-20 h-20 bg-white p-1.5 border border-stone-300">
+                  <img
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://line.me/ti/p/@mumbao"
+                    alt="LINE QR Code"
+                    className="w-full h-full object-contain opacity-80"
+                  />
+                </div>
+                <span className="text-[10px] text-stone-500 tracking-wide text-center">LINE 預約</span>
+              </div>
             </div>
           </div>
+
         </div>
 
         {/* Bottom Bar */}
-        <div className="border-t border-primary/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs opacity-50 tracking-wider">
-          <p>Copyright © 2025 The Wandering Walls. All rights reserved.</p>
+        <div className="border-t border-stone-300 pt-6 flex flex-col md:flex-row justify-between items-center gap-3 text-xs text-stone-600 tracking-wider font-medium font-sans">
+          <p>© 2026 The Mumbao Studio. All rights reserved.</p>
           <div className="flex gap-6">
-            <a href="#" className="hover:opacity-100 transition-opacity">Sitemap</a>
-            <a href="#" className="hover:opacity-100 transition-opacity">Privacy Policy</a>
-            <span>Design by Manus</span>
+            <a href="#" className="hover:text-black transition-colors">Privacy Policy</a>
+            <a href="#" className="hover:text-black transition-colors">Terms of Service</a>
           </div>
         </div>
       </div>

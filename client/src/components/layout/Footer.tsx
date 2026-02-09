@@ -23,25 +23,25 @@ export function Footer() {
             </h3>
             <ul className="space-y-3 text-base tracking-wide text-stone-700 font-serif leading-relaxed">
               <li>
-                <a href="#" className="group flex items-baseline justify-center md:justify-start gap-2">
+                <a href="/#about" className="group flex items-baseline justify-center md:justify-start gap-2">
                   <span className="block font-medium group-hover:text-black transition-colors">About Us</span>
                   <span className="block text-xs text-stone-500 group-hover:text-stone-700 transition-colors">/ 關於慢寶</span>
                 </a>
               </li>
               <li>
-                <a href="#" className="group flex items-baseline justify-center md:justify-start gap-2">
+                <a href="/#rooms" className="group flex items-baseline justify-center md:justify-start gap-2">
                   <span className="block font-medium group-hover:text-black transition-colors">Rooms</span>
                   <span className="block text-xs text-stone-500 group-hover:text-stone-700 transition-colors">/ 空間棲息</span>
                 </a>
               </li>
               <li>
-                <a href="#" className="group flex items-baseline justify-center md:justify-start gap-2">
+                <a href="/#experience" className="group flex items-baseline justify-center md:justify-start gap-2">
                   <span className="block font-medium group-hover:text-black transition-colors">Experience</span>
                   <span className="block text-xs text-stone-500 group-hover:text-stone-700 transition-colors">/ 慢食慢遊</span>
                 </a>
               </li>
               <li>
-                <a href="#" className="group flex items-baseline justify-center md:justify-start gap-2">
+                <a href="/#news" className="group flex items-baseline justify-center md:justify-start gap-2">
                   <span className="block font-medium group-hover:text-black transition-colors">News</span>
                   <span className="block text-xs text-stone-500 group-hover:text-stone-700 transition-colors">/ 最新消息</span>
                 </a>
@@ -80,7 +80,7 @@ export function Footer() {
                     <MessageCircle className="w-5 h-5" />
                   </a>
                 </div>
-                <div className="pt-1 text-xs text-stone-500">
+                <div className="pt-1 text-base text-stone-700">
                   統編：12345678
                 </div>
               </div>

@@ -13,11 +13,19 @@ export default function Home() {
       <Header />
 
       <main>
-        <Hero />
+        <div id="about">
+          <Hero />
+        </div>
         <About />
-        <News />
-        <Experience />
-        <Rooms />
+        <div id="news">
+          <News />
+        </div>
+        <div id="experience">
+          <Experience />
+        </div>
+        <div id="rooms">
+          <Rooms />
+        </div>
         <BookingCTA />
       </main>
 

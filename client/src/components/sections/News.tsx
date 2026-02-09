@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion"; // Added AnimatePresence
+import { useState } from "react"; // Added useState
 
 const newsItems = [
   {
@@ -46,7 +47,7 @@ const newsItems = [
 ];
 
 export function News() {
-  const featuredNews = newsItems[0];
+  const [activeNews, setActiveNews] = useState(newsItems[0]); // State for interactive preview
   const sideNews = newsItems.slice(1, 4);
 
   return (
@@ -69,7 +70,7 @@ export function News() {
           </Button>
         </div>
 
-        {/* --- Mobile: Horizontal Scroll --- */}
+        {/* --- Mobile: Horizontal Scroll (Unchanged) --- */}
         <div className="flex overflow-x-auto snap-x snap-mandatory pb-8 -mx-4 px-4 md:hidden scrollbar-hide">
           {newsItems.map((item, idx) => (
             <motion.div
@@ -102,71 +103,85 @@ export function News() {
           ))}
         </div>
 
-        {/* --- Desktop: Asymmetrical Grid --- */}
+        {/* --- Desktop: Asymmetrical Grid (Interactive) --- */}
         <div className="hidden md:grid grid-cols-12 gap-8">
-          {/* Left: Featured Post (Span 8) */}
-          <motion.div
-            className="col-span-8 group cursor-pointer relative"
-            initial={{ opacity: 0, x: -20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-          >
-            <div className="relative overflow-hidden aspect-video rounded-2xl mb-6 bg-gray-100">
-              <img
-                src={featuredNews.image}
-                alt={featuredNews.title}
-                className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
-              />
-              <div className="absolute top-6 left-6 bg-white/90 backdrop-blur px-3 py-1 text-xs uppercase tracking-widest rounded-sm font-medium">
-                {featuredNews.category}
-              </div>
-            </div>
-            <div className="space-y-4 pr-12">
-              <div className="flex items-center gap-4 text-sm text-gray-400 font-mono tracking-wider">
-                <span>{featuredNews.date}</span>
-                <span className="w-8 h-[1px] bg-gray-300" />
-                <span>Featured</span>
-              </div>
-              <h3 className="font-serif text-3xl font-medium text-primary group-hover:text-[#E8A0BF] transition-colors duration-300 leading-tight">
-                {featuredNews.title}
-              </h3>
-              <p className="text-gray-500 font-light leading-relaxed line-clamp-3">
-                {featuredNews.desc}
-              </p>
-            </div>
-          </motion.div>
-
-          {/* Right: Side List (Span 4) */}
-          <div className="col-span-4 flex flex-col gap-6">
-            {sideNews.map((item, idx) => (
+          {/* Left: Featured Post (Displays activeNews) */}
+          <div className="col-span-8 relative min-h-[500px]">
+            {/* AnimatePresence for smooth transitions between active items */}
+            <AnimatePresence mode="wait">
               <motion.div
-                key={item.id}
-                className="flex gap-4 group cursor-pointer border-b border-gray-100 pb-6 last:border-0 last:pb-0"
-                initial={{ opacity: 0, x: 20 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: idx * 0.1 }}
+                key={activeNews.id} // Key change triggers animation
+                className="group cursor-pointer relative w-full h-full"
+                initial={{ opacity: 0 }} // Simple fade in
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4 }}
               >
-                {/* Thumbnail */}
-                <div className="w-24 h-24 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100">
+                <div className="relative overflow-hidden aspect-video rounded-2xl mb-6 bg-gray-100">
                   <img
-                    src={item.image}
-                    alt={item.title}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    src={activeNews.image}
+                    alt={activeNews.title}
+                    className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
                   />
+                  <div className="absolute top-6 left-6 bg-white/90 backdrop-blur px-3 py-1 text-xs uppercase tracking-widest rounded-sm font-medium">
+                    {activeNews.category}
+                  </div>
                 </div>
-                {/* Info */}
-                <div className="flex flex-col justify-center space-y-2">
-                  <span className="text-[10px] text-gray-400 tracking-wider font-mono uppercase">
-                    {item.date} • {item.category}
-                  </span>
-                  <h4 className="font-serif text-lg text-primary group-hover:text-[#E8A0BF] transition-colors duration-300 leading-snug line-clamp-2">
-                    {item.title}
-                  </h4>
+                <div className="space-y-4 pr-12">
+                  <div className="flex items-center gap-4 text-sm text-gray-400 font-mono tracking-wider">
+                    <span>{activeNews.date}</span>
+                    <span className="w-8 h-[1px] bg-gray-300" />
+                    {/* Show 'Featured' only if it's the first item, otherwise 'Preview' or similar? kept simple for now */}
+                    <span>{activeNews.id === 1 ? 'Featured' : 'Preview'}</span>
+                  </div>
+                  <h3 className="font-serif text-3xl font-medium text-primary group-hover:text-[#E8A0BF] transition-colors duration-300 leading-tight">
+                    {activeNews.title}
+                  </h3>
+                  <p className="text-gray-500 font-light leading-relaxed line-clamp-3">
+                    {activeNews.desc}
+                  </p>
                 </div>
               </motion.div>
-            ))}
+            </AnimatePresence>
+          </div>
+
+          {/* Right: Side List (Interactive Triggers) */}
+          <div
+            className="col-span-4 flex flex-col gap-6"
+            onMouseLeave={() => setActiveNews(newsItems[0])} // Reset on leave
+          >
+            {sideNews.map((item, idx) => {
+              const isActive = activeNews.id === item.id;
+              return (
+                <motion.div
+                  key={item.id}
+                  className={`flex gap-4 group cursor-pointer border-b border-gray-100 pb-6 last:border-0 last:pb-0 transition-all duration-300 ${isActive ? 'pl-4 border-l-4 border-l-[#E8A0BF] border-b-gray-100' : 'pl-0 border-l-0'}`}
+                  initial={{ opacity: 0, x: 20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.6, delay: idx * 0.1 }}
+                  onMouseEnter={() => setActiveNews(item)} // Trigger preview
+                >
+                  {/* Thumbnail */}
+                  <div className="w-24 h-24 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100">
+                    <img
+                      src={item.image}
+                      alt={item.title}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    />
+                  </div>
+                  {/* Info */}
+                  <div className="flex flex-col justify-center space-y-2">
+                    <span className="text-[10px] text-gray-400 tracking-wider font-mono uppercase">
+                      {item.date} • {item.category}
+                    </span>
+                    <h4 className={`font-serif text-lg transition-colors duration-300 leading-snug line-clamp-2 ${isActive ? 'text-[#E8A0BF]' : 'text-primary group-hover:text-[#E8A0BF]'}`}>
+                      {item.title}
+                    </h4>
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       </div>

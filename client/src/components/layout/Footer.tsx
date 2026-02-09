@@ -2,12 +2,12 @@ import { Facebook, Instagram, Phone, MapPin, MessageCircle } from "lucide-react"
 
 export function Footer() {
   return (
-    <footer className="bg-[#EAE8E4] py-16 text-gray-800 border-t border-stone-300">
-      <div className="container mx-auto px-4 md:px-8 max-w-5xl">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-12 lg:gap-16 items-start mb-12">
+    <footer className="bg-[#EAE8E4] py-12 md:py-16 text-gray-800 border-t border-stone-300">
+      <div className="container mx-auto px-6 md:px-8 max-w-5xl">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-16 items-start mb-8 md:mb-12">
 
           {/* Column 1: Brand Identity */}
-          <div className="space-y-4 md:text-left text-center">
+          <div className="space-y-3 text-left">
             <h2 className="font-serif text-3xl md:text-4xl tracking-widest text-[#2C2C2C] font-medium">
               MUMBAO
             </h2>
@@ -16,32 +16,33 @@ export function Footer() {
             </p>
           </div>
 
-          {/* Column 2: Navigation */}
-          <div className="space-y-6 text-center md:text-left">
-            <h3 className="font-sans text-xs tracking-[0.25em] font-semibold text-stone-500 uppercase mb-4 border-b border-stone-300 pb-2 inline-block md:block">
+          {/* Column 2: Navigation (Mobile: 2-Col Grid, Desktop: Stack) */}
+          <div className="space-y-4 text-left">
+            <h3 className="font-sans text-xs tracking-[0.25em] font-semibold text-stone-500 uppercase mb-3 border-b border-stone-300 pb-2 inline-block">
               Explore
             </h3>
-            <ul className="space-y-3 text-base tracking-wide text-stone-700 font-serif leading-relaxed">
+            {/* Reordered items to place About/Rooms in Left Col and Experience/News in Right Col on Mobile Grid */}
+            <ul className="grid grid-cols-2 md:grid-cols-1 gap-x-4 gap-y-2 text-base tracking-wide text-stone-700 font-serif leading-relaxed">
               <li>
-                <a href="/#about" className="group flex items-baseline justify-center md:justify-start gap-2">
+                <a href="/#about" className="group flex items-baseline justify-start gap-2">
                   <span className="block font-medium group-hover:text-black transition-colors">About Us</span>
                   <span className="block text-xs text-stone-500 group-hover:text-stone-700 transition-colors">/ 關於慢寶</span>
                 </a>
               </li>
               <li>
-                <a href="/#rooms" className="group flex items-baseline justify-center md:justify-start gap-2">
-                  <span className="block font-medium group-hover:text-black transition-colors">Rooms</span>
-                  <span className="block text-xs text-stone-500 group-hover:text-stone-700 transition-colors">/ 空間棲息</span>
-                </a>
-              </li>
-              <li>
-                <a href="/#experience" className="group flex items-baseline justify-center md:justify-start gap-2">
+                <a href="/#experience" className="group flex items-baseline justify-start gap-2">
                   <span className="block font-medium group-hover:text-black transition-colors">Experience</span>
                   <span className="block text-xs text-stone-500 group-hover:text-stone-700 transition-colors">/ 慢食慢遊</span>
                 </a>
               </li>
               <li>
-                <a href="/#news" className="group flex items-baseline justify-center md:justify-start gap-2">
+                <a href="/#rooms" className="group flex items-baseline justify-start gap-2">
+                  <span className="block font-medium group-hover:text-black transition-colors">Rooms</span>
+                  <span className="block text-xs text-stone-500 group-hover:text-stone-700 transition-colors">/ 空間棲息</span>
+                </a>
+              </li>
+              <li>
+                <a href="/#news" className="group flex items-baseline justify-start gap-2">
                   <span className="block font-medium group-hover:text-black transition-colors">News</span>
                   <span className="block text-xs text-stone-500 group-hover:text-stone-700 transition-colors">/ 最新消息</span>
                 </a>
@@ -49,27 +50,31 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Column 3: Contact & Social (Horizontal Layout) */}
-          <div className="space-y-6 text-center md:text-left">
-            <h3 className="font-sans text-xs tracking-[0.25em] font-semibold text-stone-500 uppercase mb-4 border-b border-stone-300 pb-2 inline-block md:block">
+          {/* Column 3: Contact & Social (Mobile: Flex Row, Desktop: Flex Row) */}
+          <div className="space-y-4 text-left">
+            <h3 className="font-sans text-xs tracking-[0.25em] font-semibold text-stone-500 uppercase mb-3 border-b border-stone-300 pb-2 inline-block">
               Contact
             </h3>
 
-            <div className="flex flex-col md:flex-row gap-6 items-start justify-center md:justify-start">
-              {/* Left: Info & Icons */}
-              <div className="space-y-3 text-base tracking-wide text-stone-700 font-serif leading-relaxed flex-1">
-                <div className="space-y-2">
-                  <div className="flex items-start justify-center md:justify-start gap-3">
-                    <MapPin className="w-4 h-4 mt-1 text-stone-500" />
-                    <span>宜蘭縣員山鄉深洲二路158號</span>
+            <div className="flex flex-row justify-between items-start gap-4">
+              {/* Left (70%): Info & Icons */}
+              <div className="space-y-2 text-base tracking-wide text-stone-700 font-serif leading-snug flex-1">
+                <div className="space-y-1.5">
+                  <div className="flex items-start justify-start gap-2">
+                    <MapPin className="w-4 h-4 mt-1 text-stone-500 shrink-0" />
+                    <span className="text-sm md:text-base">宜蘭縣員山鄉深洲二路158號</span>
                   </div>
-                  <a href="tel:+886987274888" className="flex items-center justify-center md:justify-start gap-3 hover:text-black transition-colors">
-                    <Phone className="w-4 h-4 text-stone-500" />
-                    <span>+886 987-274-888</span>
+                  <a href="tel:+886987274888" className="flex items-center justify-start gap-2 hover:text-black transition-colors">
+                    <Phone className="w-4 h-4 text-stone-500 shrink-0" />
+                    <span className="text-sm md:text-base">+886 987-274-888</span>
                   </a>
                 </div>
 
-                <div className="flex items-center justify-center md:justify-start gap-4 pt-2">
+                <div className="pt-1 text-sm md:text-base text-stone-700">
+                  統編：12345678
+                </div>
+
+                <div className="flex items-center justify-start gap-3 pt-2">
                   <a href="#" className="text-stone-500 hover:text-stone-900 transition-colors duration-300">
                     <Facebook className="w-5 h-5" />
                   </a>
@@ -80,13 +85,10 @@ export function Footer() {
                     <MessageCircle className="w-5 h-5" />
                   </a>
                 </div>
-                <div className="pt-1 text-base text-stone-700">
-                  統編：12345678
-                </div>
               </div>
 
-              {/* Right: QR Code (Horizontal) */}
-              <div className="flex flex-col items-center gap-2">
+              {/* Right (30%): QR Code */}
+              <div className="flex flex-col items-end gap-1 shrink-0">
                 <div className="w-20 h-20 bg-white p-1.5 border border-stone-300">
                   <img
                     src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://line.me/ti/p/@mumbao"
@@ -102,7 +104,7 @@ export function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="border-t border-stone-300 pt-6 flex flex-col md:flex-row justify-between items-center gap-3 text-xs text-stone-600 tracking-wider font-medium font-sans">
+        <div className="border-t border-stone-300 pt-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 text-xs text-stone-600 tracking-wider font-medium font-sans">
           <p>© 2026 The Mumbao Studio. All rights reserved.</p>
           <div className="flex gap-6">
             <a href="#" className="hover:text-black transition-colors">Privacy Policy</a>

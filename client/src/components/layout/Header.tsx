@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { Menu, Globe, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -18,6 +19,7 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
+  const [location, setLocation] = useLocation();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -27,6 +29,15 @@ export function Header() {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  const handleLogoClick = () => {
+    if (location === "/") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      setLocation("/");
+      window.scrollTo(0, 0);
+    }
+  };
 
   const menuItems = [
     "關於我們",
@@ -94,11 +105,14 @@ export function Header() {
         </Sheet>
 
         {/* Center: Logo */}
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        <div
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
+          onClick={handleLogoClick}
+        >
           <img
             src="/images/logo.webp"
             alt="STime Villa Logo"
-            className="h-12 md:h-20 lg:h-24 object-contain"
+            className="h-12 md:h-20 lg:h-24 object-contain group-hover:opacity-80 transition-opacity"
           />
         </div>
 

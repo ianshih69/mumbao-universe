@@ -19,7 +19,7 @@ export function Hero() {
         transition={{ duration: 1, ease: "easeOut" }}
       >
         <img
-          src="https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?q=80&w=3000&auto=format&fit=crop"
+          src="/images/Hero.webp"
           alt="Wandering Walls Architecture"
           className="w-full h-full object-cover"
         />

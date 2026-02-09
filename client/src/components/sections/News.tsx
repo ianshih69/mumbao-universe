@@ -81,11 +81,11 @@ export function News() {
               viewport={{ once: true }}
               transition={{ duration: 0.6, delay: idx * 0.1 }}
             >
-              <div className="relative overflow-hidden aspect-[4/3] mb-4 bg-gray-100 rounded-2xl">
+              <div className="relative overflow-hidden aspect-[4/3] mb-4 bg-gray-100 rounded-none">
                 <img
                   src={item.image}
                   alt={item.title}
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
                 <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-2 py-1 text-[10px] uppercase tracking-wider rounded-sm font-medium">
                   {item.category}
@@ -117,11 +117,11 @@ export function News() {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.4 }}
               >
-                <div className="relative overflow-hidden aspect-video rounded-2xl mb-6 bg-gray-100">
+                <div className="relative overflow-hidden aspect-video rounded-none mb-6 bg-gray-100">
                   <img
                     src={activeNews.image}
                     alt={activeNews.title}
-                    className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                   />
                   <div className="absolute top-6 left-6 bg-white/90 backdrop-blur px-3 py-1 text-xs uppercase tracking-widest rounded-sm font-medium">
                     {activeNews.category}
@@ -163,11 +163,11 @@ export function News() {
                   onMouseEnter={() => setActiveNews(item)} // Trigger preview
                 >
                   {/* Thumbnail */}
-                  <div className="w-24 h-24 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100">
+                  <div className="w-24 h-24 flex-shrink-0 overflow-hidden rounded-none bg-gray-100">
                     <img
                       src={item.image}
                       alt={item.title}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                     />
                   </div>
                   {/* Info */}

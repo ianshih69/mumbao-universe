@@ -3,12 +3,13 @@ import { Facebook, Instagram, Phone, MapPin, MessageCircle } from "lucide-react"
 export function Footer() {
   return (
     <footer className="bg-[#EAE8E4] py-12 md:py-16 text-gray-800 border-t border-stone-300">
-      <div className="container mx-auto px-6 md:px-8 max-w-5xl">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-16 items-start mb-8 md:mb-12">
+      <div className="container mx-auto px-6 md:px-8 max-w-6xl">
+        {/* Main Grid: 12 Columns on Desktop */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-8 items-start mb-8 md:mb-12">
 
-          {/* Column 1: Brand Identity */}
-          <div className="space-y-3 text-left">
-            <h2 className="font-serif text-3xl md:text-4xl tracking-widest text-[#2C2C2C] font-medium">
+          {/* Column 1: Brand Identity (Desktop: col-span-4) */}
+          <div className="md:col-span-4 space-y-3 text-left">
+            <h2 className="font-serif text-3xl md:text-4xl tracking-widest text-[#2C2C2C] font-medium leading-none">
               MUMBAO
             </h2>
             <p className="text-base text-stone-600 tracking-wide font-serif italic font-medium">
@@ -16,12 +17,12 @@ export function Footer() {
             </p>
           </div>
 
-          {/* Column 2: Navigation (Mobile: 2-Col Grid, Desktop: Stack) */}
-          <div className="space-y-4 text-left">
+          {/* Column 2: Navigation (Desktop: col-span-4) */}
+          <div className="md:col-span-4 space-y-4 text-left">
             <h3 className="font-sans text-xs tracking-[0.25em] font-semibold text-stone-500 uppercase mb-3 border-b border-stone-300 pb-2 inline-block">
               Explore
             </h3>
-            {/* Reordered items to place About/Rooms in Left Col and Experience/News in Right Col on Mobile Grid */}
+            {/* Mobile: 2-Col Grid, Desktop: 1-Col Stack */}
             <ul className="grid grid-cols-2 md:grid-cols-1 gap-x-4 gap-y-2 text-base tracking-wide text-stone-700 font-serif leading-relaxed">
               <li>
                 <a href="/#about" className="group flex items-baseline justify-start gap-2">
@@ -50,16 +51,16 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Column 3: Contact & Social (Mobile: Flex Row, Desktop: Flex Row) */}
-          <div className="space-y-4 text-left">
+          {/* Column 3: Contact & Social (Desktop: col-span-4) */}
+          <div className="md:col-span-4 space-y-4 text-left">
             <h3 className="font-sans text-xs tracking-[0.25em] font-semibold text-stone-500 uppercase mb-3 border-b border-stone-300 pb-2 inline-block">
               Contact
             </h3>
 
-            <div className="flex flex-row justify-between items-start gap-4">
-              {/* Left (70%): Info & Icons */}
+            <div className="flex flex-row items-start gap-6">
+              {/* Left (Text Info) */}
               <div className="space-y-2 text-base tracking-wide text-stone-700 font-serif leading-snug flex-1">
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 align-top">
                   <div className="flex items-start justify-start gap-2">
                     <MapPin className="w-4 h-4 mt-1 text-stone-500 shrink-0" />
                     <span className="text-sm md:text-base">宜蘭縣員山鄉深洲二路158號</span>
@@ -87,9 +88,9 @@ export function Footer() {
                 </div>
               </div>
 
-              {/* Right (30%): QR Code */}
-              <div className="flex flex-col items-end gap-1 shrink-0">
-                <div className="w-20 h-20 bg-white p-1.5 border border-stone-300">
+              {/* Right (QR Code) - Side by Side */}
+              <div className="flex flex-col items-center gap-1 shrink-0">
+                <div className="w-24 h-24 bg-white p-1.5 border border-stone-300">
                   <img
                     src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://line.me/ti/p/@mumbao"
                     alt="LINE QR Code"

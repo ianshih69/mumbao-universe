@@ -4,6 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --animate-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --font-serif: "Playfair Display", serif;
   --font-sans: "Noto Serif TC", serif;
   /* Using Serif as primary font for this design */

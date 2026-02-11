@@ -6,10 +6,14 @@ import { News } from "@/components/sections/News";
 import { Experience } from "@/components/sections/Experience";
 import { Rooms } from "@/components/sections/Rooms";
 import { BookingCTA } from "@/components/sections/BookingCTA";
+import FlyingMascot from "@/components/effects/FlyingMascot";
+import MeteorShower from "@/components/effects/MeteorShower";
 
 export default function Home() {
   return (
     <div className="min-h-screen-safe bg-background font-sans selection:bg-[#E8A0BF] selection:text-white">
+      <MeteorShower intensity={300} showBackground={false} />
+      <FlyingMascot />
       <Header />
 
       <main>

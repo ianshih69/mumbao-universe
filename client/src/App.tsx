@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import FixedViewport from "@/components/utils/FixedViewport";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import About from "./pages/About";
@@ -28,6 +29,7 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
+      <FixedViewport />
       <ThemeProvider
         defaultTheme="light"
       // switchable

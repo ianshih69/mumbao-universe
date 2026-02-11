@@ -32,7 +32,11 @@ export default function MeteorShower({ intensity = 200, showBackground = true }:
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        // 1. 偵測設備：行動裝置/平板
+        const isMobile = window.innerWidth < 1024 || window.matchMedia("(pointer: coarse)").matches;
+
+        // 2. 差異化畫質
+        const dpr = isMobile ? 1 : Math.max(1, Math.min(2, window.devicePixelRatio || 1));
 
         const resize = () => {
             const w = window.innerWidth;

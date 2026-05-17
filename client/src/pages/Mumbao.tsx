@@ -3,8 +3,7 @@ import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-
-const imageBase = "/images/mumbao";
+import { getMumbaoImage, readAdminContent } from "@/lib/adminStore";
 
 const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 28 },
@@ -68,21 +67,35 @@ function ImagePanel({
   src,
   alt,
   className = "",
+  fallbackSrc,
 }: {
   src: string;
   alt: string;
   className?: string;
+  fallbackSrc: string;
 }) {
   return (
     <div
       className={`overflow-hidden rounded-lg border border-stone-200/80 bg-[#F8F3EE] shadow-lg shadow-stone-200/60 ${className}`}
     >
-      <img src={src} alt={alt} className="h-full w-full object-contain" />
+      <img
+        src={src}
+        alt={alt}
+        className="h-full w-full object-contain"
+        onError={(event) => {
+          event.currentTarget.src = fallbackSrc;
+        }}
+      />
     </div>
   );
 }
 
 export default function Mumbao() {
+  const adminContent = readAdminContent();
+  const mumbaoImages = [1, 2, 3, 4, 5].map((index) =>
+    getMumbaoImage(index, adminContent)
+  );
+
   useEffect(() => {
     document.title = "認識慢寶｜慢慢蒔光 STime Villa";
     setMetaDescription(
@@ -138,8 +151,9 @@ export default function Mumbao() {
               transition={{ duration: 0.85, ease: "easeOut", delay: 0.1 }}
             >
               <ImagePanel
-                src={`${imageBase}/1.jpg`}
-                alt="認識慢寶 Meet MUMBAO"
+                src={mumbaoImages[0].src}
+                alt={mumbaoImages[0].alt}
+                fallbackSrc="/images/mumbao/1.jpg"
                 className="mx-auto aspect-[1/1] w-full max-w-[430px] bg-white/10 p-3 shadow-2xl shadow-black/20 md:aspect-[4/5] md:max-h-[560px] md:max-w-[520px]"
               />
             </motion.div>
@@ -156,8 +170,9 @@ export default function Mumbao() {
               variants={fadeInUp}
             >
               <ImagePanel
-                src={`${imageBase}/2.jpg`}
-                alt="慢寶是誰與慢寶的誕生"
+                src={mumbaoImages[1].src}
+                alt={mumbaoImages[1].alt}
+                fallbackSrc="/images/mumbao/2.jpg"
                 className="mx-auto aspect-[1/1] w-full max-w-[430px] md:aspect-[4/5] md:max-w-none"
               />
             </motion.div>
@@ -242,8 +257,9 @@ export default function Mumbao() {
                 variants={fadeInUp}
               >
                 <ImagePanel
-                  src={`${imageBase}/3.jpg`}
-                  alt="慢寶的象徵元素"
+                  src={mumbaoImages[2].src}
+                  alt={mumbaoImages[2].alt}
+                  fallbackSrc="/images/mumbao/3.jpg"
                   className="mx-auto aspect-[1/1] w-full max-w-[430px] md:aspect-[4/5] md:max-w-none lg:sticky lg:top-28"
                 />
               </motion.div>
@@ -296,8 +312,9 @@ export default function Mumbao() {
                 variants={fadeInUp}
               >
                 <ImagePanel
-                  src={`${imageBase}/4.jpg`}
-                  alt="覺醒模式"
+                  src={mumbaoImages[3].src}
+                  alt={mumbaoImages[3].alt}
+                  fallbackSrc="/images/mumbao/4.jpg"
                   className="aspect-[1/1] w-full md:aspect-[4/5]"
                 />
                 <div className="space-y-4 md:space-y-5">
@@ -326,8 +343,9 @@ export default function Mumbao() {
                 variants={fadeInUp}
               >
                 <ImagePanel
-                  src={`${imageBase}/5.jpg`}
-                  alt="冥想模式與慢寶的品牌精神"
+                  src={mumbaoImages[4].src}
+                  alt={mumbaoImages[4].alt}
+                  fallbackSrc="/images/mumbao/5.jpg"
                   className="aspect-[1/1] w-full md:aspect-[4/5]"
                 />
                 <div className="space-y-4 md:space-y-5">

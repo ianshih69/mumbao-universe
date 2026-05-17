@@ -8,12 +8,14 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import About from "./pages/About";
 import Mumbao from "./pages/Mumbao";
+import Admin from "./pages/Admin";
 
 
 function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
+      <Route path={"/admin"} component={Admin} />
       <Route path={"/about"} component={About} />
       <Route path={"/about-mumbao"} component={Mumbao} />
       <Route path={"/mumbao"} component={Mumbao} />

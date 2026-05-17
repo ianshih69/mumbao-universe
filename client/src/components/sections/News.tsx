@@ -1,9 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion"; // Added AnimatePresence
-import { useState } from "react"; // Added useState
+import { useEffect, useMemo, useState } from "react"; // Added useState
+import { readAdminContent } from "@/lib/adminStore";
 
-const newsItems = [
+const fallbackNewsItems = [
   {
     id: 1,
     date: "2022.12.26",
@@ -47,8 +48,45 @@ const newsItems = [
 ];
 
 export function News() {
+  const newsItems = useMemo(() => {
+    const content = readAdminContent();
+    const imageFallbacks = [
+      "/images/Hero.webp",
+      "/images/architecture-detail.jpg",
+      "/images/interior-living.jpg",
+      "/images/room-pool.jpg",
+      "/images/food-breakfast.jpg",
+    ];
+    const publishedNews = content.news
+      .filter((item) => item.status === "published")
+      .map((item, index) => ({
+        id: `news-${item.id}`,
+        date: item.date.replaceAll("-", "."),
+        title: item.title,
+        desc: item.summary,
+        image: imageFallbacks[index % imageFallbacks.length],
+        category: "News",
+      }));
+    const publishedMedia = content.media
+      .filter((item) => item.status === "published")
+      .map((item, index) => ({
+        id: `media-${item.id}`,
+        date: item.date.replaceAll("-", "."),
+        title: item.title,
+        desc: item.source || item.url || "媒體報導",
+        image: imageFallbacks[(publishedNews.length + index) % imageFallbacks.length],
+        category: "Media",
+      }));
+    const managedItems = [...publishedNews, ...publishedMedia];
+
+    return managedItems.length > 0 ? managedItems : fallbackNewsItems;
+  }, []);
   const [activeNews, setActiveNews] = useState(newsItems[0]); // State for interactive preview
   const sideNews = newsItems.slice(1, 4);
+
+  useEffect(() => {
+    setActiveNews(newsItems[0]);
+  }, [newsItems]);
 
   return (
     <section className="py-24 bg-white overflow-hidden">
@@ -86,6 +124,9 @@ export function News() {
                   src={item.image}
                   alt={item.title}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  onError={(event) => {
+                    event.currentTarget.src = "/images/Hero.webp";
+                  }}
                 />
                 <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-2 py-1 text-[10px] uppercase tracking-wider rounded-sm font-medium">
                   {item.category}
@@ -122,6 +163,9 @@ export function News() {
                     src={activeNews.image}
                     alt={activeNews.title}
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    onError={(event) => {
+                      event.currentTarget.src = "/images/Hero.webp";
+                    }}
                   />
                   <div className="absolute top-6 left-6 bg-white/90 backdrop-blur px-3 py-1 text-xs uppercase tracking-widest rounded-sm font-medium">
                     {activeNews.category}
@@ -168,6 +212,9 @@ export function News() {
                       src={item.image}
                       alt={item.title}
                       className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      onError={(event) => {
+                        event.currentTarget.src = "/images/Hero.webp";
+                      }}
                     />
                   </div>
                   {/* Info */}

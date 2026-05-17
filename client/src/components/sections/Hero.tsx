@@ -2,9 +2,11 @@ import { Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { useMobileViewportHeight } from "@/hooks/useMobileViewportHeight";
+import { getHomeHeroImage } from "@/lib/adminStore";
 
 export function Hero() {
   const height = useMobileViewportHeight();
+  const heroImage = getHomeHeroImage();
 
   return (
     <section
@@ -19,9 +21,12 @@ export function Hero() {
         transition={{ duration: 1, ease: "easeOut" }}
       >
         <img
-          src="/images/Hero.webp"
-          alt="Wandering Walls Architecture"
+          src={heroImage.src}
+          alt={heroImage.alt}
           className="w-full h-full object-cover"
+          onError={(event) => {
+            event.currentTarget.src = "/images/Hero.webp";
+          }}
         />
         <div className="absolute inset-0 bg-black/30" />
       </motion.div>

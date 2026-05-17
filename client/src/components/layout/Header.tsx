@@ -40,12 +40,13 @@ export function Header() {
   };
 
   const menuItems = [
-    "關於我們",
-    "最新消息",
-    "房間",
-    "線上訂房",
-    "媒體報導",
-    "隱私權政策",
+    { label: "關於我們", href: "/about" },
+    { label: "認識慢寶", href: "/mumbao" },
+    { label: "房間", href: "/#rooms" },
+    { label: "線上訂房", href: "/#booking" },
+    { label: "最新消息", href: "/#news" },
+    { label: "媒體報導", href: "#" },
+    { label: "隱私權政策", href: "#" },
   ];
 
   const languages = ["繁體中文", "日本語", "韓語", "English"];
@@ -91,13 +92,14 @@ export function Header() {
               </div>
               <nav className="flex flex-col gap-8">
                 {menuItems.map((item) => (
-                  <a
-                    key={item}
-                    href="#"
-                    className="font-serif text-2xl md:text-3xl text-primary hover:text-[#E8A0BF] transition-colors tracking-wider"
-                  >
-                    {item}
-                  </a>
+                  <SheetClose asChild key={item.label}>
+                    <a
+                      href={item.href}
+                      className="font-serif text-2xl md:text-3xl text-primary hover:text-[#E8A0BF] transition-colors tracking-wider"
+                    >
+                      {item.label}
+                    </a>
+                  </SheetClose>
                 ))}
               </nav>
             </div>

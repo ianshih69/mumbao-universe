@@ -30,7 +30,9 @@ export default function Home() {
         <div id="rooms">
           <Rooms />
         </div>
-        <BookingCTA />
+        <div id="booking">
+          <BookingCTA />
+        </div>
       </main>
 
       <Footer />

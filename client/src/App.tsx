@@ -15,7 +15,12 @@ function Router() {
     <Switch>
       <Route path={"/"} component={Home} />
       <Route path={"/about"} component={About} />
+      <Route path={"/about-mumbao"} component={Mumbao} />
       <Route path={"/mumbao"} component={Mumbao} />
+      <Route path={"/zh-TW/about-mumbao"} component={Mumbao} />
+      <Route path={"/en/about-mumbao"} component={Mumbao} />
+      <Route path={"/ja/about-mumbao"} component={Mumbao} />
+      <Route path={"/ko/about-mumbao"} component={Mumbao} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

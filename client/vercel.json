@@ -1,7 +1,10 @@
 {
+  "devCommand": "npx vite --host 0.0.0.0 --configLoader runner",
+  "buildCommand": "npx vite build --configLoader runner",
+  "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api(?:/|$)).*)",
       "destination": "/index.html"
     }
   ]

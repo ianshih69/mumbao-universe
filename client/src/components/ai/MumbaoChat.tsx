@@ -1,29 +1,90 @@
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Cloud, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+type ChatRole = "assistant" | "user";
+
 type ChatMessage = {
   id: string;
-  role: "assistant" | "user";
-  content: string;
+  role: ChatRole;
+  message: string;
+  created_at?: string;
 };
 
+type ApiMessage = {
+  id?: string | number;
+  sender?: string;
+  message?: string;
+  created_at?: string;
+};
+
+const visitorStorageKey = "mumbao_visitor_id";
 const welcomeMessage =
   "嗨，我是慢寶。你可以問我住宿、包棟、寵物、停車、入住時間，或白雲基地的故事。";
+const aiFallbackReply = "慢寶收到你的問題了，我正在慢慢想一下。";
+const errorReply = "慢寶現在連線有點慢，請稍後再問我一次。";
 
-const fallbackReply =
-  "我先把你的問題記在雲朵裡。AI客服 API 下一步接上後，我就能正式回答你。";
+function createLocalId() {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random()}`;
+}
 
-function createMessage(role: ChatMessage["role"], content: string): ChatMessage {
+function createMessage(role: ChatRole, message: string): ChatMessage {
   return {
-    id:
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random()}`,
+    id: createLocalId(),
     role,
-    content,
+    message,
   };
+}
+
+function getVisitorId() {
+  const existingVisitorId = localStorage.getItem(visitorStorageKey);
+  if (existingVisitorId) {
+    return existingVisitorId;
+  }
+
+  const nextVisitorId = createLocalId();
+  localStorage.setItem(visitorStorageKey, nextVisitorId);
+  return nextVisitorId;
+}
+
+function normalizeMessage(apiMessage: ApiMessage): ChatMessage {
+  return {
+    id: String(apiMessage.id || createLocalId()),
+    role: apiMessage.sender === "user" ? "user" : "assistant",
+    message: String(apiMessage.message || ""),
+    created_at: apiMessage.created_at,
+  };
+}
+
+function getInitialMessages(messages: ChatMessage[]) {
+  return messages.length > 0 ? messages : [createMessage("assistant", welcomeMessage)];
+}
+
+async function fetchJsonWithTimeout<T>(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number
+): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Request failed: ${response.status}`);
+    }
+
+    return (await response.json()) as T;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 type MumbaoChatProps = {
@@ -32,51 +93,122 @@ type MumbaoChatProps = {
 };
 
 export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
+  const [visitorId, setVisitorId] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     createMessage("assistant", welcomeMessage),
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const canSend = useMemo(() => input.trim().length > 0 && !isLoading, [input, isLoading]);
+  const canSend = useMemo(
+    () => input.trim().length > 0 && !isLoading && !isHistoryLoading,
+    [input, isLoading, isHistoryLoading]
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+    const nextVisitorId = getVisitorId();
+    setVisitorId(nextVisitorId);
+
+    async function loadHistory() {
+      try {
+        const data = await fetchJsonWithTimeout<{ messages?: ApiMessage[] }>(
+          "/api/ai-chat-history",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ visitor_id: nextVisitorId }),
+          },
+          4500
+        );
+
+        if (!isMounted) return;
+
+        const historyMessages = (data.messages || [])
+          .map(normalizeMessage)
+          .filter((message) => message.message.trim().length > 0);
+
+        setMessages(getInitialMessages(historyMessages));
+      } catch (error) {
+        console.warn("Mumbao chat history unavailable:", error);
+        if (isMounted) {
+          setMessages([createMessage("assistant", welcomeMessage)]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsHistoryLoading(false);
+        }
+      }
+    }
+
+    loadHistory();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages, isLoading, isHistoryLoading]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const question = input.trim();
-    if (!question || isLoading) return;
+    if (!question || isLoading || isHistoryLoading || !visitorId) return;
 
-    const userMessage = createMessage("user", question);
-    const nextMessages = [...messages, userMessage];
+    const pendingUserMessage = createMessage("user", question);
 
-    setMessages(nextMessages);
+    setMessages((current) => [...current, pendingUserMessage]);
     setInput("");
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/ai-chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const data = await fetchJsonWithTimeout<{
+        userMessage?: ApiMessage;
+        aiMessage?: ApiMessage;
+      }>(
+        "/api/ai-chat-message",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            visitor_id: visitorId,
+            message: question,
+          }),
         },
-        body: JSON.stringify({
-          message: question,
-          messages: nextMessages.map(({ role, content }) => ({ role, content })),
-        }),
-      });
+        12000
+      );
 
-      if (!response.ok) {
-        throw new Error("AI chat API is not ready yet.");
-      }
+      const savedUserMessage = data.userMessage
+        ? normalizeMessage(data.userMessage)
+        : pendingUserMessage;
+      const savedAiMessage = data.aiMessage
+        ? normalizeMessage(data.aiMessage)
+        : createMessage("assistant", aiFallbackReply);
 
-      const data = (await response.json()) as { reply?: string };
+      setMessages((current) => [
+        ...current.filter((message) => message.id !== pendingUserMessage.id),
+        savedUserMessage,
+        savedAiMessage,
+      ]);
+    } catch (error) {
+      console.warn("Mumbao chat message unavailable:", error);
       setMessages((current) => [
         ...current,
-        createMessage("assistant", data.reply?.trim() || fallbackReply),
+        createMessage("assistant", errorReply),
       ]);
-    } catch {
-      setMessages((current) => [...current, createMessage("assistant", fallbackReply)]);
     } finally {
       setIsLoading(false);
       requestAnimationFrame(() => inputRef.current?.focus());
@@ -109,7 +241,10 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#fffdf8] px-4 py-5">
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#fffdf8] px-4 py-5"
+      >
         {messages.map((message) => (
           <div
             key={message.id}
@@ -126,10 +261,18 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
                   : "rounded-bl-md border border-[#f0e3d4] bg-white text-[#5f544b]"
               )}
             >
-              {message.content}
+              {message.message}
             </div>
           </div>
         ))}
+
+        {isHistoryLoading && (
+          <div className="flex justify-start">
+            <div className="rounded-3xl rounded-bl-md border border-[#f0e3d4] bg-white px-4 py-3 text-sm text-[#8a796a] shadow-sm">
+              慢寶正在整理之前的對話…
+            </div>
+          </div>
+        )}
 
         {isLoading && (
           <div className="flex justify-start">
@@ -163,4 +306,3 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
     </section>
   );
 }
-

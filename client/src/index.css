@@ -57,6 +57,17 @@
   height: 100svh;
 }
 
+@keyframes mumbao-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
 :root {
   /* Brutalist Zen Palette */
   --primary: oklch(0.25 0 0);

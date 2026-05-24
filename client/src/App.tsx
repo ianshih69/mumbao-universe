@@ -5,10 +5,12 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import FixedViewport from "@/components/utils/FixedViewport";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { MumbaoChatLauncher } from "./components/ai/MumbaoChatLauncher";
 import Home from "./pages/Home";
 import About from "./pages/About";
 import Mumbao from "./pages/Mumbao";
 import Admin from "./pages/Admin";
+import AiChat from "./pages/AiChat";
 
 
 function Router() {
@@ -17,6 +19,7 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path={"/admin"} component={Admin} />
       <Route path={"/about"} component={About} />
+      <Route path={"/ai-chat"} component={AiChat} />
       <Route path={"/about-mumbao"} component={Mumbao} />
       <Route path={"/mumbao"} component={Mumbao} />
       <Route path={"/zh-TW/about-mumbao"} component={Mumbao} />
@@ -46,6 +49,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
+          <MumbaoChatLauncher />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

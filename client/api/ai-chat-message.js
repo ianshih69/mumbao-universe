@@ -31,7 +31,14 @@ function getSupabaseConfig() {
 }
 
 function getDeepSeekConfig() {
+  const aiMode = process.env.AI_MODE || "cloud_only";
   const apiKey = process.env.DEEPSEEK_API_KEY;
+
+  if (aiMode !== "cloud_only") {
+    const error = new Error(`Unsupported AI_MODE: ${aiMode}`);
+    error.reason = "unsupported ai mode";
+    throw error;
+  }
 
   if (!apiKey) {
     console.error("DEEPSEEK_API_KEY is missing");
@@ -41,6 +48,7 @@ function getDeepSeekConfig() {
   }
 
   return {
+    aiMode,
     apiKey,
     baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
     model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
@@ -102,6 +110,8 @@ async function callDeepSeek(userMessage) {
   const timeoutId = setTimeout(() => controller.abort(), deepSeekTimeoutMs);
 
   try {
+    console.log("[ai-chat] provider=deepseek model=", model);
+
     const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       signal: controller.signal,
@@ -125,6 +135,8 @@ async function callDeepSeek(userMessage) {
         max_tokens: 500,
       }),
     });
+
+    console.log("[ai-chat] deepseek status=", response.status);
 
     const text = await response.text();
     let data = null;
@@ -226,6 +238,7 @@ export default async function handler(req, res) {
     const userMessage = await insertMessage(session.id, "user", message, null);
     const aiAnswer = await callDeepSeek(message);
     const aiMessage = await insertMessage(session.id, "ai", aiAnswer, "deepseek");
+    console.log("[ai-chat] saved assistant message");
 
     return sendJson(res, 200, {
       session,

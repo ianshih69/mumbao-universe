@@ -4,16 +4,162 @@ const systemPrompt = `你是「慢慢蒔光｜白雲基地」的 AI 客服小幫
 如果不確定答案，不要亂編，請引導客人私訊官方 LINE 或等人工客服確認。
 每次回答盡量控制在 80～180 字。`;
 const aiErrorReply = "慢寶的雲朵訊號暫時不穩，請稍後再試。";
+const scopeGuardReply =
+  "慢寶目前主要協助回答慢慢蒔光｜白雲基地的訂房、入住、設施、寵物與生活公約問題喔。若有其他問題，歡迎私訊官方 LINE，會有專人協助你。";
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
 const supabaseTimeoutMs = 8000;
 const deepSeekTimeoutMs = 20000;
+let hasGuesthouseKnowledgeCache = false;
+let guesthouseKnowledgeCache = "";
+const supportScopeKeywords = [
+  "慢慢蒔光",
+  "白雲基地",
+  "慢寶",
+  "mumbao",
+  "民宿",
+  "住宿",
+  "房間",
+  "包棟",
+  "訂房",
+  "預訂",
+  "預約",
+  "入住",
+  "退房",
+  "checkin",
+  "check-in",
+  "check out",
+  "checkout",
+  "早餐",
+  "押金",
+  "訪客",
+  "寵物",
+  "毛孩",
+  "設施",
+  "烤肉",
+  "麻將",
+  "歡唱",
+  "唱歌",
+  "ktv",
+  "禁菸",
+  "抽菸",
+  "公約",
+  "生活公約",
+  "規定",
+  "入住規定",
+  "付款",
+  "付費",
+  "訂金",
+  "退款",
+  "改期",
+  "價格",
+  "房價",
+  "空房",
+  "費用",
+  "停車",
+  "交通",
+  "周邊景點",
+  "附近景點",
+  "官方 line",
+  "官方line",
+  "聯絡",
+  "客服",
+];
+const yilanTravelKeywords = [
+  "宜蘭",
+  "羅東",
+  "冬山",
+  "五結",
+  "礁溪",
+  "景點",
+  "旅遊",
+  "行程",
+  "附近",
+  "周邊",
+];
+const lodgingContextKeywords = [
+  "住宿",
+  "民宿",
+  "訂房",
+  "包棟",
+  "入住",
+  "退房",
+  "慢慢蒔光",
+  "白雲基地",
+  "慢寶",
+  "mumbao",
+  "附近",
+  "周邊",
+  "停車",
+  "交通",
+  "景點",
+];
+const blockedScopeKeywords = [
+  "寫程式",
+  "程式碼",
+  "程式",
+  "debug",
+  "股票",
+  "投資",
+  "基金",
+  "加密貨幣",
+  "算命",
+  "占卜",
+  "塔羅",
+  "星座",
+  "閒聊",
+  "聊天",
+  "作文",
+  "寫作",
+  "翻譯",
+  "法律",
+  "律師",
+  "訴訟",
+  "醫療",
+  "醫生",
+  "診斷",
+  "處方",
+  "政治",
+  "選舉",
+  "總統",
+];
 
 function sendJson(res, status, body) {
   res.statusCode = status;
   res.setHeader("Content-Type", jsonHeaders["Content-Type"]);
   res.end(JSON.stringify(body));
+}
+
+function includesKeyword(text, keywords) {
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
+function isAllowedSupportScope(message) {
+  const normalizedMessage = String(message || "").toLowerCase().trim();
+
+  if (!normalizedMessage) {
+    return false;
+  }
+
+  if (includesKeyword(normalizedMessage, blockedScopeKeywords)) {
+    return false;
+  }
+
+  const hasSupportKeyword = includesKeyword(
+    normalizedMessage,
+    supportScopeKeywords
+  );
+  const hasYilanTravelKeyword = includesKeyword(
+    normalizedMessage,
+    yilanTravelKeywords
+  );
+  const hasLodgingContext = includesKeyword(
+    normalizedMessage,
+    lodgingContextKeywords
+  );
+
+  return hasSupportKeyword || (hasYilanTravelKeyword && hasLodgingContext);
 }
 
 function getSupabaseConfig() {
@@ -53,6 +199,55 @@ function getDeepSeekConfig() {
     baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
     model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
   };
+}
+
+async function loadGuesthouseKnowledge() {
+  if (hasGuesthouseKnowledgeCache) {
+    return guesthouseKnowledgeCache;
+  }
+
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  const cwd = process.cwd();
+  const candidatePaths = [
+    path.join(cwd, "api", "knowledge", "guesthouse-rules.md"),
+    path.join(cwd, "client", "api", "knowledge", "guesthouse-rules.md"),
+  ];
+
+  for (const knowledgePath of candidatePaths) {
+    try {
+      guesthouseKnowledgeCache = await fs.readFile(knowledgePath, "utf8");
+      hasGuesthouseKnowledgeCache = true;
+      return guesthouseKnowledgeCache;
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        console.error("[ai-chat] failed to load guesthouse knowledge:", {
+          path: knowledgePath,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  console.error("[ai-chat] guesthouse knowledge file not found");
+  hasGuesthouseKnowledgeCache = true;
+  guesthouseKnowledgeCache = "";
+  return guesthouseKnowledgeCache;
+}
+
+async function buildSystemPrompt() {
+  const guesthouseKnowledge = (await loadGuesthouseKnowledge()).trim();
+
+  return `${systemPrompt}
+
+客服知識庫使用規則：
+- 回答住宿問題時，優先依照 guesthouse-rules.md 的內容。
+- 如果 guesthouse-rules.md 沒有寫，不要推測或補充。
+- 價格、空房、訂金、退款、寵物細節、特定日期等不確定資訊，請引導客人私訊官方 LINE。
+- 不要直接提到你正在讀取 Markdown 檔案，也不要把知識庫原文整段貼給客人。
+
+以下是慢慢蒔光｜白雲基地 AI 客服知識庫 guesthouse-rules.md：
+${guesthouseKnowledge || "目前知識庫沒有可用內容。遇到不確定問題，請引導客人私訊官方 LINE。"}`;
 }
 
 async function readBody(req) {
@@ -106,6 +301,7 @@ async function supabaseRequest(path, options = {}) {
 
 async function callDeepSeek(userMessage) {
   const { apiKey, baseUrl, model } = getDeepSeekConfig();
+  const prompt = await buildSystemPrompt();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), deepSeekTimeoutMs);
 
@@ -124,7 +320,7 @@ async function callDeepSeek(userMessage) {
         messages: [
           {
             role: "system",
-            content: systemPrompt,
+            content: prompt,
           },
           {
             role: "user",
@@ -236,6 +432,25 @@ export default async function handler(req, res) {
 
     const session = await getOrCreateSession(visitorId);
     const userMessage = await insertMessage(session.id, "user", message, null);
+
+    if (!isAllowedSupportScope(message)) {
+      console.log("[ai-chat] scope=blocked");
+      const aiMessage = await insertMessage(
+        session.id,
+        "ai",
+        scopeGuardReply,
+        "scope_guard"
+      );
+
+      return sendJson(res, 200, {
+        session,
+        userMessage,
+        aiMessage,
+        answer: scopeGuardReply,
+      });
+    }
+
+    console.log("[ai-chat] scope=allowed");
     const aiAnswer = await callDeepSeek(message);
     const aiMessage = await insertMessage(session.id, "ai", aiAnswer, "deepseek");
     console.log("[ai-chat] saved assistant message");

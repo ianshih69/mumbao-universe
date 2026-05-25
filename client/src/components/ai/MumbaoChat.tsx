@@ -22,8 +22,7 @@ type ApiMessage = {
 const visitorStorageKey = "mumbao_visitor_id";
 const welcomeMessage =
   "嗨，我是慢寶。你可以問我住宿、包棟、寵物、停車、入住時間，或白雲基地的故事。";
-const aiFallbackReply = "慢寶收到你的問題了，我正在慢慢想一下。";
-const errorReply = "慢寶現在連線有點慢，請稍後再問我一次。";
+const errorReply = "慢寶的雲朵訊號暫時不穩，請稍後再試。";
 
 function createLocalId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -76,12 +75,15 @@ async function fetchJsonWithTimeout<T>(
       ...options,
       signal: controller.signal,
     });
+    const data = (await response.json().catch(() => ({}))) as T & {
+      error?: string;
+    };
 
     if (!response.ok) {
-      throw new Error(`Request failed: ${response.status}`);
+      throw new Error(data.error || `Request failed: ${response.status}`);
     }
 
-    return (await response.json()) as T;
+    return data;
   } finally {
     window.clearTimeout(timeoutId);
   }
@@ -176,6 +178,7 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
       const data = await fetchJsonWithTimeout<{
         userMessage?: ApiMessage;
         aiMessage?: ApiMessage;
+        answer?: string;
       }>(
         "/api/ai-chat-message",
         {
@@ -188,7 +191,7 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
             message: question,
           }),
         },
-        12000
+        30000
       );
 
       const savedUserMessage = data.userMessage
@@ -196,7 +199,9 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
         : pendingUserMessage;
       const savedAiMessage = data.aiMessage
         ? normalizeMessage(data.aiMessage)
-        : createMessage("assistant", aiFallbackReply);
+        : data.answer
+          ? createMessage("assistant", data.answer)
+          : createMessage("assistant", errorReply);
 
       setMessages((current) => [
         ...current.filter((message) => message.id !== pendingUserMessage.id),
@@ -205,9 +210,14 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
       ]);
     } catch (error) {
       console.warn("Mumbao chat message unavailable:", error);
+      const assistantErrorMessage =
+        error instanceof Error && error.message.includes("慢寶")
+          ? error.message
+          : errorReply;
+
       setMessages((current) => [
         ...current,
-        createMessage("assistant", errorReply),
+        createMessage("assistant", assistantErrorMessage),
       ]);
     } finally {
       setIsLoading(false);

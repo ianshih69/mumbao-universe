@@ -132,8 +132,18 @@ function localApiPlugin() {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
-  process.env.SUPABASE_URL = env.SUPABASE_URL;
-  process.env.SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
+  for (const name of [
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "AI_MODE",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "DEEPSEEK_MODEL",
+  ]) {
+    if (env[name]) {
+      process.env[name] = env[name];
+    }
+  }
 
   return {
     plugins: [localApiPlugin(), react(), tailwindcss(), vitePluginManusRuntime()],

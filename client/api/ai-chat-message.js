@@ -1,8 +1,14 @@
-﻿const aiReply = "慢寶收到你的問題了，我正在慢慢想一下。";
+const systemPrompt = `你是「慢慢蒔光｜白雲基地」的 AI 客服小幫手。
+回答要溫柔、清楚、簡短，使用繁體中文。
+你要幫客人理解包棟、訂房、入住、退房、設施、寵物友善、白雲基地與慢寶 MUMBAO 相關問題。
+如果不確定答案，不要亂編，請引導客人私訊官方 LINE 或等人工客服確認。
+每次回答盡量控制在 80～180 字。`;
+const aiErrorReply = "慢寶的雲朵訊號暫時不穩，請稍後再試。";
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
 const supabaseTimeoutMs = 8000;
+const deepSeekTimeoutMs = 20000;
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -21,6 +27,23 @@ function getSupabaseConfig() {
   return {
     restUrl: `${url.replace(/\/$/, "")}/rest/v1`,
     serviceRoleKey,
+  };
+}
+
+function getDeepSeekConfig() {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+
+  if (!apiKey) {
+    console.error("DEEPSEEK_API_KEY is missing");
+    const error = new Error("DEEPSEEK_API_KEY is missing");
+    error.reason = "missing deepseek api key";
+    throw error;
+  }
+
+  return {
+    apiKey,
+    baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+    model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
   };
 }
 
@@ -68,6 +91,81 @@ async function supabaseRequest(path, options = {}) {
     }
 
     return data;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function callDeepSeek(userMessage) {
+  const { apiKey, baseUrl, model } = getDeepSeekConfig();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), deepSeekTimeoutMs);
+
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt,
+          },
+          {
+            role: "user",
+            content: userMessage,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      }),
+    });
+
+    const text = await response.text();
+    let data = null;
+
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = { raw: text };
+    }
+
+    if (!response.ok) {
+      console.error("DeepSeek API error:", {
+        status: response.status,
+        statusText: response.statusText,
+        data,
+      });
+      throw new Error(`DeepSeek request failed: ${response.status}`);
+    }
+
+    const answer = data?.choices?.[0]?.message?.content?.trim();
+
+    if (!answer) {
+      console.error("DeepSeek API error:", {
+        message: "Missing assistant answer",
+        data,
+      });
+      throw new Error("DeepSeek response did not include an answer.");
+    }
+
+    return answer;
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      console.error("DeepSeek API error:", {
+        message: "DeepSeek request timed out",
+        timeoutMs: deepSeekTimeoutMs,
+      });
+    } else if (error?.reason !== "missing deepseek api key") {
+      console.error("DeepSeek API error:", error);
+    }
+
+    throw error;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -126,15 +224,22 @@ export default async function handler(req, res) {
 
     const session = await getOrCreateSession(visitorId);
     const userMessage = await insertMessage(session.id, "user", message, null);
-    const aiMessage = await insertMessage(session.id, "ai", aiReply, "mock");
+    const aiAnswer = await callDeepSeek(message);
+    const aiMessage = await insertMessage(session.id, "ai", aiAnswer, "deepseek");
 
     return sendJson(res, 200, {
       session,
       userMessage,
       aiMessage,
+      answer: aiAnswer,
     });
   } catch (error) {
     console.error("ai-chat-message error:", error);
-    return sendJson(res, 500, { error: "Failed to send chat message." });
+
+    if (error?.reason === "missing deepseek api key") {
+      return sendJson(res, 500, { error: "DEEPSEEK_API_KEY is missing" });
+    }
+
+    return sendJson(res, 500, { error: aiErrorReply });
   }
 }

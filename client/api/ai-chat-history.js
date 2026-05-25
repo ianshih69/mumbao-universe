@@ -106,6 +106,24 @@ async function getOrCreateSession(visitorId) {
   return createdSessions[0];
 }
 
+function getCreatedTime(message) {
+  const time = Date.parse(message?.created_at || "");
+  return Number.isNaN(time) ? null : time;
+}
+
+function sortMessagesByCreatedAt(messages) {
+  return [...(messages || [])].sort((first, second) => {
+    const firstTime = getCreatedTime(first);
+    const secondTime = getCreatedTime(second);
+
+    if (firstTime === null || secondTime === null) {
+      return 0;
+    }
+
+    return firstTime - secondTime;
+  });
+}
+
 export default async function handler(req, res) {
   if (!["GET", "POST"].includes(req.method)) {
     res.setHeader("Allow", "GET, POST");
@@ -140,7 +158,7 @@ export default async function handler(req, res) {
 
     return sendJson(res, 200, {
       session,
-      messages: messages || [],
+      messages: sortMessagesByCreatedAt(messages),
     });
   } catch (error) {
     console.error("chat history error:", error);

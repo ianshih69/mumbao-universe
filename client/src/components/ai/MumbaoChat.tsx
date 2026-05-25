@@ -62,6 +62,24 @@ function getInitialMessages(messages: ChatMessage[]) {
   return messages.length > 0 ? messages : [createMessage("assistant", welcomeMessage)];
 }
 
+function getCreatedTime(message: ChatMessage) {
+  const time = Date.parse(message.created_at || "");
+  return Number.isNaN(time) ? null : time;
+}
+
+function sortMessagesByCreatedAt(messages: ChatMessage[]) {
+  return [...messages].sort((first, second) => {
+    const firstTime = getCreatedTime(first);
+    const secondTime = getCreatedTime(second);
+
+    if (firstTime === null || secondTime === null) {
+      return 0;
+    }
+
+    return firstTime - secondTime;
+  });
+}
+
 async function fetchJsonWithTimeout<T>(
   url: string,
   options: RequestInit,
@@ -135,7 +153,7 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
           .map(normalizeMessage)
           .filter((message) => message.message.trim().length > 0);
 
-        setMessages(getInitialMessages(historyMessages));
+        setMessages(getInitialMessages(sortMessagesByCreatedAt(historyMessages)));
       } catch (error) {
         console.warn("Mumbao chat history unavailable:", error);
         if (isMounted) {
@@ -203,11 +221,13 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
           ? createMessage("assistant", data.answer)
           : createMessage("assistant", errorReply);
 
-      setMessages((current) => [
-        ...current.filter((message) => message.id !== pendingUserMessage.id),
-        savedUserMessage,
-        savedAiMessage,
-      ]);
+      setMessages((current) =>
+        sortMessagesByCreatedAt([
+          ...current.filter((message) => message.id !== pendingUserMessage.id),
+          savedUserMessage,
+          savedAiMessage,
+        ])
+      );
     } catch (error) {
       console.warn("Mumbao chat message unavailable:", error);
       const assistantErrorMessage =

@@ -123,10 +123,7 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const canSend = useMemo(
-    () => input.trim().length > 0 && !isLoading && !isHistoryLoading,
-    [input, isLoading, isHistoryLoading]
-  );
+  const hasDraftMessage = useMemo(() => input.trim().length > 0, [input]);
 
   useEffect(() => {
     let isMounted = true;
@@ -248,13 +245,13 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
   return (
     <section
       className={cn(
-        "flex h-full min-h-0 flex-col overflow-hidden border border-white/80 bg-[#fffaf2]/95 shadow-[0_24px_80px_rgba(111,88,71,0.18)] backdrop-blur-2xl",
+        "box-border flex h-full max-h-[100dvh] min-h-0 flex-col overflow-hidden border border-white/80 bg-[#fffaf2]/95 shadow-[0_24px_80px_rgba(111,88,71,0.18)] backdrop-blur-2xl",
         compact ? "rounded-[28px]" : "rounded-[32px]",
         className
       )}
       aria-label="問慢寶 AI客服"
     >
-      <div className="relative overflow-hidden border-b border-white/70 bg-[#f8efe3] px-5 py-4">
+      <div className="relative flex-none overflow-hidden border-b border-white/70 bg-[#f8efe3] px-5 py-4">
         <div className="absolute right-4 top-3 flex text-[#d7b77a]" aria-hidden="true">
           <Sparkles className="size-4" />
           <Sparkles className="mt-5 size-3 opacity-70" />
@@ -273,7 +270,7 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
 
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#fffdf8] px-4 py-5"
+        className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#fffdf8] px-4 pb-[calc(env(safe-area-inset-bottom,0px)_+_1.5rem)] pt-5"
       >
         {messages.map((message) => (
           <div
@@ -315,19 +312,20 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
 
       <form
         onSubmit={handleSubmit}
-        className="flex items-end gap-2 border-t border-white/70 bg-[#f8efe3]/90 p-3"
+        className="box-border flex w-full flex-none items-end gap-2 border-t border-white/70 bg-[#f8efe3]/90 px-3 pt-3"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)" }}
       >
         <input
           ref={inputRef}
           value={input}
           onChange={(event) => setInput(event.target.value)}
           placeholder="輸入想問慢寶的問題"
-          className="min-h-11 flex-1 rounded-full border border-[#ead8c6] bg-white px-4 text-base text-[#5c5147] shadow-inner outline-none transition focus:border-[#9ec7b8] focus:ring-4 focus:ring-[#9ec7b8]/20 md:text-sm"
+          className="min-h-11 min-w-0 flex-1 rounded-full border border-[#ead8c6] bg-white px-4 text-base text-[#5c5147] shadow-inner outline-none transition focus:border-[#9ec7b8] focus:ring-4 focus:ring-[#9ec7b8]/20 md:text-sm"
         />
         <Button
           type="submit"
-          disabled={!canSend}
-          className="size-11 rounded-full bg-[#8dbbad] p-0 text-white shadow-md hover:bg-[#7aaea0]"
+          disabled={!hasDraftMessage}
+          className="h-11 min-h-11 w-11 min-w-11 flex-none shrink-0 rounded-full bg-[#8dbbad] p-0 text-white shadow-md hover:bg-[#7aaea0] disabled:opacity-60"
           aria-label="送出訊息"
         >
           <Send className="size-5" aria-hidden="true" />

@@ -13,9 +13,9 @@ export function MumbaoChatLauncher() {
   }
 
   return (
-    <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+0.875rem)] right-3 z-[80] flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
+    <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom,0px)_+_0.875rem)] left-[max(0.75rem,env(safe-area-inset-left,0px))] right-[max(0.75rem,env(safe-area-inset-right,0px))] z-[80] flex flex-col items-end gap-3 sm:left-auto sm:bottom-6 sm:right-6">
       {isOpen && (
-        <div className="h-[min(620px,calc(100svh-7.5rem))] w-[min(calc(100vw-2rem),390px)]">
+        <div className="pointer-events-auto h-[min(620px,calc(100dvh_-_7.5rem_-_env(safe-area-inset-bottom,0px)))] w-full max-w-[390px]">
           <MumbaoChat compact />
         </div>
       )}
@@ -24,7 +24,7 @@ export function MumbaoChatLauncher() {
         type="button"
         onClick={() => setIsOpen((current) => !current)}
         className={cn(
-          "group relative flex min-h-[96px] w-[92px] flex-col items-center justify-end border-0 bg-transparent pb-0 text-[#5c5147] outline-none",
+          "group pointer-events-auto relative flex min-h-[96px] w-[92px] flex-col items-center justify-end border-0 bg-transparent pb-0 text-[#5c5147] outline-none",
           "animate-[mumbao-float_5.2s_ease-in-out_infinite] transition-transform duration-500 ease-out hover:-translate-y-1 hover:scale-[1.04] focus-visible:ring-4 focus-visible:ring-[#9ec7b8]/30",
           "sm:min-h-[116px] sm:w-[116px]"
         )}

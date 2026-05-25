@@ -11,8 +11,11 @@ const jsonHeaders = {
 };
 const supabaseTimeoutMs = 8000;
 const deepSeekTimeoutMs = 20000;
+const recentMessagesLimit = 12;
+const recentContextMaxChars = 4000;
 let hasGuesthouseKnowledgeCache = false;
 let guesthouseKnowledgeCache = "";
+
 const supportScopeKeywords = [
   "慢慢蒔光",
   "白雲基地",
@@ -55,8 +58,10 @@ const supportScopeKeywords = [
   "改期",
   "價格",
   "房價",
+  "包棟價",
   "空房",
   "費用",
+  "人數",
   "停車",
   "交通",
   "周邊景點",
@@ -99,6 +104,8 @@ const blockedScopeKeywords = [
   "寫程式",
   "程式碼",
   "程式",
+  "python",
+  "javascript",
   "debug",
   "股票",
   "投資",
@@ -109,7 +116,6 @@ const blockedScopeKeywords = [
   "塔羅",
   "星座",
   "閒聊",
-  "聊天",
   "作文",
   "寫作",
   "翻譯",
@@ -124,6 +130,60 @@ const blockedScopeKeywords = [
   "選舉",
   "總統",
 ];
+const contextFollowUpKeywords = [
+  "今年",
+  "明年",
+  "後年",
+  "那",
+  "這樣",
+  "可以",
+  "怎麼訂",
+  "怎麼預訂",
+  "如何訂",
+  "有空",
+  "空房",
+  "多少",
+  "價格",
+  "費用",
+  "週五",
+  "周五",
+  "平日",
+  "假日",
+  "暑假",
+  "寒假",
+  "過年",
+  "連假",
+  "春節",
+  "早餐",
+  "押金",
+  "停車",
+  "寵物",
+  "入住",
+  "退房",
+  "包棟",
+  "訂房",
+  "付款",
+  "訂金",
+  "退款",
+  "改期",
+  "訪客",
+  "烤肉",
+  "麻將",
+  "歡唱",
+  "禁菸",
+];
+const shortFollowUpMessages = [
+  "可以",
+  "好",
+  "要",
+  "不要",
+  "需要",
+  "不用",
+  "ok",
+  "okay",
+  "yes",
+  "no",
+];
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -135,31 +195,84 @@ function includesKeyword(text, keywords) {
   return keywords.some((keyword) => text.includes(keyword));
 }
 
-function isAllowedSupportScope(message) {
+function hasSupportContext(text) {
+  const normalizedText = String(text || "").toLowerCase().trim();
+  const hasSupportKeyword = includesKeyword(normalizedText, supportScopeKeywords);
+  const hasYilanTravelKeyword = includesKeyword(
+    normalizedText,
+    yilanTravelKeywords
+  );
+  const hasLodgingContext = includesKeyword(
+    normalizedText,
+    lodgingContextKeywords
+  );
+
+  return hasSupportKeyword || (hasYilanTravelKeyword && hasLodgingContext);
+}
+
+function isDateOrPeopleFragment(text) {
+  const compactText = String(text || "").toLowerCase().replace(/\s+/g, "");
+
+  return (
+    /^\d{4}$/.test(compactText) ||
+    /^\d{1,2}[/-]\d{1,2}$/.test(compactText) ||
+    /\d+\s*(人|位|大人|小孩)/.test(compactText) ||
+    /[一二三四五六七八九十兩]+(人|位|大人|小孩)/.test(compactText) ||
+    /[一二三四五六七八九十]+月[一二三四五六七八九十]+/.test(compactText) ||
+    /(週|周)[一二三四五六日天]/.test(compactText)
+  );
+}
+
+function isLikelyContextFollowUp(message) {
   const normalizedMessage = String(message || "").toLowerCase().trim();
+  const compactMessage = normalizedMessage.replace(/\s+/g, "");
+
+  if (!compactMessage) {
+    return false;
+  }
+
+  if (shortFollowUpMessages.includes(compactMessage)) {
+    return true;
+  }
+
+  if (includesKeyword(normalizedMessage, contextFollowUpKeywords)) {
+    return true;
+  }
+
+  if (isDateOrPeopleFragment(normalizedMessage)) {
+    return true;
+  }
+
+  return (
+    compactMessage.length <= 24 &&
+    /^(那|這|所以|請問|如果|不然|還有|另外)/.test(compactMessage)
+  );
+}
+
+function isAllowedSupportScope(message, contextText = message) {
+  const normalizedMessage = String(message || "").toLowerCase().trim();
+  const normalizedContext = String(contextText || "").toLowerCase().trim();
 
   if (!normalizedMessage) {
     return false;
   }
 
-  if (includesKeyword(normalizedMessage, blockedScopeKeywords)) {
+  const hasCurrentSupportContext = hasSupportContext(normalizedMessage);
+  if (
+    includesKeyword(normalizedMessage, blockedScopeKeywords) &&
+    !hasCurrentSupportContext
+  ) {
     return false;
   }
 
-  const hasSupportKeyword = includesKeyword(
-    normalizedMessage,
-    supportScopeKeywords
-  );
-  const hasYilanTravelKeyword = includesKeyword(
-    normalizedMessage,
-    yilanTravelKeywords
-  );
-  const hasLodgingContext = includesKeyword(
-    normalizedMessage,
-    lodgingContextKeywords
-  );
+  if (hasCurrentSupportContext) {
+    return true;
+  }
 
-  return hasSupportKeyword || (hasYilanTravelKeyword && hasLodgingContext);
+  return (
+    hasSupportContext(normalizedContext) &&
+    isLikelyContextFollowUp(normalizedMessage)
+  );
 }
 
 function getSupabaseConfig() {
@@ -201,6 +314,28 @@ function getDeepSeekConfig() {
   };
 }
 
+function getTaipeiDateInfo() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value])
+  );
+  const currentYear = Number(values.year);
+
+  return {
+    currentDate: `${values.year}-${values.month}-${values.day}`,
+    currentYear,
+    nextYear: currentYear + 1,
+    timeZone: "Asia/Taipei",
+  };
+}
+
 async function loadGuesthouseKnowledge() {
   if (hasGuesthouseKnowledgeCache) {
     return guesthouseKnowledgeCache;
@@ -235,10 +370,19 @@ async function loadGuesthouseKnowledge() {
   return guesthouseKnowledgeCache;
 }
 
-async function buildSystemPrompt() {
+async function buildSystemPrompt(dateInfo) {
   const guesthouseKnowledge = (await loadGuesthouseKnowledge()).trim();
 
   return `${systemPrompt}
+
+目前日期資訊：
+- 目前日期：${dateInfo.currentDate}
+- 目前年份：${dateInfo.currentYear}
+- 明年：${dateInfo.nextYear}
+- 時區：${dateInfo.timeZone}
+- 使用者說「今年」時，請理解為 ${dateInfo.currentYear} 年；說「明年」時，請理解為 ${dateInfo.nextYear} 年。
+- 若前後文已有月日、人數、包棟或價格條件，請把「今年／明年／那天／那多少」等短回覆與前文合併理解。
+- 若只有日期如 5/30，且前後文完全沒有年份或「今年／明年」線索，才詢問年份。
 
 客服知識庫使用規則：
 - 回答住宿問題時，優先依照 guesthouse-rules.md 的內容。
@@ -299,9 +443,102 @@ async function supabaseRequest(path, options = {}) {
   }
 }
 
-async function callDeepSeek(userMessage) {
+function sortMessagesByCreatedAt(messages) {
+  return [...(messages || [])].sort((first, second) => {
+    const firstTime = Date.parse(first?.created_at || "");
+    const secondTime = Date.parse(second?.created_at || "");
+
+    if (Number.isNaN(firstTime) || Number.isNaN(secondTime)) {
+      return 0;
+    }
+
+    return firstTime - secondTime;
+  });
+}
+
+async function loadRecentMessages(sessionId) {
+  const encodedSessionId = encodeURIComponent(sessionId);
+  const latestMessages = await supabaseRequest(
+    `/chat_messages?session_id=eq.${encodedSessionId}&select=created_at&order=created_at.desc&limit=${recentMessagesLimit}`
+  );
+
+  if (!latestMessages?.length) {
+    return [];
+  }
+
+  const oldestRecentCreatedAt = latestMessages[latestMessages.length - 1]?.created_at;
+  const createdAtFilter = oldestRecentCreatedAt
+    ? `&created_at=gte.${encodeURIComponent(oldestRecentCreatedAt)}`
+    : "";
+  const messages = await supabaseRequest(
+    `/chat_messages?session_id=eq.${encodedSessionId}${createdAtFilter}&select=sender,message,created_at,provider_used&order=created_at.asc&limit=${recentMessagesLimit}`
+  );
+
+  return sortMessagesByCreatedAt(messages || []).filter((message) =>
+    String(message?.message || "").trim()
+  );
+}
+
+function buildContextText(recentMessages, currentMessage) {
+  const text = [
+    ...recentMessages.map(
+      (message) => `${message.sender || "message"}: ${message.message || ""}`
+    ),
+    `user: ${currentMessage}`,
+  ].join("\n");
+
+  return text.length > recentContextMaxChars
+    ? text.slice(text.length - recentContextMaxChars)
+    : text;
+}
+
+function trimRecentMessagesForPrompt(recentMessages) {
+  const selected = [];
+  let totalLength = 0;
+
+  for (let index = recentMessages.length - 1; index >= 0; index -= 1) {
+    const message = recentMessages[index];
+    const content = String(message?.message || "").trim();
+
+    if (!content) {
+      continue;
+    }
+
+    if (totalLength + content.length > recentContextMaxChars) {
+      break;
+    }
+
+    totalLength += content.length;
+    selected.unshift(message);
+  }
+
+  return selected;
+}
+
+function buildDeepSeekMessages(prompt, recentMessages, userMessage) {
+  const conversationMessages = trimRecentMessagesForPrompt(recentMessages).map(
+    (message) => ({
+      role: message.sender === "user" ? "user" : "assistant",
+      content: String(message.message || ""),
+    })
+  );
+
+  return [
+    {
+      role: "system",
+      content: prompt,
+    },
+    ...conversationMessages,
+    {
+      role: "user",
+      content: userMessage,
+    },
+  ];
+}
+
+async function callDeepSeek(userMessage, recentMessages, dateInfo) {
   const { apiKey, baseUrl, model } = getDeepSeekConfig();
-  const prompt = await buildSystemPrompt();
+  const prompt = await buildSystemPrompt(dateInfo);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), deepSeekTimeoutMs);
 
@@ -317,16 +554,7 @@ async function callDeepSeek(userMessage) {
       },
       body: JSON.stringify({
         model,
-        messages: [
-          {
-            role: "system",
-            content: prompt,
-          },
-          {
-            role: "user",
-            content: userMessage,
-          },
-        ],
+        messages: buildDeepSeekMessages(prompt, recentMessages, userMessage),
         temperature: 0.7,
         max_tokens: 500,
       }),
@@ -431,9 +659,18 @@ export default async function handler(req, res) {
     }
 
     const session = await getOrCreateSession(visitorId);
+    const dateInfo = getTaipeiDateInfo();
+    console.log("[ai-chat] current year=", dateInfo.currentYear);
+
+    const recentMessages = await loadRecentMessages(session.id);
+    console.log("[ai-chat] recent messages count=", recentMessages.length);
+
+    const contextText = buildContextText(recentMessages, message);
+    const isCurrentScopeAllowed = isAllowedSupportScope(message);
+    const isContextScopeAllowed = isAllowedSupportScope(message, contextText);
     const userMessage = await insertMessage(session.id, "user", message, null);
 
-    if (!isAllowedSupportScope(message)) {
+    if (!isContextScopeAllowed) {
       console.log("[ai-chat] scope=blocked");
       const aiMessage = await insertMessage(
         session.id,
@@ -450,8 +687,12 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log("[ai-chat] scope=allowed");
-    const aiAnswer = await callDeepSeek(message);
+    console.log(
+      isCurrentScopeAllowed
+        ? "[ai-chat] scope=allowed"
+        : "[ai-chat] scope=allowed by context"
+    );
+    const aiAnswer = await callDeepSeek(message, recentMessages, dateInfo);
     const aiMessage = await insertMessage(session.id, "ai", aiAnswer, "deepseek");
     console.log("[ai-chat] saved assistant message");
 

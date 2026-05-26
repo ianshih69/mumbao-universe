@@ -453,7 +453,7 @@ async function supabaseRequest(path, options = {}) {
 
 async function verifyLineIdToken(idToken) {
   const normalizedToken = String(idToken || "").trim();
-  const channelId = String(process.env.LINE_CHANNEL_ID || "").trim();
+  const channelId = getLineChannelId();
 
   if (!normalizedToken || !channelId) {
     return null;
@@ -501,6 +501,15 @@ async function verifyLineIdToken(idToken) {
 function normalizeLinePictureUrl(value) {
   const pictureUrl = String(value || "").trim();
   return pictureUrl.startsWith("https://profile.line-scdn.net/") ? pictureUrl : "";
+}
+
+function getLineChannelId() {
+  const explicitChannelId = String(process.env.LINE_CHANNEL_ID || "").trim();
+  if (explicitChannelId) {
+    return explicitChannelId;
+  }
+
+  return String(process.env.NEXT_PUBLIC_LIFF_ID || "").split("-")[0].trim();
 }
 
 async function verifyLineAccessToken(accessToken) {

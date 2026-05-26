@@ -103,6 +103,7 @@ function createMessage(role: ChatRole, message: string): ChatMessage {
     id: createLocalId(),
     role,
     message,
+    created_at: new Date().toISOString(),
   };
 }
 
@@ -208,6 +209,62 @@ function getInitialMessages(messages: ChatMessage[]) {
 function getCreatedTime(message: ChatMessage) {
   const time = Date.parse(message.created_at || "");
   return Number.isNaN(time) ? null : time;
+}
+
+function getTaipeiDateParts(value: string | Date | number) {
+  const date = value instanceof Date ? value : new Date(value);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const getPart = (type: string) =>
+    parts.find((part) => part.type === type)?.value || "";
+
+  return {
+    year: getPart("year"),
+    month: getPart("month"),
+    day: getPart("day"),
+  };
+}
+
+function getTaipeiDateKey(value?: string) {
+  if (!value || Number.isNaN(Date.parse(value))) {
+    return "";
+  }
+
+  const { year, month, day } = getTaipeiDateParts(value);
+  return year && month && day ? `${year}-${month}-${day}` : "";
+}
+
+function formatTaipeiDateLabel(value?: string) {
+  const key = getTaipeiDateKey(value);
+  if (!key) return "";
+
+  const todayKey = getTaipeiDateKey(new Date().toISOString());
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = getTaipeiDateKey(yesterday.toISOString());
+
+  if (key === todayKey) return "今天";
+  if (key === yesterdayKey) return "昨天";
+
+  const { year, month, day } = getTaipeiDateParts(value);
+  return `${year}/${month}/${day}`;
+}
+
+function formatTaipeiMessageTime(value?: string) {
+  if (!value || Number.isNaN(Date.parse(value))) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
 }
 
 function sortMessagesByCreatedAt(messages: ChatMessage[]) {
@@ -598,6 +655,29 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
 
   const hasDraftMessage = useMemo(() => input.trim().length > 0, [input]);
   const canResizeWindow = compact && isDesktopResizable;
+  const messageTimeline = useMemo(() => {
+    let lastDateKey = "";
+
+    return messages.flatMap((message) => {
+      const items: Array<
+        | { type: "date"; id: string; label: string }
+        | { type: "message"; message: ChatMessage }
+      > = [];
+      const dateKey = getTaipeiDateKey(message.created_at);
+
+      if (dateKey && dateKey !== lastDateKey) {
+        lastDateKey = dateKey;
+        items.push({
+          type: "date",
+          id: `date-${dateKey}-${message.id}`,
+          label: formatTaipeiDateLabel(message.created_at),
+        });
+      }
+
+      items.push({ type: "message", message });
+      return items;
+    });
+  }, [messages]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 768px)");
@@ -1078,26 +1158,51 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
           )}
         </div>
 
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={cn(
-              "flex w-full",
-              message.role === "user" ? "justify-end" : "justify-start"
-            )}
-          >
+        {messageTimeline.map((item) => {
+          if (item.type === "date") {
+            return (
+              <div key={item.id} className="flex justify-center py-2">
+                <span className="rounded-full bg-[#eee8df] px-3 py-1 text-xs font-medium text-[#9a8b7d]">
+                  {item.label}
+                </span>
+              </div>
+            );
+          }
+
+          const { message } = item;
+          const messageTime = formatTaipeiMessageTime(message.created_at);
+
+          return (
             <div
+              key={message.id}
               className={cn(
-                "max-w-[82%] whitespace-pre-wrap break-words rounded-3xl px-4 py-3 text-sm leading-7 shadow-sm",
-                message.role === "user"
-                  ? "rounded-br-md bg-[#9ec7b8] text-white"
-                  : "rounded-bl-md border border-[#f0e3d4] bg-white text-[#5f544b]"
+                "flex w-full flex-col gap-1",
+                message.role === "user" ? "items-end" : "items-start"
               )}
             >
-              {message.message}
+              <div
+                className={cn(
+                  "max-w-[82%] whitespace-pre-wrap break-words rounded-3xl px-4 py-3 text-sm leading-7 shadow-sm",
+                  message.role === "user"
+                    ? "rounded-br-md bg-[#9ec7b8] text-white"
+                    : "rounded-bl-md border border-[#f0e3d4] bg-white text-[#5f544b]"
+                )}
+              >
+                {message.message}
+              </div>
+              {messageTime && (
+                <span
+                  className={cn(
+                    "px-1 text-[11px] leading-none text-[#b2a69a]",
+                    message.role === "user" ? "text-right" : "text-left"
+                  )}
+                >
+                  {messageTime}
+                </span>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {isLoading && (
           <div className="flex justify-start">

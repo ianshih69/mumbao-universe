@@ -45,6 +45,7 @@ type LineIdentity = {
 type LiffSdk = {
   init: (options: { liffId: string }) => Promise<void>;
   isLoggedIn: () => boolean;
+  isInClient?: () => boolean;
   login: () => void;
   getProfile: () => Promise<LineProfile>;
   getIDToken: () => string | null;
@@ -432,6 +433,18 @@ function loadLineLiffSdkFromScript() {
   });
 }
 
+function shouldRequestLineLogin(liff: LiffSdk) {
+  const params = new URLSearchParams(window.location.search);
+  const isLineLiffRedirect =
+    params.has("liff.state") || document.referrer.includes("liff.line.me");
+  const isExplicitLineEntry =
+    params.get("liff") === "1" || params.get("fromLine") === "1";
+
+  return Boolean(
+    liff.isInClient?.() || isLineLiffRedirect || isExplicitLineEntry
+  );
+}
+
 async function loadLineIdentity(): Promise<LineIdentity | null> {
   const liffId = getLineLiffId();
   if (!liffId) {
@@ -443,7 +456,7 @@ async function loadLineIdentity(): Promise<LineIdentity | null> {
     await liff.init({ liffId });
 
     if (!liff.isLoggedIn()) {
-      if (window.location.pathname === "/chat") {
+      if (shouldRequestLineLogin(liff)) {
         liff.login();
       }
       return null;

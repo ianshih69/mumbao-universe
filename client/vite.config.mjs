@@ -139,6 +139,9 @@ export default defineConfig(({ mode }) => {
     "DEEPSEEK_API_KEY",
     "DEEPSEEK_BASE_URL",
     "DEEPSEEK_MODEL",
+    "LINE_CHANNEL_ID",
+    "NEXT_PUBLIC_LIFF_ID",
+    "VITE_LINE_LIFF_ID",
   ]) {
     if (env[name]) {
       process.env[name] = env[name];
@@ -147,6 +150,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [localApiPlugin(), react(), tailwindcss(), vitePluginManusRuntime()],
+    envPrefix: ["VITE_", "NEXT_PUBLIC_"],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "src"),

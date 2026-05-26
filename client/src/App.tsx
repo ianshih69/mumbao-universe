@@ -11,6 +11,7 @@ import About from "./pages/About";
 import Mumbao from "./pages/Mumbao";
 import Admin from "./pages/Admin";
 import AiChat from "./pages/AiChat";
+import Chat from "./pages/Chat";
 
 
 function Router() {
@@ -20,6 +21,7 @@ function Router() {
       <Route path={"/admin"} component={Admin} />
       <Route path={"/about"} component={About} />
       <Route path={"/ai-chat"} component={AiChat} />
+      <Route path={"/chat"} component={Chat} />
       <Route path={"/about-mumbao"} component={Mumbao} />
       <Route path={"/mumbao"} component={Mumbao} />
       <Route path={"/zh-TW/about-mumbao"} component={Mumbao} />

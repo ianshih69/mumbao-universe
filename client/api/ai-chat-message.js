@@ -10,6 +10,7 @@ const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
 const supabaseTimeoutMs = 8000;
+const lineVerifyTimeoutMs = 8000;
 const deepSeekTimeoutMs = 20000;
 const recentMessagesLimit = 12;
 const recentContextMaxChars = 4000;
@@ -450,6 +451,103 @@ async function supabaseRequest(path, options = {}) {
   }
 }
 
+async function verifyLineIdToken(idToken) {
+  const normalizedToken = String(idToken || "").trim();
+  const channelId = String(process.env.LINE_CHANNEL_ID || "").trim();
+
+  if (!normalizedToken || !channelId) {
+    return null;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), lineVerifyTimeoutMs);
+
+  try {
+    const response = await fetch("https://api.line.me/oauth2/v2.1/verify", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        id_token: normalizedToken,
+        client_id: channelId,
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || !data?.sub) {
+      console.warn("[ai-chat] LINE ID token verify failed", {
+        status: response.status,
+        message: data?.error_description || data?.error,
+      });
+      return null;
+    }
+
+    return {
+      line_user_id: String(data.sub),
+      line_display_name: String(data.name || ""),
+      line_picture_url: String(data.picture || ""),
+    };
+  } catch (error) {
+    console.warn("[ai-chat] LINE ID token verify unavailable", error);
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function resolveVisitorIdentity({ visitorId, anonymousVisitorId, lineIdToken }) {
+  const verifiedLineProfile = await verifyLineIdToken(lineIdToken);
+
+  if (verifiedLineProfile?.line_user_id) {
+    return {
+      visitorId: `line:${verifiedLineProfile.line_user_id}`,
+      lineProfile: verifiedLineProfile,
+    };
+  }
+
+  if (String(visitorId || "").startsWith("line:")) {
+    return {
+      visitorId: String(anonymousVisitorId || "").trim(),
+      lineProfile: null,
+    };
+  }
+
+  return {
+    visitorId: String(visitorId || "").trim(),
+    lineProfile: null,
+  };
+}
+
+async function updateSessionLineIdentity(sessionId, lineProfile) {
+  if (!sessionId || !lineProfile?.line_user_id) {
+    return null;
+  }
+
+  try {
+    const updatedSessions = await supabaseRequest(
+      `/chat_sessions?id=eq.${encodeURIComponent(sessionId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          visitor_id: `line:${lineProfile.line_user_id}`,
+          line_user_id: lineProfile.line_user_id,
+          line_display_name: lineProfile.line_display_name,
+          line_picture_url: lineProfile.line_picture_url,
+          source: "line",
+        }),
+      }
+    );
+
+    return updatedSessions?.[0] || null;
+  } catch (error) {
+    console.error("[ai-chat] failed to save LINE session identity:", error);
+    return null;
+  }
+}
+
 function sortMessagesByCreatedAt(messages) {
   return [...(messages || [])].sort((first, second) => {
     const firstTime = Date.parse(first?.created_at || "");
@@ -697,7 +795,15 @@ export default async function handler(req, res) {
 
   try {
     const body = await readBody(req);
-    const visitorId = String(body.visitor_id || "").trim();
+    const requestedVisitorId = String(body.visitor_id || "").trim();
+    const anonymousVisitorId = String(body.anonymous_visitor_id || "").trim();
+    const lineIdToken = String(body.line_id_token || "").trim();
+    const identity = await resolveVisitorIdentity({
+      visitorId: requestedVisitorId,
+      anonymousVisitorId,
+      lineIdToken,
+    });
+    const visitorId = identity.visitorId;
     const sessionId = String(body.session_id || "").trim();
     const message = String(body.message || "").trim();
 
@@ -709,7 +815,10 @@ export default async function handler(req, res) {
       return sendJson(res, 400, { error: "message is required." });
     }
 
-    const session = await getSessionForMessage(visitorId, sessionId);
+    let session = await getSessionForMessage(visitorId, sessionId);
+    session =
+      (await updateSessionLineIdentity(session.id, identity.lineProfile)) ||
+      session;
     const dateInfo = getTaipeiDateInfo();
     console.log("[ai-chat] current year=", dateInfo.currentYear);
 

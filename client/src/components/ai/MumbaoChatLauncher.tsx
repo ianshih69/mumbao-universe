@@ -1,12 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useLocation } from "wouter";
 import { MumbaoChat } from "@/components/ai/MumbaoChat";
 import { cn } from "@/lib/utils";
 
 export function MumbaoChatLauncher() {
-  const [isOpen, setIsOpen] = useState(false);
   const [location] = useLocation();
+  const [isOpen, setIsOpen] = useState(() => shouldAutoOpenChat(location));
+
+  useEffect(() => {
+    if (shouldAutoOpenChat(location)) {
+      setIsOpen(true);
+    }
+  }, [location]);
 
   if (location === "/ai-chat") {
     return null;
@@ -54,5 +60,16 @@ export function MumbaoChatLauncher() {
         </span>
       </button>
     </div>
+  );
+}
+
+function shouldAutoOpenChat(location: string) {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return (
+    location === "/chat" ||
+    new URLSearchParams(window.location.search).get("openChat") === "1"
   );
 }

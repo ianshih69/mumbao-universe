@@ -29,6 +29,39 @@ type ApiMessage = {
   created_at?: string;
 };
 
+type LineProfile = {
+  userId?: string;
+  displayName?: string;
+  pictureUrl?: string;
+};
+
+type LineIdentity = {
+  idToken: string;
+  decodedIdToken?: Record<string, unknown> | null;
+  profile: LineProfile;
+  visitorId: string;
+};
+
+type LiffSdk = {
+  init: (options: { liffId: string }) => Promise<void>;
+  isLoggedIn: () => boolean;
+  login: () => void;
+  getProfile: () => Promise<LineProfile>;
+  getIDToken: () => string | null;
+  getDecodedIDToken?: () => Record<string, unknown> | null;
+};
+
+type ChatSession = {
+  id?: string | number;
+  visitor_id?: string;
+  source?: string;
+};
+
+type SessionRequestIdentity = {
+  lineIdentity?: LineIdentity | null;
+  anonymousVisitorId?: string;
+};
+
 type ChatWindowSize = {
   width: number;
   height: number;
@@ -42,6 +75,7 @@ const sessionStorageKey = "mumbao-chat-session-id";
 const visitorCookieKey = "mumbao_chat_visitor_id";
 const recentChatStorageKey = "mumbao_chat_recent_messages";
 const chatWindowSizeStorageKey = "mumbao-chat-window-size";
+const lineLiffSdkUrl = "https://static.line-scdn.net/liff/edge/2/sdk.js";
 const historyPageSize = 7;
 const localCacheMessageLimit = 30;
 const recentContextMessageLimit = 12;
@@ -116,13 +150,35 @@ function getVisitorIdentity() {
   };
 }
 
-function getStoredSessionId() {
-  return localStorage.getItem(sessionStorageKey) || "";
+function isLineVisitorId(visitorId: string) {
+  return visitorId.startsWith("line:");
 }
 
-function saveSessionId(nextSessionId: string) {
-  if (!nextSessionId) return;
-  localStorage.setItem(sessionStorageKey, nextSessionId);
+function getStoredSessionId(visitorId: string) {
+  const rawSession = localStorage.getItem(sessionStorageKey) || "";
+  if (!rawSession) return "";
+
+  try {
+    const session = JSON.parse(rawSession) as {
+      visitor_id?: string;
+      session_id?: string;
+    };
+
+    return session.visitor_id === visitorId ? session.session_id || "" : "";
+  } catch {
+    return isLineVisitorId(visitorId) ? "" : rawSession;
+  }
+}
+
+function saveSessionId(nextSessionId: string, visitorId: string) {
+  if (!nextSessionId || !visitorId) return;
+  localStorage.setItem(
+    sessionStorageKey,
+    JSON.stringify({
+      visitor_id: visitorId,
+      session_id: nextSessionId,
+    })
+  );
 }
 
 function clearSessionId() {
@@ -312,6 +368,109 @@ function saveChatWindowSize(size: ChatWindowSize) {
   }
 }
 
+function getLineLiffId() {
+  const env = import.meta.env as Record<string, string | undefined>;
+  return String(env.NEXT_PUBLIC_LIFF_ID || env.VITE_LINE_LIFF_ID || "").trim();
+}
+
+function getWindowLiff() {
+  return (window as Window & { liff?: LiffSdk }).liff;
+}
+
+function loadLineLiffSdk() {
+  const existingLiff = getWindowLiff();
+  if (existingLiff) {
+    return Promise.resolve(existingLiff);
+  }
+
+  return import("@line/liff")
+    .then((module) => (module.default || module) as LiffSdk)
+    .catch(() => loadLineLiffSdkFromScript());
+}
+
+function loadLineLiffSdkFromScript() {
+  return new Promise<LiffSdk>((resolve, reject) => {
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      `script[src="${lineLiffSdkUrl}"]`
+    );
+
+    const resolveLoadedLiff = () => {
+      const liff = getWindowLiff();
+      if (liff) {
+        resolve(liff);
+      } else {
+        reject(new Error("LIFF SDK did not initialize."));
+      }
+    };
+
+    if (existingScript) {
+      if (existingScript.dataset.liffLoaded === "true") {
+        resolveLoadedLiff();
+        return;
+      }
+
+      existingScript.addEventListener("load", resolveLoadedLiff, {
+        once: true,
+      });
+      existingScript.addEventListener(
+        "error",
+        () => reject(new Error("Failed to load LIFF SDK.")),
+        { once: true }
+      );
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = lineLiffSdkUrl;
+    script.async = true;
+    script.onload = () => {
+      script.dataset.liffLoaded = "true";
+      resolveLoadedLiff();
+    };
+    script.onerror = () => reject(new Error("Failed to load LIFF SDK."));
+    document.head.appendChild(script);
+  });
+}
+
+async function loadLineIdentity(): Promise<LineIdentity | null> {
+  const liffId = getLineLiffId();
+  if (!liffId) {
+    return null;
+  }
+
+  try {
+    const liff = await loadLineLiffSdk();
+    await liff.init({ liffId });
+
+    if (!liff.isLoggedIn()) {
+      if (window.location.pathname === "/chat") {
+        liff.login();
+      }
+      return null;
+    }
+
+    const [profile, idToken] = await Promise.all([
+      liff.getProfile(),
+      Promise.resolve(liff.getIDToken()),
+    ]);
+    const decodedIdToken = liff.getDecodedIDToken?.() || null;
+
+    if (!profile.userId || !idToken) {
+      return null;
+    }
+
+    return {
+      idToken,
+      decodedIdToken,
+      profile,
+      visitorId: `line:${profile.userId}`,
+    };
+  } catch (error) {
+    console.warn("Mumbao chat LINE identity unavailable:", error);
+    return null;
+  }
+}
+
 async function fetchJsonWithTimeout<T>(
   url: string,
   options: RequestInit,
@@ -344,9 +503,26 @@ type MumbaoChatProps = {
   compact?: boolean;
 };
 
-async function fetchSessionOnly(visitorId: string, forceNewSession = false) {
+function buildLineRequestPayload(identity?: SessionRequestIdentity) {
+  if (!identity?.lineIdentity) {
+    return {};
+  }
+
+  return {
+    anonymous_visitor_id: identity.anonymousVisitorId || undefined,
+    line_id_token: identity.lineIdentity.idToken,
+    line_decoded_id_token: identity.lineIdentity.decodedIdToken || undefined,
+    line_profile: identity.lineIdentity.profile,
+  };
+}
+
+async function fetchSessionOnly(
+  visitorId: string,
+  forceNewSession = false,
+  identity?: SessionRequestIdentity
+) {
   return fetchJsonWithTimeout<{
-    session?: { id?: string | number };
+    session?: ChatSession;
   }>(
     "/api/ai-chat-history",
     {
@@ -358,6 +534,7 @@ async function fetchSessionOnly(visitorId: string, forceNewSession = false) {
         visitor_id: visitorId,
         session_only: true,
         force_new_session: forceNewSession,
+        ...buildLineRequestPayload(identity),
       }),
     },
     8000
@@ -366,6 +543,8 @@ async function fetchSessionOnly(visitorId: string, forceNewSession = false) {
 
 export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
   const [visitorId, setVisitorId] = useState("");
+  const [anonymousVisitorId, setAnonymousVisitorId] = useState("");
+  const [lineIdentity, setLineIdentity] = useState<LineIdentity | null>(null);
   const [sessionId, setSessionId] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     createWelcomeMessage(),
@@ -419,13 +598,16 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
 
   useEffect(() => {
     const { visitorId: nextVisitorId, isExistingVisitor } = getVisitorIdentity();
-    const existingSessionId = isExistingVisitor ? getStoredSessionId() : "";
+    const existingSessionId = isExistingVisitor
+      ? getStoredSessionId(nextVisitorId)
+      : "";
     let isMounted = true;
 
     if (!isExistingVisitor) {
       clearSessionId();
     }
 
+    setAnonymousVisitorId(nextVisitorId);
     setVisitorId(nextVisitorId);
     setSessionId(existingSessionId);
     setMessages(getInitialMessages(loadCachedMessages(nextVisitorId)));
@@ -442,13 +624,46 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
         if (!isMounted || !recoveredSessionId) return;
 
         setSessionId(recoveredSessionId);
-        saveSessionId(recoveredSessionId);
+        saveSessionId(recoveredSessionId, nextVisitorId);
       } catch (error) {
         console.warn("Mumbao chat session recovery unavailable:", error);
       }
     }
 
+    async function initializeLineIdentity() {
+      const identity = await loadLineIdentity();
+      if (!isMounted || !identity) return;
+
+      try {
+        const storedLineSessionId = getStoredSessionId(identity.visitorId);
+        const data = await fetchSessionOnly(identity.visitorId, false, {
+          lineIdentity: identity,
+          anonymousVisitorId: nextVisitorId,
+        });
+        const effectiveVisitorId =
+          data.session?.visitor_id && isLineVisitorId(String(data.session.visitor_id))
+            ? String(data.session.visitor_id)
+            : "";
+        const recoveredSessionId = data.session?.id
+          ? String(data.session.id)
+          : storedLineSessionId;
+
+        if (!isMounted || !effectiveVisitorId || !recoveredSessionId) {
+          return;
+        }
+
+        setLineIdentity(identity);
+        setVisitorId(effectiveVisitorId);
+        setSessionId(recoveredSessionId);
+        setMessages(getInitialMessages(loadCachedMessages(effectiveVisitorId)));
+        saveSessionId(recoveredSessionId, effectiveVisitorId);
+      } catch (error) {
+        console.warn("Mumbao chat LINE session unavailable:", error);
+      }
+    }
+
     recoverSession();
+    initializeLineIdentity();
 
     return () => {
       isMounted = false;
@@ -607,7 +822,7 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
     try {
       const before = getOldestCreatedAt(messages);
       const data = await fetchJsonWithTimeout<{
-        session?: { id?: string | number };
+        session?: ChatSession;
         messages?: ApiMessage[];
         has_more?: boolean;
       }>(
@@ -622,6 +837,10 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
             session_id: sessionId || undefined,
             limit: historyPageSize,
             before,
+            ...buildLineRequestPayload({
+              lineIdentity,
+              anonymousVisitorId,
+            }),
           }),
         },
         8000
@@ -629,8 +848,14 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
 
       if (data.session?.id) {
         const nextSessionId = String(data.session.id);
+        const nextVisitorId = data.session.visitor_id
+          ? String(data.session.visitor_id)
+          : visitorId;
+        if (nextVisitorId !== visitorId) {
+          setVisitorId(nextVisitorId);
+        }
         setSessionId(nextSessionId);
-        saveSessionId(nextSessionId);
+        saveSessionId(nextSessionId, nextVisitorId);
       }
 
       const historyMessages = (data.messages || [])
@@ -673,7 +898,7 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
 
     try {
       const data = await fetchJsonWithTimeout<{
-        session?: { id?: string | number };
+        session?: ChatSession;
         userMessage?: ApiMessage;
         aiMessage?: ApiMessage;
         answer?: string;
@@ -689,6 +914,10 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
             session_id: sessionId || undefined,
             message: question,
             recentMessages: getRecentMessagesForApi(messages),
+            ...buildLineRequestPayload({
+              lineIdentity,
+              anonymousVisitorId,
+            }),
           }),
         },
         30000
@@ -705,8 +934,14 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
 
       if (data.session?.id) {
         const nextSessionId = String(data.session.id);
+        const nextVisitorId = data.session.visitor_id
+          ? String(data.session.visitor_id)
+          : visitorId;
+        if (nextVisitorId !== visitorId) {
+          setVisitorId(nextVisitorId);
+        }
         setSessionId(nextSessionId);
-        saveSessionId(nextSessionId);
+        saveSessionId(nextSessionId, nextVisitorId);
       }
 
       setMessages((current) =>
@@ -746,13 +981,22 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
     shouldAutoScrollRef.current = true;
 
     try {
-      const data = await fetchSessionOnly(visitorId, true);
+      const data = await fetchSessionOnly(visitorId, true, {
+        lineIdentity,
+        anonymousVisitorId,
+      });
       const nextSessionId = data.session?.id ? String(data.session.id) : "";
 
       if (!nextSessionId) return;
 
+      const nextVisitorId = data.session?.visitor_id
+        ? String(data.session.visitor_id)
+        : visitorId;
+      if (nextVisitorId !== visitorId) {
+        setVisitorId(nextVisitorId);
+      }
       setSessionId(nextSessionId);
-      saveSessionId(nextSessionId);
+      saveSessionId(nextSessionId, nextVisitorId);
     } catch (error) {
       console.warn("Mumbao chat new session unavailable:", error);
     }

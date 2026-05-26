@@ -663,6 +663,33 @@ async function fetchSessionOnly(
   );
 }
 
+async function fetchLatestHistory(
+  visitorId: string,
+  sessionId: string,
+  identity?: SessionRequestIdentity
+) {
+  return fetchJsonWithTimeout<{
+    session?: ChatSession;
+    messages?: ApiMessage[];
+    has_more?: boolean;
+  }>(
+    "/api/ai-chat-history",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        visitor_id: visitorId,
+        session_id: sessionId,
+        limit: historyPageSize,
+        ...buildLineRequestPayload(identity),
+      }),
+    },
+    8000
+  );
+}
+
 export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
   const [visitorId, setVisitorId] = useState("");
   const [anonymousVisitorId, setAnonymousVisitorId] = useState("");
@@ -777,7 +804,12 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
 
     async function initializeLineIdentity() {
       const identity = await loadLineIdentity();
-      if (!isMounted || !identity) return;
+      if (!isMounted) return;
+
+      if (!identity) {
+        recoverSession();
+        return;
+      }
 
       try {
         const boundLineSession = await bindLineSession(
@@ -792,35 +824,56 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
             : "";
 
         if (!effectiveVisitorId) {
+          recoverSession();
           return;
         }
 
-        const storedLineSessionId = getStoredSessionId(effectiveVisitorId);
-        const data = await fetchSessionOnly(effectiveVisitorId, false, {
-          lineIdentity: identity,
-          anonymousVisitorId: nextVisitorId,
-        });
-        const recoveredSessionId = data.session?.id
-          ? String(data.session.id)
-          : boundLineSession.session?.id
-            ? String(boundLineSession.session.id)
-            : storedLineSessionId;
+        const recoveredSessionId = boundLineSession.session?.id
+          ? String(boundLineSession.session.id)
+          : getStoredSessionId(effectiveVisitorId);
 
         if (!isMounted || !effectiveVisitorId || !recoveredSessionId) {
           return;
         }
 
+        const cachedMessages = loadCachedMessages(effectiveVisitorId);
+        let latestMessages = cachedMessages;
+        let hasMore = true;
+
+        try {
+          const historyData = await fetchLatestHistory(
+            effectiveVisitorId,
+            recoveredSessionId,
+            {
+              lineIdentity: identity,
+              anonymousVisitorId: nextVisitorId,
+            }
+          );
+          const historyMessages = (historyData.messages || [])
+            .map(normalizeMessage)
+            .filter((message) => message.message.trim().length > 0);
+
+          latestMessages =
+            historyMessages.length > 0
+              ? sortMessagesByCreatedAt(historyMessages)
+              : cachedMessages;
+          hasMore = Boolean(historyData.has_more);
+        } catch (error) {
+          console.warn("Mumbao chat LINE history unavailable:", error);
+        }
+
         setLineIdentity(identity);
         setVisitorId(effectiveVisitorId);
         setSessionId(recoveredSessionId);
-        setMessages(getInitialMessages(loadCachedMessages(effectiveVisitorId)));
+        setMessages(getInitialMessages(latestMessages));
+        setHasMoreHistory(hasMore);
         saveSessionId(recoveredSessionId, effectiveVisitorId);
       } catch (error) {
         console.warn("Mumbao chat LINE session unavailable:", error);
+        recoverSession();
       }
     }
 
-    recoverSession();
     initializeLineIdentity();
 
     return () => {

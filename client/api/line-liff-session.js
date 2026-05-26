@@ -173,13 +173,73 @@ async function loadSessionById(sessionId) {
   return sessions?.[0] || null;
 }
 
-async function loadLatestLineSession(lineUserId) {
-  const sessions = await supabaseRequest(
+async function countSessionMessages(sessionId) {
+  if (!sessionId) return 0;
+
+  const messages = await supabaseRequest(
+    `/chat_messages?session_id=eq.${encodeURIComponent(
+      sessionId
+    )}&select=id&limit=1000`
+  );
+
+  return Array.isArray(messages) ? messages.length : 0;
+}
+
+function getSessionSortTime(session) {
+  const time = Date.parse(
+    session?.latest_message_at || session?.updated_at || session?.created_at || ""
+  );
+
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function selectBestLineSession(sessionEntries) {
+  return [...sessionEntries].sort((first, second) => {
+    const firstHumanPriority = first.session?.status === "human_takeover" ? 0 : 1;
+    const secondHumanPriority = second.session?.status === "human_takeover" ? 0 : 1;
+    if (firstHumanPriority !== secondHumanPriority) {
+      return firstHumanPriority - secondHumanPriority;
+    }
+
+    const firstMessagePriority = first.messageCount > 0 ? 0 : 1;
+    const secondMessagePriority = second.messageCount > 0 ? 0 : 1;
+    if (firstMessagePriority !== secondMessagePriority) {
+      return firstMessagePriority - secondMessagePriority;
+    }
+
+    return getSessionSortTime(second.session) - getSessionSortTime(first.session);
+  })[0];
+}
+
+async function loadBestLineSession(lineUserId) {
+  const activeSessions = await supabaseRequest(
     `/chat_sessions?line_user_id=eq.${encodeURIComponent(
       lineUserId
-    )}&status=neq.closed&select=*&order=updated_at.desc&limit=1`
+    )}&status=in.(ai_active,human_takeover)&select=*&order=updated_at.desc&limit=20`
   );
-  return sessions?.[0] || null;
+
+  const sessions = activeSessions?.length
+    ? activeSessions
+    : await supabaseRequest(
+        `/chat_sessions?line_user_id=eq.${encodeURIComponent(
+          lineUserId
+        )}&select=*&order=updated_at.desc&limit=20`
+      ).then((items) =>
+        (items || []).filter((session) => session?.status !== "closed")
+      );
+
+  if (!sessions?.length) {
+    return null;
+  }
+
+  const entries = await Promise.all(
+    sessions.map(async (session) => ({
+      session,
+      messageCount: await countSessionMessages(session.id),
+    }))
+  );
+
+  return selectBestLineSession(entries) || null;
 }
 
 async function loadLatestVisitorSession(visitorId) {
@@ -259,26 +319,79 @@ export default async function handler(req, res) {
       body.currentSessionId || body.current_session_id || body.session_id || ""
     ).trim();
     const lineVisitorId = `line:${lineProfile.line_user_id}`;
-    const currentSession = await loadSessionById(currentSessionId);
+    console.log(
+      "[line-liff-session] verified userId =",
+      lineProfile.line_user_id
+    );
 
-    if (isSessionAttachable(currentSession, visitorId, lineVisitorId)) {
-      const session = await updateSessionLineIdentity(currentSession.id, lineProfile);
+    const existingLineSession = await loadBestLineSession(
+      lineProfile.line_user_id
+    );
+
+    if (existingLineSession?.session?.id) {
+      console.log(
+        "[line-liff-session] found existing session =",
+        existingLineSession.session.id
+      );
+      console.log(
+        "[line-liff-session] reused session reason = line_user_id match"
+      );
+      console.log(
+        "[line-liff-session] selected session has message count =",
+        existingLineSession.messageCount
+      );
+
+      const session = await updateSessionLineIdentity(
+        existingLineSession.session.id,
+        lineProfile
+      );
       return sendJson(res, 200, {
         session,
         lineProfile,
       });
     }
 
-    const existingLineSession =
-      (await loadLatestLineSession(lineProfile.line_user_id)) ||
-      (await loadLatestVisitorSession(lineVisitorId));
-    const targetSession = existingLineSession || (await createLineSession(lineVisitorId));
+    const currentSession = await loadSessionById(currentSessionId);
+
+    if (isSessionAttachable(currentSession, visitorId, lineVisitorId)) {
+      const session = await updateSessionLineIdentity(currentSession.id, lineProfile);
+      const messageCount = await countSessionMessages(session.id);
+      console.log("[line-liff-session] found existing session =", session.id);
+      console.log(
+        "[line-liff-session] reused session reason = current session attach"
+      );
+      console.log(
+        "[line-liff-session] selected session has message count =",
+        messageCount
+      );
+      return sendJson(res, 200, {
+        session,
+        lineProfile,
+      });
+    }
+
+    const existingVisitorSession = await loadLatestVisitorSession(lineVisitorId);
+    const targetSession = existingVisitorSession || (await createLineSession(lineVisitorId));
     if (!targetSession?.id) {
       throw new Error("Failed to create LINE chat session.");
     }
     const session = await updateSessionLineIdentity(
       targetSession.id,
       lineProfile
+    );
+    const messageCount = await countSessionMessages(session.id);
+
+    if (existingVisitorSession?.id) {
+      console.log("[line-liff-session] found existing session =", session.id);
+      console.log(
+        "[line-liff-session] reused session reason = line visitor_id match"
+      );
+    } else {
+      console.log("[line-liff-session] created new session =", session.id);
+    }
+    console.log(
+      "[line-liff-session] selected session has message count =",
+      messageCount
     );
 
     return sendJson(res, 200, {

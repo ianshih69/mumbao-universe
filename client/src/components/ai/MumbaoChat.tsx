@@ -36,7 +36,10 @@ type ChatWindowSize = {
 
 type ResizeDirection = "left" | "top" | "top-left" | "bottom-right";
 
-const visitorStorageKey = "mumbao_visitor_id";
+const visitorStorageKey = "mumbao-chat-visitor-id";
+const legacyVisitorStorageKey = "mumbao_visitor_id";
+const sessionStorageKey = "mumbao-chat-session-id";
+const visitorCookieKey = "mumbao_chat_visitor_id";
 const recentChatStorageKey = "mumbao_chat_recent_messages";
 const chatWindowSizeStorageKey = "mumbao-chat-window-size";
 const historyPageSize = 7;
@@ -70,15 +73,60 @@ function createWelcomeMessage() {
   };
 }
 
-function getVisitorId() {
-  const existingVisitorId = localStorage.getItem(visitorStorageKey);
+function getCookieValue(name: string) {
+  const cookie = document.cookie
+    .split("; ")
+    .find((item) => item.startsWith(`${name}=`));
+
+  return cookie ? decodeURIComponent(cookie.split("=").slice(1).join("=")) : "";
+}
+
+function setCookieValue(name: string, value: string) {
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=${encodeURIComponent(
+    value
+  )}; Max-Age=31536000; Path=/; SameSite=Lax${secure}`;
+}
+
+function persistVisitorId(visitorId: string) {
+  localStorage.setItem(visitorStorageKey, visitorId);
+  setCookieValue(visitorCookieKey, visitorId);
+}
+
+function getVisitorIdentity() {
+  const existingVisitorId =
+    localStorage.getItem(visitorStorageKey) ||
+    localStorage.getItem(legacyVisitorStorageKey) ||
+    getCookieValue(visitorCookieKey);
+
   if (existingVisitorId) {
-    return existingVisitorId;
+    persistVisitorId(existingVisitorId);
+    return {
+      visitorId: existingVisitorId,
+      isExistingVisitor: true,
+    };
   }
 
   const nextVisitorId = createLocalId();
-  localStorage.setItem(visitorStorageKey, nextVisitorId);
-  return nextVisitorId;
+  persistVisitorId(nextVisitorId);
+
+  return {
+    visitorId: nextVisitorId,
+    isExistingVisitor: false,
+  };
+}
+
+function getStoredSessionId() {
+  return localStorage.getItem(sessionStorageKey) || "";
+}
+
+function saveSessionId(nextSessionId: string) {
+  if (!nextSessionId) return;
+  localStorage.setItem(sessionStorageKey, nextSessionId);
+}
+
+function clearSessionId() {
+  localStorage.removeItem(sessionStorageKey);
 }
 
 function normalizeMessage(apiMessage: ApiMessage): ChatMessage {
@@ -296,6 +344,26 @@ type MumbaoChatProps = {
   compact?: boolean;
 };
 
+async function fetchSessionOnly(visitorId: string, forceNewSession = false) {
+  return fetchJsonWithTimeout<{
+    session?: { id?: string | number };
+  }>(
+    "/api/ai-chat-history",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        visitor_id: visitorId,
+        session_only: true,
+        force_new_session: forceNewSession,
+      }),
+    },
+    8000
+  );
+}
+
 export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
   const [visitorId, setVisitorId] = useState("");
   const [sessionId, setSessionId] = useState("");
@@ -350,9 +418,41 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
   }, []);
 
   useEffect(() => {
-    const nextVisitorId = getVisitorId();
+    const { visitorId: nextVisitorId, isExistingVisitor } = getVisitorIdentity();
+    const existingSessionId = isExistingVisitor ? getStoredSessionId() : "";
+    let isMounted = true;
+
+    if (!isExistingVisitor) {
+      clearSessionId();
+    }
+
     setVisitorId(nextVisitorId);
+    setSessionId(existingSessionId);
     setMessages(getInitialMessages(loadCachedMessages(nextVisitorId)));
+
+    async function recoverSession() {
+      if (existingSessionId || !isExistingVisitor) return;
+
+      try {
+        const data = await fetchSessionOnly(nextVisitorId);
+        const recoveredSessionId = data.session?.id
+          ? String(data.session.id)
+          : "";
+
+        if (!isMounted || !recoveredSessionId) return;
+
+        setSessionId(recoveredSessionId);
+        saveSessionId(recoveredSessionId);
+      } catch (error) {
+        console.warn("Mumbao chat session recovery unavailable:", error);
+      }
+    }
+
+    recoverSession();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -528,7 +628,9 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
       );
 
       if (data.session?.id) {
-        setSessionId(String(data.session.id));
+        const nextSessionId = String(data.session.id);
+        setSessionId(nextSessionId);
+        saveSessionId(nextSessionId);
       }
 
       const historyMessages = (data.messages || [])
@@ -602,7 +704,9 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
           : createMessage("assistant", errorReply);
 
       if (data.session?.id) {
-        setSessionId(String(data.session.id));
+        const nextSessionId = String(data.session.id);
+        setSessionId(nextSessionId);
+        saveSessionId(nextSessionId);
       }
 
       setMessages((current) =>
@@ -629,6 +733,28 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
     } finally {
       setIsLoading(false);
       requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  };
+
+  const handleEndConversation = async () => {
+    if (!visitorId || isLoading || isHistoryLoading) return;
+
+    clearSessionId();
+    setSessionId("");
+    setMessages([createWelcomeMessage()]);
+    setHasMoreHistory(true);
+    shouldAutoScrollRef.current = true;
+
+    try {
+      const data = await fetchSessionOnly(visitorId, true);
+      const nextSessionId = data.session?.id ? String(data.session.id) : "";
+
+      if (!nextSessionId) return;
+
+      setSessionId(nextSessionId);
+      saveSessionId(nextSessionId);
+    } catch (error) {
+      console.warn("Mumbao chat new session unavailable:", error);
     }
   };
 
@@ -665,10 +791,18 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
           <div className="flex size-12 items-center justify-center rounded-full bg-white text-[#88a9c7] shadow-inner">
             <Cloud className="size-7" aria-hidden="true" />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <h2 className="text-lg font-semibold tracking-wide text-[#5c5147]">問慢寶 AI客服</h2>
             <p className="text-sm text-[#8a796a]">白雲基地小幫手</p>
           </div>
+          <Button
+            type="button"
+            onClick={handleEndConversation}
+            disabled={!visitorId || isLoading || isHistoryLoading}
+            className="h-8 flex-none rounded-full border border-white/80 bg-white/70 px-3 text-xs font-medium text-[#8a796a] shadow-sm hover:bg-white disabled:opacity-60"
+          >
+            結束對話
+          </Button>
         </div>
       </div>
 

@@ -191,6 +191,13 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+function createHttpError(message, status, reason) {
+  const error = new Error(message);
+  error.status = status;
+  error.reason = reason;
+  return error;
+}
+
 function includesKeyword(text, keywords) {
   return keywords.some((keyword) => text.includes(keyword));
 }
@@ -629,7 +636,7 @@ async function callDeepSeek(userMessage, recentMessages, dateInfo) {
 async function getOrCreateSession(visitorId) {
   const encodedVisitorId = encodeURIComponent(visitorId);
   const sessions = await supabaseRequest(
-    `/chat_sessions?visitor_id=eq.${encodedVisitorId}&select=*&order=created_at.desc&limit=1`
+    `/chat_sessions?visitor_id=eq.${encodedVisitorId}&select=*&order=updated_at.desc&limit=1`
   );
 
   if (sessions?.[0]) {
@@ -657,6 +664,12 @@ async function getSessionForMessage(visitorId, sessionId) {
     if (sessions?.[0]) {
       return sessions[0];
     }
+
+    throw createHttpError(
+      "session_id does not belong to visitor_id.",
+      403,
+      "session visitor mismatch"
+    );
   }
 
   return getOrCreateSession(visitorId);
@@ -767,6 +780,12 @@ export default async function handler(req, res) {
 
     if (error?.reason === "missing deepseek api key") {
       return sendJson(res, 500, { error: "DEEPSEEK_API_KEY is missing" });
+    }
+
+    if (error?.status === 403) {
+      return sendJson(res, 403, {
+        error: "session_id does not belong to visitor_id.",
+      });
     }
 
     return sendJson(res, 500, { error: aiErrorReply });

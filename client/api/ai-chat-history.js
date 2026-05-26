@@ -5,6 +5,13 @@ const supabaseTimeoutMs = 8000;
 const defaultHistoryLimit = 7;
 const maxHistoryLimit = 30;
 
+function createHttpError(message, status, reason) {
+  const error = new Error(message);
+  error.status = status;
+  error.reason = reason;
+  return error;
+}
+
 function sendJson(res, status, body) {
   res.statusCode = status;
   res.setHeader("Content-Type", jsonHeaders["Content-Type"]);
@@ -82,7 +89,7 @@ async function getOrCreateSession(visitorId) {
 
   try {
     sessions = await supabaseRequest(
-      `/chat_sessions?visitor_id=eq.${encodedVisitorId}&select=*&order=created_at.desc&limit=1`
+      `/chat_sessions?visitor_id=eq.${encodedVisitorId}&select=*&order=updated_at.desc&limit=1`
     );
   } catch (error) {
     error.reason = error.reason || "supabase create session failed";
@@ -108,6 +115,15 @@ async function getOrCreateSession(visitorId) {
   return createdSessions[0];
 }
 
+async function createSession(visitorId) {
+  const createdSessions = await supabaseRequest("/chat_sessions", {
+    method: "POST",
+    body: JSON.stringify({ visitor_id: visitorId }),
+  });
+
+  return createdSessions[0];
+}
+
 function firstQueryValue(value) {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -123,10 +139,18 @@ function normalizeLimit(value) {
 }
 
 async function getSession({ visitorId, sessionId }) {
+  if (!visitorId) {
+    throw createHttpError(
+      "visitor_id is required.",
+      400,
+      "missing visitor_id"
+    );
+  }
+
   if (sessionId) {
     const sessionFilters = [
       `id=eq.${encodeURIComponent(sessionId)}`,
-      visitorId ? `visitor_id=eq.${encodeURIComponent(visitorId)}` : "",
+      `visitor_id=eq.${encodeURIComponent(visitorId)}`,
     ]
       .filter(Boolean)
       .join("&");
@@ -138,18 +162,11 @@ async function getSession({ visitorId, sessionId }) {
       return sessions[0];
     }
 
-    if (!visitorId) {
-      const error = new Error("Session not found.");
-      error.reason = "supabase create session failed";
-      throw error;
-    }
-  }
-
-  if (!visitorId) {
-    const error = new Error("visitor_id or session_id is required.");
-    error.status = 400;
-    error.reason = "missing visitor_id or session_id";
-    throw error;
+    throw createHttpError(
+      "session_id does not belong to visitor_id.",
+      403,
+      "session visitor mismatch"
+    );
   }
 
   return getOrCreateSession(visitorId);
@@ -232,12 +249,31 @@ export default async function handler(req, res) {
     const before = String(
       body.before || firstQueryValue(req.query?.before) || ""
     ).trim();
+    const sessionOnly =
+      body.session_only === true ||
+      firstQueryValue(req.query?.session_only) === "true";
+    const forceNewSession =
+      body.force_new_session === true ||
+      firstQueryValue(req.query?.force_new_session) === "true";
 
-    if (!visitorId && !sessionId) {
-      return sendJson(res, 400, { error: "visitor_id or session_id is required." });
+    if (!visitorId) {
+      return sendJson(res, 400, { error: "visitor_id is required." });
     }
 
-    const session = await getSession({ visitorId, sessionId });
+    const session = forceNewSession
+      ? await createSession(visitorId)
+      : await getSession({ visitorId, sessionId });
+
+    if (sessionOnly) {
+      return sendJson(res, 200, {
+        session,
+        messages: [],
+        limit,
+        before: null,
+        next_before: null,
+        has_more: false,
+      });
+    }
     let messages;
 
     try {
@@ -268,8 +304,8 @@ export default async function handler(req, res) {
       return sendJson(res, 500, { error: "missing env" });
     }
 
-    if (error?.status === 400) {
-      return sendJson(res, 400, { error: error.message, reason });
+    if (error?.status === 400 || error?.status === 403) {
+      return sendJson(res, error.status, { error: error.message, reason });
     }
 
     return sendJson(res, 500, {

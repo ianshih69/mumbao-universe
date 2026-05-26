@@ -116,6 +116,42 @@ function normalizeSession(session) {
   };
 }
 
+async function loadLatestMessage(sessionId) {
+  const messages = await supabaseRequest(
+    `/chat_messages?session_id=eq.${encodeURIComponent(
+      sessionId
+    )}&select=id,session_id,sender,message,created_at&order=created_at.desc&limit=1`
+  );
+
+  return messages?.[0] || null;
+}
+
+async function applyLatestMessageFallbacks(sessions) {
+  return Promise.all(
+    sessions.map(async (session) => {
+      if (session.last_message && session.latest_message_at) {
+        return session;
+      }
+
+      const latestMessage = await loadLatestMessage(session.id);
+      if (!latestMessage) {
+        return session;
+      }
+
+      return {
+        ...session,
+        last_message: session.last_message || latestMessage.message || "",
+        latest_message_at:
+          session.latest_message_at ||
+          latestMessage.created_at ||
+          session.updated_at ||
+          session.created_at ||
+          "",
+      };
+    })
+  );
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", "GET");
@@ -139,11 +175,18 @@ export default async function handler(req, res) {
         limit + 1
       }&offset=${offset}`
     );
-    const sessionPage = sessions || [];
+    const sessionPage = await applyLatestMessageFallbacks(sessions || []);
     const hasMore = sessionPage.length > limit;
 
     return sendJson(res, 200, {
-      sessions: sessionPage.slice(0, limit).map(normalizeSession),
+      sessions: sessionPage
+        .slice(0, limit)
+        .map(normalizeSession)
+        .sort((first, second) => {
+          const firstTime = Date.parse(first.latest_message_at || first.updated_at || "") || 0;
+          const secondTime = Date.parse(second.latest_message_at || second.updated_at || "") || 0;
+          return secondTime - firstTime;
+        }),
       page,
       limit,
       hasMore,

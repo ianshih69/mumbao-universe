@@ -1,5 +1,5 @@
+import type { FormEvent, PointerEvent as ReactPointerEvent } from "react";
 import {
-  FormEvent,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -29,11 +29,22 @@ type ApiMessage = {
   created_at?: string;
 };
 
+type ChatWindowSize = {
+  width: number;
+  height: number;
+};
+
+type ResizeDirection = "left" | "top" | "top-left" | "bottom-right";
+
 const visitorStorageKey = "mumbao_visitor_id";
 const recentChatStorageKey = "mumbao_chat_recent_messages";
+const chatWindowSizeStorageKey = "mumbao-chat-window-size";
 const historyPageSize = 7;
 const localCacheMessageLimit = 30;
 const recentContextMessageLimit = 12;
+const defaultDesktopWindowSize = { width: 420, height: 680 };
+const minDesktopWindowSize = { width: 360, height: 480 };
+const maxDesktopWindowSize = { width: 720, height: 900 };
 const welcomeMessage =
   "嗨，我是慢寶。你可以問我住宿、包棟、寵物、停車、入住時間，或白雲基地的故事。";
 const errorReply = "慢寶的雲朵訊號暫時不穩，請稍後再試。";
@@ -199,6 +210,60 @@ function getRecentMessagesForApi(messages: ChatMessage[]) {
     }));
 }
 
+function getMaxDesktopWindowSize() {
+  if (typeof window === "undefined") {
+    return maxDesktopWindowSize;
+  }
+
+  return {
+    width: Math.min(window.innerWidth * 0.9, maxDesktopWindowSize.width),
+    height: Math.min(window.innerHeight * 0.9, maxDesktopWindowSize.height),
+  };
+}
+
+function clampChatWindowSize(size: ChatWindowSize): ChatWindowSize {
+  const maxSize = getMaxDesktopWindowSize();
+
+  return {
+    width: Math.round(
+      Math.min(Math.max(size.width, minDesktopWindowSize.width), maxSize.width)
+    ),
+    height: Math.round(
+      Math.min(Math.max(size.height, minDesktopWindowSize.height), maxSize.height)
+    ),
+  };
+}
+
+function loadChatWindowSize() {
+  if (typeof window === "undefined") {
+    return defaultDesktopWindowSize;
+  }
+
+  try {
+    const rawSize = localStorage.getItem(chatWindowSizeStorageKey);
+    if (!rawSize) {
+      return clampChatWindowSize(defaultDesktopWindowSize);
+    }
+
+    const size = JSON.parse(rawSize) as Partial<ChatWindowSize>;
+    return clampChatWindowSize({
+      width: Number(size.width) || defaultDesktopWindowSize.width,
+      height: Number(size.height) || defaultDesktopWindowSize.height,
+    });
+  } catch (error) {
+    console.warn("Mumbao chat window size unavailable:", error);
+    return clampChatWindowSize(defaultDesktopWindowSize);
+  }
+}
+
+function saveChatWindowSize(size: ChatWindowSize) {
+  try {
+    localStorage.setItem(chatWindowSizeStorageKey, JSON.stringify(size));
+  } catch (error) {
+    console.warn("Mumbao chat window size save unavailable:", error);
+  }
+}
+
 async function fetchJsonWithTimeout<T>(
   url: string,
   options: RequestInit,
@@ -241,6 +306,11 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [isDesktopResizable, setIsDesktopResizable] = useState(false);
+  const [windowSize, setWindowSize] = useState<ChatWindowSize>(() =>
+    loadChatWindowSize()
+  );
+  const [isResizing, setIsResizing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -248,8 +318,36 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
     scrollHeight: number;
     scrollTop: number;
   } | null>(null);
+  const resizeStartRef = useRef<{
+    pointerId: number;
+    direction: ResizeDirection;
+    startX: number;
+    startY: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const resizeFrameRef = useRef<number | null>(null);
+  const nextResizeSizeRef = useRef<ChatWindowSize | null>(null);
 
   const hasDraftMessage = useMemo(() => input.trim().length > 0, [input]);
+  const canResizeWindow = compact && isDesktopResizable;
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 768px)");
+    const updateResizableState = () => {
+      setIsDesktopResizable(mediaQuery.matches);
+      setWindowSize((current) => clampChatWindowSize(current));
+    };
+
+    updateResizableState();
+    mediaQuery.addEventListener("change", updateResizableState);
+    window.addEventListener("resize", updateResizableState);
+
+    return () => {
+      mediaQuery.removeEventListener("change", updateResizableState);
+      window.removeEventListener("resize", updateResizableState);
+    };
+  }, []);
 
   useEffect(() => {
     const nextVisitorId = getVisitorId();
@@ -287,6 +385,110 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
       pendingScrollRestore.scrollTop;
     pendingScrollRestoreRef.current = null;
   }, [messages]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const resizeStart = resizeStartRef.current;
+      if (!resizeStart) return;
+
+      const deltaX = event.clientX - resizeStart.startX;
+      const deltaY = event.clientY - resizeStart.startY;
+      const nextSize = {
+        width: resizeStart.width,
+        height: resizeStart.height,
+      };
+
+      if (
+        resizeStart.direction === "left" ||
+        resizeStart.direction === "top-left"
+      ) {
+        nextSize.width = resizeStart.width - deltaX;
+      }
+
+      if (resizeStart.direction === "bottom-right") {
+        nextSize.width = resizeStart.width + deltaX;
+      }
+
+      if (
+        resizeStart.direction === "top" ||
+        resizeStart.direction === "top-left"
+      ) {
+        nextSize.height = resizeStart.height - deltaY;
+      }
+
+      if (resizeStart.direction === "bottom-right") {
+        nextSize.height = resizeStart.height + deltaY;
+      }
+
+      nextResizeSizeRef.current = clampChatWindowSize(nextSize);
+
+      if (resizeFrameRef.current !== null) {
+        return;
+      }
+
+      resizeFrameRef.current = window.requestAnimationFrame(() => {
+        resizeFrameRef.current = null;
+        if (nextResizeSizeRef.current) {
+          setWindowSize(nextResizeSizeRef.current);
+        }
+      });
+    };
+
+    const handlePointerUp = () => {
+      if (resizeFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeFrameRef.current);
+        resizeFrameRef.current = null;
+      }
+
+      const finalSize = nextResizeSizeRef.current;
+      nextResizeSizeRef.current = null;
+      resizeStartRef.current = null;
+      setIsResizing(false);
+      setWindowSize((current) => {
+        const nextSize = clampChatWindowSize(finalSize || current);
+        saveChatWindowSize(nextSize);
+        return nextSize;
+      });
+    };
+
+    document.body.classList.add("select-none");
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+
+    return () => {
+      document.body.classList.remove("select-none");
+      if (resizeFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeFrameRef.current);
+        resizeFrameRef.current = null;
+      }
+      nextResizeSizeRef.current = null;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [isResizing]);
+
+  const handleResizePointerDown = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    direction: ResizeDirection
+  ) => {
+    if (!canResizeWindow || event.button !== 0) return;
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeStartRef.current = {
+      pointerId: event.pointerId,
+      direction,
+      startX: event.clientX,
+      startY: event.clientY,
+      width: windowSize.width,
+      height: windowSize.height,
+    };
+    setIsResizing(true);
+  };
 
   const handleLoadHistory = async () => {
     if (!visitorId || isHistoryLoading || !hasMoreHistory) return;
@@ -430,11 +632,25 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
     }
   };
 
+  const desktopWindowStyle = canResizeWindow
+    ? {
+        width: `${windowSize.width}px`,
+        height: `${windowSize.height}px`,
+        minWidth: `${minDesktopWindowSize.width}px`,
+        minHeight: `${minDesktopWindowSize.height}px`,
+        maxWidth: "min(90vw, 720px)",
+        maxHeight: "min(90dvh, 900px)",
+      }
+    : undefined;
+
   return (
     <section
+      style={desktopWindowStyle}
       className={cn(
-        "box-border flex h-full max-h-[100dvh] min-h-0 flex-col overflow-hidden border border-white/80 bg-[#fffaf2]/95 shadow-[0_24px_80px_rgba(111,88,71,0.18)] backdrop-blur-2xl",
+        "relative box-border flex h-full max-h-[100dvh] min-h-0 flex-col overflow-hidden border border-white/80 bg-[#fffaf2]/95 shadow-[0_24px_80px_rgba(111,88,71,0.18)] backdrop-blur-2xl",
         compact ? "rounded-[28px]" : "rounded-[32px]",
+        isResizing && "select-none",
+        isResizing && "[&_*]:!transition-none",
         className
       )}
       aria-label="問慢寶 AI客服"
@@ -528,6 +744,42 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
           <Send className="size-5" aria-hidden="true" />
         </Button>
       </form>
+
+      {canResizeWindow && (
+        <>
+          <button
+            type="button"
+            onPointerDown={(event) => handleResizePointerDown(event, "left")}
+            className="absolute -left-1 top-6 z-20 hidden h-[calc(100%-3rem)] w-3 cursor-ew-resize touch-none rounded-l-[28px] border-0 bg-transparent p-0 md:block"
+            aria-label="調整客服視窗寬度"
+          />
+          <button
+            type="button"
+            onPointerDown={(event) => handleResizePointerDown(event, "top")}
+            className="absolute -top-1 left-6 z-20 hidden h-3 w-[calc(100%-3rem)] cursor-ns-resize touch-none rounded-t-[28px] border-0 bg-transparent p-0 md:block"
+            aria-label="調整客服視窗高度"
+          />
+          <button
+            type="button"
+            onPointerDown={(event) => handleResizePointerDown(event, "top-left")}
+            className="absolute -left-1 -top-1 z-30 hidden size-6 cursor-nwse-resize touch-none rounded-tl-[28px] border-0 bg-transparent p-0 text-[#bda98d] opacity-55 transition hover:opacity-90 md:block"
+            aria-label="調整客服視窗寬度與高度"
+          >
+            <span className="pointer-events-none absolute left-2 top-2 size-3 border-l-2 border-t-2 border-current" />
+          </button>
+          <button
+            type="button"
+            onPointerDown={(event) =>
+              handleResizePointerDown(event, "bottom-right")
+            }
+            className="absolute bottom-1 right-1 z-20 hidden size-6 cursor-nwse-resize touch-none items-end justify-end rounded-br-[22px] border-0 bg-transparent p-0 text-[#bda98d] opacity-70 transition hover:opacity-100 md:flex"
+            aria-label="調整客服視窗大小"
+          >
+            <span className="pointer-events-none absolute bottom-2 right-2 size-3 border-b-2 border-r-2 border-current" />
+            <span className="pointer-events-none absolute bottom-2 right-2 size-5 border-b border-r border-current opacity-45" />
+          </button>
+        </>
+      )}
     </section>
   );
 }

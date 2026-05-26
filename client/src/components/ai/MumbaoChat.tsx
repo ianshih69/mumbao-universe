@@ -517,6 +517,7 @@ async function fetchJsonWithTimeout<T>(
 type MumbaoChatProps = {
   className?: string;
   compact?: boolean;
+  onRequestClose?: () => void;
 };
 
 function buildLineRequestPayload(identity?: SessionRequestIdentity) {
@@ -557,7 +558,11 @@ async function fetchSessionOnly(
   );
 }
 
-export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
+export function MumbaoChat({
+  className,
+  compact = false,
+  onRequestClose,
+}: MumbaoChatProps) {
   const [visitorId, setVisitorId] = useState("");
   const [anonymousVisitorId, setAnonymousVisitorId] = useState("");
   const [lineIdentity, setLineIdentity] = useState<LineIdentity | null>(null);
@@ -987,14 +992,18 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
     }
   };
 
-  const handleEndConversation = async () => {
+  const closeChatWidget = () => {
+    onRequestClose?.();
+  };
+
+  const resetChatSession = async () => {
     if (!visitorId || isLoading || isHistoryLoading) return;
 
-    clearSessionId();
-    setSessionId("");
-    setMessages([createWelcomeMessage()]);
-    setHasMoreHistory(true);
-    shouldAutoScrollRef.current = true;
+    const confirmed = window.confirm(
+      "這不會刪除歷史紀錄，只會開啟新的對話。"
+    );
+
+    if (!confirmed) return;
 
     try {
       const data = await fetchSessionOnly(visitorId, true, {
@@ -1013,6 +1022,9 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
       }
       setSessionId(nextSessionId);
       saveSessionId(nextSessionId, nextVisitorId);
+      setMessages([createWelcomeMessage()]);
+      setHasMoreHistory(true);
+      shouldAutoScrollRef.current = true;
     } catch (error) {
       console.warn("Mumbao chat new session unavailable:", error);
     }
@@ -1055,13 +1067,22 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
             <h2 className="text-lg font-semibold tracking-wide text-[#5c5147]">問慢寶 AI客服</h2>
             <p className="text-sm text-[#8a796a]">白雲基地小幫手</p>
           </div>
+          {onRequestClose && (
+            <Button
+              type="button"
+              onClick={closeChatWidget}
+              className="h-8 flex-none rounded-full border border-white/80 bg-white/70 px-3 text-xs font-medium text-[#8a796a] shadow-sm hover:bg-white"
+            >
+              收合
+            </Button>
+          )}
           <Button
             type="button"
-            onClick={handleEndConversation}
+            onClick={resetChatSession}
             disabled={!visitorId || isLoading || isHistoryLoading}
-            className="h-8 flex-none rounded-full border border-white/80 bg-white/70 px-3 text-xs font-medium text-[#8a796a] shadow-sm hover:bg-white disabled:opacity-60"
+            className="h-8 flex-none rounded-full border border-transparent bg-transparent px-2 text-xs font-medium text-[#9a8778] shadow-none hover:bg-white/55 disabled:opacity-60"
           >
-            結束對話
+            重新開始
           </Button>
         </div>
       </div>

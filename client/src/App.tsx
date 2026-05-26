@@ -10,6 +10,7 @@ import Home from "./pages/Home";
 import About from "./pages/About";
 import Mumbao from "./pages/Mumbao";
 import Admin from "./pages/Admin";
+import AdminChats from "./pages/AdminChats";
 import AiChat from "./pages/AiChat";
 import Chat from "./pages/Chat";
 
@@ -19,6 +20,7 @@ function Router() {
     <Switch>
       <Route path={"/"} component={Home} />
       <Route path={"/admin"} component={Admin} />
+      <Route path={"/admin/chats"} component={AdminChats} />
       <Route path={"/about"} component={About} />
       <Route path={"/ai-chat"} component={AiChat} />
       <Route path={"/chat"} component={Chat} />

@@ -787,6 +787,44 @@ async function insertMessage(sessionId, sender, message, providerUsed) {
   return inserted[0];
 }
 
+async function updateSessionAfterMessage(session, message, options = {}) {
+  if (!session?.id || !message) {
+    return session;
+  }
+
+  const unreadCount = options.incrementUnread
+    ? Number(session.unread_count || 0) + 1
+    : Number(session.unread_count || 0);
+
+  try {
+    const updatedSessions = await supabaseRequest(
+      `/chat_sessions?id=eq.${encodeURIComponent(session.id)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          last_message: message.message || "",
+          latest_message_at: message.created_at || new Date().toISOString(),
+          unread_count: unreadCount,
+          updated_at: new Date().toISOString(),
+        }),
+      }
+    );
+
+    return updatedSessions?.[0] || session;
+  } catch (error) {
+    console.warn("[ai-chat] failed to update session summary:", error);
+    return session;
+  }
+}
+
+function shouldSkipAiReply(session) {
+  return (
+    session?.status === "human_takeover" ||
+    session?.status === "closed" ||
+    session?.should_ai_reply === false
+  );
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -851,6 +889,20 @@ export default async function handler(req, res) {
     console.log("[ai-chat] recent messages count=", recentMessages.length);
 
     const userMessage = await insertMessage(session.id, "user", message, null);
+    session = await updateSessionAfterMessage(session, userMessage, {
+      incrementUnread: true,
+    });
+
+    if (shouldSkipAiReply(session)) {
+      console.log("[ai-chat] human takeover active, skip ai reply");
+      return sendJson(res, 200, {
+        session,
+        userMessage,
+        aiMessage: null,
+        answer: "",
+        humanTakeover: true,
+      });
+    }
 
     if (!isContextScopeAllowed) {
       console.log("[ai-chat] scope=blocked");
@@ -860,6 +912,7 @@ export default async function handler(req, res) {
         scopeGuardReply,
         "scope_guard"
       );
+      session = await updateSessionAfterMessage(session, aiMessage);
 
       return sendJson(res, 200, {
         session,
@@ -876,6 +929,7 @@ export default async function handler(req, res) {
     );
     const aiAnswer = await callDeepSeek(message, recentMessages, dateInfo);
     const aiMessage = await insertMessage(session.id, "ai", aiAnswer, "deepseek");
+    session = await updateSessionAfterMessage(session, aiMessage);
     console.log("[ai-chat] saved assistant message");
 
     return sendJson(res, 200, {

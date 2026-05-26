@@ -325,6 +325,20 @@ async function loadMessagesPage({ sessionId, limit, before }) {
   );
 }
 
+async function loadMessagesAfter({ sessionId, limit, after }) {
+  const normalizedAfter = String(after || "").trim();
+  const afterFilter =
+    normalizedAfter && !Number.isNaN(Date.parse(normalizedAfter))
+      ? `&created_at=gt.${encodeURIComponent(normalizedAfter)}`
+      : "";
+
+  return supabaseRequest(
+    `/chat_messages?session_id=eq.${encodeURIComponent(
+      sessionId
+    )}${afterFilter}&select=id,sender,message,provider_used,created_at&order=created_at.asc&limit=${limit}`
+  );
+}
+
 export default async function handler(req, res) {
   if (!["GET", "POST"].includes(req.method)) {
     res.setHeader("Allow", "GET, POST");
@@ -361,6 +375,9 @@ export default async function handler(req, res) {
     const before = String(
       body.before || firstQueryValue(req.query?.before) || ""
     ).trim();
+    const after = String(
+      body.after || firstQueryValue(req.query?.after) || ""
+    ).trim();
     const sessionOnly =
       body.session_only === true ||
       firstQueryValue(req.query?.session_only) === "true";
@@ -393,11 +410,17 @@ export default async function handler(req, res) {
     let messages;
 
     try {
-      messages = await loadMessagesPage({
-        sessionId: session.id,
-        limit,
-        before,
-      });
+      messages = after
+        ? await loadMessagesAfter({
+            sessionId: session.id,
+            limit,
+            after,
+          })
+        : await loadMessagesPage({
+            sessionId: session.id,
+            limit,
+            before,
+          });
     } catch (error) {
       error.reason = error.reason || "supabase load messages failed";
       throw error;
@@ -409,8 +432,9 @@ export default async function handler(req, res) {
       messages: sortedMessages,
       limit,
       before: before || null,
+      after: after || null,
       next_before: sortedMessages[0]?.created_at || null,
-      has_more: sortedMessages.length === limit,
+      has_more: !after && sortedMessages.length === limit,
     });
   } catch (error) {
     console.error("chat history error:", error);

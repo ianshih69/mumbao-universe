@@ -316,6 +316,12 @@ function getOldestCreatedAt(messages: ChatMessage[]) {
   )?.created_at;
 }
 
+function getNewestCreatedAt(messages: ChatMessage[]) {
+  return sortMessagesByCreatedAt(messages.filter(isRealChatMessage))
+    .reverse()
+    .find((message) => message.created_at)?.created_at;
+}
+
 function loadCachedMessages(visitorId: string) {
   try {
     const rawCache = localStorage.getItem(recentChatStorageKey);
@@ -776,6 +782,69 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
   }, [messages, visitorId]);
 
   useEffect(() => {
+    if (!visitorId || !sessionId) return;
+
+    let isCancelled = false;
+
+    const loadNewMessages = async () => {
+      const after = getNewestCreatedAt(messages);
+
+      try {
+        const data = await fetchJsonWithTimeout<{
+          messages?: ApiMessage[];
+        }>(
+          "/api/ai-chat-history",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              visitor_id: visitorId,
+              session_id: sessionId,
+              limit: historyPageSize,
+              after: after || undefined,
+              ...buildLineRequestPayload({
+                lineIdentity,
+                anonymousVisitorId,
+              }),
+            }),
+          },
+          8000
+        );
+
+        if (isCancelled) return;
+
+        const incomingMessages = (data.messages || [])
+          .map(normalizeMessage)
+          .filter((message) => message.message.trim().length > 0);
+
+        if (incomingMessages.length === 0) return;
+
+        shouldAutoScrollRef.current = true;
+        setMessages((current) =>
+          getInitialMessages(
+            sortMessagesByCreatedAt(
+              dedupeMessages([
+                ...current.filter((message) => isRealChatMessage(message)),
+                ...incomingMessages,
+              ])
+            )
+          )
+        );
+      } catch (error) {
+        console.warn("Mumbao chat live messages unavailable:", error);
+      }
+    };
+
+    const timer = window.setInterval(loadNewMessages, 5000);
+    return () => {
+      isCancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [anonymousVisitorId, lineIdentity, messages, sessionId, visitorId]);
+
+  useEffect(() => {
     if (!shouldAutoScrollRef.current || pendingScrollRestoreRef.current) {
       return;
     }
@@ -1008,8 +1077,9 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
       const data = await fetchJsonWithTimeout<{
         session?: ChatSession;
         userMessage?: ApiMessage;
-        aiMessage?: ApiMessage;
+        aiMessage?: ApiMessage | null;
         answer?: string;
+        humanTakeover?: boolean;
       }>(
         "/api/ai-chat-message",
         {
@@ -1034,7 +1104,9 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
       const savedUserMessage = data.userMessage
         ? normalizeMessage(data.userMessage)
         : pendingUserMessage;
-      const savedAiMessage = data.aiMessage
+      const savedAiMessage = data.humanTakeover
+        ? null
+        : data.aiMessage
         ? normalizeMessage(data.aiMessage)
         : data.answer
           ? createMessage("assistant", data.answer)
@@ -1053,14 +1125,16 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
       }
 
       setMessages((current) =>
-        sortMessagesByCreatedAt([
+        sortMessagesByCreatedAt(
+          [
           ...current.filter(
             (message) =>
               isRealChatMessage(message) && message.id !== pendingUserMessage.id
           ),
           savedUserMessage,
           savedAiMessage,
-        ])
+        ].filter(Boolean) as ChatMessage[]
+        )
       );
     } catch (error) {
       console.warn("Mumbao chat message unavailable:", error);

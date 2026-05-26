@@ -12,7 +12,46 @@ const localApiRoutes = new Map([
   ["/api/env-test", path.resolve(__dirname, "api", "env-test.js")],
   ["/api/ai-chat-history", path.resolve(__dirname, "api", "ai-chat-history.js")],
   ["/api/ai-chat-message", path.resolve(__dirname, "api", "ai-chat-message.js")],
+  ["/api/admin/chat-sessions", path.resolve(__dirname, "api", "admin", "chat-sessions.js")],
 ]);
+
+function matchLocalApiRoute(pathname) {
+  const directRoute = localApiRoutes.get(pathname);
+  if (directRoute) {
+    return { apiFile: directRoute, params: {} };
+  }
+
+  const messagesMatch = pathname.match(/^\/api\/admin\/chat-sessions\/([^/]+)\/messages$/);
+  if (messagesMatch) {
+    return {
+      apiFile: path.resolve(
+        __dirname,
+        "api",
+        "admin",
+        "chat-sessions",
+        "[sessionId]",
+        "messages.js"
+      ),
+      params: { sessionId: decodeURIComponent(messagesMatch[1]) },
+    };
+  }
+
+  const sessionMatch = pathname.match(/^\/api\/admin\/chat-sessions\/([^/]+)$/);
+  if (sessionMatch) {
+    return {
+      apiFile: path.resolve(
+        __dirname,
+        "api",
+        "admin",
+        "chat-sessions",
+        "[sessionId].js"
+      ),
+      params: { sessionId: decodeURIComponent(sessionMatch[1]) },
+    };
+  }
+
+  return null;
+}
 
 async function readRequestBody(req) {
   const chunks = [];
@@ -35,6 +74,12 @@ async function readRequestBody(req) {
 
 function createVercelResponse(res) {
   return {
+    get statusCode() {
+      return res.statusCode;
+    },
+    set statusCode(code) {
+      res.statusCode = code;
+    },
     status(code) {
       res.statusCode = code;
       return this;
@@ -97,21 +142,24 @@ function localApiPlugin() {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const requestUrl = new URL(req.url || "/", "http://localhost");
-        const apiFile = localApiRoutes.get(requestUrl.pathname);
+        const route = matchLocalApiRoute(requestUrl.pathname);
 
-        if (!apiFile) {
+        if (!route) {
           next();
           return;
         }
 
         try {
-          req.query = Object.fromEntries(requestUrl.searchParams.entries());
+          req.query = {
+            ...Object.fromEntries(requestUrl.searchParams.entries()),
+            ...route.params,
+          };
 
           if (!["GET", "HEAD"].includes(req.method || "GET")) {
             req.body = await readRequestBody(req);
           }
 
-          const handler = await loadApiHandler(apiFile);
+          const handler = await loadApiHandler(route.apiFile);
           await handler(req, createVercelResponse(res));
         } catch (error) {
           console.error("Local API handler error:", error);
@@ -142,6 +190,7 @@ export default defineConfig(({ mode }) => {
     "LINE_CHANNEL_ID",
     "NEXT_PUBLIC_LIFF_ID",
     "VITE_LINE_LIFF_ID",
+    "ADMIN_PASSWORD",
   ]) {
     if (env[name]) {
       process.env[name] = env[name];

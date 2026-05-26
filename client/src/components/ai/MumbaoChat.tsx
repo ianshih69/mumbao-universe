@@ -46,7 +46,7 @@ type LiffSdk = {
   init: (options: { liffId: string }) => Promise<void>;
   isLoggedIn: () => boolean;
   isInClient?: () => boolean;
-  login: () => void;
+  login: (options?: { redirectUri?: string }) => void;
   getProfile: () => Promise<LineProfile>;
   getIDToken: () => string | null;
   getDecodedIDToken?: () => Record<string, unknown> | null;
@@ -77,6 +77,7 @@ const visitorCookieKey = "mumbao_chat_visitor_id";
 const recentChatStorageKey = "mumbao_chat_recent_messages";
 const chatWindowSizeStorageKey = "mumbao-chat-window-size";
 const lineLiffSdkUrl = "https://static.line-scdn.net/liff/edge/2/sdk.js";
+const lineLoginRedirectUri = "https://www.mumbao.tw/chat";
 const historyPageSize = 7;
 const localCacheMessageLimit = 30;
 const recentContextMessageLimit = 12;
@@ -457,7 +458,9 @@ async function loadLineIdentity(): Promise<LineIdentity | null> {
 
     if (!liff.isLoggedIn()) {
       if (shouldRequestLineLogin(liff)) {
-        liff.login();
+        liff.login({
+          redirectUri: lineLoginRedirectUri,
+        });
       }
       return null;
     }

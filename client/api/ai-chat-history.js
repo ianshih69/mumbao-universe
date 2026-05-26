@@ -2,6 +2,8 @@ const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
 const supabaseTimeoutMs = 8000;
+const defaultHistoryLimit = 7;
+const maxHistoryLimit = 30;
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -106,6 +108,53 @@ async function getOrCreateSession(visitorId) {
   return createdSessions[0];
 }
 
+function firstQueryValue(value) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeLimit(value) {
+  const parsedLimit = Number.parseInt(String(value || defaultHistoryLimit), 10);
+
+  if (!Number.isFinite(parsedLimit) || parsedLimit <= 0) {
+    return defaultHistoryLimit;
+  }
+
+  return Math.min(parsedLimit, maxHistoryLimit);
+}
+
+async function getSession({ visitorId, sessionId }) {
+  if (sessionId) {
+    const sessionFilters = [
+      `id=eq.${encodeURIComponent(sessionId)}`,
+      visitorId ? `visitor_id=eq.${encodeURIComponent(visitorId)}` : "",
+    ]
+      .filter(Boolean)
+      .join("&");
+    const sessions = await supabaseRequest(
+      `/chat_sessions?${sessionFilters}&select=*&limit=1`
+    );
+
+    if (sessions?.[0]) {
+      return sessions[0];
+    }
+
+    if (!visitorId) {
+      const error = new Error("Session not found.");
+      error.reason = "supabase create session failed";
+      throw error;
+    }
+  }
+
+  if (!visitorId) {
+    const error = new Error("visitor_id or session_id is required.");
+    error.status = 400;
+    error.reason = "missing visitor_id or session_id";
+    throw error;
+  }
+
+  return getOrCreateSession(visitorId);
+}
+
 function getCreatedTime(message) {
   const time = Date.parse(message?.created_at || "");
   return Number.isNaN(time) ? null : time;
@@ -124,6 +173,43 @@ function sortMessagesByCreatedAt(messages) {
   });
 }
 
+async function resolveBeforeCreatedAt(sessionId, before) {
+  const normalizedBefore = String(before || "").trim();
+  if (!normalizedBefore) {
+    return "";
+  }
+
+  if (!Number.isNaN(Date.parse(normalizedBefore))) {
+    return normalizedBefore;
+  }
+
+  const cursorMessages = await supabaseRequest(
+    `/chat_messages?session_id=eq.${encodeURIComponent(
+      sessionId
+    )}&id=eq.${encodeURIComponent(normalizedBefore)}&select=created_at&limit=1`
+  );
+
+  return cursorMessages?.[0]?.created_at || null;
+}
+
+async function loadMessagesPage({ sessionId, limit, before }) {
+  const beforeCreatedAt = await resolveBeforeCreatedAt(sessionId, before);
+
+  if (before && !beforeCreatedAt) {
+    return [];
+  }
+
+  const beforeFilter = beforeCreatedAt
+    ? `&created_at=lt.${encodeURIComponent(beforeCreatedAt)}`
+    : "";
+
+  return supabaseRequest(
+    `/chat_messages?session_id=eq.${encodeURIComponent(
+      sessionId
+    )}${beforeFilter}&select=id,sender,message,provider_used,created_at&order=created_at.desc&limit=${limit}`
+  );
+}
+
 export default async function handler(req, res) {
   if (!["GET", "POST"].includes(req.method)) {
     res.setHeader("Allow", "GET, POST");
@@ -137,28 +223,42 @@ export default async function handler(req, res) {
 
     const body = req.method === "POST" ? await readBody(req) : {};
     const visitorId = String(
-      body.visitor_id || req.query?.visitor_id || ""
+      body.visitor_id || firstQueryValue(req.query?.visitor_id) || ""
+    ).trim();
+    const sessionId = String(
+      body.session_id || firstQueryValue(req.query?.session_id) || ""
+    ).trim();
+    const limit = normalizeLimit(body.limit || firstQueryValue(req.query?.limit));
+    const before = String(
+      body.before || firstQueryValue(req.query?.before) || ""
     ).trim();
 
-    if (!visitorId) {
-      return sendJson(res, 400, { error: "visitor_id is required." });
+    if (!visitorId && !sessionId) {
+      return sendJson(res, 400, { error: "visitor_id or session_id is required." });
     }
 
-    const session = await getOrCreateSession(visitorId);
+    const session = await getSession({ visitorId, sessionId });
     let messages;
 
     try {
-      messages = await supabaseRequest(
-        `/chat_messages?session_id=eq.${encodeURIComponent(session.id)}&select=*&order=created_at.asc`
-      );
+      messages = await loadMessagesPage({
+        sessionId: session.id,
+        limit,
+        before,
+      });
     } catch (error) {
       error.reason = error.reason || "supabase load messages failed";
       throw error;
     }
+    const sortedMessages = sortMessagesByCreatedAt(messages);
 
     return sendJson(res, 200, {
       session,
-      messages: sortMessagesByCreatedAt(messages),
+      messages: sortedMessages,
+      limit,
+      before: before || null,
+      next_before: sortedMessages[0]?.created_at || null,
+      has_more: sortedMessages.length === limit,
     });
   } catch (error) {
     console.error("chat history error:", error);
@@ -166,6 +266,10 @@ export default async function handler(req, res) {
     const reason = error?.reason || "unknown error";
     if (reason === "missing env") {
       return sendJson(res, 500, { error: "missing env" });
+    }
+
+    if (error?.status === 400) {
+      return sendJson(res, 400, { error: error.message, reason });
     }
 
     return sendJson(res, 500, {

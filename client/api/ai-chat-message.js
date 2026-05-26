@@ -458,24 +458,43 @@ function sortMessagesByCreatedAt(messages) {
 
 async function loadRecentMessages(sessionId) {
   const encodedSessionId = encodeURIComponent(sessionId);
-  const latestMessages = await supabaseRequest(
-    `/chat_messages?session_id=eq.${encodedSessionId}&select=created_at&order=created_at.desc&limit=${recentMessagesLimit}`
-  );
-
-  if (!latestMessages?.length) {
-    return [];
-  }
-
-  const oldestRecentCreatedAt = latestMessages[latestMessages.length - 1]?.created_at;
-  const createdAtFilter = oldestRecentCreatedAt
-    ? `&created_at=gte.${encodeURIComponent(oldestRecentCreatedAt)}`
-    : "";
   const messages = await supabaseRequest(
-    `/chat_messages?session_id=eq.${encodedSessionId}${createdAtFilter}&select=sender,message,created_at,provider_used&order=created_at.asc&limit=${recentMessagesLimit}`
+    `/chat_messages?session_id=eq.${encodedSessionId}&select=sender,message,created_at&order=created_at.desc&limit=${recentMessagesLimit}`
   );
 
   return sortMessagesByCreatedAt(messages || []).filter((message) =>
     String(message?.message || "").trim()
+  );
+}
+
+function normalizeRecentMessage(message) {
+  const rawSender = String(message?.sender || message?.role || "").toLowerCase();
+  const content = String(message?.message || "").trim();
+
+  if (!content) {
+    return null;
+  }
+
+  const sender = rawSender === "user" ? "user" : "ai";
+  const createdAt = String(message?.created_at || "").trim();
+
+  return {
+    sender,
+    message: content,
+    created_at: createdAt || undefined,
+  };
+}
+
+function normalizeClientRecentMessages(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return sortMessagesByCreatedAt(
+    value
+      .slice(-recentMessagesLimit)
+      .map(normalizeRecentMessage)
+      .filter(Boolean)
   );
 }
 
@@ -625,6 +644,24 @@ async function getOrCreateSession(visitorId) {
   return createdSessions[0];
 }
 
+async function getSessionForMessage(visitorId, sessionId) {
+  const normalizedSessionId = String(sessionId || "").trim();
+
+  if (normalizedSessionId) {
+    const sessions = await supabaseRequest(
+      `/chat_sessions?id=eq.${encodeURIComponent(
+        normalizedSessionId
+      )}&visitor_id=eq.${encodeURIComponent(visitorId)}&select=*&limit=1`
+    );
+
+    if (sessions?.[0]) {
+      return sessions[0];
+    }
+  }
+
+  return getOrCreateSession(visitorId);
+}
+
 async function insertMessage(sessionId, sender, message, providerUsed) {
   const inserted = await supabaseRequest("/chat_messages", {
     method: "POST",
@@ -648,6 +685,7 @@ export default async function handler(req, res) {
   try {
     const body = await readBody(req);
     const visitorId = String(body.visitor_id || "").trim();
+    const sessionId = String(body.session_id || "").trim();
     const message = String(body.message || "").trim();
 
     if (!visitorId) {
@@ -658,16 +696,38 @@ export default async function handler(req, res) {
       return sendJson(res, 400, { error: "message is required." });
     }
 
-    const session = await getOrCreateSession(visitorId);
+    const session = await getSessionForMessage(visitorId, sessionId);
     const dateInfo = getTaipeiDateInfo();
     console.log("[ai-chat] current year=", dateInfo.currentYear);
 
-    const recentMessages = await loadRecentMessages(session.id);
+    const clientRecentMessages = normalizeClientRecentMessages(body.recentMessages);
+    let recentMessages = clientRecentMessages;
+    let contextSource = "client";
+    let contextText = buildContextText(recentMessages, message);
+    const isCurrentScopeAllowed = isAllowedSupportScope(message);
+    let isContextScopeAllowed = isAllowedSupportScope(message, contextText);
+    const isClearlyBlockedWithoutSupport =
+      includesKeyword(message.toLowerCase(), blockedScopeKeywords) &&
+      !hasSupportContext(message);
+    const needsSupabaseFallback =
+      !isClearlyBlockedWithoutSupport &&
+      !isCurrentScopeAllowed &&
+      (!clientRecentMessages.length || !isContextScopeAllowed);
+
+    if (needsSupabaseFallback) {
+      recentMessages = await loadRecentMessages(session.id);
+      contextSource = "supabase_fallback";
+      contextText = buildContextText(recentMessages, message);
+      isContextScopeAllowed = isAllowedSupportScope(message, contextText);
+    }
+
+    if (contextSource === "client") {
+      console.log("[ai-chat] context source=client");
+    } else {
+      console.log("[ai-chat] context source=supabase_fallback");
+    }
     console.log("[ai-chat] recent messages count=", recentMessages.length);
 
-    const contextText = buildContextText(recentMessages, message);
-    const isCurrentScopeAllowed = isAllowedSupportScope(message);
-    const isContextScopeAllowed = isAllowedSupportScope(message, contextText);
     const userMessage = await insertMessage(session.id, "user", message, null);
 
     if (!isContextScopeAllowed) {

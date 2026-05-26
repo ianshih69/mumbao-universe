@@ -4,6 +4,17 @@ const jsonHeaders = {
 const supabaseTimeoutMs = 8000;
 const lineVerifyTimeoutMs = 8000;
 
+function getTimingNow() {
+  return Date.now();
+}
+
+function logApiTiming(event, startedAt, details = {}) {
+  console.log(`[line-liff-session] ${event}`, {
+    durationMs: Date.now() - startedAt,
+    ...details,
+  });
+}
+
 function sendJson(res, status, body) {
   res.statusCode = status;
   res.setHeader("Content-Type", jsonHeaders["Content-Type"]);
@@ -179,7 +190,7 @@ async function countSessionMessages(sessionId) {
   const messages = await supabaseRequest(
     `/chat_messages?session_id=eq.${encodeURIComponent(
       sessionId
-    )}&select=id&limit=1000`
+    )}&select=id&limit=1`
   );
 
   return Array.isArray(messages) ? messages.length : 0;
@@ -298,6 +309,7 @@ function isSessionAttachable(session, visitorId, lineVisitorId) {
 }
 
 export default async function handler(req, res) {
+  const requestStartedAt = getTimingNow();
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return sendJson(res, 405, { error: "Method not allowed." });
@@ -305,12 +317,30 @@ export default async function handler(req, res) {
 
   try {
     const body = await readBody(req);
+    console.log("[line-liff-session] request start", {
+      hasIdToken: Boolean(body.idToken || body.id_token || body.line_id_token),
+      hasAccessToken: Boolean(
+        body.accessToken || body.access_token || body.line_access_token
+      ),
+      hasVisitorId: Boolean(body.visitorId || body.visitor_id),
+      hasCurrentSessionId: Boolean(
+        body.currentSessionId || body.current_session_id || body.session_id
+      ),
+    });
+    const verifyStartedAt = getTimingNow();
     const lineProfile = await verifyLineIdentity({
       idToken: body.idToken || body.id_token || body.line_id_token,
       accessToken: body.accessToken || body.access_token || body.line_access_token,
     });
+    logApiTiming("LINE token verify end", verifyStartedAt, {
+      hasLineUserId: Boolean(lineProfile?.line_user_id),
+    });
 
     if (!lineProfile?.line_user_id) {
+      logApiTiming("request end", requestStartedAt, {
+        status: 401,
+        reason: "LINE identity verification failed",
+      });
       return sendJson(res, 401, { error: "LINE identity verification failed." });
     }
 
@@ -324,9 +354,14 @@ export default async function handler(req, res) {
       lineProfile.line_user_id
     );
 
+    const bestLineSessionStartedAt = getTimingNow();
     const existingLineSession = await loadBestLineSession(
       lineProfile.line_user_id
     );
+    logApiTiming("load best LINE session end", bestLineSessionStartedAt, {
+      foundSessionId: existingLineSession?.session?.id || "",
+      messagePresence: existingLineSession?.messageCount || 0,
+    });
 
     if (existingLineSession?.session?.id) {
       console.log(
@@ -341,21 +376,40 @@ export default async function handler(req, res) {
         existingLineSession.messageCount
       );
 
+      const updateStartedAt = getTimingNow();
       const session = await updateSessionLineIdentity(
         existingLineSession.session.id,
         lineProfile
       );
+      logApiTiming("update session identity end", updateStartedAt, {
+        sessionId: session?.id || "",
+      });
+      logApiTiming("request end", requestStartedAt, {
+        status: 200,
+        sessionId: session?.id || "",
+        reason: "line_user_id match",
+      });
       return sendJson(res, 200, {
         session,
         lineProfile,
       });
     }
 
+    const currentSessionStartedAt = getTimingNow();
     const currentSession = await loadSessionById(currentSessionId);
+    logApiTiming("load current session end", currentSessionStartedAt, {
+      requestedSessionId: currentSessionId,
+      foundSessionId: currentSession?.id || "",
+    });
 
     if (isSessionAttachable(currentSession, visitorId, lineVisitorId)) {
+      const attachStartedAt = getTimingNow();
       const session = await updateSessionLineIdentity(currentSession.id, lineProfile);
       const messageCount = await countSessionMessages(session.id);
+      logApiTiming("attach current session end", attachStartedAt, {
+        sessionId: session?.id || "",
+        messagePresence: messageCount,
+      });
       console.log("[line-liff-session] found existing session =", session.id);
       console.log(
         "[line-liff-session] reused session reason = current session attach"
@@ -364,22 +418,37 @@ export default async function handler(req, res) {
         "[line-liff-session] selected session has message count =",
         messageCount
       );
+      logApiTiming("request end", requestStartedAt, {
+        status: 200,
+        sessionId: session?.id || "",
+        reason: "current session attach",
+      });
       return sendJson(res, 200, {
         session,
         lineProfile,
       });
     }
 
+    const visitorSessionStartedAt = getTimingNow();
     const existingVisitorSession = await loadLatestVisitorSession(lineVisitorId);
     const targetSession = existingVisitorSession || (await createLineSession(lineVisitorId));
+    logApiTiming("load or create visitor session end", visitorSessionStartedAt, {
+      foundExistingVisitorSession: Boolean(existingVisitorSession?.id),
+      targetSessionId: targetSession?.id || "",
+    });
     if (!targetSession?.id) {
       throw new Error("Failed to create LINE chat session.");
     }
+    const updateVisitorStartedAt = getTimingNow();
     const session = await updateSessionLineIdentity(
       targetSession.id,
       lineProfile
     );
     const messageCount = await countSessionMessages(session.id);
+    logApiTiming("update visitor session identity end", updateVisitorStartedAt, {
+      sessionId: session?.id || "",
+      messagePresence: messageCount,
+    });
 
     if (existingVisitorSession?.id) {
       console.log("[line-liff-session] found existing session =", session.id);
@@ -394,12 +463,23 @@ export default async function handler(req, res) {
       messageCount
     );
 
+    logApiTiming("request end", requestStartedAt, {
+      status: 200,
+      sessionId: session?.id || "",
+      reason: existingVisitorSession?.id
+        ? "line visitor_id match"
+        : "created line session",
+    });
     return sendJson(res, 200, {
       session,
       lineProfile,
     });
   } catch (error) {
     console.error("[line-liff-session] error:", error);
+    logApiTiming("request end", requestStartedAt, {
+      status: 500,
+      message: error instanceof Error ? error.message : String(error),
+    });
     return sendJson(res, 500, { error: "Failed to bind LINE session." });
   }
 }

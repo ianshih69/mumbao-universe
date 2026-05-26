@@ -4,7 +4,18 @@ const jsonHeaders = {
 const supabaseTimeoutMs = 8000;
 const lineVerifyTimeoutMs = 8000;
 const defaultHistoryLimit = 7;
-const maxHistoryLimit = 30;
+const maxHistoryLimit = 100;
+
+function getTimingNow() {
+  return Date.now();
+}
+
+function logApiTiming(event, startedAt, details = {}) {
+  console.log(`[ai-chat-history] ${event}`, {
+    durationMs: Date.now() - startedAt,
+    ...details,
+  });
+}
 
 function createHttpError(message, status, reason) {
   const error = new Error(message);
@@ -256,7 +267,7 @@ async function countSessionMessages(sessionId) {
   const messages = await supabaseRequest(
     `/chat_messages?session_id=eq.${encodeURIComponent(
       sessionId
-    )}&select=id&limit=1000`
+    )}&select=id&limit=1`
   );
 
   return Array.isArray(messages) ? messages.length : 0;
@@ -495,6 +506,7 @@ async function loadMessagesAfter({ sessionId, limit, after }) {
 }
 
 export default async function handler(req, res) {
+  const requestStartedAt = getTimingNow();
   if (!["GET", "POST"].includes(req.method)) {
     res.setHeader("Allow", "GET, POST");
     return sendJson(res, 405, { error: "Method not allowed." });
@@ -520,11 +532,23 @@ export default async function handler(req, res) {
     const lineAccessToken = String(
       body.line_access_token || firstQueryValue(req.query?.line_access_token) || ""
     ).trim();
+    console.log("[ai-chat-history] request start", {
+      method: req.method,
+      hasVisitorId: Boolean(requestedVisitorId),
+      hasSessionId: Boolean(body.session_id || firstQueryValue(req.query?.session_id)),
+      hasLineIdToken: Boolean(lineIdToken),
+      hasLineAccessToken: Boolean(lineAccessToken),
+    });
+    const identityStartedAt = getTimingNow();
     const identity = await resolveVisitorIdentity({
       visitorId: requestedVisitorId,
       anonymousVisitorId,
       lineIdToken,
       lineAccessToken,
+    });
+    logApiTiming("identity resolve end", identityStartedAt, {
+      hasLineProfile: Boolean(identity.lineProfile?.line_user_id),
+      resolvedVisitorId: identity.visitorId,
     });
     const visitorId = identity.visitorId;
     const sessionId = String(
@@ -548,6 +572,7 @@ export default async function handler(req, res) {
       return sendJson(res, 400, { error: "visitor_id is required." });
     }
 
+    const sessionStartedAt = getTimingNow();
     let session = forceNewSession
       ? await createSession(visitorId)
       : await getSession({
@@ -559,8 +584,18 @@ export default async function handler(req, res) {
     session =
       (await updateSessionLineIdentity(session.id, identity.lineProfile)) ||
       session;
+    logApiTiming("session resolve end", sessionStartedAt, {
+      sessionId: session?.id || "",
+      visitorId: session?.visitor_id || visitorId,
+      forceNewSession,
+      requestedSessionId: sessionId,
+    });
 
     if (sessionOnly) {
+      logApiTiming("request end", requestStartedAt, {
+        sessionOnly: true,
+        sessionId: session.id,
+      });
       return sendJson(res, 200, {
         session,
         messages: [],
@@ -573,6 +608,7 @@ export default async function handler(req, res) {
     let messages;
 
     try {
+      const messagesStartedAt = getTimingNow();
       messages = after
         ? await loadMessagesAfter({
             sessionId: session.id,
@@ -584,11 +620,26 @@ export default async function handler(req, res) {
             limit,
             before,
           });
+      logApiTiming("messages query end", messagesStartedAt, {
+        sessionId: session.id,
+        limit,
+        before: Boolean(before),
+        after: Boolean(after),
+        messageCount: Array.isArray(messages) ? messages.length : 0,
+      });
     } catch (error) {
       error.reason = error.reason || "supabase load messages failed";
       throw error;
     }
     const sortedMessages = sortMessagesByCreatedAt(messages);
+
+    logApiTiming("request end", requestStartedAt, {
+      sessionOnly: false,
+      sessionId: session.id,
+      limit,
+      messageCount: sortedMessages.length,
+      hasMore: !after && sortedMessages.length === limit,
+    });
 
     return sendJson(res, 200, {
       session,

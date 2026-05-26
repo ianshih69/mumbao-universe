@@ -86,8 +86,8 @@ const chatWindowSizeStorageKey = "mumbao-chat-window-size";
 const lineLiffSdkUrl = "https://static.line-scdn.net/liff/edge/2/sdk.js";
 const lineLoginRedirectUri = "https://www.mumbao.tw/chat";
 const historyPageSize = 7;
-const initialHistoryPageSize = 30;
-const localCacheMessageLimit = 30;
+const initialHistoryPageSize = 100;
+const localCacheMessageLimit = 50;
 const recentContextMessageLimit = 12;
 const sessionMessagesCacheTtlMs = 10 * 60 * 1000;
 const defaultDesktopWindowSize = { width: 420, height: 680 };
@@ -100,6 +100,21 @@ const errorReply = "慢寶的雲朵訊號暫時不穩，請稍後再試。";
 function logChatDebug(event: string, details: Record<string, unknown> = {}) {
   console.info(`[MumbaoChat] ${event}`, {
     at: new Date().toISOString(),
+    ...details,
+  });
+}
+
+function getTimingNow() {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
+function logChatTiming(
+  event: string,
+  startedAt: number,
+  details: Record<string, unknown> = {}
+) {
+  logChatDebug(event, {
+    durationMs: Math.round(getTimingNow() - startedAt),
     ...details,
   });
 }
@@ -344,69 +359,129 @@ function getNewestCreatedAt(messages: ChatMessage[]) {
     .find((message) => message.created_at)?.created_at;
 }
 
-function loadCachedMessages(visitorId: string, sessionId = "") {
+type RecentMessagesCache = {
+  visitorId: string;
+  sessionId: string;
+  messages: ChatMessage[];
+  source: "sessionStorage" | "localStorage";
+};
+
+function clearCachedMessages(reason: string, details: Record<string, unknown> = {}) {
   try {
-    const rawCache =
-      sessionStorage.getItem(recentChatStorageKey) ||
-      localStorage.getItem(recentChatStorageKey);
-    if (!rawCache) {
-      logChatDebug("cache read miss: empty", { visitorId, sessionId });
-      return [];
-    }
+    sessionStorage.removeItem(recentChatStorageKey);
+    localStorage.removeItem(recentChatStorageKey);
+    logChatDebug("cache cleared", { reason, ...details });
+  } catch (error) {
+    console.warn("Mumbao chat cache clear unavailable:", error);
+  }
+}
 
-    const cache = JSON.parse(rawCache) as {
-      visitor_id?: string;
-      session_id?: string;
-      expires_at?: number;
-      messages?: ApiMessage[];
-    };
+function readRecentMessagesCache(): RecentMessagesCache | null {
+  try {
+    const storageEntries: Array<["sessionStorage" | "localStorage", string | null]> = [
+      ["sessionStorage", sessionStorage.getItem(recentChatStorageKey)],
+      ["localStorage", localStorage.getItem(recentChatStorageKey)],
+    ];
 
-    if (cache.expires_at && cache.expires_at < Date.now()) {
-      sessionStorage.removeItem(recentChatStorageKey);
-      logChatDebug("cache read miss: expired", {
-        visitorId,
-        sessionId,
-        cacheSessionId: cache.session_id,
-      });
-      return [];
-    }
+    for (const [source, rawCache] of storageEntries) {
+      if (!rawCache) continue;
 
-    if (cache.visitor_id !== visitorId || !Array.isArray(cache.messages)) {
-      logChatDebug("cache read miss: visitor mismatch", {
-        visitorId,
-        sessionId,
+      const cache = JSON.parse(rawCache) as {
+        visitor_id?: string;
+        session_id?: string;
+        expires_at?: number;
+        messages?: ApiMessage[];
+      };
+
+      if (cache.expires_at && cache.expires_at < Date.now()) {
+        if (source === "sessionStorage") {
+          sessionStorage.removeItem(recentChatStorageKey);
+        } else {
+          localStorage.removeItem(recentChatStorageKey);
+        }
+        logChatDebug("cache read miss: expired", {
+          source,
+          cacheVisitorId: cache.visitor_id,
+          cacheSessionId: cache.session_id,
+        });
+        continue;
+      }
+
+      if (!cache.session_id || !Array.isArray(cache.messages)) {
+        logChatDebug("cache read miss: invalid payload", {
+          source,
+          cacheVisitorId: cache.visitor_id,
+          cacheSessionId: cache.session_id,
+          hasMessagesArray: Array.isArray(cache.messages),
+        });
+        continue;
+      }
+
+      const cachedMessages = sortMessagesByCreatedAt(
+        cache.messages
+          .map(normalizeMessage)
+          .filter((message) => message.message.trim().length > 0)
+      );
+
+      if (cachedMessages.length === 0) {
+        logChatDebug("cache read miss: no real messages", {
+          source,
+          cacheVisitorId: cache.visitor_id,
+          cacheSessionId: cache.session_id,
+        });
+        continue;
+      }
+
+      logChatDebug("cache read hit", {
+        source,
         cacheVisitorId: cache.visitor_id,
-        hasMessagesArray: Array.isArray(cache.messages),
-      });
-      return [];
-    }
-
-    if (sessionId && cache.session_id && cache.session_id !== sessionId) {
-      logChatDebug("cache read miss: session mismatch", {
-        visitorId,
-        sessionId,
         cacheSessionId: cache.session_id,
+        messageCount: cachedMessages.length,
       });
-      return [];
+
+      return {
+        visitorId: String(cache.visitor_id || ""),
+        sessionId: String(cache.session_id || ""),
+        messages: cachedMessages,
+        source,
+      };
     }
 
-    const cachedMessages = sortMessagesByCreatedAt(
-      cache.messages
-        .map(normalizeMessage)
-        .filter((message) => message.message.trim().length > 0)
-    );
-    logChatDebug("cache read hit", {
-      visitorId,
-      sessionId,
-      messageCount: cachedMessages.length,
-      cacheSessionId: cache.session_id,
-    });
-
-    return cachedMessages;
+    logChatDebug("cache read miss: empty");
+    return null;
   } catch (error) {
     console.warn("Mumbao chat cache unavailable:", error);
+    return null;
+  }
+}
+
+function loadCachedMessages(visitorId: string, sessionId = "") {
+  const cache = readRecentMessagesCache();
+
+  if (!cache) {
     return [];
   }
+
+  if (cache.visitorId !== visitorId) {
+    logChatDebug("cache read miss: visitor mismatch", {
+      visitorId,
+      sessionId,
+      cacheVisitorId: cache.visitorId,
+      cacheSessionId: cache.sessionId,
+    });
+    return [];
+  }
+
+  if (sessionId && cache.sessionId !== sessionId) {
+    logChatDebug("cache read miss: session mismatch", {
+      visitorId,
+      sessionId,
+      cacheSessionId: cache.sessionId,
+    });
+    return [];
+  }
+
+  return cache.messages;
 }
 
 function saveCachedMessages(
@@ -432,17 +507,24 @@ function saveCachedMessages(
       created_at: message.created_at,
     }));
 
+  if (!visitorId || !sessionId || cacheMessages.length === 0) {
+    logChatDebug("cache write skipped", {
+      visitorId,
+      sessionId,
+      messageCount: cacheMessages.length,
+    });
+    return;
+  }
+
   try {
-    sessionStorage.setItem(
-      recentChatStorageKey,
-      JSON.stringify({
-        visitor_id: visitorId,
-        session_id: sessionId,
-        expires_at: Date.now() + sessionMessagesCacheTtlMs,
-        messages: cacheMessages,
-      })
-    );
-    localStorage.removeItem(recentChatStorageKey);
+    const cachePayload = JSON.stringify({
+      visitor_id: visitorId,
+      session_id: sessionId,
+      expires_at: Date.now() + sessionMessagesCacheTtlMs,
+      messages: cacheMessages,
+    });
+    sessionStorage.setItem(recentChatStorageKey, cachePayload);
+    localStorage.setItem(recentChatStorageKey, cachePayload);
     logChatDebug("cache write success", {
       visitorId,
       sessionId,
@@ -600,9 +682,17 @@ async function loadLineIdentity(): Promise<LineIdentity | null> {
     return null;
   }
 
+  let initStartedAt = 0;
   try {
+    initStartedAt = getTimingNow();
+    logChatDebug("liff.init start", { hasLiffId: Boolean(liffId) });
     const liff = await loadLineLiffSdk();
     await liff.init({ liffId });
+    logChatTiming("liff.init end", initStartedAt, {
+      status: "success",
+      isLoggedIn: liff.isLoggedIn(),
+      isInClient: Boolean(liff.isInClient?.()),
+    });
 
     if (!liff.isLoggedIn()) {
       if (shouldRequestLineLogin(liff)) {
@@ -613,9 +703,15 @@ async function loadLineIdentity(): Promise<LineIdentity | null> {
       return null;
     }
 
+    const tokenStartedAt = getTimingNow();
+    logChatDebug("get token start", { isInClient: Boolean(liff.isInClient?.()) });
     await liff.getProfile().catch(() => null);
     const idToken = liff.getIDToken() || "";
     const accessToken = liff.getAccessToken?.() || "";
+    logChatTiming("get token end", tokenStartedAt, {
+      hasIdToken: Boolean(idToken),
+      hasAccessToken: Boolean(accessToken),
+    });
 
     if (!idToken && !accessToken) {
       return null;
@@ -626,6 +722,12 @@ async function loadLineIdentity(): Promise<LineIdentity | null> {
       accessToken,
     };
   } catch (error) {
+    if (initStartedAt) {
+      logChatTiming("liff.init end", initStartedAt, {
+        status: "error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
     console.warn("Mumbao chat LINE identity unavailable:", error);
     return null;
   }
@@ -681,24 +783,48 @@ async function bindLineSession(
   visitorId: string,
   currentSessionId = ""
 ) {
-  return fetchJsonWithTimeout<{
-    session?: ChatSession;
-  }>(
-    "/api/line-liff-session",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+  const startedAt = getTimingNow();
+  logChatDebug("POST /api/line-liff-session start", {
+    visitorId,
+    currentSessionId,
+    hasIdToken: Boolean(identity.idToken),
+    hasAccessToken: Boolean(identity.accessToken),
+  });
+
+  try {
+    const data = await fetchJsonWithTimeout<{
+      session?: ChatSession;
+    }>(
+      "/api/line-liff-session",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          idToken: identity.idToken || undefined,
+          accessToken: identity.accessToken || undefined,
+          visitorId,
+          currentSessionId: currentSessionId || undefined,
+        }),
       },
-      body: JSON.stringify({
-        idToken: identity.idToken || undefined,
-        accessToken: identity.accessToken || undefined,
-        visitorId,
-        currentSessionId: currentSessionId || undefined,
-      }),
-    },
-    10000
-  );
+      10000
+    );
+
+    logChatTiming("POST /api/line-liff-session end", startedAt, {
+      status: "success",
+      responseSessionId: data.session?.id ? String(data.session.id) : "",
+      responseVisitorId: data.session?.visitor_id || "",
+    });
+
+    return data;
+  } catch (error) {
+    logChatTiming("POST /api/line-liff-session end", startedAt, {
+      status: "error",
+      message: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
 async function fetchSessionOnly(
@@ -731,6 +857,7 @@ async function fetchLatestHistory(
   sessionId: string,
   identity?: SessionRequestIdentity
 ) {
+  const startedAt = getTimingNow();
   logChatDebug("history fetch start", {
     endpoint: "/api/ai-chat-history",
     visitorId,
@@ -739,37 +866,68 @@ async function fetchLatestHistory(
     anonymousVisitorId: identity?.anonymousVisitorId || "",
   });
 
-  const data = await fetchJsonWithTimeout<{
-    session?: ChatSession;
-    messages?: ApiMessage[];
-    has_more?: boolean;
-  }>(
-    "/api/ai-chat-history",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+  try {
+    const data = await fetchJsonWithTimeout<{
+      session?: ChatSession;
+      messages?: ApiMessage[];
+      has_more?: boolean;
+    }>(
+      "/api/ai-chat-history",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          visitor_id: visitorId,
+          session_id: sessionId,
+          limit: initialHistoryPageSize,
+          ...buildLineRequestPayload(identity),
+        }),
       },
-      body: JSON.stringify({
-        visitor_id: visitorId,
-        session_id: sessionId,
-        limit: initialHistoryPageSize,
-        ...buildLineRequestPayload(identity),
-      }),
-    },
-    8000
+      8000
+    );
+
+    logChatTiming("history fetch end", startedAt, {
+      status: "success",
+      endpoint: "/api/ai-chat-history",
+      visitorId,
+      sessionId,
+      responseSessionId: data.session?.id ? String(data.session.id) : "",
+      messageCount: data.messages?.length || 0,
+      hasMore: Boolean(data.has_more),
+    });
+
+    return data;
+  } catch (error) {
+    logChatTiming("history fetch end", startedAt, {
+      status: "error",
+      endpoint: "/api/ai-chat-history",
+      visitorId,
+      sessionId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+function ChatHistorySkeleton() {
+  return (
+    <div className="space-y-3 px-1 py-1" aria-hidden="true">
+      <div className="flex items-start gap-2">
+        <div className="size-8 flex-none rounded-full bg-[#f1e7db]" />
+        <div className="w-2/3 rounded-3xl rounded-bl-md border border-[#f0e3d4] bg-white px-4 py-3 shadow-sm">
+          <div className="h-3 w-3/4 rounded-full bg-[#eee2d5]" />
+          <div className="mt-2 h-3 w-1/2 rounded-full bg-[#f4eadf]" />
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <div className="w-1/2 rounded-3xl rounded-br-md bg-[#e1f0ea] px-4 py-3 shadow-sm">
+          <div className="h-3 w-3/4 rounded-full bg-[#c7ded5]" />
+        </div>
+      </div>
+    </div>
   );
-
-  logChatDebug("history fetch success", {
-    endpoint: "/api/ai-chat-history",
-    visitorId,
-    sessionId,
-    responseSessionId: data.session?.id ? String(data.session.id) : "",
-    messageCount: data.messages?.length || 0,
-    hasMore: Boolean(data.has_more),
-  });
-
-  return data;
 }
 
 export function MumbaoChat({
@@ -800,6 +958,8 @@ export function MumbaoChat({
   const messagesCacheRef = useRef<Map<string, ChatMessage[]>>(new Map());
   const historyFetchIdRef = useRef(0);
   const previousIsOpenRef = useRef(isOpen);
+  const bootStartedAtRef = useRef(getTimingNow());
+  const firstMessagesRenderLoggedRef = useRef(false);
   const shouldAutoScrollRef = useRef(true);
   const pendingScrollRestoreRef = useRef<{
     scrollHeight: number;
@@ -868,6 +1028,19 @@ export function MumbaoChat({
   }, [isOpen, messages, sessionId, visitorId]);
 
   useEffect(() => {
+    if (firstMessagesRenderLoggedRef.current || realMessageCount === 0) {
+      return;
+    }
+
+    firstMessagesRenderLoggedRef.current = true;
+    logChatTiming("first messages render time", bootStartedAtRef.current, {
+      visitorId,
+      sessionId,
+      messageCount: realMessageCount,
+    });
+  }, [realMessageCount, sessionId, visitorId]);
+
+  useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 768px)");
     const updateResizableState = () => {
       setIsDesktopResizable(mediaQuery.matches);
@@ -896,6 +1069,20 @@ export function MumbaoChat({
     }
     hasInitializedRef.current = true;
 
+    const coldStartCache = readRecentMessagesCache();
+    if (coldStartCache) {
+      messagesCacheRef.current.set(coldStartCache.sessionId, coldStartCache.messages);
+      setMessages(getInitialMessages(coldStartCache.messages));
+      logChatDebug("cold cache immediate render", {
+        visitorId: coldStartCache.visitorId,
+        sessionId: coldStartCache.sessionId,
+        source: coldStartCache.source,
+        messageCount: coldStartCache.messages.length,
+      });
+    } else {
+      setIsInitialHistoryLoading(true);
+    }
+
     const { visitorId: nextVisitorId, isExistingVisitor } = getVisitorIdentity();
     const existingSessionId = isExistingVisitor
       ? getStoredSessionId(nextVisitorId)
@@ -919,15 +1106,27 @@ export function MumbaoChat({
       nextVisitorId,
       existingSessionId
     );
-    setMessages(getInitialMessages(initialCachedMessages));
+    const immediateMessages =
+      initialCachedMessages.length > 0
+        ? initialCachedMessages
+        : coldStartCache?.messages || [];
+    setMessages(getInitialMessages(immediateMessages));
+    setIsInitialHistoryLoading(immediateMessages.length === 0);
     logChatDebug("initialization cache applied", {
       visitorId: nextVisitorId,
       sessionId: existingSessionId,
-      messageCount: initialCachedMessages.length,
+      messageCount: immediateMessages.length,
+      strictCacheCount: initialCachedMessages.length,
+      coldCacheSessionId: coldStartCache?.sessionId || "",
     });
 
     async function recoverSession() {
-      if (existingSessionId || !isExistingVisitor) return;
+      if (existingSessionId || !isExistingVisitor) {
+        if (isMounted) {
+          setIsInitialHistoryLoading(false);
+        }
+        return;
+      }
 
       try {
         const data = await fetchSessionOnly(nextVisitorId);
@@ -941,6 +1140,10 @@ export function MumbaoChat({
         saveSessionId(recoveredSessionId, nextVisitorId);
       } catch (error) {
         console.warn("Mumbao chat session recovery unavailable:", error);
+      } finally {
+        if (isMounted) {
+          setIsInitialHistoryLoading(false);
+        }
       }
     }
 
@@ -983,6 +1186,18 @@ export function MumbaoChat({
           effectiveVisitorId,
           recoveredSessionId,
         });
+
+        if (
+          coldStartCache?.sessionId &&
+          coldStartCache.sessionId !== recoveredSessionId
+        ) {
+          messagesCacheRef.current.delete(coldStartCache.sessionId);
+          clearCachedMessages("line session changed", {
+            coldCacheSessionId: coldStartCache.sessionId,
+            recoveredSessionId,
+          });
+          setMessages([createWelcomeMessage()]);
+        }
 
         setIsInitialHistoryLoading(true);
         const cachedMessages =
@@ -1724,10 +1939,13 @@ export function MumbaoChat({
         </div>
 
         {isInitialHistoryLoading && realMessageCount === 0 && (
-          <div className="flex justify-center py-3">
-            <span className="rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-[#9b897a] shadow-sm">
-              正在載入對話紀錄…
-            </span>
+          <div className="space-y-3 py-3">
+            <div className="flex justify-center">
+              <span className="rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-[#9b897a] shadow-sm">
+                正在載入對話紀錄…
+              </span>
+            </div>
+            <ChatHistorySkeleton />
           </div>
         )}
 

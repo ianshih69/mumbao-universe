@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import FixedViewport from "@/components/utils/FixedViewport";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -43,6 +43,9 @@ function Router() {
 // - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
 
 function App() {
+  const [pathname] = useLocation();
+  const isAdminRoute = pathname.startsWith("/admin");
+
   return (
     <ErrorBoundary>
       <FixedViewport />
@@ -53,7 +56,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
-          <MumbaoChatLauncher />
+          {!isAdminRoute && <MumbaoChatLauncher />}
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

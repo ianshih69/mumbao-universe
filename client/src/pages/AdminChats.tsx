@@ -1,4 +1,13 @@
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  KeyboardEvent,
+  UIEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Bot, Lock, RefreshCw, Search, Send, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +18,9 @@ type ChatSessionStatus = "ai_active" | "human_takeover" | "closed";
 
 type AdminChatSession = {
   id: string;
+  session_id?: string;
   visitor_id?: string;
+  visitor_name?: string;
   line_user_id?: string;
   line_display_name?: string;
   line_picture_url?: string;
@@ -20,7 +31,6 @@ type AdminChatSession = {
   latest_message_at?: string;
   created_at?: string;
   updated_at?: string;
-  last_role?: string;
 };
 
 type AdminChatMessage = {
@@ -33,6 +43,8 @@ type AdminChatMessage = {
 };
 
 const adminTokenKey = "mumbao-admin-chat-token";
+const sessionListLimit = 30;
+
 const statusLabels: Record<string, string> = {
   ai_active: "AI 回覆中",
   human_takeover: "管家接手中",
@@ -121,7 +133,7 @@ function formatSessionTime(value?: string) {
 }
 
 function getDisplayName(session?: AdminChatSession) {
-  return session?.line_display_name || "訪客";
+  return session?.line_display_name || session?.visitor_name || "訪客";
 }
 
 function buildHeaders(token: string) {
@@ -154,6 +166,66 @@ async function fetchAdminJson<T>(
   return data;
 }
 
+function getNewestCreatedAt(messages: AdminChatMessage[]) {
+  return messages.reduce((newest, message) => {
+    if (!message.created_at || Number.isNaN(Date.parse(message.created_at))) {
+      return newest;
+    }
+
+    if (!newest || Date.parse(message.created_at) > Date.parse(newest)) {
+      return message.created_at;
+    }
+
+    return newest;
+  }, "");
+}
+
+function mergeMessages(
+  current: AdminChatMessage[],
+  incoming: AdminChatMessage[]
+) {
+  const byId = new Map<string, AdminChatMessage>();
+
+  for (const message of [...current, ...incoming]) {
+    byId.set(String(message.id), message);
+  }
+
+  return Array.from(byId.values()).sort((first, second) => {
+    const firstTime = Date.parse(first.created_at || "") || 0;
+    const secondTime = Date.parse(second.created_at || "") || 0;
+    return firstTime - secondTime;
+  });
+}
+
+function mergeSessions(
+  current: AdminChatSession[],
+  incoming: AdminChatSession[],
+  replace = false
+) {
+  const byId = new Map<string, AdminChatSession>();
+
+  for (const session of replace ? incoming : current) {
+    byId.set(String(session.id), session);
+  }
+
+  if (!replace) {
+    for (const session of incoming) {
+      byId.set(String(session.id), {
+        ...byId.get(String(session.id)),
+        ...session,
+      });
+    }
+  }
+
+  return Array.from(byId.values()).sort((first, second) => {
+    const firstTime =
+      Date.parse(first.latest_message_at || first.updated_at || "") || 0;
+    const secondTime =
+      Date.parse(second.latest_message_at || second.updated_at || "") || 0;
+    return secondTime - firstTime;
+  });
+}
+
 export default function AdminChats() {
   const [token, setToken] = useState(() => getStoredAdminToken());
   const [password, setPassword] = useState("");
@@ -164,10 +236,14 @@ export default function AdminChats() {
   const [search, setSearch] = useState("");
   const [reply, setReply] = useState("");
   const [isSessionsLoading, setIsSessionsLoading] = useState(false);
+  const [isMoreSessionsLoading, setIsMoreSessionsLoading] = useState(false);
   const [isMessagesLoading, setIsMessagesLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [hasMoreSessions, setHasMoreSessions] = useState(true);
+  const [sessionPage, setSessionPage] = useState(0);
   const [error, setError] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messagesCacheRef = useRef<Map<string, AdminChatMessage[]>>(new Map());
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId),
@@ -198,68 +274,140 @@ export default function AdminChats() {
     });
   }, [messages]);
 
-  const loadSessions = async (silent = false) => {
-    if (!token) return;
-    if (!silent) setIsSessionsLoading(true);
-
-    try {
-      const query = search.trim()
-        ? `?q=${encodeURIComponent(search.trim())}`
-        : "";
-      const data = await fetchAdminJson<{ sessions?: AdminChatSession[] }>(
-        `/api/admin/chat-sessions${query}`,
-        token
-      );
-      const nextSessions = data.sessions || [];
-      setSessions(nextSessions);
-      setError("");
-
-      if (!selectedSessionId && nextSessions[0]?.id) {
-        setSelectedSessionId(String(nextSessions[0].id));
+  const loadSessions = useCallback(
+    async ({
+      page = 0,
+      append = false,
+      silent = false,
+    }: { page?: number; append?: boolean; silent?: boolean } = {}) => {
+      if (!token) return;
+      if (append) {
+        setIsMoreSessionsLoading(true);
+      } else if (!silent) {
+        setIsSessionsLoading(true);
       }
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "載入對話失敗");
-    } finally {
-      if (!silent) setIsSessionsLoading(false);
-    }
-  };
 
-  const loadMessages = async (sessionId = selectedSessionId, silent = false) => {
-    if (!token || !sessionId) return;
-    if (!silent) setIsMessagesLoading(true);
+      try {
+        const params = new URLSearchParams({
+          limit: String(sessionListLimit),
+          page: String(page),
+        });
+        const trimmedSearch = search.trim();
+        if (trimmedSearch) params.set("q", trimmedSearch);
 
-    try {
-      const data = await fetchAdminJson<{ messages?: AdminChatMessage[] }>(
-        `/api/admin/chat-sessions/${encodeURIComponent(sessionId)}/messages`,
-        token
-      );
-      setMessages(data.messages || []);
-      setError("");
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "載入訊息失敗");
-    } finally {
-      if (!silent) setIsMessagesLoading(false);
-    }
-  };
+        const data = await fetchAdminJson<{
+          sessions?: AdminChatSession[];
+          hasMore?: boolean;
+          nextPage?: number | null;
+        }>(`/api/admin/chat-sessions?${params.toString()}`, token);
+        const nextSessions = data.sessions || [];
+
+        setSessions((current) =>
+          mergeSessions(current, nextSessions, !append && !silent)
+        );
+        setHasMoreSessions(Boolean(data.hasMore));
+        setSessionPage(
+          typeof data.nextPage === "number" ? data.nextPage : page + 1
+        );
+        setError("");
+
+      } catch (loadError) {
+        setError(
+          loadError instanceof Error ? loadError.message : "載入對話列表失敗"
+        );
+      } finally {
+        if (append) {
+          setIsMoreSessionsLoading(false);
+        } else if (!silent) {
+          setIsSessionsLoading(false);
+        }
+      }
+    },
+    [search, token]
+  );
+
+  const loadMessages = useCallback(
+    async (
+      sessionId = selectedSessionId,
+      { silent = false, incremental = false } = {}
+    ) => {
+      if (!token || !sessionId) return;
+
+      const cachedMessages = messagesCacheRef.current.get(sessionId) || [];
+      const since = incremental ? getNewestCreatedAt(cachedMessages) : "";
+
+      if (!silent && cachedMessages.length > 0) {
+        setMessages(cachedMessages);
+      }
+
+      if (!silent && cachedMessages.length === 0) {
+        setIsMessagesLoading(true);
+      }
+
+      try {
+        const params = new URLSearchParams();
+        if (since) params.set("since", since);
+        const query = params.toString() ? `?${params.toString()}` : "";
+        const data = await fetchAdminJson<{ messages?: AdminChatMessage[] }>(
+          `/api/admin/chat-sessions/${encodeURIComponent(sessionId)}/messages${query}`,
+          token
+        );
+        const incomingMessages = data.messages || [];
+        const mergedMessages = since
+          ? mergeMessages(cachedMessages, incomingMessages)
+          : mergeMessages([], incomingMessages);
+
+        messagesCacheRef.current.set(sessionId, mergedMessages);
+        if (sessionId === selectedSessionId) {
+          setMessages(mergedMessages);
+        }
+        setError("");
+      } catch (loadError) {
+        setError(
+          loadError instanceof Error ? loadError.message : "載入訊息失敗"
+        );
+      } finally {
+        if (!silent && cachedMessages.length === 0) {
+          setIsMessagesLoading(false);
+        }
+      }
+    },
+    [selectedSessionId, token]
+  );
 
   useEffect(() => {
     if (!token) return;
 
-    loadSessions();
-    const timer = window.setInterval(() => loadSessions(true), 10000);
+    setSessions([]);
+    setSelectedSessionId("");
+    setHasMoreSessions(true);
+    setSessionPage(0);
+    loadSessions({ page: 0 });
+    const timer = window.setInterval(
+      () => loadSessions({ page: 0, silent: true }),
+      10000
+    );
     return () => window.clearInterval(timer);
-  }, [token, search]);
+  }, [loadSessions, token]);
 
   useEffect(() => {
     if (!token || !selectedSessionId) return;
 
-    loadMessages(selectedSessionId);
+    const cachedMessages = messagesCacheRef.current.get(selectedSessionId);
+    if (cachedMessages) {
+      setMessages(cachedMessages);
+      loadMessages(selectedSessionId, { silent: true, incremental: true });
+    } else {
+      setMessages([]);
+      loadMessages(selectedSessionId);
+    }
+
     const timer = window.setInterval(
-      () => loadMessages(selectedSessionId, true),
+      () => loadMessages(selectedSessionId, { silent: true, incremental: true }),
       5000
     );
     return () => window.clearInterval(timer);
-  }, [token, selectedSessionId]);
+  }, [loadMessages, selectedSessionId, token]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -283,11 +431,27 @@ export default function AdminChats() {
 
   const logout = () => {
     clearAdminToken();
+    messagesCacheRef.current.clear();
     setToken("");
     setPassword("");
     setSessions([]);
     setMessages([]);
     setSelectedSessionId("");
+  };
+
+  const loadNextSessionPage = () => {
+    if (isMoreSessionsLoading || !hasMoreSessions) return;
+    loadSessions({ page: sessionPage, append: true, silent: true });
+  };
+
+  const handleSessionScroll = (event: UIEvent<HTMLDivElement>) => {
+    const element = event.currentTarget;
+    const remaining =
+      element.scrollHeight - element.scrollTop - element.clientHeight;
+
+    if (remaining < 120) {
+      loadNextSessionPage();
+    }
   };
 
   const updateStatus = async (status: ChatSessionStatus) => {
@@ -302,9 +466,11 @@ export default function AdminChats() {
           body: JSON.stringify({ status }),
         }
       );
-      await loadSessions(true);
+      await loadSessions({ page: 0, silent: true });
     } catch (statusError) {
-      setError(statusError instanceof Error ? statusError.message : "更新狀態失敗");
+      setError(
+        statusError instanceof Error ? statusError.message : "更新狀態失敗"
+      );
     }
   };
 
@@ -324,9 +490,13 @@ export default function AdminChats() {
       );
       setReply("");
       if (data.message) {
-        setMessages((current) => [...current, data.message as AdminChatMessage]);
+        const cachedMessages =
+          messagesCacheRef.current.get(selectedSessionId) || [];
+        const mergedMessages = mergeMessages(cachedMessages, [data.message]);
+        messagesCacheRef.current.set(selectedSessionId, mergedMessages);
+        setMessages(mergedMessages);
       }
-      await loadSessions(true);
+      await loadSessions({ page: 0, silent: true });
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "送出失敗");
     } finally {
@@ -404,10 +574,10 @@ export default function AdminChats() {
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto" onScroll={handleSessionScroll}>
           {sessions.length === 0 ? (
             <div className="p-6 text-center text-sm text-stone-500">
-              目前沒有對話紀錄
+              目前沒有對話
             </div>
           ) : (
             sessions.map((session) => {
@@ -453,13 +623,28 @@ export default function AdminChats() {
                     <p className="mt-1 line-clamp-1 text-sm text-stone-500">
                       {session.last_message || "尚無訊息"}
                     </p>
-                    <span className="mt-2 inline-flex rounded-full bg-stone-100 px-2 py-0.5 text-[11px] text-stone-500">
-                      {statusLabels[session.status || "ai_active"] || session.status}
-                    </span>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="inline-flex rounded-full bg-stone-100 px-2 py-0.5 text-[11px] text-stone-500">
+                        {statusLabels[session.status || "ai_active"] || session.status}
+                      </span>
+                      <span className="text-[11px] text-stone-400">
+                        {session.source || "web"}
+                      </span>
+                    </div>
                   </div>
                 </button>
               );
             })
+          )}
+          {isMoreSessionsLoading && (
+            <div className="p-4 text-center text-xs text-stone-400">
+              載入更多對話中...
+            </div>
+          )}
+          {!hasMoreSessions && sessions.length > 0 && (
+            <div className="p-4 text-center text-xs text-stone-300">
+              已載入全部對話
+            </div>
           )}
         </div>
       </aside>

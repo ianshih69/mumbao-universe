@@ -89,6 +89,10 @@ function getSessionId(req) {
   return String(req.query?.sessionId || req.query?.session_id || "").trim();
 }
 
+function firstQueryValue(value) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 function normalizeRole(sender) {
   const normalized = String(sender || "").toLowerCase();
   if (normalized === "ai") return "assistant";
@@ -148,16 +152,22 @@ async function markRead(sessionId) {
 
 async function handleGet(req, res, sessionId) {
   await assertSessionExists(sessionId);
+  const since = String(firstQueryValue(req.query?.since) || "").trim();
+  const sinceFilter =
+    since && !Number.isNaN(Date.parse(since))
+      ? `&created_at=gt.${encodeURIComponent(since)}`
+      : "";
   const messages = await supabaseRequest(
     `/chat_messages?session_id=eq.${encodeURIComponent(
       sessionId
-    )}&select=id,session_id,sender,message,provider_used,created_at,read_by_admin,metadata&order=created_at.asc`
+    )}${sinceFilter}&select=id,session_id,sender,message,provider_used,created_at,read_by_admin,metadata&order=created_at.asc`
   );
 
   await markRead(sessionId);
 
   return sendJson(res, 200, {
     messages: (messages || []).map(normalizeMessage),
+    since: since || null,
   });
 }
 

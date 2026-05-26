@@ -2,7 +2,8 @@ const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
 const supabaseTimeoutMs = 8000;
-const maxSessions = 80;
+const defaultLimit = 30;
+const maxLimit = 50;
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -84,33 +85,35 @@ function firstQueryValue(value) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function normalizeRole(sender) {
-  const normalized = String(sender || "").toLowerCase();
-  if (normalized === "ai") return "assistant";
-  if (normalized === "assistant") return "assistant";
-  if (normalized === "human") return "human";
-  if (normalized === "system") return "system";
-  return "user";
+function getPositiveInt(value, fallback, maxValue) {
+  const parsed = Number.parseInt(String(value || ""), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(parsed, maxValue);
 }
 
-async function loadLatestMessage(sessionId) {
-  const messages = await supabaseRequest(
-    `/chat_messages?session_id=eq.${encodeURIComponent(
-      sessionId
-    )}&select=id,sender,message,provider_used,created_at&order=created_at.desc&limit=1`
-  );
-
-  return messages?.[0] || null;
+function getPage(value) {
+  const parsed = Number.parseInt(String(value || ""), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return parsed;
 }
 
-function getSessionSortTime(session, latestMessage) {
-  return (
-    Date.parse(session.latest_message_at || "") ||
-    Date.parse(latestMessage?.created_at || "") ||
-    Date.parse(session.updated_at || "") ||
-    Date.parse(session.created_at || "") ||
-    0
-  );
+function normalizeSession(session) {
+  return {
+    id: session.id,
+    session_id: session.id,
+    visitor_id: session.visitor_id || "",
+    line_user_id: session.line_user_id || "",
+    line_display_name: session.line_display_name || "",
+    visitor_name: session.line_display_name || "",
+    line_picture_url: session.line_picture_url || "",
+    source: session.source || "web",
+    status: session.status || "ai_active",
+    unread_count: Number(session.unread_count || 0),
+    last_message: session.last_message || "",
+    latest_message_at: session.latest_message_at || session.updated_at || session.created_at || "",
+    created_at: session.created_at || "",
+    updated_at: session.updated_at || "",
+  };
 }
 
 export default async function handler(req, res) {
@@ -122,53 +125,29 @@ export default async function handler(req, res) {
   try {
     requireAdmin(req);
     const search = String(firstQueryValue(req.query?.q) || "").trim().toLowerCase();
+    const limit = getPositiveInt(firstQueryValue(req.query?.limit), defaultLimit, maxLimit);
+    const page = getPage(firstQueryValue(req.query?.page));
+    const offset = page * limit;
+    const select =
+      "id,visitor_id,line_user_id,line_display_name,line_picture_url,source,status,unread_count,last_message,latest_message_at,created_at,updated_at";
+    const searchTerm = encodeURIComponent(`*${search.replace(/[(),]/g, " ")}*`);
+    const searchFilter = search
+      ? `&or=(line_display_name.ilike.${searchTerm},visitor_id.ilike.${searchTerm},line_user_id.ilike.${searchTerm},last_message.ilike.${searchTerm})`
+      : "";
     const sessions = await supabaseRequest(
-      `/chat_sessions?select=*&order=updated_at.desc&limit=${maxSessions}`
+      `/chat_sessions?select=${select}${searchFilter}&order=latest_message_at.desc.nullslast,updated_at.desc.nullslast&limit=${
+        limit + 1
+      }&offset=${offset}`
     );
-    const enrichedSessions = await Promise.all(
-      (sessions || []).map(async (session) => {
-        const latestMessage = await loadLatestMessage(session.id);
-        const lastMessage = String(session.last_message || latestMessage?.message || "");
-        const latestMessageAt =
-          session.latest_message_at || latestMessage?.created_at || session.updated_at || session.created_at || "";
-
-        return {
-          id: session.id,
-          visitor_id: session.visitor_id || "",
-          line_user_id: session.line_user_id || "",
-          line_display_name: session.line_display_name || "",
-          line_picture_url: session.line_picture_url || "",
-          source: session.source || "web",
-          status: session.status || "ai_active",
-          unread_count: Number(session.unread_count || 0),
-          last_message: lastMessage,
-          latest_message_at: latestMessageAt,
-          created_at: session.created_at || "",
-          updated_at: session.updated_at || "",
-          last_role: normalizeRole(latestMessage?.sender),
-          sort_time: getSessionSortTime(session, latestMessage),
-        };
-      })
-    );
-
-    const filteredSessions = search
-      ? enrichedSessions.filter((session) =>
-          [
-            session.line_display_name,
-            session.visitor_id,
-            session.line_user_id,
-            session.last_message,
-          ]
-            .join(" ")
-            .toLowerCase()
-            .includes(search)
-        )
-      : enrichedSessions;
-
-    filteredSessions.sort((first, second) => second.sort_time - first.sort_time);
+    const sessionPage = sessions || [];
+    const hasMore = sessionPage.length > limit;
 
     return sendJson(res, 200, {
-      sessions: filteredSessions.map(({ sort_time, ...session }) => session),
+      sessions: sessionPage.slice(0, limit).map(normalizeSession),
+      page,
+      limit,
+      hasMore,
+      nextPage: hasMore ? page + 1 : null,
     });
   } catch (error) {
     console.error("admin chat sessions error:", error);

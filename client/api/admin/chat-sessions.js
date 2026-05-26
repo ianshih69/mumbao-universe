@@ -120,10 +120,14 @@ async function loadLatestMessage(sessionId) {
   const messages = await supabaseRequest(
     `/chat_messages?session_id=eq.${encodeURIComponent(
       sessionId
-    )}&select=id,session_id,sender,message,created_at&order=created_at.desc&limit=1`
+    )}&select=id,session_id,sender,message,created_at&order=created_at.desc&limit=10`
   );
 
-  return messages?.[0] || null;
+  return (
+    (messages || []).find((message) => String(message.message || "").trim()) ||
+    messages?.[0] ||
+    null
+  );
 }
 
 async function applyLatestMessageFallbacks(sessions) {

@@ -242,6 +242,9 @@ export default function AdminChats() {
   const [hasMoreSessions, setHasMoreSessions] = useState(true);
   const [sessionPage, setSessionPage] = useState(0);
   const [error, setError] = useState("");
+  const [failedAvatarIds, setFailedAvatarIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesCacheRef = useRef<Map<string, AdminChatMessage[]>>(new Map());
 
@@ -432,6 +435,7 @@ export default function AdminChats() {
   const logout = () => {
     clearAdminToken();
     messagesCacheRef.current.clear();
+    setFailedAvatarIds(new Set());
     setToken("");
     setPassword("");
     setSessions([]);
@@ -582,6 +586,9 @@ export default function AdminChats() {
           ) : (
             sessions.map((session) => {
               const isActive = selectedSessionId === session.id;
+              const hasLineAvatar =
+                Boolean(session.line_picture_url) &&
+                !failedAvatarIds.has(String(session.id));
 
               return (
                 <button
@@ -594,14 +601,21 @@ export default function AdminChats() {
                   )}
                 >
                   <div className="relative flex-none">
-                    {session.line_picture_url ? (
+                    {hasLineAvatar ? (
                       <img
                         src={session.line_picture_url}
                         alt=""
-                        className="size-11 rounded-full object-cover"
+                        className="h-10 w-10 rounded-full object-cover"
+                        onError={() =>
+                          setFailedAvatarIds((current) => {
+                            const next = new Set(current);
+                            next.add(String(session.id));
+                            return next;
+                          })
+                        }
                       />
                     ) : (
-                      <div className="flex size-11 items-center justify-center rounded-full bg-stone-200 text-stone-500">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-200 text-stone-500">
                         <UserRound className="size-5" />
                       </div>
                     )}
@@ -628,7 +642,9 @@ export default function AdminChats() {
                         {statusLabels[session.status || "ai_active"] || session.status}
                       </span>
                       <span className="text-[11px] text-stone-400">
-                        {session.source || "web"}
+                        {session.source === "line_liff" || session.source === "line"
+                          ? "LINE"
+                          : "web"}
                       </span>
                     </div>
                   </div>

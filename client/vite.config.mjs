@@ -12,6 +12,7 @@ const localApiRoutes = new Map([
   ["/api/env-test", path.resolve(__dirname, "api", "env-test.js")],
   ["/api/ai-chat-history", path.resolve(__dirname, "api", "ai-chat-history.js")],
   ["/api/ai-chat-message", path.resolve(__dirname, "api", "ai-chat-message.js")],
+  ["/api/line-liff-session", path.resolve(__dirname, "api", "line-liff-session.js")],
   ["/api/admin/chat-sessions", path.resolve(__dirname, "api", "admin", "chat-sessions.js")],
 ]);
 

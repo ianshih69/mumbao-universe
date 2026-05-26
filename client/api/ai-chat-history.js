@@ -131,8 +131,67 @@ async function verifyLineIdToken(idToken) {
   }
 }
 
-async function resolveVisitorIdentity({ visitorId, anonymousVisitorId, lineIdToken }) {
-  const verifiedLineProfile = await verifyLineIdToken(lineIdToken);
+function normalizeLinePictureUrl(value) {
+  const pictureUrl = String(value || "").trim();
+  return pictureUrl.startsWith("https://profile.line-scdn.net/") ? pictureUrl : "";
+}
+
+async function verifyLineAccessToken(accessToken) {
+  const normalizedToken = String(accessToken || "").trim();
+  if (!normalizedToken) {
+    return null;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), lineVerifyTimeoutMs);
+
+  try {
+    const response = await fetch("https://api.line.me/v2/profile", {
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${normalizedToken}`,
+      },
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || !data?.userId) {
+      console.warn("[ai-chat] LINE access token verify failed", {
+        status: response.status,
+        message: data?.message,
+      });
+      return null;
+    }
+
+    return {
+      line_user_id: String(data.userId),
+      line_display_name: String(data.displayName || ""),
+      line_picture_url: normalizeLinePictureUrl(data.pictureUrl),
+    };
+  } catch (error) {
+    console.warn("[ai-chat] LINE access token verify unavailable", error);
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function verifyLineIdentity({ lineIdToken, lineAccessToken }) {
+  const idTokenProfile = await verifyLineIdToken(lineIdToken);
+  if (idTokenProfile?.line_user_id) {
+    return {
+      ...idTokenProfile,
+      line_picture_url: normalizeLinePictureUrl(idTokenProfile.line_picture_url),
+    };
+  }
+
+  return verifyLineAccessToken(lineAccessToken);
+}
+
+async function resolveVisitorIdentity({ visitorId, anonymousVisitorId, lineIdToken, lineAccessToken }) {
+  const verifiedLineProfile = await verifyLineIdentity({
+    lineIdToken,
+    lineAccessToken,
+  });
 
   if (verifiedLineProfile?.line_user_id) {
     return {
@@ -169,7 +228,8 @@ async function updateSessionLineIdentity(sessionId, lineProfile) {
           line_user_id: lineProfile.line_user_id,
           line_display_name: lineProfile.line_display_name,
           line_picture_url: lineProfile.line_picture_url,
-          source: "line",
+          source: "line_liff",
+          updated_at: new Date().toISOString(),
         }),
       }
     );
@@ -362,10 +422,14 @@ export default async function handler(req, res) {
     const lineIdToken = String(
       body.line_id_token || firstQueryValue(req.query?.line_id_token) || ""
     ).trim();
+    const lineAccessToken = String(
+      body.line_access_token || firstQueryValue(req.query?.line_access_token) || ""
+    ).trim();
     const identity = await resolveVisitorIdentity({
       visitorId: requestedVisitorId,
       anonymousVisitorId,
       lineIdToken,
+      lineAccessToken,
     });
     const visitorId = identity.visitorId;
     const sessionId = String(

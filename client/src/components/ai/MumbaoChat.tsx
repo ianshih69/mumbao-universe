@@ -40,10 +40,8 @@ type LineProfile = {
 };
 
 type LineIdentity = {
-  idToken: string;
-  decodedIdToken?: Record<string, unknown> | null;
-  profile: LineProfile;
-  visitorId: string;
+  idToken?: string;
+  accessToken?: string;
 };
 
 type LiffSdk = {
@@ -53,6 +51,7 @@ type LiffSdk = {
   login: (options?: { redirectUri?: string }) => void;
   getProfile: () => Promise<LineProfile>;
   getIDToken: () => string | null;
+  getAccessToken?: () => string | null;
   getDecodedIDToken?: () => Record<string, unknown> | null;
 };
 
@@ -60,6 +59,9 @@ type ChatSession = {
   id?: string | number;
   visitor_id?: string;
   source?: string;
+  line_user_id?: string;
+  line_display_name?: string;
+  line_picture_url?: string;
 };
 
 type SessionRequestIdentity = {
@@ -532,21 +534,17 @@ async function loadLineIdentity(): Promise<LineIdentity | null> {
       return null;
     }
 
-    const [profile, idToken] = await Promise.all([
-      liff.getProfile(),
-      Promise.resolve(liff.getIDToken()),
-    ]);
-    const decodedIdToken = liff.getDecodedIDToken?.() || null;
+    await liff.getProfile().catch(() => null);
+    const idToken = liff.getIDToken() || "";
+    const accessToken = liff.getAccessToken?.() || "";
 
-    if (!profile.userId || !idToken) {
+    if (!idToken && !accessToken) {
       return null;
     }
 
     return {
       idToken,
-      decodedIdToken,
-      profile,
-      visitorId: `line:${profile.userId}`,
+      accessToken,
     };
   } catch (error) {
     console.warn("Mumbao chat LINE identity unavailable:", error);
@@ -593,10 +591,34 @@ function buildLineRequestPayload(identity?: SessionRequestIdentity) {
 
   return {
     anonymous_visitor_id: identity.anonymousVisitorId || undefined,
-    line_id_token: identity.lineIdentity.idToken,
-    line_decoded_id_token: identity.lineIdentity.decodedIdToken || undefined,
-    line_profile: identity.lineIdentity.profile,
+    line_id_token: identity.lineIdentity.idToken || undefined,
+    line_access_token: identity.lineIdentity.accessToken || undefined,
   };
+}
+
+async function bindLineSession(
+  identity: LineIdentity,
+  visitorId: string,
+  currentSessionId = ""
+) {
+  return fetchJsonWithTimeout<{
+    session?: ChatSession;
+  }>(
+    "/api/line-liff-session",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        idToken: identity.idToken || undefined,
+        accessToken: identity.accessToken || undefined,
+        visitorId,
+        currentSessionId: currentSessionId || undefined,
+      }),
+    },
+    10000
+  );
 }
 
 async function fetchSessionOnly(
@@ -741,18 +763,31 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
       if (!isMounted || !identity) return;
 
       try {
-        const storedLineSessionId = getStoredSessionId(identity.visitorId);
-        const data = await fetchSessionOnly(identity.visitorId, false, {
+        const boundLineSession = await bindLineSession(
+          identity,
+          nextVisitorId,
+          existingSessionId
+        );
+        const effectiveVisitorId =
+          boundLineSession.session?.visitor_id &&
+          isLineVisitorId(String(boundLineSession.session.visitor_id))
+            ? String(boundLineSession.session.visitor_id)
+            : "";
+
+        if (!effectiveVisitorId) {
+          return;
+        }
+
+        const storedLineSessionId = getStoredSessionId(effectiveVisitorId);
+        const data = await fetchSessionOnly(effectiveVisitorId, false, {
           lineIdentity: identity,
           anonymousVisitorId: nextVisitorId,
         });
-        const effectiveVisitorId =
-          data.session?.visitor_id && isLineVisitorId(String(data.session.visitor_id))
-            ? String(data.session.visitor_id)
-            : "";
         const recoveredSessionId = data.session?.id
           ? String(data.session.id)
-          : storedLineSessionId;
+          : boundLineSession.session?.id
+            ? String(boundLineSession.session.id)
+            : storedLineSessionId;
 
         if (!isMounted || !effectiveVisitorId || !recoveredSessionId) {
           return;

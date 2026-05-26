@@ -223,12 +223,20 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "GET") {
-      return handleGet(req, res, sessionId);
+      return await handleGet(req, res, sessionId);
     }
 
-    return handlePost(req, res, sessionId);
+    return await handlePost(req, res, sessionId);
   } catch (error) {
     console.error("admin chat messages error:", error);
+    const message = String(error?.message || "");
+    if (message.includes("chat_messages_sender_check")) {
+      return sendJson(res, 500, {
+        error:
+          "Failed to send message: chat_messages sender constraint does not allow human. Please run the human sender migration.",
+      });
+    }
+
     return sendJson(res, error.status || 500, {
       error:
         error.status === 401

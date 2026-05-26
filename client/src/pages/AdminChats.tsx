@@ -502,6 +502,7 @@ export default function AdminChats() {
       }
       await loadSessions({ page: 0, silent: true });
     } catch (sendError) {
+      console.error("admin chat send reply failed:", sendError);
       setError(sendError instanceof Error ? sendError.message : "送出失敗");
     } finally {
       setIsSending(false);

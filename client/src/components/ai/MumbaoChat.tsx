@@ -14,7 +14,7 @@ import { Cloud, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type ChatRole = "assistant" | "user";
+type ChatRole = "assistant" | "user" | "human" | "system";
 
 type ChatMessage = {
   id: string;
@@ -195,9 +195,19 @@ function clearSessionId() {
 }
 
 function normalizeMessage(apiMessage: ApiMessage): ChatMessage {
+  const sender = String(apiMessage.sender || "").toLowerCase();
+  const role =
+    sender === "user"
+      ? "user"
+      : sender === "human"
+        ? "human"
+        : sender === "system"
+          ? "system"
+          : "assistant";
+
   return {
     id: String(apiMessage.id || createLocalId()),
-    role: apiMessage.sender === "user" ? "user" : "assistant",
+    role,
     message: String(apiMessage.message || ""),
     provider_used: apiMessage.provider_used,
     created_at: apiMessage.created_at,
@@ -355,7 +365,14 @@ function saveCachedMessages(visitorId: string, messages: ChatMessage[]) {
     .slice(-localCacheMessageLimit)
     .map((message) => ({
       id: message.id,
-      sender: message.role === "user" ? "user" : "ai",
+      sender:
+        message.role === "user"
+          ? "user"
+          : message.role === "human"
+            ? "human"
+            : message.role === "system"
+              ? "system"
+              : "ai",
       message: message.message,
       provider_used: message.provider_used,
       created_at: message.created_at,
@@ -1280,21 +1297,30 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
 
           const { message } = item;
           const messageTime = formatTaipeiMessageTime(message.created_at);
+          const isUserMessage = message.role === "user";
+          const isHumanMessage = message.role === "human";
 
           return (
             <div
               key={message.id}
               className={cn(
                 "flex w-full flex-col gap-1",
-                message.role === "user" ? "items-end" : "items-start"
+                isUserMessage ? "items-end" : "items-start"
               )}
             >
+              {isHumanMessage && (
+                <span className="px-1 text-[11px] leading-none text-[#9b897a]">
+                  慢慢蒔光管家
+                </span>
+              )}
               <div
                 className={cn(
                   "max-w-[82%] whitespace-pre-wrap break-words rounded-3xl px-4 py-3 text-sm leading-7 shadow-sm",
-                  message.role === "user"
+                  isUserMessage
                     ? "rounded-br-md bg-[#9ec7b8] text-white"
-                    : "rounded-bl-md border border-[#f0e3d4] bg-white text-[#5f544b]"
+                    : isHumanMessage
+                      ? "rounded-bl-md border border-[#d8eadf] bg-[#f2fbf6] text-[#4f645a]"
+                      : "rounded-bl-md border border-[#f0e3d4] bg-white text-[#5f544b]"
                 )}
               >
                 {message.message}
@@ -1303,7 +1329,7 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
                 <span
                   className={cn(
                     "px-1 text-[11px] leading-none text-[#b2a69a]",
-                    message.role === "user" ? "text-right" : "text-left"
+                    isUserMessage ? "text-right" : "text-left"
                   )}
                 >
                   {messageTime}

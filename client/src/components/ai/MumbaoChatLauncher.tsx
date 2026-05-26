@@ -22,7 +22,7 @@ export function MumbaoChatLauncher() {
     <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom,0px)_+_0.875rem)] left-[max(0.75rem,env(safe-area-inset-left,0px))] right-[max(0.75rem,env(safe-area-inset-right,0px))] z-[80] flex flex-col items-end gap-3 sm:left-auto sm:bottom-6 sm:right-6">
       {isOpen && (
         <div className="pointer-events-auto h-[min(620px,calc(100dvh_-_7.5rem_-_env(safe-area-inset-bottom,0px)))] w-full max-w-[390px] md:h-auto md:w-auto md:max-w-none">
-          <MumbaoChat compact onRequestClose={() => setIsOpen(false)} />
+          <MumbaoChat compact />
         </div>
       )}
 

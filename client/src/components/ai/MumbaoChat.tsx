@@ -1,4 +1,8 @@
-import type { FormEvent, PointerEvent as ReactPointerEvent } from "react";
+import type {
+  FormEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   useEffect,
   useLayoutEffect,
@@ -517,7 +521,6 @@ async function fetchJsonWithTimeout<T>(
 type MumbaoChatProps = {
   className?: string;
   compact?: boolean;
-  onRequestClose?: () => void;
 };
 
 function buildLineRequestPayload(identity?: SessionRequestIdentity) {
@@ -558,11 +561,7 @@ async function fetchSessionOnly(
   );
 }
 
-export function MumbaoChat({
-  className,
-  compact = false,
-  onRequestClose,
-}: MumbaoChatProps) {
+export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
   const [visitorId, setVisitorId] = useState("");
   const [anonymousVisitorId, setAnonymousVisitorId] = useState("");
   const [lineIdentity, setLineIdentity] = useState<LineIdentity | null>(null);
@@ -579,7 +578,7 @@ export function MumbaoChat({
     loadChatWindowSize()
   );
   const [isResizing, setIsResizing] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const pendingScrollRestoreRef = useRef<{
@@ -721,6 +720,14 @@ export function MumbaoChat({
       pendingScrollRestore.scrollTop;
     pendingScrollRestoreRef.current = null;
   }, [messages]);
+
+  useLayoutEffect(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+  }, [input]);
 
   useEffect(() => {
     if (!isResizing) return;
@@ -992,42 +999,22 @@ export function MumbaoChat({
     }
   };
 
-  const closeChatWidget = () => {
-    onRequestClose?.();
-  };
-
-  const resetChatSession = async () => {
-    if (!visitorId || isLoading || isHistoryLoading) return;
-
-    const confirmed = window.confirm(
-      "這不會刪除歷史紀錄，只會開啟新的對話。"
-    );
-
-    if (!confirmed) return;
-
-    try {
-      const data = await fetchSessionOnly(visitorId, true, {
-        lineIdentity,
-        anonymousVisitorId,
-      });
-      const nextSessionId = data.session?.id ? String(data.session.id) : "";
-
-      if (!nextSessionId) return;
-
-      const nextVisitorId = data.session?.visitor_id
-        ? String(data.session.visitor_id)
-        : visitorId;
-      if (nextVisitorId !== visitorId) {
-        setVisitorId(nextVisitorId);
-      }
-      setSessionId(nextSessionId);
-      saveSessionId(nextSessionId, nextVisitorId);
-      setMessages([createWelcomeMessage()]);
-      setHasMoreHistory(true);
-      shouldAutoScrollRef.current = true;
-    } catch (error) {
-      console.warn("Mumbao chat new session unavailable:", error);
+  const handleTextareaKeyDown = (
+    event: ReactKeyboardEvent<HTMLTextAreaElement>
+  ) => {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+      return;
     }
+
+    const shouldSubmitWithEnter = window.matchMedia("(min-width: 768px)").matches;
+    if (!shouldSubmitWithEnter) {
+      return;
+    }
+
+    event.preventDefault();
+    if (!input.trim() || isLoading) return;
+
+    event.currentTarget.form?.requestSubmit();
   };
 
   const desktopWindowStyle = canResizeWindow
@@ -1067,23 +1054,6 @@ export function MumbaoChat({
             <h2 className="text-lg font-semibold tracking-wide text-[#5c5147]">問慢寶 AI客服</h2>
             <p className="text-sm text-[#8a796a]">白雲基地小幫手</p>
           </div>
-          {onRequestClose && (
-            <Button
-              type="button"
-              onClick={closeChatWidget}
-              className="h-8 flex-none rounded-full border border-white/80 bg-white/70 px-3 text-xs font-medium text-[#8a796a] shadow-sm hover:bg-white"
-            >
-              收合
-            </Button>
-          )}
-          <Button
-            type="button"
-            onClick={resetChatSession}
-            disabled={!visitorId || isLoading || isHistoryLoading}
-            className="h-8 flex-none rounded-full border border-transparent bg-transparent px-2 text-xs font-medium text-[#9a8778] shadow-none hover:bg-white/55 disabled:opacity-60"
-          >
-            重新開始
-          </Button>
         </div>
       </div>
 
@@ -1118,7 +1088,7 @@ export function MumbaoChat({
           >
             <div
               className={cn(
-                "max-w-[82%] rounded-3xl px-4 py-3 text-sm leading-7 shadow-sm",
+                "max-w-[82%] whitespace-pre-wrap break-words rounded-3xl px-4 py-3 text-sm leading-7 shadow-sm",
                 message.role === "user"
                   ? "rounded-br-md bg-[#9ec7b8] text-white"
                   : "rounded-bl-md border border-[#f0e3d4] bg-white text-[#5f544b]"
@@ -1143,12 +1113,14 @@ export function MumbaoChat({
         className="box-border flex w-full flex-none items-end gap-2 border-t border-white/70 bg-[#f8efe3]/90 px-3 pt-3"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)" }}
       >
-        <input
+        <textarea
           ref={inputRef}
           value={input}
           onChange={(event) => setInput(event.target.value)}
+          onKeyDown={handleTextareaKeyDown}
           placeholder="輸入想問慢寶的問題"
-          className="min-h-11 min-w-0 flex-1 rounded-full border border-[#ead8c6] bg-white px-4 text-base text-[#5c5147] shadow-inner outline-none transition focus:border-[#9ec7b8] focus:ring-4 focus:ring-[#9ec7b8]/20 md:text-sm"
+          rows={1}
+          className="max-h-[120px] min-h-11 min-w-0 flex-1 resize-none overflow-y-auto rounded-3xl border border-[#ead8c6] bg-white px-4 py-2.5 text-base leading-6 text-[#5c5147] shadow-inner outline-none transition focus:border-[#9ec7b8] focus:ring-4 focus:ring-[#9ec7b8]/20 md:text-sm"
         />
         <Button
           type="submit"

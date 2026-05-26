@@ -4,6 +4,7 @@ import type {
   PointerEvent as ReactPointerEvent,
 } from "react";
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -85,8 +86,10 @@ const chatWindowSizeStorageKey = "mumbao-chat-window-size";
 const lineLiffSdkUrl = "https://static.line-scdn.net/liff/edge/2/sdk.js";
 const lineLoginRedirectUri = "https://www.mumbao.tw/chat";
 const historyPageSize = 7;
+const initialHistoryPageSize = 30;
 const localCacheMessageLimit = 30;
 const recentContextMessageLimit = 12;
+const sessionMessagesCacheTtlMs = 10 * 60 * 1000;
 const defaultDesktopWindowSize = { width: 420, height: 680 };
 const minDesktopWindowSize = { width: 360, height: 480 };
 const maxDesktopWindowSize = { width: 720, height: 900 };
@@ -252,7 +255,7 @@ function getTaipeiDateKey(value?: string) {
 
 function formatTaipeiDateLabel(value?: string) {
   const key = getTaipeiDateKey(value);
-  if (!key) return "";
+  if (!key || !value) return "";
 
   const todayKey = getTaipeiDateKey(new Date().toISOString());
   const yesterday = new Date();
@@ -334,17 +337,30 @@ function getNewestCreatedAt(messages: ChatMessage[]) {
     .find((message) => message.created_at)?.created_at;
 }
 
-function loadCachedMessages(visitorId: string) {
+function loadCachedMessages(visitorId: string, sessionId = "") {
   try {
-    const rawCache = localStorage.getItem(recentChatStorageKey);
+    const rawCache =
+      sessionStorage.getItem(recentChatStorageKey) ||
+      localStorage.getItem(recentChatStorageKey);
     if (!rawCache) return [];
 
     const cache = JSON.parse(rawCache) as {
       visitor_id?: string;
+      session_id?: string;
+      expires_at?: number;
       messages?: ApiMessage[];
     };
 
+    if (cache.expires_at && cache.expires_at < Date.now()) {
+      sessionStorage.removeItem(recentChatStorageKey);
+      return [];
+    }
+
     if (cache.visitor_id !== visitorId || !Array.isArray(cache.messages)) {
+      return [];
+    }
+
+    if (sessionId && cache.session_id && cache.session_id !== sessionId) {
       return [];
     }
 
@@ -359,7 +375,11 @@ function loadCachedMessages(visitorId: string) {
   }
 }
 
-function saveCachedMessages(visitorId: string, messages: ChatMessage[]) {
+function saveCachedMessages(
+  visitorId: string,
+  messages: ChatMessage[],
+  sessionId = ""
+) {
   const cacheMessages = messages
     .filter(isRealChatMessage)
     .slice(-localCacheMessageLimit)
@@ -379,13 +399,16 @@ function saveCachedMessages(visitorId: string, messages: ChatMessage[]) {
     }));
 
   try {
-    localStorage.setItem(
+    sessionStorage.setItem(
       recentChatStorageKey,
       JSON.stringify({
         visitor_id: visitorId,
+        session_id: sessionId,
+        expires_at: Date.now() + sessionMessagesCacheTtlMs,
         messages: cacheMessages,
       })
     );
+    localStorage.removeItem(recentChatStorageKey);
   } catch (error) {
     console.warn("Mumbao chat cache save unavailable:", error);
   }
@@ -599,6 +622,7 @@ async function fetchJsonWithTimeout<T>(
 type MumbaoChatProps = {
   className?: string;
   compact?: boolean;
+  isOpen?: boolean;
 };
 
 function buildLineRequestPayload(identity?: SessionRequestIdentity) {
@@ -682,7 +706,7 @@ async function fetchLatestHistory(
       body: JSON.stringify({
         visitor_id: visitorId,
         session_id: sessionId,
-        limit: historyPageSize,
+        limit: initialHistoryPageSize,
         ...buildLineRequestPayload(identity),
       }),
     },
@@ -690,7 +714,11 @@ async function fetchLatestHistory(
   );
 }
 
-export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
+export function MumbaoChat({
+  className,
+  compact = false,
+  isOpen = true,
+}: MumbaoChatProps) {
   const [visitorId, setVisitorId] = useState("");
   const [anonymousVisitorId, setAnonymousVisitorId] = useState("");
   const [lineIdentity, setLineIdentity] = useState<LineIdentity | null>(null);
@@ -701,6 +729,7 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isInitialHistoryLoading, setIsInitialHistoryLoading] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [isDesktopResizable, setIsDesktopResizable] = useState(false);
   const [windowSize, setWindowSize] = useState<ChatWindowSize>(() =>
@@ -709,6 +738,9 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
   const [isResizing, setIsResizing] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const hasInitializedRef = useRef(false);
+  const messagesCacheRef = useRef<Map<string, ChatMessage[]>>(new Map());
+  const historyFetchIdRef = useRef(0);
   const shouldAutoScrollRef = useRef(true);
   const pendingScrollRestoreRef = useRef<{
     scrollHeight: number;
@@ -727,6 +759,10 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
 
   const hasDraftMessage = useMemo(() => input.trim().length > 0, [input]);
   const canResizeWindow = compact && isDesktopResizable;
+  const realMessageCount = useMemo(
+    () => messages.filter(isRealChatMessage).length,
+    [messages]
+  );
   const messageTimeline = useMemo(() => {
     let lastDateKey = "";
 
@@ -769,6 +805,9 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
   }, []);
 
   useEffect(() => {
+    if (!isOpen || hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
+
     const { visitorId: nextVisitorId, isExistingVisitor } = getVisitorIdentity();
     const existingSessionId = isExistingVisitor
       ? getStoredSessionId(nextVisitorId)
@@ -782,7 +821,7 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
     setAnonymousVisitorId(nextVisitorId);
     setVisitorId(nextVisitorId);
     setSessionId(existingSessionId);
-    setMessages(getInitialMessages(loadCachedMessages(nextVisitorId)));
+    setMessages(getInitialMessages(loadCachedMessages(nextVisitorId, existingSessionId)));
 
     async function recoverSession() {
       if (existingSessionId || !isExistingVisitor) return;
@@ -836,9 +875,21 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
           return;
         }
 
-        const cachedMessages = loadCachedMessages(effectiveVisitorId);
+        setIsInitialHistoryLoading(true);
+        const cachedMessages =
+          messagesCacheRef.current.get(recoveredSessionId) ||
+          loadCachedMessages(effectiveVisitorId, recoveredSessionId);
         let latestMessages = cachedMessages;
         let hasMore = true;
+
+        if (cachedMessages.length > 0) {
+          setLineIdentity(identity);
+          setVisitorId(effectiveVisitorId);
+          setSessionId(recoveredSessionId);
+          setMessages(getInitialMessages(cachedMessages));
+          messagesCacheRef.current.set(recoveredSessionId, cachedMessages);
+          saveSessionId(recoveredSessionId, effectiveVisitorId);
+        }
 
         try {
           const historyData = await fetchLatestHistory(
@@ -867,10 +918,15 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
         setSessionId(recoveredSessionId);
         setMessages(getInitialMessages(latestMessages));
         setHasMoreHistory(hasMore);
+        messagesCacheRef.current.set(recoveredSessionId, latestMessages);
         saveSessionId(recoveredSessionId, effectiveVisitorId);
       } catch (error) {
         console.warn("Mumbao chat LINE session unavailable:", error);
         recoverSession();
+      } finally {
+        if (isMounted) {
+          setIsInitialHistoryLoading(false);
+        }
       }
     }
 
@@ -879,15 +935,108 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!visitorId) return;
-    saveCachedMessages(visitorId, messages);
-  }, [messages, visitorId]);
+    if (sessionId) {
+      messagesCacheRef.current.set(
+        sessionId,
+        sortMessagesByCreatedAt(messages.filter(isRealChatMessage))
+      );
+    }
+    saveCachedMessages(visitorId, messages, sessionId);
+  }, [messages, sessionId, visitorId]);
+
+  const refreshCurrentSessionHistory = useCallback(
+    async ({ showLoading = false } = {}) => {
+      if (!visitorId || !sessionId) return;
+
+      const fetchId = historyFetchIdRef.current + 1;
+      historyFetchIdRef.current = fetchId;
+      const cachedMessages =
+        messagesCacheRef.current.get(sessionId) ||
+        loadCachedMessages(visitorId, sessionId);
+
+      if (cachedMessages.length > 0) {
+        setMessages(getInitialMessages(cachedMessages));
+      } else if (showLoading) {
+        setIsInitialHistoryLoading(true);
+      }
+
+      try {
+        const data = await fetchLatestHistory(visitorId, sessionId, {
+          lineIdentity,
+          anonymousVisitorId,
+        });
+
+        if (historyFetchIdRef.current !== fetchId) return;
+
+        if (data.session?.id) {
+          const nextSessionId = String(data.session.id);
+          const nextVisitorId = data.session.visitor_id
+            ? String(data.session.visitor_id)
+            : visitorId;
+
+          if (nextVisitorId !== visitorId) {
+            setVisitorId(nextVisitorId);
+          }
+          if (nextSessionId !== sessionId) {
+            setSessionId(nextSessionId);
+          }
+          saveSessionId(nextSessionId, nextVisitorId);
+        }
+
+        const historyMessages = (data.messages || [])
+          .map(normalizeMessage)
+          .filter((message) => message.message.trim().length > 0);
+
+        if (historyMessages.length > 0) {
+          shouldAutoScrollRef.current = true;
+          setMessages((current) => {
+            const merged = getInitialMessages(
+              sortMessagesByCreatedAt(
+                dedupeMessages([
+                  ...current.filter((message) => isRealChatMessage(message)),
+                  ...historyMessages,
+                ])
+              )
+            );
+            messagesCacheRef.current.set(sessionId, merged.filter(isRealChatMessage));
+            return merged;
+          });
+        }
+
+        setHasMoreHistory(Boolean(data.has_more));
+      } catch (error) {
+        console.warn("Mumbao chat history refresh unavailable:", error);
+      } finally {
+        if (historyFetchIdRef.current === fetchId) {
+          setIsInitialHistoryLoading(false);
+        }
+      }
+    },
+    [anonymousVisitorId, lineIdentity, sessionId, visitorId]
+  );
 
   useEffect(() => {
-    if (!visitorId || !sessionId) return;
+    if (!isOpen || !visitorId || !sessionId) return;
+
+    const cachedMessages =
+      messagesCacheRef.current.get(sessionId) ||
+      loadCachedMessages(visitorId, sessionId);
+
+    if (cachedMessages.length > 0) {
+      setMessages(getInitialMessages(cachedMessages));
+    }
+
+    refreshCurrentSessionHistory({
+      showLoading: cachedMessages.length === 0,
+    });
+  }, [isOpen, refreshCurrentSessionHistory, sessionId, visitorId]);
+
+  useEffect(() => {
+    if (!isOpen || !visitorId || !sessionId) return;
 
     let isCancelled = false;
 
@@ -947,7 +1096,7 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
       isCancelled = true;
       window.clearInterval(timer);
     };
-  }, [anonymousVisitorId, lineIdentity, messages, sessionId, visitorId]);
+  }, [anonymousVisitorId, isOpen, lineIdentity, messages, sessionId, visitorId]);
 
   useEffect(() => {
     if (!shouldAutoScrollRef.current || pendingScrollRestoreRef.current) {
@@ -1336,6 +1485,14 @@ export function MumbaoChat({ className, compact = false }: MumbaoChatProps) {
             </span>
           )}
         </div>
+
+        {isInitialHistoryLoading && realMessageCount === 0 && (
+          <div className="flex justify-center py-3">
+            <span className="rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-[#9b897a] shadow-sm">
+              正在載入對話紀錄…
+            </span>
+          </div>
+        )}
 
         {messageTimeline.map((item) => {
           if (item.type === "date") {

@@ -4,8 +4,10 @@ import {
   readBody,
   sendJson,
   supabaseRequest,
-} from "./_shop_shared.js";
+} from "../server/shopShared.js";
 
+const defaultLimit = 30;
+const maxLimit = 50;
 const validOrderStatuses = new Set([
   "pending_confirm",
   "pending_payment",
@@ -42,15 +44,25 @@ function requireAdmin(req) {
   }
 }
 
-function normalizeOrder(order, items = []) {
+function getPositiveInt(value, fallback, maxValue) {
+  const parsed = Number.parseInt(String(value || ""), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(parsed, maxValue);
+}
+
+function getPage(value) {
+  const parsed = Number.parseInt(String(value || ""), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return parsed;
+}
+
+function normalizeOrderSummary(order) {
   return {
     id: order.id,
     order_number: order.order_number || "",
     customer_name: order.customer_name || "",
     customer_phone: order.customer_phone || "",
     customer_email: order.customer_email || "",
-    shipping_address: order.shipping_address || "",
-    note: order.note || "",
     subtotal: Number(order.subtotal || 0),
     shipping_fee: Number(order.shipping_fee || 0),
     total: Number(order.total || 0),
@@ -59,6 +71,14 @@ function normalizeOrder(order, items = []) {
     order_status: order.order_status || "pending_confirm",
     created_at: order.created_at || "",
     updated_at: order.updated_at || "",
+  };
+}
+
+function normalizeOrder(order, items = []) {
+  return {
+    ...normalizeOrderSummary(order),
+    shipping_address: order.shipping_address || "",
+    note: order.note || "",
     items: items.map(normalizeItem),
   };
 }
@@ -80,6 +100,38 @@ function normalizeItem(item) {
     line_total: Number(item.line_total || 0),
     created_at: item.created_at || "",
   };
+}
+
+async function loadOrders(req, res) {
+  const search = String(firstQueryValue(req.query?.q) || "").trim();
+  const status = String(firstQueryValue(req.query?.status) || "").trim();
+  const limit = getPositiveInt(firstQueryValue(req.query?.limit), defaultLimit, maxLimit);
+  const page = getPage(firstQueryValue(req.query?.page));
+  const offset = page * limit;
+  const select =
+    "id,order_number,customer_name,customer_phone,customer_email,subtotal,shipping_fee,total,payment_method,payment_status,order_status,created_at,updated_at";
+  const statusFilter =
+    status && validOrderStatuses.has(status)
+      ? `&order_status=eq.${encodeURIComponent(status)}`
+      : "";
+  const searchTerm = encodeURIComponent(`*${search.replace(/[(),]/g, " ")}*`);
+  const searchFilter = search
+    ? `&or=(order_number.ilike.${searchTerm},customer_name.ilike.${searchTerm},customer_phone.ilike.${searchTerm})`
+    : "";
+  const orders = await supabaseRequest(
+    `/shop_orders?select=${select}${statusFilter}${searchFilter}&order=created_at.desc&limit=${
+      limit + 1
+    }&offset=${offset}`
+  );
+  const hasMore = (orders || []).length > limit;
+
+  return sendJson(res, 200, {
+    orders: (orders || []).slice(0, limit).map(normalizeOrderSummary),
+    page,
+    limit,
+    hasMore,
+    nextPage: hasMore ? page + 1 : null,
+  });
 }
 
 async function loadOrder(orderNumber) {
@@ -137,45 +189,60 @@ function validateStatusPatch(body) {
   return patch;
 }
 
+async function handleOrderAction(req, res) {
+  if (req.method === "GET") {
+    const orderNumber = String(firstQueryValue(req.query?.orderNumber) || "").trim();
+    if (!orderNumber) {
+      return sendJson(res, 400, { error: "orderNumber is required." });
+    }
+
+    return sendJson(res, 200, { order: await loadOrder(orderNumber) });
+  }
+
+  if (req.method === "PATCH") {
+    const body = await readBody(req);
+    const orderNumber = String(body?.orderNumber || "").trim();
+    if (!orderNumber) {
+      return sendJson(res, 400, { error: "orderNumber is required." });
+    }
+
+    const patch = validateStatusPatch(body);
+    await supabaseRequest(
+      `/shop_orders?order_number=eq.${encodeURIComponent(orderNumber)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          ...patch,
+          updated_at: new Date().toISOString(),
+        }),
+      }
+    );
+
+    return sendJson(res, 200, { order: await loadOrder(orderNumber) });
+  }
+
+  res.setHeader("Allow", "GET, PATCH");
+  return sendJson(res, 405, { error: "Method not allowed." });
+}
+
 export default async function handler(req, res) {
+  const action = String(firstQueryValue(req.query?.action) || "").trim();
+
   try {
     requireAdmin(req);
 
-    if (req.method === "GET") {
-      const orderNumber = String(firstQueryValue(req.query?.orderNumber) || "").trim();
-      if (!orderNumber) {
-        return sendJson(res, 400, { error: "orderNumber is required." });
-      }
-
-      return sendJson(res, 200, { order: await loadOrder(orderNumber) });
+    if (req.method === "GET" && action === "orders") {
+      return await loadOrders(req, res);
     }
 
-    if (req.method === "PATCH") {
-      const body = await readBody(req);
-      const orderNumber = String(body?.orderNumber || "").trim();
-      if (!orderNumber) {
-        return sendJson(res, 400, { error: "orderNumber is required." });
-      }
-
-      const patch = validateStatusPatch(body);
-      await supabaseRequest(
-        `/shop_orders?order_number=eq.${encodeURIComponent(orderNumber)}`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({
-            ...patch,
-            updated_at: new Date().toISOString(),
-          }),
-        }
-      );
-
-      return sendJson(res, 200, { order: await loadOrder(orderNumber) });
+    if (action === "order") {
+      return await handleOrderAction(req, res);
     }
 
     res.setHeader("Allow", "GET, PATCH");
-    return sendJson(res, 405, { error: "Method not allowed." });
+    return sendJson(res, 405, { error: "Method or action not allowed." });
   } catch (error) {
-    console.error("admin shop order error:", error);
+    console.error("admin shop api error:", error);
     return sendJson(res, error.status || 500, {
       error:
         error.status === 401
@@ -184,7 +251,7 @@ export default async function handler(req, res) {
             ? "Order not found."
             : error.status === 400
               ? error.message
-              : "Failed to load order.",
+              : "Admin shop request failed.",
     });
   }
 }

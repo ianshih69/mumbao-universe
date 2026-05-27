@@ -68,13 +68,13 @@ function readLocalEnv() {
   return localEnvCache;
 }
 
-export async function supabaseRequest(path, options = {}) {
+export async function supabaseRequest(pathname, options = {}) {
   const { restUrl, serviceRoleKey } = getSupabaseConfig();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), supabaseTimeoutMs);
 
   try {
-    const response = await fetch(`${restUrl}${path}`, {
+    const response = await fetch(`${restUrl}${pathname}`, {
       ...options,
       signal: controller.signal,
       headers: {

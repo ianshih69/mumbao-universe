@@ -6,35 +6,14 @@
     "api/ai-chat-message.js": {
       "includeFiles": "api/knowledge/guesthouse-rules.md"
     },
-    "api/shop-products.js": {
-      "includeFiles": "api/_shop_shared.js"
+    "api/shop.js": {
+      "includeFiles": "server/shopShared.js"
     },
-    "api/shop-product.js": {
-      "includeFiles": "api/_shop_shared.js"
-    },
-    "api/shop-orders.js": {
-      "includeFiles": "api/_shop_shared.js"
-    },
-    "api/admin-shop-orders.js": {
-      "includeFiles": "api/_shop_shared.js"
-    },
-    "api/admin-shop-order.js": {
-      "includeFiles": "api/_shop_shared.js"
+    "api/admin-shop.js": {
+      "includeFiles": "server/shopShared.js"
     }
   },
   "rewrites": [
-    {
-      "source": "/api/shop/products",
-      "destination": "/api/shop-products"
-    },
-    {
-      "source": "/api/shop/products/:slug",
-      "destination": "/api/shop-product?slug=:slug"
-    },
-    {
-      "source": "/api/shop/orders",
-      "destination": "/api/shop-orders"
-    },
     {
       "source": "/((?!api(?:/|$)).*)",
       "destination": "/index.html"

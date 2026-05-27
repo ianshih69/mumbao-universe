@@ -87,6 +87,7 @@ export async function fetchAdminShopOrders({
 
   if (q.trim()) params.set("q", q.trim());
   if (status.trim()) params.set("status", status.trim());
+  params.set("action", "orders");
 
   return fetchAdminJson<{
     orders?: AdminShopOrderSummary[];
@@ -94,12 +95,12 @@ export async function fetchAdminShopOrders({
     limit?: number;
     hasMore?: boolean;
     nextPage?: number | null;
-  }>(`/api/admin-shop-orders?${params.toString()}`, token);
+  }>(`/api/admin-shop?${params.toString()}`, token);
 }
 
 export async function fetchAdminShopOrder(token: string, orderNumber: string) {
   const data = await fetchAdminJson<{ order?: AdminShopOrderDetail }>(
-    `/api/admin-shop-order?orderNumber=${encodeURIComponent(orderNumber)}`,
+    `/api/admin-shop?action=order&orderNumber=${encodeURIComponent(orderNumber)}`,
     token
   );
 
@@ -122,7 +123,7 @@ export async function updateAdminShopOrderStatus({
   payment_status?: AdminPaymentStatus;
 }) {
   const data = await fetchAdminJson<{ order?: AdminShopOrderDetail }>(
-    "/api/admin-shop-order",
+    "/api/admin-shop?action=order",
     token,
     {
       method: "PATCH",

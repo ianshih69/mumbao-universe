@@ -13,6 +13,11 @@ import Admin from "./pages/Admin";
 import AdminChats from "./pages/AdminChats";
 import AiChat from "./pages/AiChat";
 import Chat from "./pages/Chat";
+import Shop from "./pages/Shop";
+import ProductDetail from "./pages/ProductDetail";
+import Cart from "./pages/Cart";
+import Checkout from "./pages/Checkout";
+import OrderComplete from "./pages/OrderComplete";
 
 
 function Router() {
@@ -24,6 +29,11 @@ function Router() {
       <Route path={"/about"} component={About} />
       <Route path={"/ai-chat"} component={AiChat} />
       <Route path={"/chat"} component={Chat} />
+      <Route path={"/shop"} component={Shop} />
+      <Route path={"/shop/:slug"} component={ProductDetail} />
+      <Route path={"/cart"} component={Cart} />
+      <Route path={"/checkout"} component={Checkout} />
+      <Route path={"/order-complete/:orderNumber"} component={OrderComplete} />
       <Route path={"/about-mumbao"} component={Mumbao} />
       <Route path={"/mumbao"} component={Mumbao} />
       <Route path={"/zh-TW/about-mumbao"} component={Mumbao} />

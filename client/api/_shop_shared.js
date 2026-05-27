@@ -14,10 +14,8 @@ export function sendJson(res, status, body) {
 }
 
 export function getSupabaseConfig() {
-  const localEnv = readLocalEnv();
-  const url = process.env.SUPABASE_URL || localEnv.SUPABASE_URL;
-  const serviceRoleKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY || localEnv.SUPABASE_SERVICE_ROLE_KEY;
+  const url = getServerEnv("SUPABASE_URL");
+  const serviceRoleKey = getServerEnv("SUPABASE_SERVICE_ROLE_KEY");
 
   if (!url || !serviceRoleKey) {
     throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
@@ -28,6 +26,11 @@ export function getSupabaseConfig() {
     rpcUrl: `${url.replace(/\/$/, "")}/rest/v1/rpc`,
     serviceRoleKey,
   };
+}
+
+export function getServerEnv(name) {
+  const localEnv = readLocalEnv();
+  return process.env[name] || localEnv[name] || "";
 }
 
 function readLocalEnv() {

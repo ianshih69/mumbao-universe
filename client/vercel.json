@@ -14,6 +14,12 @@
     },
     "api/shop-orders.js": {
       "includeFiles": "api/_shop_shared.js"
+    },
+    "api/admin-shop-orders.js": {
+      "includeFiles": "api/_shop_shared.js"
+    },
+    "api/admin-shop-order.js": {
+      "includeFiles": "api/_shop_shared.js"
     }
   },
   "rewrites": [

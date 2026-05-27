@@ -11,7 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Cloud, Send, Sparkles } from "lucide-react";
+import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -1900,23 +1900,6 @@ export function MumbaoChat({
       )}
       aria-label="問慢寶 AI客服"
     >
-      <div className="relative flex-none overflow-hidden border-b border-white/70 bg-[#f8efe3] px-5 py-4">
-        <div className="absolute right-4 top-3 flex text-[#d7b77a]" aria-hidden="true">
-          <Sparkles className="size-4" />
-          <Sparkles className="mt-5 size-3 opacity-70" />
-        </div>
-        <div className="absolute -left-8 -top-10 h-24 w-32 rounded-full bg-white/70 blur-sm" aria-hidden="true" />
-        <div className="relative flex items-center gap-3">
-          <div className="flex size-12 items-center justify-center rounded-full bg-white text-[#88a9c7] shadow-inner">
-            <Cloud className="size-7" aria-hidden="true" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-semibold tracking-wide text-[#5c5147]">問慢寶 AI客服</h2>
-            <p className="text-sm text-[#8a796a]">白雲基地小幫手</p>
-          </div>
-        </div>
-      </div>
-
       <div
         ref={scrollRef}
         className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#fffdf8] px-4 pb-[calc(env(safe-area-inset-bottom,0px)_+_1.5rem)] pt-5"
@@ -1964,50 +1947,89 @@ export function MumbaoChat({
           const messageTime = formatTaipeiMessageTime(message.created_at);
           const isUserMessage = message.role === "user";
           const isHumanMessage = message.role === "human";
+          const senderName = isUserMessage
+            ? "我"
+            : isHumanMessage
+              ? "慢慢蒔光管家"
+              : "慢寶";
 
           return (
             <div
               key={message.id}
               className={cn(
-                "flex w-full flex-col gap-1",
-                isUserMessage ? "items-end" : "items-start"
+                "flex w-full",
+                isUserMessage ? "justify-end" : "justify-start"
               )}
             >
-              {isHumanMessage && (
-                <span className="px-1 text-[11px] leading-none text-[#9b897a]">
-                  慢慢蒔光管家
-                </span>
+              {!isUserMessage && (
+                <div className="mr-2 mt-5 flex size-9 flex-none items-center justify-center overflow-hidden rounded-full border border-white/90 bg-[#fff4e4] shadow-[0_6px_14px_rgba(111,88,71,0.12)] sm:size-10">
+                  <img
+                    src="/images/stand.png"
+                    alt=""
+                    className="h-full w-full object-cover object-top"
+                    draggable={false}
+                  />
+                </div>
               )}
+
               <div
                 className={cn(
-                  "max-w-[82%] whitespace-pre-wrap break-words rounded-3xl px-4 py-3 text-sm leading-7 shadow-sm",
-                  isUserMessage
-                    ? "rounded-br-md bg-[#9ec7b8] text-white"
-                    : isHumanMessage
-                      ? "rounded-bl-md border border-[#d8eadf] bg-[#f2fbf6] text-[#4f645a]"
-                      : "rounded-bl-md border border-[#f0e3d4] bg-white text-[#5f544b]"
+                  "flex max-w-[82%] flex-col gap-1",
+                  isUserMessage ? "items-end" : "items-start"
                 )}
               >
-                {message.message}
-              </div>
-              {messageTime && (
                 <span
                   className={cn(
-                    "px-1 text-[11px] leading-none text-[#b2a69a]",
+                    "px-1 text-[11px] font-medium leading-none text-[#a99a8c]",
                     isUserMessage ? "text-right" : "text-left"
                   )}
                 >
-                  {messageTime}
+                  {senderName}
                 </span>
-              )}
+                <div
+                  className={cn(
+                    "whitespace-pre-wrap break-words rounded-[22px] px-4 py-3 text-sm leading-7 shadow-[0_8px_20px_rgba(111,88,71,0.08)]",
+                    isUserMessage
+                      ? "rounded-tr-md bg-[#e99554] text-[#fffaf2]"
+                      : isHumanMessage
+                        ? "rounded-tl-md border border-[#e1eadf] bg-[#f6fbf4] text-[#546456]"
+                        : "rounded-tl-md border border-[#f0e3d4] bg-white text-[#5f544b]"
+                  )}
+                >
+                  {message.message}
+                </div>
+                {messageTime && (
+                  <span
+                    className={cn(
+                      "px-1 text-[10px] leading-none text-[#b9ada2]",
+                      isUserMessage ? "text-right" : "text-left"
+                    )}
+                  >
+                    {messageTime}
+                  </span>
+                )}
+              </div>
             </div>
           );
         })}
 
         {isLoading && (
-          <div className="flex justify-start">
-            <div className="rounded-3xl rounded-bl-md border border-[#f0e3d4] bg-white px-4 py-3 text-sm text-[#8a796a] shadow-sm">
-              慢寶正在想一下…
+          <div className="flex w-full justify-start">
+            <div className="mr-2 mt-5 flex size-9 flex-none items-center justify-center overflow-hidden rounded-full border border-white/90 bg-[#fff4e4] shadow-[0_6px_14px_rgba(111,88,71,0.12)] sm:size-10">
+              <img
+                src="/images/stand.png"
+                alt=""
+                className="h-full w-full object-cover object-top"
+                draggable={false}
+              />
+            </div>
+            <div className="flex max-w-[82%] flex-col items-start gap-1">
+              <span className="px-1 text-[11px] font-medium leading-none text-[#a99a8c]">
+                慢寶
+              </span>
+              <div className="rounded-[22px] rounded-tl-md border border-[#f0e3d4] bg-white px-4 py-3 text-sm text-[#8a796a] shadow-[0_8px_20px_rgba(111,88,71,0.08)]">
+                慢寶正在想一下…
+              </div>
             </div>
           </div>
         )}

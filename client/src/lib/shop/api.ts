@@ -20,13 +20,13 @@ async function fetchJson<T>(url: string, options: RequestInit = {}) {
 }
 
 export async function fetchShopProducts() {
-  const data = await fetchJson<{ products?: ShopProduct[] }>("/api/shop/products");
+  const data = await fetchJson<{ products?: ShopProduct[] }>("/api/shop-products");
   return data.products || [];
 }
 
 export async function fetchShopProduct(slug: string) {
   const data = await fetchJson<{ product?: ShopProduct }>(
-    `/api/shop/products/${encodeURIComponent(slug)}`
+    `/api/shop-product?slug=${encodeURIComponent(slug)}`
   );
   return data.product || null;
 }
@@ -40,7 +40,7 @@ export async function createShopOrder({
   note?: string;
   items: Array<{ variant_id: string; quantity: number }>;
 }) {
-  const data = await fetchJson<{ order?: CreatedOrder }>("/api/shop/orders", {
+  const data = await fetchJson<{ order?: CreatedOrder }>("/api/shop-orders", {
     method: "POST",
     body: JSON.stringify({
       customer,

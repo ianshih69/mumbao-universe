@@ -1,4 +1,4 @@
-import { firstQueryValue, sendJson, supabaseRequest } from "../_shared.js";
+import { firstQueryValue, sendJson, supabaseRequest } from "./_shop_shared.js";
 
 function normalizeVariant(variant) {
   return {

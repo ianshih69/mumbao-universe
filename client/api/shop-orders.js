@@ -1,4 +1,4 @@
-import { readBody, sendJson, supabaseRpc } from "./_shared.js";
+import { readBody, sendJson, supabaseRpc } from "./_shop_shared.js";
 
 const knownOrderErrors = new Map([
   ["ORDER_ITEMS_REQUIRED", "購物車目前沒有商品。"],

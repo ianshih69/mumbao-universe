@@ -1,7 +1,11 @@
+import fs from "node:fs";
+import path from "node:path";
+
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
 const supabaseTimeoutMs = 8000;
+let localEnvCache = null;
 
 export function sendJson(res, status, body) {
   res.statusCode = status;
@@ -10,8 +14,10 @@ export function sendJson(res, status, body) {
 }
 
 export function getSupabaseConfig() {
-  const url = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const localEnv = readLocalEnv();
+  const url = process.env.SUPABASE_URL || localEnv.SUPABASE_URL;
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY || localEnv.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceRoleKey) {
     throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
@@ -22,6 +28,41 @@ export function getSupabaseConfig() {
     rpcUrl: `${url.replace(/\/$/, "")}/rest/v1/rpc`,
     serviceRoleKey,
   };
+}
+
+function readLocalEnv() {
+  if (localEnvCache) return localEnvCache;
+
+  localEnvCache = {};
+
+  try {
+    const candidatePaths = [
+      path.join(process.cwd(), ".env.local"),
+      path.join(process.cwd(), "client", ".env.local"),
+    ];
+    const envPath = candidatePaths.find((candidatePath) =>
+      fs.existsSync(candidatePath)
+    );
+
+    if (!envPath) return localEnvCache;
+
+    const content = fs.readFileSync(envPath, "utf8");
+    for (const line of content.split(/\r?\n/)) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine || trimmedLine.startsWith("#")) continue;
+
+      const equalsIndex = trimmedLine.indexOf("=");
+      if (equalsIndex <= 0) continue;
+
+      const key = trimmedLine.slice(0, equalsIndex).trim();
+      const rawValue = trimmedLine.slice(equalsIndex + 1).trim();
+      localEnvCache[key] = rawValue.replace(/^['"]|['"]$/g, "");
+    }
+  } catch {
+    localEnvCache = {};
+  }
+
+  return localEnvCache;
 }
 
 export async function supabaseRequest(path, options = {}) {

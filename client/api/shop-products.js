@@ -1,4 +1,4 @@
-import { firstQueryValue, sendJson, supabaseRequest } from "./_shared.js";
+import { firstQueryValue, sendJson, supabaseRequest } from "./_shop_shared.js";
 
 function normalizeVariant(variant) {
   return {
@@ -6,7 +6,7 @@ function normalizeVariant(variant) {
     sku: variant.sku || "",
     product_id: variant.product_id,
     variant_name: variant.variant_name || "",
-    variant_option: variant.variant_option || "",
+    variant_option: variant.variant_option || null,
     price: Number(variant.price || 0),
     compare_at_price:
       variant.compare_at_price === null || variant.compare_at_price === undefined

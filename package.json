@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "license": "MIT",
   "scripts": {
-    "dev": "vercel dev --cwd client --listen 3000",
+    "dev": "vercel dev --cwd client --listen 3000 --local-config client/vercel.json",
     "dev:vite": "vite --host",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",

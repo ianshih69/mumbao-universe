@@ -96,8 +96,14 @@ const maxDesktopWindowSize = { width: 720, height: 900 };
 const welcomeMessage =
   "嗨，我是慢寶。你可以問我住宿、包棟、寵物、停車、入住時間，或白雲基地的故事。";
 const errorReply = "慢寶的雲朵訊號暫時不穩，請稍後再試。";
+const chatDebugEnabled =
+  String(
+    (import.meta.env.NEXT_PUBLIC_CHAT_DEBUG || import.meta.env.VITE_CHAT_DEBUG || "")
+  ).toLowerCase() === "true";
 
 function logChatDebug(event: string, details: Record<string, unknown> = {}) {
+  if (!chatDebugEnabled) return;
+
   console.info(`[MumbaoChat] ${event}`, {
     at: new Date().toISOString(),
     ...details,
@@ -1962,7 +1968,7 @@ export function MumbaoChat({
               )}
             >
               {!isUserMessage && (
-                <div className="mr-2 mt-5 flex size-9 flex-none items-center justify-center overflow-hidden rounded-full border border-white/90 bg-[#fff4e4] shadow-[0_6px_14px_rgba(111,88,71,0.12)] sm:size-10">
+                <div className="mr-2 -mt-0.5 flex size-9 flex-none items-center justify-center overflow-hidden rounded-full border border-white/90 bg-[#fff4e4] shadow-[0_6px_14px_rgba(111,88,71,0.12)] sm:size-10">
                   <img
                     src="/images/stand.png"
                     alt=""
@@ -2015,7 +2021,7 @@ export function MumbaoChat({
 
         {isLoading && (
           <div className="flex w-full justify-start">
-            <div className="mr-2 mt-5 flex size-9 flex-none items-center justify-center overflow-hidden rounded-full border border-white/90 bg-[#fff4e4] shadow-[0_6px_14px_rgba(111,88,71,0.12)] sm:size-10">
+            <div className="mr-2 -mt-0.5 flex size-9 flex-none items-center justify-center overflow-hidden rounded-full border border-white/90 bg-[#fff4e4] shadow-[0_6px_14px_rgba(111,88,71,0.12)] sm:size-10">
               <img
                 src="/images/stand.png"
                 alt=""

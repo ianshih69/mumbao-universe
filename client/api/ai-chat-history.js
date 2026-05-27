@@ -5,13 +5,21 @@ const supabaseTimeoutMs = 8000;
 const lineVerifyTimeoutMs = 8000;
 const defaultHistoryLimit = 7;
 const maxHistoryLimit = 100;
+const chatDebugEnabled =
+  String(process.env.NEXT_PUBLIC_CHAT_DEBUG || "").toLowerCase() === "true";
+
+function logApiDebug(event, details = {}) {
+  if (!chatDebugEnabled) return;
+
+  console.log(`[ai-chat-history] ${event}`, details);
+}
 
 function getTimingNow() {
   return Date.now();
 }
 
 function logApiTiming(event, startedAt, details = {}) {
-  console.log(`[ai-chat-history] ${event}`, {
+  logApiDebug(event, {
     durationMs: Date.now() - startedAt,
     ...details,
   });
@@ -400,13 +408,10 @@ async function getSession({ visitorId, sessionId, lineProfile }) {
     const existingLineSession = await loadBestLineSession(lineProfile.line_user_id);
 
     if (existingLineSession?.session?.id) {
-      console.log(
-        "[ai-chat-history] reused session reason = line_user_id match"
-      );
-      console.log(
-        "[ai-chat-history] selected session has message count =",
-        existingLineSession.messageCount
-      );
+      logApiDebug("reused session", {
+        reason: "line_user_id match",
+        selectedSessionHasMessageCount: existingLineSession.messageCount,
+      });
       return existingLineSession.session;
     }
   }
@@ -532,7 +537,7 @@ export default async function handler(req, res) {
     const lineAccessToken = String(
       body.line_access_token || firstQueryValue(req.query?.line_access_token) || ""
     ).trim();
-    console.log("[ai-chat-history] request start", {
+    logApiDebug("request start", {
       method: req.method,
       hasVisitorId: Boolean(requestedVisitorId),
       hasSessionId: Boolean(body.session_id || firstQueryValue(req.query?.session_id)),

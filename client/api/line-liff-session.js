@@ -3,13 +3,21 @@ const jsonHeaders = {
 };
 const supabaseTimeoutMs = 8000;
 const lineVerifyTimeoutMs = 8000;
+const chatDebugEnabled =
+  String(process.env.NEXT_PUBLIC_CHAT_DEBUG || "").toLowerCase() === "true";
+
+function logApiDebug(event, details = {}) {
+  if (!chatDebugEnabled) return;
+
+  console.log(`[line-liff-session] ${event}`, details);
+}
 
 function getTimingNow() {
   return Date.now();
 }
 
 function logApiTiming(event, startedAt, details = {}) {
-  console.log(`[line-liff-session] ${event}`, {
+  logApiDebug(event, {
     durationMs: Date.now() - startedAt,
     ...details,
   });
@@ -317,7 +325,7 @@ export default async function handler(req, res) {
 
   try {
     const body = await readBody(req);
-    console.log("[line-liff-session] request start", {
+    logApiDebug("request start", {
       hasIdToken: Boolean(body.idToken || body.id_token || body.line_id_token),
       hasAccessToken: Boolean(
         body.accessToken || body.access_token || body.line_access_token
@@ -349,10 +357,9 @@ export default async function handler(req, res) {
       body.currentSessionId || body.current_session_id || body.session_id || ""
     ).trim();
     const lineVisitorId = `line:${lineProfile.line_user_id}`;
-    console.log(
-      "[line-liff-session] verified userId =",
-      lineProfile.line_user_id
-    );
+    logApiDebug("verified LINE identity", {
+      hasLineUserId: Boolean(lineProfile.line_user_id),
+    });
 
     const bestLineSessionStartedAt = getTimingNow();
     const existingLineSession = await loadBestLineSession(
@@ -364,17 +371,11 @@ export default async function handler(req, res) {
     });
 
     if (existingLineSession?.session?.id) {
-      console.log(
-        "[line-liff-session] found existing session =",
-        existingLineSession.session.id
-      );
-      console.log(
-        "[line-liff-session] reused session reason = line_user_id match"
-      );
-      console.log(
-        "[line-liff-session] selected session has message count =",
-        existingLineSession.messageCount
-      );
+      logApiDebug("reused session", {
+        reason: "line_user_id match",
+        foundSessionId: existingLineSession.session.id,
+        selectedSessionHasMessageCount: existingLineSession.messageCount,
+      });
 
       const updateStartedAt = getTimingNow();
       const session = await updateSessionLineIdentity(
@@ -410,14 +411,11 @@ export default async function handler(req, res) {
         sessionId: session?.id || "",
         messagePresence: messageCount,
       });
-      console.log("[line-liff-session] found existing session =", session.id);
-      console.log(
-        "[line-liff-session] reused session reason = current session attach"
-      );
-      console.log(
-        "[line-liff-session] selected session has message count =",
-        messageCount
-      );
+      logApiDebug("reused session", {
+        reason: "current session attach",
+        foundSessionId: session.id,
+        selectedSessionHasMessageCount: messageCount,
+      });
       logApiTiming("request end", requestStartedAt, {
         status: 200,
         sessionId: session?.id || "",
@@ -451,17 +449,14 @@ export default async function handler(req, res) {
     });
 
     if (existingVisitorSession?.id) {
-      console.log("[line-liff-session] found existing session =", session.id);
-      console.log(
-        "[line-liff-session] reused session reason = line visitor_id match"
-      );
+      logApiDebug("reused session", {
+        reason: "line visitor_id match",
+        foundSessionId: session.id,
+      });
     } else {
-      console.log("[line-liff-session] created new session =", session.id);
+      logApiDebug("created new session", { sessionId: session.id });
     }
-    console.log(
-      "[line-liff-session] selected session has message count =",
-      messageCount
-    );
+    logApiDebug("selected session", { messageCount });
 
     logApiTiming("request end", requestStartedAt, {
       status: 200,

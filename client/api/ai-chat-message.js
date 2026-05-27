@@ -14,8 +14,16 @@ const lineVerifyTimeoutMs = 8000;
 const deepSeekTimeoutMs = 20000;
 const recentMessagesLimit = 12;
 const recentContextMaxChars = 4000;
+const chatDebugEnabled =
+  String(process.env.NEXT_PUBLIC_CHAT_DEBUG || "").toLowerCase() === "true";
 let hasGuesthouseKnowledgeCache = false;
 let guesthouseKnowledgeCache = "";
+
+function logChatDebug(event, details = {}) {
+  if (!chatDebugEnabled) return;
+
+  console.log(`[ai-chat] ${event}`, details);
+}
 
 const supportScopeKeywords = [
   "慢慢蒔光",
@@ -807,7 +815,7 @@ async function callDeepSeek(userMessage, recentMessages, dateInfo) {
   const timeoutId = setTimeout(() => controller.abort(), deepSeekTimeoutMs);
 
   try {
-    console.log("[ai-chat] provider=deepseek model=", model);
+    logChatDebug("provider=deepseek", { model });
 
     const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
@@ -824,7 +832,7 @@ async function callDeepSeek(userMessage, recentMessages, dateInfo) {
       }),
     });
 
-    console.log("[ai-chat] deepseek status=", response.status);
+    logChatDebug("deepseek status", { status: response.status });
 
     const text = await response.text();
     let data = null;
@@ -896,11 +904,10 @@ async function getSessionForMessage(visitorId, sessionId, lineProfile) {
     const existingLineSession = await loadBestLineSession(lineProfile.line_user_id);
 
     if (existingLineSession?.session?.id) {
-      console.log("[ai-chat] reused session reason = line_user_id match");
-      console.log(
-        "[ai-chat] selected session has message count =",
-        existingLineSession.messageCount
-      );
+      logChatDebug("reused session", {
+        reason: "line_user_id match",
+        selectedSessionHasMessageCount: existingLineSession.messageCount,
+      });
       return existingLineSession.session;
     }
   }
@@ -1017,7 +1024,7 @@ export default async function handler(req, res) {
       (await updateSessionLineIdentity(session.id, identity.lineProfile)) ||
       session;
     const dateInfo = getTaipeiDateInfo();
-    console.log("[ai-chat] current year=", dateInfo.currentYear);
+    logChatDebug("current year", { currentYear: dateInfo.currentYear });
 
     const clientRecentMessages = normalizeClientRecentMessages(body.recentMessages);
     let recentMessages = clientRecentMessages;
@@ -1040,12 +1047,10 @@ export default async function handler(req, res) {
       isContextScopeAllowed = isAllowedSupportScope(message, contextText);
     }
 
-    if (contextSource === "client") {
-      console.log("[ai-chat] context source=client");
-    } else {
-      console.log("[ai-chat] context source=supabase_fallback");
-    }
-    console.log("[ai-chat] recent messages count=", recentMessages.length);
+    logChatDebug("context source", {
+      source: contextSource,
+      recentMessagesCount: recentMessages.length,
+    });
 
     const userMessage = await insertMessage(session.id, "user", message, null);
     session = await updateSessionAfterMessage(session, userMessage, {
@@ -1053,7 +1058,7 @@ export default async function handler(req, res) {
     });
 
     if (shouldSkipAiReply(session)) {
-      console.log("[ai-chat] human takeover active, skip ai reply");
+      logChatDebug("human takeover active, skip ai reply");
       return sendJson(res, 200, {
         session,
         userMessage,
@@ -1064,7 +1069,7 @@ export default async function handler(req, res) {
     }
 
     if (!isContextScopeAllowed) {
-      console.log("[ai-chat] scope=blocked");
+      logChatDebug("scope=blocked");
       const aiMessage = await insertMessage(
         session.id,
         "ai",
@@ -1081,15 +1086,13 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log(
-      isCurrentScopeAllowed
-        ? "[ai-chat] scope=allowed"
-        : "[ai-chat] scope=allowed by context"
+    logChatDebug(
+      isCurrentScopeAllowed ? "scope=allowed" : "scope=allowed by context"
     );
     const aiAnswer = await callDeepSeek(message, recentMessages, dateInfo);
     const aiMessage = await insertMessage(session.id, "ai", aiAnswer, "deepseek");
     session = await updateSessionAfterMessage(session, aiMessage);
-    console.log("[ai-chat] saved assistant message");
+    logChatDebug("saved assistant message");
 
     return sendJson(res, 200, {
       session,

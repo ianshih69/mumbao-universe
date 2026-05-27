@@ -107,7 +107,7 @@ export function Footer() {
         <div className="border-t border-stone-200 pt-8 flex flex-col items-start gap-3 md:gap-4 font-serif text-stone-600">
           <p className="text-sm tracking-wide">© 2026 The Mumbao Studio. All rights reserved.</p>
           <div className="flex gap-4 text-xs md:text-sm tracking-wide text-stone-500">
-            <a href="#" className="hover:text-stone-800 transition-colors">Privacy Policy</a>
+            <a href="#" className="hover:text-stone-800 transition-colors">隱私權政策</a>
             <span className="text-stone-300">|</span>
             <a href="#" className="hover:text-stone-800 transition-colors">Terms of Service</a>
           </div>

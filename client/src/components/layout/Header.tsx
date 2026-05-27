@@ -44,12 +44,12 @@ export function Header() {
 
   const menuItems = [
     { label: "關於我們", href: "/about", internal: true },
-    { label: "認識慢寶", href: `${localePrefix}/about-mumbao`, internal: true },
-    { label: "房間", href: "/#rooms", internal: false },
-    { label: "線上訂房", href: "/#booking", internal: false },
     { label: "最新消息", href: "/#news", internal: false },
-    { label: "媒體報導", href: "#", internal: false },
-    { label: "隱私權政策", href: "#", internal: false },
+    { label: "認識慢寶", href: `${localePrefix}/about-mumbao`, internal: true },
+    { label: "房型介紹", href: "/#rooms", internal: false },
+    { label: "線上訂房", href: "/#booking", internal: false },
+    { label: "宇宙碎品", href: "/shop", internal: true },
+    { label: "媒體報導", href: "/#news", internal: false },
   ];
 
   const languages = ["繁體中文", "日本語", "韓語", "English"];

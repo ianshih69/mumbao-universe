@@ -553,8 +553,13 @@ export default function AdminChats() {
   }
 
   return (
-    <main className="flex h-[100svh] overflow-hidden bg-[#f6f1ea] text-stone-900">
-      <aside className="flex w-full max-w-[390px] flex-col border-r border-stone-200 bg-white">
+    <main className="flex h-[100svh] w-full max-w-[100vw] overflow-hidden overflow-x-hidden bg-[#f6f1ea] text-stone-900">
+      <aside
+        className={cn(
+          "flex w-full max-w-none flex-col border-r border-stone-200 bg-white md:w-[390px] md:max-w-[390px]",
+          selectedSessionId && "hidden md:flex"
+        )}
+      >
         <header className="border-b border-stone-200 p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -666,32 +671,62 @@ export default function AdminChats() {
         </div>
       </aside>
 
-      <section className="flex min-w-0 flex-1 flex-col bg-[#fffdf8]">
+      <section
+        className={cn(
+          "min-w-0 flex-1 flex-col overflow-x-hidden bg-[#fffdf8]",
+          selectedSession ? "flex" : "hidden md:flex"
+        )}
+      >
         {selectedSession ? (
           <>
-            <header className="flex flex-none items-center justify-between gap-4 border-b border-stone-200 bg-white px-5 py-4">
-              <div className="min-w-0">
-                <h2 className="truncate text-lg font-semibold">
-                  {getDisplayName(selectedSession)}
-                </h2>
-                <p className="mt-1 text-xs text-stone-500">
-                  {selectedSession.line_user_id || selectedSession.visitor_id}
-                </p>
+            <header className="flex flex-none flex-col gap-3 border-b border-stone-200 bg-white px-4 py-3 md:flex-row md:items-center md:justify-between md:gap-4 md:px-5 md:py-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedSessionId("")}
+                  className="h-8 flex-none px-2 text-sm md:hidden"
+                >
+                  ← 返回
+                </Button>
+                <div className="min-w-0">
+                  <h2 className="truncate text-base font-semibold md:text-lg">
+                    {getDisplayName(selectedSession)}
+                  </h2>
+                  <p className="mt-1 truncate text-xs text-stone-500">
+                    {selectedSession.line_user_id || selectedSession.visitor_id}
+                  </p>
+                </div>
               </div>
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-600">
+              <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 md:w-auto md:flex-wrap md:justify-end md:overflow-visible md:pb-0">
+                <span className="inline-flex flex-none whitespace-nowrap rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-600">
                   {statusLabels[selectedSession.status || "ai_active"]}
                 </span>
                 {selectedSession.status === "human_takeover" ? (
-                  <Button variant="outline" onClick={() => updateStatus("ai_active")}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => updateStatus("ai_active")}
+                    className="flex-none whitespace-nowrap"
+                  >
                     恢復 AI
                   </Button>
                 ) : (
-                  <Button onClick={() => updateStatus("human_takeover")}>
+                  <Button
+                    size="sm"
+                    onClick={() => updateStatus("human_takeover")}
+                    className="flex-none whitespace-nowrap"
+                  >
                     接手對話
                   </Button>
                 )}
-                <Button variant="outline" onClick={() => updateStatus("closed")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => updateStatus("closed")}
+                  className="flex-none whitespace-nowrap"
+                >
                   關閉
                 </Button>
               </div>
@@ -703,7 +738,10 @@ export default function AdminChats() {
               </div>
             )}
 
-            <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5">
+            <div
+              ref={scrollRef}
+              className="min-h-0 w-full flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-3 py-4 md:px-5 md:py-5"
+            >
               {isMessagesLoading ? (
                 <div className="py-10 text-center text-sm text-stone-400">
                   載入訊息中...
@@ -741,7 +779,7 @@ export default function AdminChats() {
                       )}
                       <div
                         className={cn(
-                          "max-w-[72%] whitespace-pre-wrap break-words rounded-3xl px-4 py-3 text-sm leading-7 shadow-sm",
+                          "max-w-[78%] whitespace-pre-wrap break-words rounded-3xl px-4 py-3 text-sm leading-7 shadow-sm md:max-w-[72%]",
                           isGuest && "rounded-bl-md border border-stone-200 bg-white text-stone-700",
                           message.role === "assistant" &&
                             "rounded-br-md bg-[#e9f2ee] text-stone-700",
@@ -762,7 +800,12 @@ export default function AdminChats() {
               )}
             </div>
 
-            <footer className="flex-none border-t border-stone-200 bg-white p-4">
+            <footer
+              className="flex-none border-t border-stone-200 bg-white px-3 pt-3 md:p-4"
+              style={{
+                paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.75rem)",
+              }}
+            >
               <div className="flex items-end gap-2">
                 <Textarea
                   value={reply}

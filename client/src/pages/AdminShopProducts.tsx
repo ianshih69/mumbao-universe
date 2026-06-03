@@ -39,15 +39,15 @@ const productStatusLabels: Record<AdminProductStatus, string> = {
 };
 
 const variantStatusLabels: Record<AdminVariantStatus, string> = {
-  active: "啟用",
-  inactive: "停用",
+  active: "可販售",
+  inactive: "暫停販售",
 };
 
 const productStatusOptions: Array<{ value: "" | AdminProductStatus; label: string }> = [
-  { value: "", label: "全部狀態" },
-  { value: "published", label: "上架 published" },
-  { value: "draft", label: "草稿 draft" },
-  { value: "archived", label: "封存 archived" },
+  { value: "", label: "全部上架狀態" },
+  { value: "published", label: "上架" },
+  { value: "draft", label: "草稿" },
+  { value: "archived", label: "封存" },
 ];
 
 const editableProductStatuses: AdminProductStatus[] = ["draft", "published", "archived"];
@@ -181,6 +181,7 @@ export default function AdminShopProducts() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
 
   const selectedSummary = useMemo(
     () => products.find((product) => product.id === selectedProductId),
@@ -221,6 +222,7 @@ export default function AdminShopProducts() {
 
       setSelectedProductId(productId);
       setIsCreating(false);
+      setIsAdvancedOpen(false);
       setIsDetailLoading(true);
       setSuccess("");
       try {
@@ -263,6 +265,7 @@ export default function AdminShopProducts() {
     setSelectedProductId("");
     setSelectedProduct(null);
     setIsCreating(false);
+    setIsAdvancedOpen(false);
   };
 
   const submitSearch = (event: FormEvent) => {
@@ -271,12 +274,14 @@ export default function AdminShopProducts() {
     setSelectedProductId("");
     setSelectedProduct(null);
     setIsCreating(false);
+    setIsAdvancedOpen(false);
   };
 
   const startCreateProduct = () => {
     setSelectedProduct(createEmptyProduct());
     setSelectedProductId("__new_product__");
     setIsCreating(true);
+    setIsAdvancedOpen(false);
     setError("");
     setSuccess("");
   };
@@ -464,7 +469,7 @@ export default function AdminShopProducts() {
                 <input
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder="搜尋商品名稱、slug、分類"
+                  placeholder="搜尋商品名稱、商品網址代碼、商品分類"
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                 />
               </label>
@@ -509,8 +514,8 @@ export default function AdminShopProducts() {
                 <span>主圖</span>
                 <span>商品</span>
                 <span>分類</span>
-                <span>狀態</span>
-                <span>精選</span>
+                <span>上架狀態</span>
+                <span>精選商品</span>
                 <span>最低價</span>
                 <span>庫存</span>
                 <span>規格/圖</span>
@@ -554,7 +559,7 @@ export default function AdminShopProducts() {
                           {product.name}
                         </span>
                         <span className="mt-1 block truncate text-xs text-stone-400">
-                          {product.slug}
+                          {product.subtitle || "點擊編輯商品"}
                         </span>
                       </span>
                       <span className="truncate text-stone-700">{product.category}</span>
@@ -607,7 +612,9 @@ export default function AdminShopProducts() {
                     {isCreating ? "新增商品" : selectedProduct.name}
                   </h2>
                   <p className="mt-1 text-xs text-stone-400">
-                    {isCreating ? "填寫後會建立新的商品、規格與圖片" : selectedProduct.slug}
+                    {isCreating
+                      ? "填寫後會建立新的商品、規格與圖片"
+                      : `商品分類：${selectedProduct.category || "未分類"}`}
                   </p>
                 </div>
                 <Boxes className="h-6 w-6 text-[#b99aa2]" />
@@ -624,14 +631,58 @@ export default function AdminShopProducts() {
                     />
                   </label>
                   <label className="space-y-2 text-sm">
-                    <span className="font-medium text-stone-900">Slug</span>
+                    <span className="font-medium text-stone-900">商品分類</span>
                     <Input
-                      value={selectedProduct.slug}
-                      onChange={(event) => updateProductField("slug", event.target.value)}
+                      value={selectedProduct.category}
+                      onChange={(event) => updateProductField("category", event.target.value)}
                       className="rounded-[8px]"
                     />
                   </label>
                 </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium text-stone-900">上架狀態</span>
+                    <select
+                      value={selectedProduct.status}
+                      onChange={(event) =>
+                        updateProductField("status", event.target.value as AdminProductStatus)
+                      }
+                      className="h-10 w-full rounded-[8px] border border-stone-200 bg-white px-3"
+                    >
+                      {editableProductStatuses.map((option) => (
+                        <option key={option} value={option}>
+                          {productStatusLabels[option]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium text-stone-900">精選商品</span>
+                    <select
+                      value={selectedProduct.featured ? "true" : "false"}
+                      onChange={(event) =>
+                        updateProductField("featured", event.target.value === "true")
+                      }
+                      className="h-10 w-full rounded-[8px] border border-stone-200 bg-white px-3"
+                    >
+                      <option value="true">是</option>
+                      <option value="false">否</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-stone-900">主圖</span>
+                  <Input
+                    value={selectedProduct.cover_image_url || ""}
+                    onChange={(event) =>
+                      updateProductField("cover_image_url", event.target.value)
+                    }
+                    placeholder="/shop-products/01.png"
+                    className="rounded-[8px]"
+                  />
+                </label>
 
                 <label className="space-y-2 text-sm">
                   <span className="font-medium text-stone-900">副標題</span>
@@ -651,71 +702,45 @@ export default function AdminShopProducts() {
                   />
                 </label>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="space-y-2 text-sm">
-                    <span className="font-medium text-stone-900">分類</span>
-                    <Input
-                      value={selectedProduct.category}
-                      onChange={(event) => updateProductField("category", event.target.value)}
-                      className="rounded-[8px]"
-                    />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="font-medium text-stone-900">排序</span>
-                    <Input
-                      type="number"
-                      value={selectedProduct.sort_order}
-                      onChange={(event) =>
-                        updateProductField("sort_order", numberValue(event.target.value))
-                      }
-                      className="rounded-[8px]"
-                    />
-                  </label>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="space-y-2 text-sm">
-                    <span className="font-medium text-stone-900">狀態</span>
-                    <select
-                      value={selectedProduct.status}
-                      onChange={(event) =>
-                        updateProductField("status", event.target.value as AdminProductStatus)
-                      }
-                      className="h-10 w-full rounded-[8px] border border-stone-200 bg-white px-3"
-                    >
-                      {editableProductStatuses.map((option) => (
-                        <option key={option} value={option}>
-                          {productStatusLabels[option]} {option}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="font-medium text-stone-900">Featured</span>
-                    <select
-                      value={selectedProduct.featured ? "true" : "false"}
-                      onChange={(event) =>
-                        updateProductField("featured", event.target.value === "true")
-                      }
-                      className="h-10 w-full rounded-[8px] border border-stone-200 bg-white px-3"
-                    >
-                      <option value="true">是</option>
-                      <option value="false">否</option>
-                    </select>
-                  </label>
-                </div>
-
-                <label className="space-y-2 text-sm">
-                  <span className="font-medium text-stone-900">主圖 URL</span>
-                  <Input
-                    value={selectedProduct.cover_image_url || ""}
-                    onChange={(event) =>
-                      updateProductField("cover_image_url", event.target.value)
-                    }
-                    placeholder="/shop-products/01.png"
-                    className="rounded-[8px]"
-                  />
-                </label>
+                <section className="rounded-[8px] border border-stone-100 bg-stone-50/60 p-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsAdvancedOpen((current) => !current)}
+                    className="flex w-full items-center justify-between text-left text-sm font-medium text-stone-800"
+                  >
+                    <span>進階設定</span>
+                    <span className="text-xs text-stone-400">
+                      {isAdvancedOpen ? "收合" : "展開"}
+                    </span>
+                  </button>
+                  {isAdvancedOpen && (
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <label className="space-y-2 text-sm">
+                        <span className="font-medium text-stone-900">商品網址代碼</span>
+                        <p className="text-xs text-stone-400">
+                          用於商品頁網址，一般不用修改
+                        </p>
+                        <Input
+                          value={selectedProduct.slug}
+                          onChange={(event) => updateProductField("slug", event.target.value)}
+                          className="rounded-[8px] bg-white"
+                        />
+                      </label>
+                      <label className="space-y-2 text-sm">
+                        <span className="font-medium text-stone-900">顯示順序</span>
+                        <p className="text-xs text-stone-400">數字越小越前面</p>
+                        <Input
+                          type="number"
+                          value={selectedProduct.sort_order}
+                          onChange={(event) =>
+                            updateProductField("sort_order", numberValue(event.target.value))
+                          }
+                          className="rounded-[8px] bg-white"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </section>
               </div>
 
               <section className="space-y-3 border-t border-stone-100 pt-5">
@@ -755,7 +780,7 @@ export default function AdminShopProducts() {
                           />
                         </label>
                         <label className="space-y-1 text-xs text-stone-500">
-                          <span>選項</span>
+                          <span>規格選項</span>
                           <Input
                             value={variant.variant_option || ""}
                             onChange={(event) =>
@@ -765,7 +790,10 @@ export default function AdminShopProducts() {
                           />
                         </label>
                         <label className="space-y-1 text-xs text-stone-500">
-                          <span>SKU</span>
+                          <span>商品編號</span>
+                          <p className="text-[11px] leading-4 text-stone-400">
+                            用於 QR code、入庫、銷售與庫存辨識
+                          </p>
                           <Input
                             value={variant.sku || ""}
                             onChange={(event) =>
@@ -775,7 +803,7 @@ export default function AdminShopProducts() {
                           />
                         </label>
                         <label className="space-y-1 text-xs text-stone-500">
-                          <span>狀態</span>
+                          <span>可販售</span>
                           <select
                             value={variant.status}
                             onChange={(event) =>
@@ -789,13 +817,13 @@ export default function AdminShopProducts() {
                           >
                             {editableVariantStatuses.map((option) => (
                               <option key={option} value={option}>
-                                {variantStatusLabels[option]} {option}
+                                {variantStatusLabels[option]}
                               </option>
                             ))}
                           </select>
                         </label>
                         <label className="space-y-1 text-xs text-stone-500">
-                          <span>價格</span>
+                          <span>售價</span>
                           <Input
                             type="number"
                             value={variant.price}
@@ -839,21 +867,26 @@ export default function AdminShopProducts() {
                             className="h-9 rounded-[8px] bg-white"
                           />
                         </label>
-                        <label className="space-y-1 text-xs text-stone-500">
-                          <span>排序</span>
-                          <Input
-                            type="number"
-                            value={variant.sort_order}
-                            onChange={(event) =>
-                              updateVariantField(
-                                variant.id,
-                                "sort_order",
-                                numberValue(event.target.value)
-                              )
-                            }
-                            className="h-9 rounded-[8px] bg-white"
-                          />
-                        </label>
+                        {isAdvancedOpen && (
+                          <label className="space-y-1 text-xs text-stone-500">
+                            <span>規格顯示順序</span>
+                            <p className="text-[11px] leading-4 text-stone-400">
+                              數字越小越前面
+                            </p>
+                            <Input
+                              type="number"
+                              value={variant.sort_order}
+                              onChange={(event) =>
+                                updateVariantField(
+                                  variant.id,
+                                  "sort_order",
+                                  numberValue(event.target.value)
+                                )
+                              }
+                              className="h-9 rounded-[8px] bg-white"
+                            />
+                          </label>
+                        )}
                       </div>
                     </div>
                   ))
@@ -889,36 +922,46 @@ export default function AdminShopProducts() {
                         </span>
                       )}
                       <div className="grid gap-2">
-                        <Input
-                          value={image.image_url}
-                          onChange={(event) =>
-                            updateImageField(image.id, "image_url", event.target.value)
-                          }
-                          placeholder="/shop-products/01.png"
-                          className="h-9 rounded-[8px]"
-                        />
-                        <div className="grid gap-2 sm:grid-cols-[1fr_90px]">
+                        <label className="space-y-1 text-xs text-stone-500">
+                          <span>圖片路徑</span>
                           <Input
-                            value={image.alt || ""}
+                            value={image.image_url}
                             onChange={(event) =>
-                              updateImageField(image.id, "alt", event.target.value)
+                              updateImageField(image.id, "image_url", event.target.value)
                             }
-                            placeholder="圖片 alt"
+                            placeholder="/shop-products/01.png"
                             className="h-9 rounded-[8px]"
                           />
-                          <Input
-                            type="number"
-                            value={image.sort_order}
-                            onChange={(event) =>
-                              updateImageField(
-                                image.id,
-                                "sort_order",
-                                numberValue(event.target.value)
-                              )
-                            }
-                            className="h-9 rounded-[8px]"
-                          />
-                        </div>
+                        </label>
+                        {isAdvancedOpen && (
+                          <div className="grid gap-2 sm:grid-cols-[1fr_110px]">
+                            <label className="space-y-1 text-xs text-stone-500">
+                              <span>圖片說明文字</span>
+                              <Input
+                                value={image.alt || ""}
+                                onChange={(event) =>
+                                  updateImageField(image.id, "alt", event.target.value)
+                                }
+                                className="h-9 rounded-[8px]"
+                              />
+                            </label>
+                            <label className="space-y-1 text-xs text-stone-500">
+                              <span>圖片顯示順序</span>
+                              <Input
+                                type="number"
+                                value={image.sort_order}
+                                onChange={(event) =>
+                                  updateImageField(
+                                    image.id,
+                                    "sort_order",
+                                    numberValue(event.target.value)
+                                  )
+                                }
+                                className="h-9 rounded-[8px]"
+                              />
+                            </label>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))

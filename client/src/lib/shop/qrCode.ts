@@ -14,6 +14,19 @@ export function buildQrFileName(sku: string) {
   return `${safeSku}-qr.png`;
 }
 
+export function parseSkuFromQrValue(value: string) {
+  const text = value.trim();
+  if (!text) return "";
+
+  try {
+    const url = new URL(text);
+    const sku = url.searchParams.get("sku")?.trim();
+    return sku ? decodeURIComponent(sku) : "";
+  } catch {
+    return text;
+  }
+}
+
 export async function createQrDataUrl(value: string, width = 900) {
   return QRCode.toDataURL(value, {
     errorCorrectionLevel: "M",

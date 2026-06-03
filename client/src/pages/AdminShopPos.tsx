@@ -19,6 +19,7 @@ import {
   lookupAdminInventoryBySku,
   type AdminInventoryLookup,
 } from "@/lib/shop/adminInventoryApi";
+import { parseSkuFromQrValue } from "@/lib/shop/qrCode";
 import {
   type AdminInventorySearchResult,
   type ManualSaleOrder,
@@ -65,21 +66,6 @@ function clearAdminToken() {
   sessionStorage.removeItem(adminPosTokenKey);
 }
 
-function parseSkuFromText(value: string) {
-  const text = value.trim();
-  if (!text) return "";
-
-  try {
-    const url = new URL(text);
-    const sku = url.searchParams.get("sku")?.trim();
-    if (sku) return sku;
-  } catch {
-    // Plain SKU values are supported.
-  }
-
-  return text;
-}
-
 function numberValue(value: string) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -99,16 +85,33 @@ function toCartItem(lookup: AdminInventoryLookup): PosCartItem {
   };
 }
 
+function getLookupErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+
+  if (message.includes("重複") || message.toLowerCase().includes("duplicate")) {
+    return "商品編號重複，請先到商品管理修正";
+  }
+
+  if (message.toLowerCase().includes("not found") || message.includes("找不到")) {
+    return "找不到商品編號，請確認 QR code 或商品編號是否正確";
+  }
+
+  return message || "找不到商品編號，請確認 QR code 或商品編號是否正確";
+}
+
 export default function AdminShopPos() {
   const [token, setToken] = useState(() => getStoredAdminToken());
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [cartItems, setCartItems] = useState<PosCartItem[]>([]);
   const [searchText, setSearchText] = useState("");
+  const [manualSku, setManualSku] = useState("");
+  const [scannedSku, setScannedSku] = useState("");
   const [searchResults, setSearchResults] = useState<AdminInventorySearchResult[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>("cash");
   const [lastOrder, setLastOrder] = useState<ManualSaleOrder | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [isAddingSku, setIsAddingSku] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState("");
@@ -158,16 +161,29 @@ export default function AdminShopPos() {
   }, []);
 
   const addSkuToCart = useCallback(
-    async (rawSku: string) => {
-      const sku = parseSkuFromText(rawSku);
+    async (rawSku: string, source: "scan" | "manual" = "manual") => {
+      const sku = parseSkuFromQrValue(rawSku);
       if (!token || !sku) return;
+
+      setIsAddingSku(true);
+      setScannedSku(source === "scan" ? sku : "");
+      setSuccess(source === "scan" ? `掃描成功：${sku}` : "");
+      setError("");
 
       try {
         const lookup = await lookupAdminInventoryBySku({ token, sku });
         addLookupToCart(lookup);
+        setManualSku("");
         setError("");
+        setSuccess(
+          source === "scan"
+            ? `掃描成功：${sku}，已加入銷售清單`
+            : `${lookup.product.name} 已加入銷售清單`
+        );
       } catch (lookupError) {
-        setError(lookupError instanceof Error ? lookupError.message : "商品查詢失敗");
+        setError(getLookupErrorMessage(lookupError));
+      } finally {
+        setIsAddingSku(false);
       }
     },
     [addLookupToCart, token]
@@ -178,7 +194,8 @@ export default function AdminShopPos() {
 
     stopScanner();
     setError("");
-    setSuccess("");
+    setSuccess("相機啟動中，請將 QR code 放入框內。");
+    setScannedSku("");
     lastScanRef.current = "";
 
     try {
@@ -190,25 +207,24 @@ export default function AdminShopPos() {
           const rawText = result?.getText();
           if (!rawText) return;
 
-          const sku = parseSkuFromText(rawText);
+          const sku = parseSkuFromQrValue(rawText);
           if (!sku || lastScanRef.current === sku) return;
 
           lastScanRef.current = sku;
-          addSkuToCart(sku);
-          window.setTimeout(() => {
-            if (lastScanRef.current === sku) lastScanRef.current = "";
-          }, 1200);
+          controlsRef.current?.stop();
+          controlsRef.current = null;
+          setIsScanning(false);
+          addSkuToCart(sku, "scan");
         }
       );
 
       controlsRef.current = controls;
       setIsScanning(true);
+      setSuccess("掃描中，請將 QR code 放入框內。建議使用 Safari / Chrome，不建議用 LINE 內建瀏覽器。");
     } catch (scanError) {
       setIsScanning(false);
       setError(
-        scanError instanceof Error
-          ? `相機啟動失敗：${scanError.message}`
-          : "相機啟動失敗，請確認瀏覽器已允許相機權限"
+        "相機無法啟動，請確認瀏覽器權限，或改用手動輸入商品編號"
       );
     }
   };
@@ -235,6 +251,21 @@ export default function AdminShopPos() {
     setCartItems([]);
     setSearchResults([]);
     setLastOrder(null);
+    setManualSku("");
+    setScannedSku("");
+  };
+
+  const submitManualSku = (event: FormEvent) => {
+    event.preventDefault();
+    addSkuToCart(manualSku, "manual");
+  };
+
+  const continueScanning = () => {
+    setScannedSku("");
+    setSuccess("");
+    setError("");
+    lastScanRef.current = "";
+    startScanner();
   };
 
   const submitSearch = async (event: FormEvent) => {
@@ -397,19 +428,28 @@ export default function AdminShopPos() {
                 <div>
                   <h2 className="text-xl font-semibold">掃 QR 加入</h2>
                   <p className="mt-1 text-sm text-stone-500">
-                    支援 URL QR 與純商品編號。
+                    請將 QR code 放入框內。建議使用 Safari / Chrome，不建議用 LINE 內建瀏覽器。
                   </p>
                 </div>
                 <Camera className="h-6 w-6 text-[#8b6f5b]" />
               </div>
-              <div className="overflow-hidden rounded-[8px] border border-stone-100 bg-stone-900">
+              <div className="relative overflow-hidden rounded-[8px] border border-stone-100 bg-stone-900">
                 <video
                   ref={videoRef}
                   className="aspect-[4/3] w-full object-cover"
                   muted
                   playsInline
                 />
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="h-52 w-52 rounded-[12px] border-2 border-white/80 shadow-[0_0_0_999px_rgba(0,0,0,0.35)]" />
+                </div>
               </div>
+              {scannedSku && (
+                <div className="rounded-[8px] border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-700">
+                  <p className="font-semibold">掃描成功</p>
+                  <p className="mt-1 break-all font-mono text-xs">{scannedSku}</p>
+                </div>
+              )}
               <div className="grid gap-3 sm:grid-cols-2">
                 <Button
                   type="button"
@@ -431,6 +471,16 @@ export default function AdminShopPos() {
                   停止掃描
                 </Button>
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 w-full rounded-full bg-white"
+                onClick={continueScanning}
+                disabled={isScanning}
+              >
+                <Camera className="h-4 w-4" />
+                繼續掃描
+              </Button>
             </section>
 
             <section className="space-y-4 rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
@@ -440,6 +490,25 @@ export default function AdminShopPos() {
                   可搜尋商品名稱、分類或商品編號。
                 </p>
               </div>
+              <form onSubmit={submitManualSku} className="space-y-3 rounded-[8px] bg-[#fbf7f1] p-3">
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-stone-900">商品編號</span>
+                  <Input
+                    value={manualSku}
+                    onChange={(event) => setManualSku(parseSkuFromQrValue(event.target.value))}
+                    placeholder="MUMBAO-TEST-001"
+                    className="h-11 rounded-[8px] bg-white font-mono"
+                  />
+                </label>
+                <Button
+                  type="submit"
+                  className="h-11 w-full rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
+                  disabled={!manualSku.trim() || isAddingSku}
+                >
+                  <Plus className="h-4 w-4" />
+                  {isAddingSku ? "加入中..." : "加入銷售清單"}
+                </Button>
+              </form>
               <form onSubmit={submitSearch} className="grid gap-3 sm:grid-cols-[1fr_auto]">
                 <label className="flex h-11 items-center gap-2 rounded-full border border-stone-200 bg-stone-50 px-4">
                   <Search className="h-4 w-4 text-stone-400" />

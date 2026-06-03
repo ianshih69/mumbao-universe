@@ -40,6 +40,15 @@ const knownInventoryErrors = new Map([
   ["VARIANT_NOT_FOUND", "Product variant not found."],
   ["INSUFFICIENT_INVENTORY", "Inventory cannot be less than 0."],
 ]);
+const validPosPaymentMethods = new Set(["cash", "transfer", "other"]);
+const knownManualSaleErrors = new Map([
+  ["SALE_ITEMS_REQUIRED", "Sale items are required."],
+  ["INVALID_PAYMENT_METHOD", "Invalid payment method."],
+  ["INVALID_SALE_ITEM", "Sale item quantity is invalid."],
+  ["VARIANT_NOT_FOUND", "Product variant not found or is not active."],
+  ["PRODUCT_NOT_FOUND", "Product not found."],
+  ["INSUFFICIENT_INVENTORY", "Inventory is not enough for this sale."],
+]);
 
 function requireAdmin(req) {
   const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
@@ -107,6 +116,15 @@ function getKnownInventoryErrorMessage(error) {
   );
 
   return matchedKey ? knownInventoryErrors.get(matchedKey) : "";
+}
+
+function getKnownManualSaleErrorMessage(error) {
+  const message = String(error?.details?.message || error?.message || "");
+  const matchedKey = Array.from(knownManualSaleErrors.keys()).find((key) =>
+    message.includes(key)
+  );
+
+  return matchedKey ? knownManualSaleErrors.get(matchedKey) : "";
 }
 
 function normalizeOrderSummary(order) {
@@ -265,6 +283,21 @@ function normalizeInventoryMovement(
 }
 
 function normalizeInventoryLookup(product, variant) {
+  return {
+    product: {
+      id: product.id,
+      slug: product.slug || "",
+      name: product.name || "",
+      category: product.category || "",
+      status: product.status || "draft",
+      cover_image_url: product.cover_image_url || "",
+    },
+    variant: normalizeVariant(variant),
+    inventory: Number(variant.inventory || 0),
+  };
+}
+
+function normalizeInventorySearchItem(product, variant) {
   return {
     product: {
       id: product.id,
@@ -886,6 +919,77 @@ async function lookupInventoryBySku(req, res) {
   return sendJson(res, 200, normalizeInventoryLookup(product, variant));
 }
 
+async function searchInventory(req, res) {
+  const search = cleanText(firstQueryValue(req.query?.q));
+  const limit = getPositiveInt(firstQueryValue(req.query?.limit), defaultLimit, maxLimit);
+  const searchTerm = encodeURIComponent(`*${search.replace(/[(),]/g, " ")}*`);
+  const productSearchFilter = search
+    ? `&or=(name.ilike.${searchTerm},slug.ilike.${searchTerm},category.ilike.${searchTerm})`
+    : "";
+  const variantSearchFilter = search
+    ? `&or=(sku.ilike.${searchTerm},variant_name.ilike.${searchTerm},variant_option.ilike.${searchTerm})`
+    : "";
+  const productMatches = await supabaseRequest(
+    `/shop_products?select=id,slug,name,category,status,cover_image_url${productSearchFilter}&order=updated_at.desc&limit=20`
+  );
+  const variantMatches = await supabaseRequest(
+    `/shop_product_variants?select=*&status=eq.active${variantSearchFilter}&order=updated_at.desc&limit=${limit}`
+  );
+  const productsById = new Map();
+  const variantsById = new Map();
+
+  for (const product of productMatches || []) {
+    productsById.set(product.id, product);
+  }
+
+  for (const variant of variantMatches || []) {
+    variantsById.set(variant.id, variant);
+  }
+
+  const productMatchIds = (productMatches || []).map((product) => product.id);
+  if (productMatchIds.length) {
+    const productVariants = await supabaseRequest(
+      `/shop_product_variants?select=*&status=eq.active&product_id=in.(${productMatchIds.join(
+        ","
+      )})&order=sort_order.asc,created_at.asc`
+    );
+
+    for (const variant of productVariants || []) {
+      variantsById.set(variant.id, variant);
+    }
+  }
+
+  const missingProductIds = [
+    ...new Set(
+      Array.from(variantsById.values())
+        .map((variant) => variant.product_id)
+        .filter((productId) => productId && !productsById.has(productId))
+    ),
+  ];
+
+  if (missingProductIds.length) {
+    const products = await supabaseRequest(
+      `/shop_products?select=id,slug,name,category,status,cover_image_url&id=in.(${missingProductIds.join(
+        ","
+      )})`
+    );
+
+    for (const product of products || []) {
+      productsById.set(product.id, product);
+    }
+  }
+
+  const results = Array.from(variantsById.values())
+    .map((variant) => {
+      const product = productsById.get(variant.product_id);
+      return product ? normalizeInventorySearchItem(product, variant) : null;
+    })
+    .filter(Boolean)
+    .slice(0, limit);
+
+  return sendJson(res, 200, { results });
+}
+
 async function handleInventoryAdjustment(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -944,6 +1048,56 @@ async function handleInventoryAdjustment(req, res) {
   }
 }
 
+function normalizeManualSaleItems(items) {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((item) => ({
+      variant_id: cleanText(item?.variant_id),
+      quantity: getInteger(item?.quantity, 0),
+    }))
+    .filter((item) => item.variant_id && item.quantity > 0);
+}
+
+async function handleManualSale(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return sendJson(res, 405, { error: "Method not allowed." });
+  }
+
+  const body = await readBody(req);
+  const paymentMethod = cleanText(body?.payment_method || "cash");
+  const rawItems = Array.isArray(body?.items) ? body.items : [];
+  const items = normalizeManualSaleItems(rawItems);
+
+  if (!validPosPaymentMethods.has(paymentMethod)) {
+    return sendJson(res, 400, { error: "Invalid payment_method." });
+  }
+
+  if (!items.length || items.length !== rawItems.length) {
+    return sendJson(res, 400, { error: "At least one sale item is required." });
+  }
+
+  try {
+    const order = await supabaseRpc("create_manual_sale_order", {
+      sale_payload: {
+        payment_method: paymentMethod,
+        note: nullableText(body?.note) || "現場銷售",
+        items,
+      },
+    });
+
+    return sendJson(res, 201, { order });
+  } catch (rpcError) {
+    const knownMessage = getKnownManualSaleErrorMessage(rpcError);
+    if (knownMessage) {
+      return sendJson(res, 409, { error: knownMessage });
+    }
+
+    throw rpcError;
+  }
+}
+
 export default async function handler(req, res) {
   const action = String(firstQueryValue(req.query?.action) || "").trim();
 
@@ -974,8 +1128,16 @@ export default async function handler(req, res) {
       return await lookupInventoryBySku(req, res);
     }
 
+    if (req.method === "GET" && action === "inventory-search") {
+      return await searchInventory(req, res);
+    }
+
     if (action === "inventory-adjust") {
       return await handleInventoryAdjustment(req, res);
+    }
+
+    if (action === "manual-sale") {
+      return await handleManualSale(req, res);
     }
 
     res.setHeader("Allow", "GET, POST, PATCH");

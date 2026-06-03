@@ -377,6 +377,12 @@ export default function AdminShopInventory() {
           </div>
           <div className="flex flex-wrap gap-3">
             <a
+              href="/admin/shop/pos"
+              className="inline-flex h-10 items-center rounded-full border border-stone-200 bg-white px-4 text-sm text-stone-700 hover:bg-stone-50"
+            >
+              現場銷售
+            </a>
+            <a
               href="/admin/shop/scan"
               className="inline-flex h-10 items-center rounded-full border border-stone-200 bg-white px-4 text-sm text-stone-700 hover:bg-stone-50"
             >

@@ -14,10 +14,10 @@ export function buildQrFileName(sku: string) {
   return `${safeSku}-qr.png`;
 }
 
-export async function createQrDataUrl(value: string, width = 240) {
+export async function createQrDataUrl(value: string, width = 900) {
   return QRCode.toDataURL(value, {
     errorCorrectionLevel: "M",
-    margin: 2,
+    margin: 4,
     width,
     color: {
       dark: "#5f4a3b",

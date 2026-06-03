@@ -40,7 +40,7 @@ export default function VariantQrCode({
       return;
     }
 
-    createQrDataUrl(qrValue, compact ? 168 : 220)
+    createQrDataUrl(qrValue, 900)
       .then((nextDataUrl) => {
         if (!isActive) return;
         setDataUrl(nextDataUrl);
@@ -94,21 +94,21 @@ export default function VariantQrCode({
         <QrCode className="h-5 w-5 shrink-0 text-[#8b6f5b]" />
       </div>
       <div className="grid gap-3 sm:grid-cols-[auto_1fr] sm:items-center">
-        <div className="flex justify-center rounded-[8px] bg-[#fffaf5] p-3">
+        <div className="flex justify-center rounded-[8px] bg-[#fffaf5] p-4">
           {dataUrl ? (
             <img
               src={dataUrl}
               alt={`${normalizedSku} QR code`}
               className={cn(
                 "aspect-square object-contain",
-                compact ? "size-32" : "size-40"
+                compact ? "size-48" : "size-56"
               )}
             />
           ) : (
             <div
               className={cn(
                 "flex aspect-square items-center justify-center rounded-[6px] bg-stone-50 text-xs text-stone-400",
-                compact ? "size-32" : "size-40"
+                compact ? "size-48" : "size-56"
               )}
             >
               {error || "產生中..."}

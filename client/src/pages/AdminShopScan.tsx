@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import {
   Camera,
+  CheckCircle2,
   LogOut,
   PackageCheck,
   PackageSearch,
@@ -18,7 +19,6 @@ import {
   lookupAdminInventoryBySku,
 } from "@/lib/shop/adminInventoryApi";
 import { formatPrice, getVariantLabel } from "@/lib/shop/format";
-import { cn } from "@/lib/utils";
 
 const adminScanTokenKey = "mumbao-admin-shop-order-token";
 
@@ -63,11 +63,26 @@ function numberValue(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function getLookupErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+
+  if (message.includes("重複") || message.toLowerCase().includes("duplicate")) {
+    return "商品編號重複，請先到商品管理修正";
+  }
+
+  if (message.toLowerCase().includes("not found") || message.includes("找不到")) {
+    return "找不到商品編號，請確認 QR code 或商品編號是否正確";
+  }
+
+  return message || "商品查詢失敗";
+}
+
 export default function AdminShopScan() {
   const [token, setToken] = useState(() => getStoredAdminToken());
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [skuInput, setSkuInput] = useState(() => getInitialSku());
+  const [scannedSku, setScannedSku] = useState("");
   const [lookup, setLookup] = useState<AdminInventoryLookup | null>(null);
   const [quantity, setQuantity] = useState("1");
   const [isLookingUp, setIsLookingUp] = useState(false);
@@ -76,8 +91,15 @@ export default function AdminShopScan() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const resultRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
   const lastScanRef = useRef("");
+
+  const scrollToResult = useCallback(() => {
+    window.setTimeout(() => {
+      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  }, []);
 
   const stopScanner = useCallback(() => {
     controlsRef.current?.stop();
@@ -86,32 +108,41 @@ export default function AdminShopScan() {
   }, []);
 
   const lookupSku = useCallback(
-    async (rawSku: string) => {
+    async (rawSku: string, source: "scan" | "manual" | "url" = "manual") => {
       const sku = parseSkuFromText(rawSku);
       if (!token || !sku) return;
 
+      setScannedSku(sku);
+      setSkuInput(sku);
       setIsLookingUp(true);
-      setSuccess("");
+      setSuccess(source === "scan" ? "掃描成功，正在查詢商品..." : "");
+      setError("");
+      scrollToResult();
+
       try {
         const result = await lookupAdminInventoryBySku({ token, sku });
         setLookup(result);
         setSkuInput(result.variant.sku || sku);
         setQuantity("1");
+        setSuccess(source === "scan" ? "掃描成功，請確認商品後按確認入庫" : "");
         setError("");
+        scrollToResult();
       } catch (lookupError) {
         setLookup(null);
-        setError(lookupError instanceof Error ? lookupError.message : "商品查詢失敗");
+        setSuccess(source === "scan" ? "掃描成功，但沒有找到對應商品" : "");
+        setError(getLookupErrorMessage(lookupError));
+        scrollToResult();
       } finally {
         setIsLookingUp(false);
       }
     },
-    [token]
+    [scrollToResult, token]
   );
 
   useEffect(() => {
     if (!token) return;
     const initialSku = getInitialSku();
-    if (initialSku) lookupSku(initialSku);
+    if (initialSku) lookupSku(initialSku, "url");
   }, [lookupSku, token]);
 
   useEffect(() => stopScanner, [stopScanner]);
@@ -136,13 +167,24 @@ export default function AdminShopScan() {
     setToken("");
     setPassword("");
     setLookup(null);
+    setScannedSku("");
     setSuccess("");
     setError("");
   };
 
   const submitLookup = (event: FormEvent) => {
     event.preventDefault();
-    lookupSku(skuInput);
+    lookupSku(skuInput, "manual");
+  };
+
+  const continueScanning = () => {
+    setLookup(null);
+    setScannedSku("");
+    setSuccess("");
+    setError("");
+    setQuantity("1");
+    lastScanRef.current = "";
+    startScanner();
   };
 
   const startScanner = async () => {
@@ -150,7 +192,7 @@ export default function AdminShopScan() {
 
     stopScanner();
     setError("");
-    setSuccess("");
+    setSuccess("相機啟動中，請把 QR code 放在畫面中央。");
     lastScanRef.current = "";
 
     try {
@@ -166,18 +208,19 @@ export default function AdminShopScan() {
           if (!sku || lastScanRef.current === sku) return;
 
           lastScanRef.current = sku;
-          setSkuInput(sku);
-          lookupSku(sku);
           controlsRef.current?.stop();
           controlsRef.current = null;
           setIsScanning(false);
+          lookupSku(sku, "scan");
         }
       );
 
       controlsRef.current = controls;
       setIsScanning(true);
+      setSuccess("掃描中，請讓 QR code 填滿掃描框。");
     } catch (scanError) {
       setIsScanning(false);
+      setSuccess("");
       setError(
         scanError instanceof Error
           ? `相機啟動失敗：${scanError.message}`
@@ -195,6 +238,8 @@ export default function AdminShopScan() {
       setError("入庫數量必須大於 0");
       return;
     }
+
+    const beforeInventory = lookup.inventory;
 
     setIsSaving(true);
     setSuccess("");
@@ -223,7 +268,8 @@ export default function AdminShopScan() {
       );
       setQuantity("1");
       setError("");
-      setSuccess(`入庫完成，目前庫存 ${nextInventory}`);
+      setSuccess(`入庫成功，庫存已從 ${beforeInventory} 增加到 ${nextInventory}`);
+      scrollToResult();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "入庫失敗");
     } finally {
@@ -280,7 +326,7 @@ export default function AdminShopScan() {
               掃描入庫
             </h1>
             <p className="mt-2 text-sm text-stone-500">
-              掃描商品 QR code 後入庫，會沿用庫存調整流程並留下流水。
+              這是入庫模式。掃描後請確認商品，再按確認入庫，庫存才會增加。
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -316,25 +362,28 @@ export default function AdminShopScan() {
           </div>
         )}
 
-        <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
           <div className="space-y-4 rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-xl font-semibold">相機掃描</h2>
                 <p className="mt-1 text-sm text-stone-500">
-                  支援網址型 QR code，也支援純商品編號。
+                  掃描時請靠近 QR code，讓 QR code 盡量填滿畫面中央。
                 </p>
               </div>
               <Camera className="h-6 w-6 text-[#8b6f5b]" />
             </div>
 
-            <div className="overflow-hidden rounded-[8px] border border-stone-100 bg-stone-900">
+            <div className="relative overflow-hidden rounded-[8px] border border-stone-100 bg-stone-900">
               <video
                 ref={videoRef}
                 className="aspect-[4/3] w-full object-cover"
                 muted
                 playsInline
               />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="h-52 w-52 rounded-[12px] border-2 border-white/80 shadow-[0_0_0_999px_rgba(0,0,0,0.35)]" />
+              </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -363,7 +412,7 @@ export default function AdminShopScan() {
           <aside className="space-y-4 rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
             <form onSubmit={submitLookup} className="space-y-3">
               <label className="space-y-2 text-sm">
-                <span className="font-medium text-stone-900">商品編號</span>
+                <span className="font-medium text-stone-900">手動輸入商品編號</span>
                 <Input
                   value={skuInput}
                   onChange={(event) => setSkuInput(parseSkuFromText(event.target.value))}
@@ -382,53 +431,76 @@ export default function AdminShopScan() {
               </Button>
             </form>
 
-            {lookup ? (
-              <div className="space-y-4 rounded-[8px] bg-[#fbf7f1] p-4">
-                <div className="flex items-start gap-3">
-                  {lookup.product.cover_image_url ? (
-                    <img
-                      src={lookup.product.cover_image_url}
-                      alt={lookup.product.name}
-                      className="size-20 rounded-[6px] bg-white object-cover"
-                    />
-                  ) : (
-                    <div className="flex size-20 items-center justify-center rounded-[6px] bg-white text-stone-300">
-                      <PackageCheck className="h-6 w-6" />
+            <div
+              ref={resultRef}
+              className="scroll-mt-6 space-y-4 rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-4"
+            >
+              {scannedSku && (
+                <div className="rounded-[8px] border border-emerald-100 bg-white p-3 text-sm">
+                  <div className="flex items-center gap-2 font-medium text-emerald-700">
+                    <CheckCircle2 className="h-4 w-4" />
+                    掃描成功
+                  </div>
+                  <p className="mt-2 break-all font-mono text-xs text-stone-600">
+                    {scannedSku}
+                  </p>
+                </div>
+              )}
+
+              {isLookingUp ? (
+                <div className="py-8 text-center text-sm text-stone-400">
+                  <RefreshCw className="mx-auto mb-3 h-6 w-6 animate-spin" />
+                  正在查詢商品資料...
+                </div>
+              ) : lookup ? (
+                <>
+                  <div className="flex items-start gap-3">
+                    {lookup.product.cover_image_url ? (
+                      <img
+                        src={lookup.product.cover_image_url}
+                        alt={lookup.product.name}
+                        className="size-24 rounded-[6px] bg-white object-cover"
+                      />
+                    ) : (
+                      <div className="flex size-24 items-center justify-center rounded-[6px] bg-white text-stone-300">
+                        <PackageCheck className="h-7 w-7" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="font-semibold text-stone-900">{lookup.product.name}</p>
+                      <p className="mt-1 text-sm text-stone-500">
+                        {getVariantLabel(
+                          lookup.variant.variant_name,
+                          lookup.variant.variant_option
+                        )}
+                      </p>
+                      <p className="mt-2 text-xs text-stone-400">商品編號</p>
+                      <p className="break-all font-mono text-xs text-stone-600">
+                        {lookup.variant.sku}
+                      </p>
                     </div>
-                  )}
-                  <div className="min-w-0">
-                    <p className="font-semibold text-stone-900">{lookup.product.name}</p>
-                    <p className="mt-1 text-sm text-stone-500">
-                      {getVariantLabel(
-                        lookup.variant.variant_name,
-                        lookup.variant.variant_option
-                      )}
-                    </p>
-                    <p className="mt-1 break-all font-mono text-xs text-stone-500">
-                      {lookup.variant.sku}
-                    </p>
                   </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-[6px] bg-white p-3">
+                      <p className="text-xs text-stone-400">目前庫存</p>
+                      <p className="mt-1 text-2xl font-semibold text-stone-900">
+                        {lookup.inventory}
+                      </p>
+                    </div>
+                    <div className="rounded-[6px] bg-white p-3">
+                      <p className="text-xs text-stone-400">售價</p>
+                      <p className="mt-1 font-semibold text-stone-900">
+                        {formatPrice(lookup.variant.price)}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="py-8 text-center text-sm text-stone-400">
+                  掃描或輸入商品編號後，這裡會顯示商品資料。
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-[6px] bg-white p-3">
-                    <p className="text-xs text-stone-400">目前庫存</p>
-                    <p className="mt-1 text-2xl font-semibold text-stone-900">
-                      {lookup.inventory}
-                    </p>
-                  </div>
-                  <div className="rounded-[6px] bg-white p-3">
-                    <p className="text-xs text-stone-400">售價</p>
-                    <p className="mt-1 font-semibold text-stone-900">
-                      {formatPrice(lookup.variant.price)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-[8px] border border-dashed border-stone-200 p-6 text-center text-sm text-stone-400">
-                掃描或輸入商品編號後，這裡會顯示商品資料。
-              </div>
-            )}
+              )}
+            </div>
 
             <form onSubmit={submitStockIn} className="space-y-3">
               <label className="space-y-2 text-sm">
@@ -457,6 +529,24 @@ export default function AdminShopScan() {
                 {isSaving ? "入庫中..." : "確認入庫"}
               </Button>
             </form>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full bg-white"
+                onClick={continueScanning}
+              >
+                <Camera className="h-4 w-4" />
+                繼續掃描
+              </Button>
+              <a
+                href="/admin/shop/inventory"
+                className="inline-flex h-10 items-center justify-center rounded-full border border-stone-200 bg-white px-4 text-sm text-stone-700 hover:bg-stone-50"
+              >
+                查看庫存流水
+              </a>
+            </div>
           </aside>
         </section>
       </div>

@@ -109,6 +109,14 @@ function getLookupErrorMessage(error: unknown) {
   return message || "找不到商品編號，請確認 QR code 或商品編號是否正確";
 }
 
+function getScanStatusText(status: "idle" | "scanning" | "success" | "stopped" | "error") {
+  if (status === "scanning") return "掃描中";
+  if (status === "success") return "掃描成功，已停止，等待繼續掃描";
+  if (status === "stopped") return "已停止，等待繼續掃描";
+  if (status === "error") return "相機啟動失敗";
+  return "尚未開始掃描";
+}
+
 export default function AdminShopPos() {
   const [token, setToken] = useState(() => getStoredAdminToken());
   const [password, setPassword] = useState("");
@@ -126,6 +134,7 @@ export default function AdminShopPos() {
   const [isAddingSku, setIsAddingSku] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [scanStatus, setScanStatus] = useState<"idle" | "scanning" | "success" | "stopped" | "error">("idle");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -169,6 +178,13 @@ export default function AdminShopPos() {
   const stopScanner = useCallback(() => {
     controlsRef.current?.stop();
     controlsRef.current = null;
+    const stream = videoRef.current?.srcObject;
+    if (stream instanceof MediaStream) {
+      stream.getTracks().forEach((track) => track.stop());
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
     setIsScanning(false);
   }, []);
 
@@ -258,7 +274,10 @@ export default function AdminShopPos() {
     setError("");
     setSuccess("相機啟動中，請將 QR code 放入框內。");
     setScannedSku("");
+    setScanStatus("idle");
     isScanProcessingRef.current = false;
+    lastScanRef.current = "";
+    lastScanAtRef.current = 0;
 
     try {
       const reader = new BrowserQRCodeReader();
@@ -280,8 +299,8 @@ export default function AdminShopPos() {
           isScanProcessingRef.current = true;
           lastScanRef.current = sku;
           lastScanAtRef.current = now;
-          controlsRef.current?.stop();
-          controlsRef.current = null;
+          stopScanner();
+          setScanStatus("success");
           setIsScanning(false);
           addSkuToCart(sku, "scan");
         }
@@ -289,9 +308,11 @@ export default function AdminShopPos() {
 
       controlsRef.current = controls;
       setIsScanning(true);
+      setScanStatus("scanning");
       setSuccess("掃描中，請將 QR code 放入框內。建議使用 Safari / Chrome，不建議用 LINE 內建瀏覽器。");
     } catch {
       setIsScanning(false);
+      setScanStatus("error");
       setError("相機無法啟動，請確認瀏覽器權限，或改用手動輸入商品編號");
     }
   };
@@ -333,6 +354,9 @@ export default function AdminShopPos() {
     setSuccess("");
     setError("");
     isScanProcessingRef.current = false;
+    lastScanRef.current = "";
+    lastScanAtRef.current = 0;
+    setScanStatus("idle");
     startScanner();
   };
 
@@ -609,6 +633,9 @@ export default function AdminShopPos() {
                   <p className="mt-1 break-all font-mono text-xs">{scannedSku}</p>
                 </div>
               )}
+              <div className="rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-3 text-sm text-stone-600">
+                目前掃描狀態：<span className="font-semibold text-stone-900">{getScanStatusText(scanStatus)}</span>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Button
                   type="button"
@@ -623,7 +650,11 @@ export default function AdminShopPos() {
                   type="button"
                   variant="outline"
                   className="h-11 rounded-full bg-white"
-                  onClick={stopScanner}
+                  onClick={() => {
+                    stopScanner();
+                    setScanStatus("stopped");
+                    setSuccess("已停止掃描，請按「繼續掃描」掃下一個商品");
+                  }}
                   disabled={!isScanning}
                 >
                   <StopCircle className="h-4 w-4" />

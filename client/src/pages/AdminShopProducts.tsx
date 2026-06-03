@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Boxes,
+  Copy,
   ImageOff,
   LogOut,
   PackageSearch,
@@ -183,6 +184,7 @@ export default function AdminShopProducts() {
   const [isCreating, setIsCreating] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [failedCoverImageUrl, setFailedCoverImageUrl] = useState("");
+  const [copiedSkuId, setCopiedSkuId] = useState("");
 
   const selectedSummary = useMemo(
     () => products.find((product) => product.id === selectedProductId),
@@ -229,6 +231,7 @@ export default function AdminShopProducts() {
       setIsCreating(false);
       setIsAdvancedOpen(false);
       setFailedCoverImageUrl("");
+      setCopiedSkuId("");
       setIsDetailLoading(true);
       setSuccess("");
       try {
@@ -273,6 +276,7 @@ export default function AdminShopProducts() {
     setIsCreating(false);
     setIsAdvancedOpen(false);
     setFailedCoverImageUrl("");
+    setCopiedSkuId("");
   };
 
   const submitSearch = (event: FormEvent) => {
@@ -283,6 +287,7 @@ export default function AdminShopProducts() {
     setIsCreating(false);
     setIsAdvancedOpen(false);
     setFailedCoverImageUrl("");
+    setCopiedSkuId("");
   };
 
   const startCreateProduct = () => {
@@ -291,8 +296,24 @@ export default function AdminShopProducts() {
     setIsCreating(true);
     setIsAdvancedOpen(false);
     setFailedCoverImageUrl("");
+    setCopiedSkuId("");
     setError("");
     setSuccess("");
+  };
+
+  const copySku = async (variant: AdminShopVariant) => {
+    const sku = variant.sku?.trim();
+    if (!sku) return;
+
+    try {
+      await navigator.clipboard.writeText(sku);
+      setCopiedSkuId(variant.id);
+      window.setTimeout(() => {
+        setCopiedSkuId((current) => (current === variant.id ? "" : current));
+      }, 1600);
+    } catch {
+      setError("商品編號複製失敗，請手動選取複製");
+    }
   };
 
   const cancelEdit = () => {
@@ -441,7 +462,7 @@ export default function AdminShopProducts() {
   }
 
   return (
-    <main className="min-h-[100svh] bg-[#f7f2ea] pb-24 text-stone-900 md:pb-0">
+    <main className="min-h-[100svh] bg-[#f7f2ea] pb-28 text-stone-900 md:pb-0">
       <header className="border-b border-stone-200 bg-white/95 px-5 py-5 backdrop-blur md:px-8">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
@@ -750,18 +771,18 @@ export default function AdminShopProducts() {
                           setFailedCoverImageUrl("");
                         }
                       }}
-                      className="aspect-[4/3] w-full rounded-[8px] border border-stone-100 bg-[#f6f1ea] object-cover"
+                      className="h-[280px] max-h-[320px] w-full rounded-[8px] border border-stone-100 bg-[#f6f1ea] object-contain md:h-[320px] md:max-h-[360px]"
                     />
                   ) : (
-                    <div className="flex aspect-[4/3] w-full items-center justify-center rounded-[8px] border border-dashed border-stone-200 bg-[#f6f1ea] text-sm text-stone-400">
+                    <div className="flex h-[280px] max-h-[320px] w-full items-center justify-center rounded-[8px] border border-dashed border-stone-200 bg-[#f6f1ea] text-sm text-stone-400 md:h-[320px] md:max-h-[360px]">
                       {coverImageUrl ? "圖片無法顯示" : "尚未設定商品主圖"}
                     </div>
                   )}
                 </div>
                 <label className="space-y-2 text-sm">
-                  <span className="font-medium text-stone-900">商品主圖路徑</span>
+                  <span className="font-medium text-stone-900">主圖圖片位置</span>
                   <p className="text-xs text-stone-400">
-                    目前先使用圖片路徑，之後可再做圖片上傳
+                    目前先貼圖片位置，之後可再改成上傳圖片
                   </p>
                   <Input
                     value={selectedProduct.cover_image_url || ""}
@@ -871,18 +892,33 @@ export default function AdminShopProducts() {
                             className="h-9 rounded-[8px] bg-white"
                           />
                         </label>
-                        <label className="space-y-1 text-xs text-stone-500">
+                        <label className="space-y-1 text-xs text-stone-500 sm:col-span-2">
                           <span>商品編號</span>
                           <p className="text-[11px] leading-4 text-stone-400">
                             掃 QR code、進貨入庫、現場銷售時會用到這個編號
                           </p>
-                          <Input
-                            value={variant.sku || ""}
-                            onChange={(event) =>
-                              updateVariantField(variant.id, "sku", event.target.value)
-                            }
-                            className="h-9 rounded-[8px] bg-white"
-                          />
+                          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                            <Input
+                              value={variant.sku || ""}
+                              onChange={(event) =>
+                                updateVariantField(variant.id, "sku", event.target.value)
+                              }
+                              className="h-10 rounded-[8px] bg-white font-mono text-sm"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-10 rounded-full bg-white"
+                              onClick={() => copySku(variant)}
+                              disabled={!variant.sku?.trim()}
+                            >
+                              <Copy className="h-4 w-4" />
+                              複製
+                            </Button>
+                          </div>
+                          {copiedSkuId === variant.id && (
+                            <p className="text-xs text-emerald-700">已複製商品編號</p>
+                          )}
                         </label>
                         <label className="space-y-1 text-xs text-stone-500">
                           <span>販售狀態</span>
@@ -1097,12 +1133,12 @@ export default function AdminShopProducts() {
         </aside>
       </div>
       {selectedProduct && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-stone-200 bg-white/95 p-3 shadow-2xl shadow-stone-300/50 backdrop-blur md:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-40 h-16 border-t border-stone-200 bg-white/95 p-2 shadow-2xl shadow-stone-300/50 backdrop-blur md:hidden">
           <div className="mx-auto grid max-w-md grid-cols-2 gap-3">
             <Button
               type="button"
               variant="outline"
-              className="h-11 rounded-full bg-white"
+              className="h-10 rounded-full bg-white"
               onClick={cancelEdit}
               disabled={isSaving}
             >
@@ -1110,7 +1146,7 @@ export default function AdminShopProducts() {
             </Button>
             <Button
               type="button"
-              className="h-11 rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
+              className="h-10 rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
               onClick={saveProduct}
               disabled={isSaving}
             >

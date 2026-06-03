@@ -131,6 +131,7 @@ export default function AdminShopPos() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const cartSectionRef = useRef<HTMLElement | null>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
+  const isScanProcessingRef = useRef(false);
   const lastScanRef = useRef("");
   const lastScanAtRef = useRef(0);
   const highlightTimerRef = useRef<number | null>(null);
@@ -181,7 +182,7 @@ export default function AdminShopPos() {
   }, [stopScanner]);
 
   const addLookupToCart = useCallback(
-    (lookup: AdminInventoryLookup) => {
+    (lookup: AdminInventoryLookup, source: "scan" | "manual" | "search" = "search") => {
       const nextItem = toCartItem(lookup);
 
       setCartItems((current) => {
@@ -198,6 +199,13 @@ export default function AdminShopPos() {
 
         setLastAddedItem(feedback);
         flashItem(nextItem.variant_id);
+        setSuccess(
+          source === "scan"
+            ? `已掃到 ${nextItem.sku || nextItem.product_name}。已加入銷售清單，目前數量 ${nextQuantity}。請按「繼續掃描」再掃下一個商品`
+            : existing
+              ? `已增加數量，目前數量 ${nextQuantity}`
+              : `${lookup.product.name} 已加入銷售清單`
+        );
 
         if (!existing) return [nextItem, ...current];
 
@@ -231,14 +239,9 @@ export default function AdminShopPos() {
 
       try {
         const lookup = await lookupAdminInventoryBySku({ token, sku });
-        addLookupToCart(lookup);
+        addLookupToCart(lookup, source);
         setManualSku("");
         setError("");
-        setSuccess(
-          source === "scan"
-            ? `掃描成功：${sku}，已加入銷售清單`
-            : `${lookup.product.name} 已加入銷售清單`
-        );
       } catch (lookupError) {
         setError(getLookupErrorMessage(lookupError));
       } finally {
@@ -255,6 +258,7 @@ export default function AdminShopPos() {
     setError("");
     setSuccess("相機啟動中，請將 QR code 放入框內。");
     setScannedSku("");
+    isScanProcessingRef.current = false;
 
     try {
       const reader = new BrowserQRCodeReader();
@@ -264,14 +268,16 @@ export default function AdminShopPos() {
         (result) => {
           const rawText = result?.getText();
           if (!rawText) return;
+          if (isScanProcessingRef.current) return;
 
           const sku = parseSkuFromQrValue(rawText);
           const now = Date.now();
           if (!sku) return;
-          if (lastScanRef.current === sku && now - lastScanAtRef.current < 1000) {
+          if (lastScanRef.current === sku && now - lastScanAtRef.current < 2000) {
             return;
           }
 
+          isScanProcessingRef.current = true;
           lastScanRef.current = sku;
           lastScanAtRef.current = now;
           controlsRef.current?.stop();
@@ -326,6 +332,7 @@ export default function AdminShopPos() {
     setScannedSku("");
     setSuccess("");
     setError("");
+    isScanProcessingRef.current = false;
     startScanner();
   };
 
@@ -691,7 +698,7 @@ export default function AdminShopPos() {
                     <button
                       key={result.variant.id}
                       type="button"
-                      onClick={() => addLookupToCart(result)}
+                      onClick={() => addLookupToCart(result, "search")}
                       className="grid w-full grid-cols-[64px_1fr_auto] gap-3 rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-3 text-left hover:bg-[#f4ece2]"
                     >
                       {result.product.cover_image_url ? (

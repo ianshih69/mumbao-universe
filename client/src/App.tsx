@@ -13,6 +13,7 @@ import Admin from "./pages/Admin";
 import AdminChats from "./pages/AdminChats";
 import AdminShopOrders from "./pages/AdminShopOrders";
 import AdminShopProducts from "./pages/AdminShopProducts";
+import AdminShopInventory from "./pages/AdminShopInventory";
 import AiChat from "./pages/AiChat";
 import Chat from "./pages/Chat";
 import Shop from "./pages/Shop";
@@ -30,6 +31,7 @@ function Router() {
       <Route path={"/admin/chats"} component={AdminChats} />
       <Route path={"/admin/shop/orders"} component={AdminShopOrders} />
       <Route path={"/admin/shop/products"} component={AdminShopProducts} />
+      <Route path={"/admin/shop/inventory"} component={AdminShopInventory} />
       <Route path={"/about"} component={About} />
       <Route path={"/ai-chat"} component={AiChat} />
       <Route path={"/chat"} component={Chat} />

@@ -4,6 +4,7 @@ import {
   readBody,
   sendJson,
   supabaseRequest,
+  supabaseRpc,
 } from "../server/shopShared.js";
 
 const defaultLimit = 30;
@@ -24,6 +25,21 @@ const validPaymentStatuses = new Set([
 ]);
 const validProductStatuses = new Set(["draft", "published", "archived"]);
 const validVariantStatuses = new Set(["active", "inactive"]);
+const validInventoryMovementTypes = new Set([
+  "stock_in",
+  "stock_out",
+  "adjustment",
+  "manual_sale",
+  "online_order",
+  "return_in",
+]);
+const knownInventoryErrors = new Map([
+  ["VARIANT_ID_REQUIRED", "Variant id is required."],
+  ["INVALID_MOVEMENT_TYPE", "Invalid inventory movement type."],
+  ["INVALID_QUANTITY", "Inventory quantity is invalid."],
+  ["VARIANT_NOT_FOUND", "Product variant not found."],
+  ["INSUFFICIENT_INVENTORY", "Inventory cannot be less than 0."],
+]);
 
 function requireAdmin(req) {
   const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
@@ -68,9 +84,29 @@ function cleanText(value) {
   return String(value ?? "").trim();
 }
 
+function getRequiredInteger(value, fieldName) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed)) {
+    const error = new Error(`${fieldName} must be a number.`);
+    error.status = 400;
+    throw error;
+  }
+
+  return parsed;
+}
+
 function nullableText(value) {
   const text = cleanText(value);
   return text ? text : null;
+}
+
+function getKnownInventoryErrorMessage(error) {
+  const message = String(error?.details?.message || error?.message || "");
+  const matchedKey = Array.from(knownInventoryErrors.keys()).find((key) =>
+    message.includes(key)
+  );
+
+  return matchedKey ? knownInventoryErrors.get(matchedKey) : "";
 }
 
 function normalizeOrderSummary(order) {
@@ -196,6 +232,35 @@ function normalizeProduct(product, variants = [], images = []) {
     ...normalizeProductSummary(product, variantsByProductId, imagesByProductId),
     variants: variantsByProductId.get(product.id) || [],
     images: imagesByProductId.get(product.id) || [],
+  };
+}
+
+function normalizeInventoryMovement(
+  movement,
+  productsById = new Map(),
+  variantsById = new Map()
+) {
+  const product = productsById.get(movement.product_id);
+  const variant = variantsById.get(movement.variant_id);
+
+  return {
+    id: movement.id,
+    product_id: movement.product_id || "",
+    variant_id: movement.variant_id || "",
+    product_name: product?.name || "",
+    product_slug: product?.slug || "",
+    variant_name: variant?.variant_name || "",
+    variant_option: variant?.variant_option || "",
+    sku: variant?.sku || "",
+    movement_type: movement.movement_type || "adjustment",
+    quantity_delta: Number(movement.quantity_delta || 0),
+    quantity_before: Number(movement.quantity_before || 0),
+    quantity_after: Number(movement.quantity_after || 0),
+    reference_type: movement.reference_type || "",
+    reference_number: movement.reference_number || "",
+    note: movement.note || "",
+    created_at: movement.created_at || "",
+    created_by: movement.created_by || "",
   };
 }
 
@@ -705,6 +770,131 @@ async function handleProductAction(req, res) {
   return sendJson(res, 405, { error: "Method not allowed." });
 }
 
+async function loadInventoryMovements(req, res) {
+  const productId = cleanText(firstQueryValue(req.query?.productId));
+  const variantId = cleanText(firstQueryValue(req.query?.variantId));
+  const movementType = cleanText(firstQueryValue(req.query?.movementType));
+  const limit = getPositiveInt(firstQueryValue(req.query?.limit), defaultLimit, maxLimit);
+  const page = getPage(firstQueryValue(req.query?.page));
+  const offset = page * limit;
+  const productFilter = productId
+    ? `&product_id=eq.${encodeURIComponent(productId)}`
+    : "";
+  const variantFilter = variantId
+    ? `&variant_id=eq.${encodeURIComponent(variantId)}`
+    : "";
+  const typeFilter =
+    movementType && validInventoryMovementTypes.has(movementType)
+      ? `&movement_type=eq.${encodeURIComponent(movementType)}`
+      : "";
+  const select =
+    "id,product_id,variant_id,movement_type,quantity_delta,quantity_before,quantity_after,reference_type,reference_number,note,created_at,created_by";
+  const movements = await supabaseRequest(
+    `/shop_inventory_movements?select=${select}${productFilter}${variantFilter}${typeFilter}&order=created_at.desc&limit=${
+      limit + 1
+    }&offset=${offset}`
+  );
+  const visibleMovements = (movements || []).slice(0, limit);
+  const productIds = [
+    ...new Set(visibleMovements.map((movement) => movement.product_id).filter(Boolean)),
+  ];
+  const variantIds = [
+    ...new Set(visibleMovements.map((movement) => movement.variant_id).filter(Boolean)),
+  ];
+  const productsById = new Map();
+  const variantsById = new Map();
+
+  if (productIds.length) {
+    const products = await supabaseRequest(
+      `/shop_products?select=id,slug,name&id=in.(${productIds.join(",")})`
+    );
+
+    for (const product of products || []) {
+      productsById.set(product.id, product);
+    }
+  }
+
+  if (variantIds.length) {
+    const variants = await supabaseRequest(
+      `/shop_product_variants?select=id,sku,variant_name,variant_option&id=in.(${variantIds.join(",")})`
+    );
+
+    for (const variant of variants || []) {
+      variantsById.set(variant.id, variant);
+    }
+  }
+
+  const hasMore = (movements || []).length > limit;
+
+  return sendJson(res, 200, {
+    movements: visibleMovements.map((movement) =>
+      normalizeInventoryMovement(movement, productsById, variantsById)
+    ),
+    page,
+    limit,
+    hasMore,
+    nextPage: hasMore ? page + 1 : null,
+  });
+}
+
+async function handleInventoryAdjustment(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return sendJson(res, 405, { error: "Method not allowed." });
+  }
+
+  const body = await readBody(req);
+  const variantId = cleanText(body?.variant_id);
+  const movementType = cleanText(body?.movement_type);
+  const quantity = getRequiredInteger(body?.quantity, "quantity");
+
+  if (!variantId) {
+    return sendJson(res, 400, { error: "variant_id is required." });
+  }
+
+  if (!["stock_in", "stock_out", "adjustment"].includes(movementType)) {
+    return sendJson(res, 400, { error: "Invalid movement_type." });
+  }
+
+  if (
+    (movementType === "stock_in" || movementType === "stock_out") &&
+    quantity <= 0
+  ) {
+    return sendJson(res, 400, { error: "Quantity must be greater than 0." });
+  }
+
+  if (movementType === "adjustment" && quantity < 0) {
+    return sendJson(res, 400, { error: "Quantity must be greater than or equal to 0." });
+  }
+
+  try {
+    const result = await supabaseRpc("adjust_shop_inventory", {
+      adjustment_payload: {
+        variant_id: variantId,
+        movement_type: movementType,
+        quantity,
+        reference_type: "manual_adjustment",
+        reference_number: nullableText(body?.reference_number),
+        note: nullableText(body?.note),
+        created_by: nullableText(body?.created_by) || "admin",
+      },
+    });
+    const movement = result?.movement || null;
+
+    return sendJson(res, 200, {
+      inventory: Number(result?.inventory || 0),
+      movement: movement ? normalizeInventoryMovement(movement) : null,
+    });
+  } catch (rpcError) {
+    const knownMessage = getKnownInventoryErrorMessage(rpcError);
+    if (knownMessage) {
+      return sendJson(res, 409, { error: knownMessage });
+    }
+
+    throw rpcError;
+  }
+}
+
 export default async function handler(req, res) {
   const action = String(firstQueryValue(req.query?.action) || "").trim();
 
@@ -727,7 +917,15 @@ export default async function handler(req, res) {
       return await handleProductAction(req, res);
     }
 
-    res.setHeader("Allow", "GET, PATCH");
+    if (req.method === "GET" && action === "inventory-movements") {
+      return await loadInventoryMovements(req, res);
+    }
+
+    if (action === "inventory-adjust") {
+      return await handleInventoryAdjustment(req, res);
+    }
+
+    res.setHeader("Allow", "GET, POST, PATCH");
     return sendJson(res, 405, { error: "Method or action not allowed." });
   } catch (error) {
     console.error("admin shop api error:", error);

@@ -49,6 +49,37 @@ export type AdminShopProductDetail = AdminShopProductSummary & {
   images: AdminShopImage[];
 };
 
+export type AdminShopProductInput = Pick<
+  AdminShopProductDetail,
+  | "name"
+  | "slug"
+  | "subtitle"
+  | "description"
+  | "category"
+  | "status"
+  | "featured"
+  | "sort_order"
+  | "cover_image_url"
+> & {
+  id?: string;
+};
+
+export type AdminShopVariantInput = Omit<
+  AdminShopVariant,
+  "id" | "product_id" | "created_at" | "updated_at"
+> & {
+  id?: string;
+  product_id?: string;
+};
+
+export type AdminShopImageInput = Omit<
+  AdminShopImage,
+  "id" | "product_id" | "created_at"
+> & {
+  id?: string;
+  product_id?: string;
+};
+
 async function fetchAdminJson<T>(
   url: string,
   token: string,
@@ -155,6 +186,33 @@ export async function updateAdminShopProduct({
 
   if (!data.product) {
     throw new Error("商品更新失敗");
+  }
+
+  return data.product;
+}
+
+export async function createAdminShopProduct({
+  token,
+  product,
+  variants,
+  images,
+}: {
+  token: string;
+  product: AdminShopProductInput;
+  variants: AdminShopVariantInput[];
+  images: AdminShopImageInput[];
+}) {
+  const data = await fetchAdminJson<{ product?: AdminShopProductDetail }>(
+    "/api/admin-shop?action=product",
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({ product, variants, images }),
+    }
+  );
+
+  if (!data.product) {
+    throw new Error("??撱箇?憭望?");
   }
 
   return data.product;

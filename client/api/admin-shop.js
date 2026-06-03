@@ -455,6 +455,49 @@ function validateProductPatch(product) {
   };
 }
 
+async function ensureUniqueSlug(slug) {
+  const existingProducts = await supabaseRequest(
+    `/shop_products?slug=eq.${encodeURIComponent(slug)}&select=id&limit=1`
+  );
+
+  if (existingProducts?.length) {
+    const error = new Error("Product slug already exists.");
+    error.status = 409;
+    throw error;
+  }
+}
+
+function validateProductCreate(product) {
+  const name = cleanText(product?.name);
+  const slug = cleanText(product?.slug);
+  const category = cleanText(product?.category);
+  const status = cleanText(product?.status || "draft");
+
+  if (!name || !slug || !category) {
+    const error = new Error("Product name, slug, and category are required.");
+    error.status = 400;
+    throw error;
+  }
+
+  if (!validProductStatuses.has(status)) {
+    const error = new Error("Invalid product status.");
+    error.status = 400;
+    throw error;
+  }
+
+  return {
+    name,
+    slug,
+    subtitle: nullableText(product.subtitle),
+    description: nullableText(product.description),
+    category,
+    status,
+    featured: Boolean(product.featured),
+    sort_order: getInteger(product.sort_order, 0),
+    cover_image_url: nullableText(product.cover_image_url),
+  };
+}
+
 function buildVariantPatch(variant) {
   const status = cleanText(variant?.status || "active");
   const variantName = cleanText(variant?.variant_name);
@@ -498,6 +541,13 @@ function buildVariantPatch(variant) {
   };
 }
 
+function buildVariantCreate(variant, productId) {
+  return {
+    product_id: productId,
+    ...buildVariantPatch(variant),
+  };
+}
+
 function buildImagePatch(image) {
   const imageUrl = cleanText(image?.image_url);
 
@@ -511,6 +561,13 @@ function buildImagePatch(image) {
     image_url: imageUrl,
     alt: nullableText(image.alt),
     sort_order: getInteger(image.sort_order, 0),
+  };
+}
+
+function buildImageCreate(image, productId) {
+  return {
+    product_id: productId,
+    ...buildImagePatch(image),
   };
 }
 
@@ -558,6 +615,74 @@ async function updateProduct(req, res) {
   return sendJson(res, 200, { product: await loadProductById(productId) });
 }
 
+async function archiveIncompleteProduct(productId) {
+  try {
+    await supabaseRequest(`/shop_products?id=eq.${encodeURIComponent(productId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: "archived",
+        updated_at: new Date().toISOString(),
+      }),
+    });
+  } catch (archiveError) {
+    console.error("failed to archive incomplete product:", archiveError);
+  }
+}
+
+async function createProduct(req, res) {
+  const body = await readBody(req);
+  const productPayload = validateProductCreate(body?.product || {});
+  const variants = Array.isArray(body?.variants) ? body.variants : [];
+  const images = Array.isArray(body?.images) ? body.images : [];
+
+  if (!variants.length) {
+    return sendJson(res, 400, { error: "At least one product variant is required." });
+  }
+
+  if (!images.length) {
+    return sendJson(res, 400, { error: "At least one product image is required." });
+  }
+
+  await ensureUniqueSlug(productPayload.slug);
+
+  const createdProducts = await supabaseRequest("/shop_products", {
+    method: "POST",
+    body: JSON.stringify(productPayload),
+  });
+  const createdProduct = createdProducts?.[0];
+
+  if (!createdProduct?.id) {
+    const error = new Error("Product create failed.");
+    error.status = 500;
+    throw error;
+  }
+
+  try {
+    await supabaseRequest("/shop_product_variants", {
+      method: "POST",
+      body: JSON.stringify(
+        variants.map((variant) => buildVariantCreate(variant, createdProduct.id))
+      ),
+    });
+
+    await supabaseRequest("/shop_product_images", {
+      method: "POST",
+      body: JSON.stringify(
+        images.map((image) => buildImageCreate(image, createdProduct.id))
+      ),
+    });
+  } catch (detailError) {
+    await archiveIncompleteProduct(createdProduct.id);
+    const error = new Error(
+      `Product details create failed. The product was archived. ${detailError.message || ""}`.trim()
+    );
+    error.status = 500;
+    throw error;
+  }
+
+  return sendJson(res, 201, { product: await loadProductById(createdProduct.id) });
+}
+
 async function handleProductAction(req, res) {
   if (req.method === "GET") {
     const productId = cleanText(firstQueryValue(req.query?.id));
@@ -572,7 +697,11 @@ async function handleProductAction(req, res) {
     return updateProduct(req, res);
   }
 
-  res.setHeader("Allow", "GET, PATCH");
+  if (req.method === "POST") {
+    return createProduct(req, res);
+  }
+
+  res.setHeader("Allow", "GET, POST, PATCH");
   return sendJson(res, 405, { error: "Method not allowed." });
 }
 
@@ -606,7 +735,7 @@ export default async function handler(req, res) {
       error:
         error.status === 401
           ? "Unauthorized."
-          : error.status === 400 || error.status === 404
+          : error.status === 400 || error.status === 404 || error.status === 409
             ? error.message
             : "Admin shop request failed.",
     });

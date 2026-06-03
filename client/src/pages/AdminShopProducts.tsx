@@ -5,6 +5,7 @@ import {
   ImageOff,
   LogOut,
   PackageSearch,
+  Plus,
   RefreshCw,
   Save,
   Search,
@@ -20,6 +21,7 @@ import {
   type AdminShopProductSummary,
   type AdminShopVariant,
   type AdminVariantStatus,
+  createAdminShopProduct,
   fetchAdminShopProduct,
   fetchAdminShopProducts,
   updateAdminShopProduct,
@@ -117,6 +119,50 @@ function getVariantTone(status: AdminVariantStatus) {
   return status === "active" ? "green" : "stone";
 }
 
+function createEmptyProduct(): AdminShopProductDetail {
+  return {
+    id: "__new_product__",
+    slug: "",
+    name: "",
+    subtitle: "",
+    description: "",
+    category: "",
+    status: "draft",
+    featured: false,
+    sort_order: 0,
+    cover_image_url: "",
+    min_price: 0,
+    total_inventory: 0,
+    variant_count: 1,
+    image_count: 1,
+    created_at: "",
+    updated_at: "",
+    variants: [
+      {
+        id: "__new_variant_1__",
+        product_id: "",
+        sku: "",
+        variant_name: "",
+        variant_option: "",
+        price: 0,
+        compare_at_price: null,
+        inventory: 0,
+        status: "active",
+        sort_order: 0,
+      },
+    ],
+    images: [
+      {
+        id: "__new_image_1__",
+        product_id: "",
+        image_url: "",
+        alt: "",
+        sort_order: 0,
+      },
+    ],
+  };
+}
+
 export default function AdminShopProducts() {
   const [token, setToken] = useState(() => getStoredAdminToken());
   const [password, setPassword] = useState("");
@@ -134,6 +180,7 @@ export default function AdminShopProducts() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
 
   const selectedSummary = useMemo(
     () => products.find((product) => product.id === selectedProductId),
@@ -173,6 +220,7 @@ export default function AdminShopProducts() {
       if (!token || !productId) return;
 
       setSelectedProductId(productId);
+      setIsCreating(false);
       setIsDetailLoading(true);
       setSuccess("");
       try {
@@ -214,6 +262,7 @@ export default function AdminShopProducts() {
     setProducts([]);
     setSelectedProductId("");
     setSelectedProduct(null);
+    setIsCreating(false);
   };
 
   const submitSearch = (event: FormEvent) => {
@@ -221,6 +270,15 @@ export default function AdminShopProducts() {
     setQuery(searchInput.trim());
     setSelectedProductId("");
     setSelectedProduct(null);
+    setIsCreating(false);
+  };
+
+  const startCreateProduct = () => {
+    setSelectedProduct(createEmptyProduct());
+    setSelectedProductId("__new_product__");
+    setIsCreating(true);
+    setError("");
+    setSuccess("");
   };
 
   const updateProductField = <K extends keyof AdminShopProductDetail>(
@@ -270,30 +328,42 @@ export default function AdminShopProducts() {
     setIsSaving(true);
     setSuccess("");
     try {
-      const saved = await updateAdminShopProduct({
-        token,
-        product: {
-          id: selectedProduct.id,
-          name: selectedProduct.name,
-          slug: selectedProduct.slug,
-          subtitle: selectedProduct.subtitle || "",
-          description: selectedProduct.description || "",
-          category: selectedProduct.category,
-          status: selectedProduct.status,
-          featured: selectedProduct.featured,
-          sort_order: selectedProduct.sort_order,
-          cover_image_url: selectedProduct.cover_image_url || "",
-        },
-        variants: selectedProduct.variants,
-        images: selectedProduct.images,
-      });
+      const productPayload = {
+        ...(isCreating ? {} : { id: selectedProduct.id }),
+        name: selectedProduct.name,
+        slug: selectedProduct.slug,
+        subtitle: selectedProduct.subtitle || "",
+        description: selectedProduct.description || "",
+        category: selectedProduct.category,
+        status: selectedProduct.status,
+        featured: selectedProduct.featured,
+        sort_order: selectedProduct.sort_order,
+        cover_image_url: selectedProduct.cover_image_url || "",
+      };
+      const saved = isCreating
+        ? await createAdminShopProduct({
+            token,
+            product: productPayload,
+            variants: selectedProduct.variants,
+            images: selectedProduct.images,
+          })
+        : await updateAdminShopProduct({
+            token,
+            product: productPayload,
+            variants: selectedProduct.variants,
+            images: selectedProduct.images,
+          });
 
       setSelectedProduct(saved);
+      setSelectedProductId(saved.id);
+      setIsCreating(false);
       setProducts((current) =>
-        current.map((product) => (product.id === saved.id ? saved : product))
+        isCreating
+          ? [saved, ...current.filter((product) => product.id !== saved.id)]
+          : current.map((product) => (product.id === saved.id ? saved : product))
       );
       setError("");
-      setSuccess("商品已更新");
+      setSuccess(isCreating ? "商品已新增" : "商品已更新");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "商品更新失敗");
     } finally {
@@ -357,6 +427,14 @@ export default function AdminShopProducts() {
             >
               訂單管理
             </a>
+            <Button
+              type="button"
+              className="rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
+              onClick={startCreateProduct}
+            >
+              <Plus className="h-4 w-4" />
+              新增商品
+            </Button>
             <Button
               variant="outline"
               className="rounded-full bg-white"
@@ -523,10 +601,14 @@ export default function AdminShopProducts() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
-                    Product Detail
+                    {isCreating ? "New Product" : "Product Detail"}
                   </p>
-                  <h2 className="mt-1 text-xl font-semibold">{selectedProduct.name}</h2>
-                  <p className="mt-1 text-xs text-stone-400">{selectedProduct.slug}</p>
+                  <h2 className="mt-1 text-xl font-semibold">
+                    {isCreating ? "新增商品" : selectedProduct.name}
+                  </h2>
+                  <p className="mt-1 text-xs text-stone-400">
+                    {isCreating ? "填寫後會建立新的商品、規格與圖片" : selectedProduct.slug}
+                  </p>
                 </div>
                 <Boxes className="h-6 w-6 text-[#b99aa2]" />
               </div>
@@ -640,7 +722,7 @@ export default function AdminShopProducts() {
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-stone-900">規格</h3>
                   <span className="text-xs text-stone-400">
-                    只編輯既有規格，不新增不刪除
+                    {isCreating ? "新增商品至少需要 1 個規格" : "只編輯既有規格，不新增不刪除"}
                   </span>
                 </div>
                 {selectedProduct.variants.length === 0 ? (
@@ -782,7 +864,7 @@ export default function AdminShopProducts() {
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-stone-900">圖片</h3>
                   <span className="text-xs text-stone-400">
-                    只編輯既有圖片 URL，不上傳不刪除
+                    {isCreating ? "新增商品至少需要 1 張圖片 URL" : "只編輯既有圖片 URL，不上傳不刪除"}
                   </span>
                 </div>
                 {selectedProduct.images.length === 0 ? (
@@ -851,14 +933,14 @@ export default function AdminShopProducts() {
                   className="h-11 w-full rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
                 >
                   <Save className="h-4 w-4" />
-                  {isSaving ? "儲存中..." : "儲存既有商品"}
+                  {isSaving ? "儲存中..." : isCreating ? "建立新商品" : "儲存既有商品"}
                 </Button>
               </div>
             </div>
           ) : (
             <div className="py-14 text-center text-sm text-stone-400">
               <PackageSearch className="mx-auto mb-3 h-9 w-9" />
-              <p>{selectedSummary ? "商品明細準備中..." : "請選擇一個既有商品進行編輯"}</p>
+              <p>{selectedSummary ? "商品明細準備中..." : "請選擇既有商品，或點新增商品建立一筆資料"}</p>
             </div>
           )}
         </aside>

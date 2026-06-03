@@ -606,15 +606,13 @@ export default function AdminShopProducts() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
-                    {isCreating ? "New Product" : "Product Detail"}
+                    商品詳情
                   </p>
                   <h2 className="mt-1 text-xl font-semibold">
                     {isCreating ? "新增商品" : selectedProduct.name}
                   </h2>
                   <p className="mt-1 text-xs text-stone-400">
-                    {isCreating
-                      ? "填寫後會建立新的商品、規格與圖片"
-                      : `商品分類：${selectedProduct.category || "未分類"}`}
+                    目前編輯商品：{selectedProduct.name || "尚未命名"}
                   </p>
                 </div>
                 <Boxes className="h-6 w-6 text-[#b99aa2]" />
@@ -672,17 +670,20 @@ export default function AdminShopProducts() {
                   </label>
                 </div>
 
-                <label className="space-y-2 text-sm">
-                  <span className="font-medium text-stone-900">主圖</span>
-                  <Input
-                    value={selectedProduct.cover_image_url || ""}
-                    onChange={(event) =>
-                      updateProductField("cover_image_url", event.target.value)
-                    }
-                    placeholder="/shop-products/01.png"
-                    className="rounded-[8px]"
-                  />
-                </label>
+                <div className="space-y-2 text-sm">
+                  <span className="font-medium text-stone-900">商品主圖</span>
+                  {selectedProduct.cover_image_url ? (
+                    <img
+                      src={selectedProduct.cover_image_url}
+                      alt={selectedProduct.name || "商品主圖"}
+                      className="aspect-[4/3] w-full rounded-[8px] border border-stone-100 bg-[#f6f1ea] object-cover"
+                    />
+                  ) : (
+                    <div className="flex aspect-[4/3] w-full items-center justify-center rounded-[8px] border border-dashed border-stone-200 bg-[#f6f1ea] text-sm text-stone-400">
+                      尚未設定商品主圖
+                    </div>
+                  )}
+                </div>
 
                 <label className="space-y-2 text-sm">
                   <span className="font-medium text-stone-900">副標題</span>
@@ -714,30 +715,118 @@ export default function AdminShopProducts() {
                     </span>
                   </button>
                   {isAdvancedOpen && (
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <label className="space-y-2 text-sm">
-                        <span className="font-medium text-stone-900">商品網址代碼</span>
-                        <p className="text-xs text-stone-400">
-                          用於商品頁網址，一般不用修改
-                        </p>
+                    <div className="mt-4 space-y-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="space-y-2 text-sm">
+                          <span className="font-medium text-stone-900">商品網址代碼</span>
+                          <p className="text-xs text-stone-400">
+                            用於商品頁網址，一般不用修改
+                          </p>
+                          <Input
+                            value={selectedProduct.slug}
+                            onChange={(event) => updateProductField("slug", event.target.value)}
+                            className="rounded-[8px] bg-white"
+                          />
+                        </label>
+                        <label className="space-y-2 text-sm">
+                          <span className="font-medium text-stone-900">顯示順序</span>
+                          <p className="text-xs text-stone-400">數字越小越前面</p>
+                          <Input
+                            type="number"
+                            value={selectedProduct.sort_order}
+                            onChange={(event) =>
+                              updateProductField("sort_order", numberValue(event.target.value))
+                            }
+                            className="rounded-[8px] bg-white"
+                          />
+                        </label>
+                      </div>
+
+                      <label className="block space-y-2 text-sm">
+                        <span className="font-medium text-stone-900">商品主圖路徑</span>
                         <Input
-                          value={selectedProduct.slug}
-                          onChange={(event) => updateProductField("slug", event.target.value)}
-                          className="rounded-[8px] bg-white"
-                        />
-                      </label>
-                      <label className="space-y-2 text-sm">
-                        <span className="font-medium text-stone-900">顯示順序</span>
-                        <p className="text-xs text-stone-400">數字越小越前面</p>
-                        <Input
-                          type="number"
-                          value={selectedProduct.sort_order}
+                          value={selectedProduct.cover_image_url || ""}
                           onChange={(event) =>
-                            updateProductField("sort_order", numberValue(event.target.value))
+                            updateProductField("cover_image_url", event.target.value)
                           }
+                          placeholder="/shop-products/01.png"
                           className="rounded-[8px] bg-white"
                         />
                       </label>
+
+                      {selectedProduct.variants.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-stone-900">規格顯示順序</p>
+                          <p className="text-xs text-stone-400">數字越小越前面</p>
+                          <div className="grid gap-2">
+                            {selectedProduct.variants.map((variant) => (
+                              <label
+                                key={`advanced-variant-${variant.id}`}
+                                className="grid gap-2 text-xs text-stone-500 sm:grid-cols-[1fr_120px] sm:items-center"
+                              >
+                                <span>{variant.variant_name || "未命名規格"}</span>
+                                <Input
+                                  type="number"
+                                  value={variant.sort_order}
+                                  onChange={(event) =>
+                                    updateVariantField(
+                                      variant.id,
+                                      "sort_order",
+                                      numberValue(event.target.value)
+                                    )
+                                  }
+                                  className="h-9 rounded-[8px] bg-white"
+                                />
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedProduct.images.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-stone-900">圖片進階設定</p>
+                          <div className="grid gap-3">
+                            {selectedProduct.images.map((image, imageIndex) => (
+                              <div
+                                key={`advanced-image-${image.id}`}
+                                className="grid gap-2 rounded-[8px] border border-stone-100 bg-white p-3"
+                              >
+                                <p className="text-xs font-medium text-stone-500">
+                                  圖片 {imageIndex + 1}
+                                </p>
+                                <div className="grid gap-2 sm:grid-cols-[1fr_120px]">
+                                  <label className="space-y-1 text-xs text-stone-500">
+                                    <span>圖片說明文字</span>
+                                    <Input
+                                      value={image.alt || ""}
+                                      onChange={(event) =>
+                                        updateImageField(image.id, "alt", event.target.value)
+                                      }
+                                      className="h-9 rounded-[8px]"
+                                    />
+                                  </label>
+                                  <label className="space-y-1 text-xs text-stone-500">
+                                    <span>圖片顯示順序</span>
+                                    <Input
+                                      type="number"
+                                      value={image.sort_order}
+                                      onChange={(event) =>
+                                        updateImageField(
+                                          image.id,
+                                          "sort_order",
+                                          numberValue(event.target.value)
+                                        )
+                                      }
+                                      className="h-9 rounded-[8px]"
+                                    />
+                                  </label>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </section>
@@ -792,7 +881,7 @@ export default function AdminShopProducts() {
                         <label className="space-y-1 text-xs text-stone-500">
                           <span>商品編號</span>
                           <p className="text-[11px] leading-4 text-stone-400">
-                            用於 QR code、入庫、銷售與庫存辨識
+                            掃 QR code、進貨入庫、現場銷售時會用到這個編號
                           </p>
                           <Input
                             value={variant.sku || ""}
@@ -867,26 +956,6 @@ export default function AdminShopProducts() {
                             className="h-9 rounded-[8px] bg-white"
                           />
                         </label>
-                        {isAdvancedOpen && (
-                          <label className="space-y-1 text-xs text-stone-500">
-                            <span>規格顯示順序</span>
-                            <p className="text-[11px] leading-4 text-stone-400">
-                              數字越小越前面
-                            </p>
-                            <Input
-                              type="number"
-                              value={variant.sort_order}
-                              onChange={(event) =>
-                                updateVariantField(
-                                  variant.id,
-                                  "sort_order",
-                                  numberValue(event.target.value)
-                                )
-                              }
-                              className="h-9 rounded-[8px] bg-white"
-                            />
-                          </label>
-                        )}
                       </div>
                     </div>
                   ))
@@ -933,35 +1002,6 @@ export default function AdminShopProducts() {
                             className="h-9 rounded-[8px]"
                           />
                         </label>
-                        {isAdvancedOpen && (
-                          <div className="grid gap-2 sm:grid-cols-[1fr_110px]">
-                            <label className="space-y-1 text-xs text-stone-500">
-                              <span>圖片說明文字</span>
-                              <Input
-                                value={image.alt || ""}
-                                onChange={(event) =>
-                                  updateImageField(image.id, "alt", event.target.value)
-                                }
-                                className="h-9 rounded-[8px]"
-                              />
-                            </label>
-                            <label className="space-y-1 text-xs text-stone-500">
-                              <span>圖片顯示順序</span>
-                              <Input
-                                type="number"
-                                value={image.sort_order}
-                                onChange={(event) =>
-                                  updateImageField(
-                                    image.id,
-                                    "sort_order",
-                                    numberValue(event.target.value)
-                                  )
-                                }
-                                className="h-9 rounded-[8px]"
-                              />
-                            </label>
-                          </div>
-                        )}
                       </div>
                     </div>
                   ))
@@ -976,7 +1016,7 @@ export default function AdminShopProducts() {
                   className="h-11 w-full rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
                 >
                   <Save className="h-4 w-4" />
-                  {isSaving ? "儲存中..." : isCreating ? "建立新商品" : "儲存既有商品"}
+                  {isSaving ? "儲存中..." : isCreating ? "建立新商品" : "儲存商品"}
                 </Button>
               </div>
             </div>

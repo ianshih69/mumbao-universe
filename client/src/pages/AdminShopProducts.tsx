@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import VariantQrCode from "@/components/shop/VariantQrCode";
 import {
   type AdminProductStatus,
   type AdminShopImage,
@@ -976,6 +977,14 @@ export default function AdminShopProducts() {
                             <p className="text-xs text-emerald-700">已複製商品編號</p>
                           )}
                         </label>
+                        <div className="sm:col-span-2">
+                          <VariantQrCode
+                            sku={variant.sku}
+                            title="商品 QR code"
+                            subtitle="手機相機掃描會開啟掃描入庫頁"
+                            compact
+                          />
+                        </div>
                         <label className="space-y-1 text-xs text-stone-500">
                           <span>販售狀態</span>
                           <select

@@ -26,6 +26,32 @@ export type AdminInventoryMovement = {
   created_by?: string;
 };
 
+export type AdminInventoryLookup = {
+  product: {
+    id: string;
+    slug: string;
+    name: string;
+    category: string;
+    status: string;
+    cover_image_url?: string;
+  };
+  variant: {
+    id: string;
+    product_id: string;
+    sku?: string;
+    variant_name: string;
+    variant_option?: string;
+    price: number;
+    compare_at_price?: number | null;
+    inventory: number;
+    status: string;
+    sort_order: number;
+    created_at?: string;
+    updated_at?: string;
+  };
+  inventory: number;
+};
+
 async function fetchAdminJson<T>(
   url: string,
   token: string,
@@ -114,4 +140,17 @@ export async function adjustAdminInventory({
       created_by: "admin",
     }),
   });
+}
+
+export async function lookupAdminInventoryBySku({
+  token,
+  sku,
+}: {
+  token: string;
+  sku: string;
+}) {
+  return fetchAdminJson<AdminInventoryLookup>(
+    `/api/admin-shop?action=inventory-lookup&sku=${encodeURIComponent(sku.trim())}`,
+    token
+  );
 }

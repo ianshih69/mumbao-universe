@@ -264,6 +264,21 @@ function normalizeInventoryMovement(
   };
 }
 
+function normalizeInventoryLookup(product, variant) {
+  return {
+    product: {
+      id: product.id,
+      slug: product.slug || "",
+      name: product.name || "",
+      category: product.category || "",
+      status: product.status || "draft",
+      cover_image_url: product.cover_image_url || "",
+    },
+    variant: normalizeVariant(variant),
+    inventory: Number(variant.inventory || 0),
+  };
+}
+
 async function loadOrders(req, res) {
   const search = String(firstQueryValue(req.query?.q) || "").trim();
   const status = String(firstQueryValue(req.query?.status) || "").trim();
@@ -837,6 +852,40 @@ async function loadInventoryMovements(req, res) {
   });
 }
 
+async function lookupInventoryBySku(req, res) {
+  const sku = cleanText(firstQueryValue(req.query?.sku));
+
+  if (!sku) {
+    return sendJson(res, 400, { error: "sku is required." });
+  }
+
+  const variants = await supabaseRequest(
+    `/shop_product_variants?sku=eq.${encodeURIComponent(sku)}&select=*&limit=2`
+  );
+
+  if (!variants?.length) {
+    return sendJson(res, 404, { error: "Product variant not found." });
+  }
+
+  if (variants.length > 1) {
+    return sendJson(res, 409, {
+      error: "商品編號重複，請先修正商品資料。",
+    });
+  }
+
+  const variant = variants[0];
+  const products = await supabaseRequest(
+    `/shop_products?id=eq.${encodeURIComponent(variant.product_id)}&select=id,slug,name,category,status,cover_image_url&limit=1`
+  );
+  const product = products?.[0];
+
+  if (!product) {
+    return sendJson(res, 404, { error: "Product not found." });
+  }
+
+  return sendJson(res, 200, normalizeInventoryLookup(product, variant));
+}
+
 async function handleInventoryAdjustment(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -919,6 +968,10 @@ export default async function handler(req, res) {
 
     if (req.method === "GET" && action === "inventory-movements") {
       return await loadInventoryMovements(req, res);
+    }
+
+    if (req.method === "GET" && action === "inventory-lookup") {
+      return await lookupInventoryBySku(req, res);
     }
 
     if (action === "inventory-adjust") {

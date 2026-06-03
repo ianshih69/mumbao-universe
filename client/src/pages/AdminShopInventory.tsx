@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import VariantQrCode from "@/components/shop/VariantQrCode";
 import {
   type AdminShopProductDetail,
   type AdminShopProductSummary,
@@ -376,6 +377,12 @@ export default function AdminShopInventory() {
           </div>
           <div className="flex flex-wrap gap-3">
             <a
+              href="/admin/shop/scan"
+              className="inline-flex h-10 items-center rounded-full border border-stone-200 bg-white px-4 text-sm text-stone-700 hover:bg-stone-50"
+            >
+              掃描入庫
+            </a>
+            <a
               href="/admin/shop/products"
               className="inline-flex h-10 items-center rounded-full border border-stone-200 bg-white px-4 text-sm text-stone-700 hover:bg-stone-50"
             >
@@ -510,6 +517,14 @@ export default function AdminShopInventory() {
                 </p>
               </div>
             </div>
+
+            {selectedVariant && (
+              <VariantQrCode
+                sku={selectedVariant.sku}
+                title="商品 QR code"
+                subtitle="可下載後印成入庫貼紙"
+              />
+            )}
 
             <div className="grid gap-3 md:grid-cols-3">
               {actionOptions.map((option) => {

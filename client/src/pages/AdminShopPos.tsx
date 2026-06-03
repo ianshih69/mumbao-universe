@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import {
   Camera,
+  CheckCircle2,
   LogOut,
   PackageCheck,
   PackageSearch,
@@ -42,6 +43,15 @@ type PosCartItem = {
   unit_price: number;
   inventory: number;
   quantity: number;
+};
+
+type LastAddedItem = {
+  variant_id: string;
+  product_name: string;
+  sku?: string;
+  quantity: number;
+  subtotal: number;
+  wasExisting: boolean;
 };
 
 const paymentLabels: Record<PosPaymentMethod, string> = {
@@ -107,6 +117,8 @@ export default function AdminShopPos() {
   const [searchText, setSearchText] = useState("");
   const [manualSku, setManualSku] = useState("");
   const [scannedSku, setScannedSku] = useState("");
+  const [lastAddedItem, setLastAddedItem] = useState<LastAddedItem | null>(null);
+  const [highlightedVariantId, setHighlightedVariantId] = useState("");
   const [searchResults, setSearchResults] = useState<AdminInventorySearchResult[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>("cash");
   const [lastOrder, setLastOrder] = useState<ManualSaleOrder | null>(null);
@@ -117,8 +129,11 @@ export default function AdminShopPos() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const cartSectionRef = useRef<HTMLElement | null>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
   const lastScanRef = useRef("");
+  const lastScanAtRef = useRef(0);
+  const highlightTimerRef = useRef<number | null>(null);
 
   const total = useMemo(
     () =>
@@ -128,6 +143,27 @@ export default function AdminShopPos() {
       ),
     [cartItems]
   );
+  const totalQuantity = useMemo(
+    () => cartItems.reduce((sum, item) => sum + Math.max(item.quantity, 0), 0),
+    [cartItems]
+  );
+
+  const scrollToCart = useCallback(() => {
+    window.setTimeout(() => {
+      cartSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+  }, []);
+
+  const flashItem = useCallback((variantId: string) => {
+    setHighlightedVariantId(variantId);
+    if (highlightTimerRef.current) {
+      window.clearTimeout(highlightTimerRef.current);
+    }
+    highlightTimerRef.current = window.setTimeout(() => {
+      setHighlightedVariantId("");
+      highlightTimerRef.current = null;
+    }, 1500);
+  }, []);
 
   const stopScanner = useCallback(() => {
     controlsRef.current?.stop();
@@ -135,30 +171,53 @@ export default function AdminShopPos() {
     setIsScanning(false);
   }, []);
 
-  useEffect(() => stopScanner, [stopScanner]);
+  useEffect(() => {
+    return () => {
+      stopScanner();
+      if (highlightTimerRef.current) {
+        window.clearTimeout(highlightTimerRef.current);
+      }
+    };
+  }, [stopScanner]);
 
-  const addLookupToCart = useCallback((lookup: AdminInventoryLookup) => {
-    const nextItem = toCartItem(lookup);
+  const addLookupToCart = useCallback(
+    (lookup: AdminInventoryLookup) => {
+      const nextItem = toCartItem(lookup);
 
-    setCartItems((current) => {
-      const existing = current.find((item) => item.variant_id === nextItem.variant_id);
-      if (!existing) return [nextItem, ...current];
+      setCartItems((current) => {
+        const existing = current.find((item) => item.variant_id === nextItem.variant_id);
+        const nextQuantity = existing ? existing.quantity + 1 : 1;
+        const feedback: LastAddedItem = {
+          variant_id: nextItem.variant_id,
+          product_name: nextItem.product_name,
+          sku: nextItem.sku,
+          quantity: nextQuantity,
+          subtotal: nextQuantity * nextItem.unit_price,
+          wasExisting: Boolean(existing),
+        };
 
-      const nextQuantity = existing.quantity + 1;
-      return current.map((item) =>
-        item.variant_id === nextItem.variant_id
-          ? {
-              ...item,
-              inventory: nextItem.inventory,
-              unit_price: nextItem.unit_price,
-              quantity: nextQuantity,
-            }
-          : item
-      );
-    });
-    setLastOrder(null);
-    setSuccess(`${lookup.product.name} 已加入銷售清單`);
-  }, []);
+        setLastAddedItem(feedback);
+        flashItem(nextItem.variant_id);
+
+        if (!existing) return [nextItem, ...current];
+
+        return current.map((item) =>
+          item.variant_id === nextItem.variant_id
+            ? {
+                ...item,
+                inventory: nextItem.inventory,
+                unit_price: nextItem.unit_price,
+                quantity: nextQuantity,
+              }
+            : item
+        );
+      });
+
+      setLastOrder(null);
+      scrollToCart();
+    },
+    [flashItem, scrollToCart]
+  );
 
   const addSkuToCart = useCallback(
     async (rawSku: string, source: "scan" | "manual" = "manual") => {
@@ -196,7 +255,6 @@ export default function AdminShopPos() {
     setError("");
     setSuccess("相機啟動中，請將 QR code 放入框內。");
     setScannedSku("");
-    lastScanRef.current = "";
 
     try {
       const reader = new BrowserQRCodeReader();
@@ -208,9 +266,14 @@ export default function AdminShopPos() {
           if (!rawText) return;
 
           const sku = parseSkuFromQrValue(rawText);
-          if (!sku || lastScanRef.current === sku) return;
+          const now = Date.now();
+          if (!sku) return;
+          if (lastScanRef.current === sku && now - lastScanAtRef.current < 1000) {
+            return;
+          }
 
           lastScanRef.current = sku;
+          lastScanAtRef.current = now;
           controlsRef.current?.stop();
           controlsRef.current = null;
           setIsScanning(false);
@@ -221,11 +284,9 @@ export default function AdminShopPos() {
       controlsRef.current = controls;
       setIsScanning(true);
       setSuccess("掃描中，請將 QR code 放入框內。建議使用 Safari / Chrome，不建議用 LINE 內建瀏覽器。");
-    } catch (scanError) {
+    } catch {
       setIsScanning(false);
-      setError(
-        "相機無法啟動，請確認瀏覽器權限，或改用手動輸入商品編號"
-      );
+      setError("相機無法啟動，請確認瀏覽器權限，或改用手動輸入商品編號");
     }
   };
 
@@ -253,6 +314,7 @@ export default function AdminShopPos() {
     setLastOrder(null);
     setManualSku("");
     setScannedSku("");
+    setLastAddedItem(null);
   };
 
   const submitManualSku = (event: FormEvent) => {
@@ -264,7 +326,6 @@ export default function AdminShopPos() {
     setScannedSku("");
     setSuccess("");
     setError("");
-    lastScanRef.current = "";
     startScanner();
   };
 
@@ -291,14 +352,26 @@ export default function AdminShopPos() {
   const updateQuantity = (variantId: string, value: string) => {
     const nextQuantity = Math.max(numberValue(value), 1);
     setCartItems((current) =>
-      current.map((item) =>
-        item.variant_id === variantId ? { ...item, quantity: nextQuantity } : item
-      )
+      current.map((item) => {
+        if (item.variant_id !== variantId) return item;
+        const nextItem = { ...item, quantity: nextQuantity };
+        setLastAddedItem({
+          variant_id: item.variant_id,
+          product_name: item.product_name,
+          sku: item.sku,
+          quantity: nextQuantity,
+          subtotal: nextQuantity * item.unit_price,
+          wasExisting: true,
+        });
+        flashItem(item.variant_id);
+        return nextItem;
+      })
     );
   };
 
   const removeItem = (variantId: string) => {
     setCartItems((current) => current.filter((item) => item.variant_id !== variantId));
+    if (lastAddedItem?.variant_id === variantId) setLastAddedItem(null);
   };
 
   const completeSale = async () => {
@@ -319,6 +392,7 @@ export default function AdminShopPos() {
 
       setCartItems([]);
       setSearchResults([]);
+      setLastAddedItem(null);
       setError("");
       setLastOrder(order);
       setSuccess(`現場銷售完成：${order.order_number}`);
@@ -402,8 +476,39 @@ export default function AdminShopPos() {
         </div>
       </header>
 
+      <div className="sticky top-0 z-20 border-b border-stone-200 bg-white/95 px-5 py-3 shadow-sm backdrop-blur md:hidden">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+          <div className="min-w-0 text-sm">
+            <p className="font-semibold text-stone-900">
+              銷售清單：{cartItems.length} 種商品 / 共 {totalQuantity} 件
+            </p>
+            <p className="text-xs text-stone-500">總金額 {formatPrice(total)}</p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0 rounded-full bg-white"
+            onClick={scrollToCart}
+          >
+            查看銷售清單
+          </Button>
+        </div>
+      </div>
+
       <div className="mx-auto grid max-w-7xl gap-6 px-5 py-6 xl:grid-cols-[minmax(0,1fr)_420px] md:px-8 md:py-8">
         <section className="space-y-5">
+          <div className="hidden rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm md:flex md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-stone-900">
+                銷售清單：{cartItems.length} 種商品 / 共 {totalQuantity} 件
+              </p>
+              <p className="mt-1 text-sm text-stone-500">總金額 {formatPrice(total)}</p>
+            </div>
+            <Button variant="outline" className="rounded-full bg-white" onClick={scrollToCart}>
+              查看銷售清單
+            </Button>
+          </div>
+
           {error && (
             <div className="rounded-[8px] border border-red-100 bg-red-50 p-4 text-sm text-red-600">
               {error}
@@ -412,6 +517,53 @@ export default function AdminShopPos() {
           {success && (
             <div className="rounded-[8px] border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-700">
               {success}
+            </div>
+          )}
+          {lastAddedItem && (
+            <div className="rounded-[8px] border border-emerald-100 bg-white p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
+                <div className="min-w-0">
+                  <p className="font-semibold text-emerald-700">
+                    {lastAddedItem.wasExisting
+                      ? `已增加數量，目前數量 ${lastAddedItem.quantity}`
+                      : "已加入銷售清單"}
+                  </p>
+                  <p className="mt-2 text-sm text-stone-900">
+                    商品：{lastAddedItem.product_name}
+                  </p>
+                  {lastAddedItem.sku && (
+                    <p className="mt-1 break-all font-mono text-xs text-stone-500">
+                      商品編號：{lastAddedItem.sku}
+                    </p>
+                  )}
+                  <p className="mt-1 text-sm text-stone-600">
+                    目前數量：{lastAddedItem.quantity}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-stone-900">
+                    小計：{formatPrice(lastAddedItem.subtotal)}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full bg-white"
+                  onClick={continueScanning}
+                  disabled={isScanning}
+                >
+                  <Camera className="h-4 w-4" />
+                  繼續掃描
+                </Button>
+                <Button
+                  type="button"
+                  className="rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
+                  onClick={scrollToCart}
+                >
+                  查看銷售清單
+                </Button>
+              </div>
             </div>
           )}
           {lastOrder && (
@@ -582,7 +734,10 @@ export default function AdminShopPos() {
           </div>
         </section>
 
-        <aside className="h-fit rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
+        <aside
+          ref={cartSectionRef}
+          className="h-fit scroll-mt-24 rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm"
+        >
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
@@ -605,8 +760,10 @@ export default function AdminShopPos() {
                 <div
                   key={item.variant_id}
                   className={cn(
-                    "rounded-[8px] border bg-[#fbf7f1] p-3",
-                    item.quantity > item.inventory ? "border-red-200" : "border-stone-100"
+                    "rounded-[8px] border bg-[#fbf7f1] p-3 transition duration-300",
+                    item.quantity > item.inventory ? "border-red-200" : "border-stone-100",
+                    highlightedVariantId === item.variant_id &&
+                      "border-emerald-300 bg-emerald-50 shadow-lg shadow-emerald-100"
                   )}
                 >
                   <div className="flex items-start gap-3">
@@ -614,18 +771,18 @@ export default function AdminShopPos() {
                       <img
                         src={item.product_image_url}
                         alt={item.product_name}
-                        className="size-14 rounded-[6px] bg-white object-cover"
+                        className="size-16 rounded-[6px] bg-white object-cover sm:size-14"
                       />
                     ) : (
-                      <span className="flex size-14 items-center justify-center rounded-[6px] bg-white text-stone-300">
+                      <span className="flex size-16 items-center justify-center rounded-[6px] bg-white text-stone-300 sm:size-14">
                         <PackageCheck className="h-5 w-5" />
                       </span>
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="line-clamp-2 text-sm font-medium text-stone-900">
+                      <p className="line-clamp-2 text-base font-semibold text-stone-900 sm:text-sm">
                         {item.product_name}
                       </p>
-                      <p className="mt-1 text-xs text-stone-500">
+                      <p className="mt-1 text-sm text-stone-600 sm:text-xs">
                         {getVariantLabel(item.variant_name, item.variant_option)}
                       </p>
                       {item.sku && (
@@ -643,25 +800,36 @@ export default function AdminShopPos() {
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
-                  <div className="mt-3 grid grid-cols-[1fr_100px] items-end gap-3">
-                    <div className="text-sm">
-                      <p className="text-stone-500">{formatPrice(item.unit_price)}</p>
-                      <p className="mt-1 text-xs text-stone-400">目前庫存 {item.inventory}</p>
+                  <div className="mt-4 grid gap-3 rounded-[8px] bg-white p-3 sm:grid-cols-[1fr_100px] sm:items-end">
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-xs text-stone-400">單價</p>
+                        <p className="font-medium text-stone-900">
+                          {formatPrice(item.unit_price)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-stone-400">目前庫存</p>
+                        <p className="font-medium text-stone-900">{item.inventory}</p>
+                      </div>
                       {item.quantity > item.inventory && (
-                        <p className="mt-1 text-xs text-red-600">
+                        <p className="col-span-2 text-xs text-red-600">
                           數量超過目前庫存，送出時會失敗
                         </p>
                       )}
                     </div>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={item.quantity}
-                      onChange={(event) => updateQuantity(item.variant_id, event.target.value)}
-                      className="h-10 rounded-[8px] bg-white text-right"
-                    />
+                    <label className="space-y-1 text-sm">
+                      <span className="font-medium text-stone-900">數量</span>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={item.quantity}
+                        onChange={(event) => updateQuantity(item.variant_id, event.target.value)}
+                        className="h-11 rounded-[8px] bg-white text-right text-base"
+                      />
+                    </label>
                   </div>
-                  <div className="mt-3 flex justify-between border-t border-stone-100 pt-3 text-sm">
+                  <div className="mt-3 flex justify-between border-t border-stone-100 pt-3 text-base">
                     <span className="text-stone-500">小計</span>
                     <span className="font-semibold text-stone-900">
                       {formatPrice(item.unit_price * item.quantity)}

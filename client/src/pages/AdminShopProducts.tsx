@@ -1,0 +1,868 @@
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import {
+  Boxes,
+  ImageOff,
+  LogOut,
+  PackageSearch,
+  RefreshCw,
+  Save,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  type AdminProductStatus,
+  type AdminShopImage,
+  type AdminShopProductDetail,
+  type AdminShopProductSummary,
+  type AdminShopVariant,
+  type AdminVariantStatus,
+  fetchAdminShopProduct,
+  fetchAdminShopProducts,
+  updateAdminShopProduct,
+} from "@/lib/shop/adminProductsApi";
+import { formatPrice } from "@/lib/shop/format";
+import { cn } from "@/lib/utils";
+
+const adminProductTokenKey = "mumbao-admin-shop-order-token";
+const productListLimit = 30;
+
+const productStatusLabels: Record<AdminProductStatus, string> = {
+  draft: "草稿",
+  published: "上架",
+  archived: "封存",
+};
+
+const variantStatusLabels: Record<AdminVariantStatus, string> = {
+  active: "啟用",
+  inactive: "停用",
+};
+
+const productStatusOptions: Array<{ value: "" | AdminProductStatus; label: string }> = [
+  { value: "", label: "全部狀態" },
+  { value: "published", label: "上架 published" },
+  { value: "draft", label: "草稿 draft" },
+  { value: "archived", label: "封存 archived" },
+];
+
+const editableProductStatuses: AdminProductStatus[] = ["draft", "published", "archived"];
+const editableVariantStatuses: AdminVariantStatus[] = ["active", "inactive"];
+
+function getStoredAdminToken() {
+  try {
+    return sessionStorage.getItem(adminProductTokenKey) || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveAdminToken(token: string) {
+  sessionStorage.setItem(adminProductTokenKey, token);
+}
+
+function clearAdminToken() {
+  sessionStorage.removeItem(adminProductTokenKey);
+}
+
+function formatDateTime(value?: string) {
+  if (!value || Number.isNaN(Date.parse(value))) return "-";
+
+  return new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+}
+
+function numberValue(value: string) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function StatusPill({
+  children,
+  tone = "stone",
+}: {
+  children: ReactNode;
+  tone?: "stone" | "green" | "pink" | "red";
+}) {
+  const toneClass = {
+    stone: "border-stone-200 bg-stone-50 text-stone-600",
+    green: "border-emerald-100 bg-emerald-50 text-emerald-700",
+    pink: "border-pink-100 bg-pink-50 text-pink-700",
+    red: "border-red-100 bg-red-50 text-red-600",
+  }[tone];
+
+  return (
+    <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-xs", toneClass)}>
+      {children}
+    </span>
+  );
+}
+
+function getProductTone(status: AdminProductStatus) {
+  if (status === "published") return "green";
+  if (status === "archived") return "red";
+  return "stone";
+}
+
+function getVariantTone(status: AdminVariantStatus) {
+  return status === "active" ? "green" : "stone";
+}
+
+export default function AdminShopProducts() {
+  const [token, setToken] = useState(() => getStoredAdminToken());
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [products, setProducts] = useState<AdminShopProductSummary[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState<AdminShopProductDetail | null>(null);
+  const [searchInput, setSearchInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<"" | AdminProductStatus>("");
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const selectedSummary = useMemo(
+    () => products.find((product) => product.id === selectedProductId),
+    [products, selectedProductId]
+  );
+
+  const loadProducts = useCallback(
+    async ({ nextPage = 0, append = false }: { nextPage?: number; append?: boolean } = {}) => {
+      if (!token) return;
+
+      setIsLoading(true);
+      try {
+        const data = await fetchAdminShopProducts({
+          token,
+          q: query,
+          status,
+          page: nextPage,
+          limit: productListLimit,
+        });
+        const nextProducts = data.products || [];
+
+        setProducts((current) => (append ? [...current, ...nextProducts] : nextProducts));
+        setPage(typeof data.nextPage === "number" ? data.nextPage : nextPage + 1);
+        setHasMore(Boolean(data.hasMore));
+        setError("");
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : "商品列表載入失敗");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [query, status, token]
+  );
+
+  const loadProductDetail = useCallback(
+    async (productId: string) => {
+      if (!token || !productId) return;
+
+      setSelectedProductId(productId);
+      setIsDetailLoading(true);
+      setSuccess("");
+      try {
+        const detail = await fetchAdminShopProduct(token, productId);
+        setSelectedProduct(detail);
+        setError("");
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : "商品明細載入失敗");
+      } finally {
+        setIsDetailLoading(false);
+      }
+    },
+    [token]
+  );
+
+  useEffect(() => {
+    if (!token) return;
+    loadProducts({ nextPage: 0 });
+  }, [loadProducts, token]);
+
+  const handleLogin = (event: FormEvent) => {
+    event.preventDefault();
+    const nextToken = password.trim();
+
+    if (!nextToken) {
+      setLoginError("請輸入 ADMIN_PASSWORD");
+      return;
+    }
+
+    saveAdminToken(nextToken);
+    setToken(nextToken);
+    setLoginError("");
+  };
+
+  const logout = () => {
+    clearAdminToken();
+    setToken("");
+    setPassword("");
+    setProducts([]);
+    setSelectedProductId("");
+    setSelectedProduct(null);
+  };
+
+  const submitSearch = (event: FormEvent) => {
+    event.preventDefault();
+    setQuery(searchInput.trim());
+    setSelectedProductId("");
+    setSelectedProduct(null);
+  };
+
+  const updateProductField = <K extends keyof AdminShopProductDetail>(
+    field: K,
+    value: AdminShopProductDetail[K]
+  ) => {
+    setSelectedProduct((current) => (current ? { ...current, [field]: value } : current));
+  };
+
+  const updateVariantField = <K extends keyof AdminShopVariant>(
+    variantId: string,
+    field: K,
+    value: AdminShopVariant[K]
+  ) => {
+    setSelectedProduct((current) =>
+      current
+        ? {
+            ...current,
+            variants: current.variants.map((variant) =>
+              variant.id === variantId ? { ...variant, [field]: value } : variant
+            ),
+          }
+        : current
+    );
+  };
+
+  const updateImageField = <K extends keyof AdminShopImage>(
+    imageId: string,
+    field: K,
+    value: AdminShopImage[K]
+  ) => {
+    setSelectedProduct((current) =>
+      current
+        ? {
+            ...current,
+            images: current.images.map((image) =>
+              image.id === imageId ? { ...image, [field]: value } : image
+            ),
+          }
+        : current
+    );
+  };
+
+  const saveProduct = async () => {
+    if (!token || !selectedProduct) return;
+
+    setIsSaving(true);
+    setSuccess("");
+    try {
+      const saved = await updateAdminShopProduct({
+        token,
+        product: {
+          id: selectedProduct.id,
+          name: selectedProduct.name,
+          slug: selectedProduct.slug,
+          subtitle: selectedProduct.subtitle || "",
+          description: selectedProduct.description || "",
+          category: selectedProduct.category,
+          status: selectedProduct.status,
+          featured: selectedProduct.featured,
+          sort_order: selectedProduct.sort_order,
+          cover_image_url: selectedProduct.cover_image_url || "",
+        },
+        variants: selectedProduct.variants,
+        images: selectedProduct.images,
+      });
+
+      setSelectedProduct(saved);
+      setProducts((current) =>
+        current.map((product) => (product.id === saved.id ? saved : product))
+      );
+      setError("");
+      setSuccess("商品已更新");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "商品更新失敗");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (!token) {
+    return (
+      <main className="flex min-h-[100svh] items-center justify-center bg-[#f7f2ea] px-5 text-stone-900">
+        <form
+          onSubmit={handleLogin}
+          className="w-full max-w-md rounded-[8px] border border-stone-200 bg-white p-7 shadow-xl shadow-stone-200/70"
+        >
+          <div className="mb-6 flex items-center gap-3">
+            <div className="flex size-11 items-center justify-center rounded-full bg-[#8b6f5b] text-white">
+              <ShieldCheck className="size-5" />
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
+                MUMBAO Admin
+              </p>
+              <h1 className="text-2xl font-semibold">商品管理登入</h1>
+            </div>
+          </div>
+          <Input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="請輸入 ADMIN_PASSWORD"
+            className="h-11 rounded-[8px]"
+          />
+          {loginError && <p className="mt-3 text-sm text-red-600">{loginError}</p>}
+          <Button
+            type="submit"
+            className="mt-5 h-11 w-full rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
+          >
+            進入商品管理
+          </Button>
+        </form>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-[100svh] bg-[#f7f2ea] text-stone-900">
+      <header className="border-b border-stone-200 bg-white/95 px-5 py-5 backdrop-blur md:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
+              MUMBAO Shop Admin
+            </p>
+            <h1 className="mt-2 font-serif text-3xl font-light tracking-wide">
+              商品管理
+            </h1>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <a
+              href="/admin/shop/orders"
+              className="inline-flex h-10 items-center rounded-full border border-stone-200 bg-white px-4 text-sm text-stone-700 hover:bg-stone-50"
+            >
+              訂單管理
+            </a>
+            <Button
+              variant="outline"
+              className="rounded-full bg-white"
+              onClick={() => loadProducts({ nextPage: 0 })}
+              disabled={isLoading}
+            >
+              <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+              重新整理
+            </Button>
+            <Button variant="ghost" className="rounded-full" onClick={logout}>
+              <LogOut className="h-4 w-4" />
+              登出
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <div className="mx-auto grid max-w-7xl gap-6 px-5 py-6 xl:grid-cols-[minmax(0,1fr)_520px] md:px-8 md:py-8">
+        <section className="space-y-4">
+          <form
+            onSubmit={submitSearch}
+            className="rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm"
+          >
+            <div className="grid gap-3 md:grid-cols-[1fr_220px_auto] md:items-center">
+              <label className="flex h-11 items-center gap-2 rounded-full border border-stone-200 bg-stone-50 px-4">
+                <Search className="h-4 w-4 text-stone-400" />
+                <input
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  placeholder="搜尋商品名稱、slug、分類"
+                  className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                />
+              </label>
+              <select
+                value={status}
+                onChange={(event) => {
+                  setStatus(event.target.value as "" | AdminProductStatus);
+                  setSelectedProductId("");
+                  setSelectedProduct(null);
+                }}
+                className="h-11 rounded-full border border-stone-200 bg-white px-4 text-sm outline-none"
+              >
+                {productStatusOptions.map((option) => (
+                  <option key={option.value || "all"} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="submit"
+                className="h-11 rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
+              >
+                搜尋
+              </Button>
+            </div>
+          </form>
+
+          {error && (
+            <div className="rounded-[8px] border border-red-100 bg-red-50 p-4 text-sm text-red-600">
+              {error}
+            </div>
+          )}
+          {success && (
+            <div className="rounded-[8px] border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-700">
+              {success}
+            </div>
+          )}
+
+          <div className="overflow-x-auto rounded-[8px] border border-stone-200 bg-white shadow-sm">
+            <div className="min-w-[860px]">
+              <div className="grid grid-cols-[76px_1.4fr_0.9fr_0.8fr_0.7fr_0.7fr_0.7fr_0.7fr_0.9fr] gap-3 border-b border-stone-100 bg-[#fbf7f1] px-4 py-3 text-xs font-medium text-stone-500">
+                <span>主圖</span>
+                <span>商品</span>
+                <span>分類</span>
+                <span>狀態</span>
+                <span>精選</span>
+                <span>最低價</span>
+                <span>庫存</span>
+                <span>規格/圖</span>
+                <span>更新時間</span>
+              </div>
+
+              {products.length === 0 ? (
+                <div className="px-5 py-14 text-center text-stone-400">
+                  <PackageSearch className="mx-auto mb-3 h-9 w-9" />
+                  <p>{isLoading ? "商品載入中..." : "目前沒有符合條件的商品"}</p>
+                </div>
+              ) : (
+                products.map((product) => {
+                  const isSelected = selectedProductId === product.id;
+
+                  return (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => loadProductDetail(product.id)}
+                      className={cn(
+                        "grid w-full grid-cols-[76px_1.4fr_0.9fr_0.8fr_0.7fr_0.7fr_0.7fr_0.7fr_0.9fr] gap-3 border-b border-stone-100 px-4 py-3 text-left text-sm transition last:border-b-0",
+                        isSelected ? "bg-[#f4ece2]" : "bg-white hover:bg-stone-50"
+                      )}
+                    >
+                      <span className="block">
+                        {product.cover_image_url ? (
+                          <img
+                            src={product.cover_image_url}
+                            alt={product.name}
+                            className="size-14 rounded-[6px] bg-[#f6f1ea] object-cover"
+                          />
+                        ) : (
+                          <span className="flex size-14 items-center justify-center rounded-[6px] bg-[#f6f1ea] text-stone-300">
+                            <ImageOff className="h-5 w-5" />
+                          </span>
+                        )}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold text-stone-900">
+                          {product.name}
+                        </span>
+                        <span className="mt-1 block truncate text-xs text-stone-400">
+                          {product.slug}
+                        </span>
+                      </span>
+                      <span className="truncate text-stone-700">{product.category}</span>
+                      <StatusPill tone={getProductTone(product.status)}>
+                        {productStatusLabels[product.status]}
+                      </StatusPill>
+                      <span className="text-stone-600">
+                        {product.featured ? "是" : "否"}
+                      </span>
+                      <span className="font-medium text-stone-800">
+                        {formatPrice(product.min_price)}
+                      </span>
+                      <span className="text-stone-700">{product.total_inventory}</span>
+                      <span className="text-stone-600">
+                        {product.variant_count} / {product.image_count}
+                      </span>
+                      <span className="text-xs text-stone-500">
+                        {formatDateTime(product.updated_at)}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {hasMore && (
+            <Button
+              variant="outline"
+              className="w-full rounded-full bg-white"
+              disabled={isLoading}
+              onClick={() => loadProducts({ nextPage: page, append: true })}
+            >
+              載入更多商品
+            </Button>
+          )}
+        </section>
+
+        <aside className="h-fit rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
+          {isDetailLoading ? (
+            <div className="py-12 text-center text-sm text-stone-400">商品明細載入中...</div>
+          ) : selectedProduct ? (
+            <div className="space-y-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
+                    Product Detail
+                  </p>
+                  <h2 className="mt-1 text-xl font-semibold">{selectedProduct.name}</h2>
+                  <p className="mt-1 text-xs text-stone-400">{selectedProduct.slug}</p>
+                </div>
+                <Boxes className="h-6 w-6 text-[#b99aa2]" />
+              </div>
+
+              <div className="grid gap-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium text-stone-900">商品名稱</span>
+                    <Input
+                      value={selectedProduct.name}
+                      onChange={(event) => updateProductField("name", event.target.value)}
+                      className="rounded-[8px]"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium text-stone-900">Slug</span>
+                    <Input
+                      value={selectedProduct.slug}
+                      onChange={(event) => updateProductField("slug", event.target.value)}
+                      className="rounded-[8px]"
+                    />
+                  </label>
+                </div>
+
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-stone-900">副標題</span>
+                  <Input
+                    value={selectedProduct.subtitle || ""}
+                    onChange={(event) => updateProductField("subtitle", event.target.value)}
+                    className="rounded-[8px]"
+                  />
+                </label>
+
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-stone-900">商品描述</span>
+                  <Textarea
+                    value={selectedProduct.description || ""}
+                    onChange={(event) => updateProductField("description", event.target.value)}
+                    className="min-h-28 rounded-[8px]"
+                  />
+                </label>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium text-stone-900">分類</span>
+                    <Input
+                      value={selectedProduct.category}
+                      onChange={(event) => updateProductField("category", event.target.value)}
+                      className="rounded-[8px]"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium text-stone-900">排序</span>
+                    <Input
+                      type="number"
+                      value={selectedProduct.sort_order}
+                      onChange={(event) =>
+                        updateProductField("sort_order", numberValue(event.target.value))
+                      }
+                      className="rounded-[8px]"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium text-stone-900">狀態</span>
+                    <select
+                      value={selectedProduct.status}
+                      onChange={(event) =>
+                        updateProductField("status", event.target.value as AdminProductStatus)
+                      }
+                      className="h-10 w-full rounded-[8px] border border-stone-200 bg-white px-3"
+                    >
+                      {editableProductStatuses.map((option) => (
+                        <option key={option} value={option}>
+                          {productStatusLabels[option]} {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium text-stone-900">Featured</span>
+                    <select
+                      value={selectedProduct.featured ? "true" : "false"}
+                      onChange={(event) =>
+                        updateProductField("featured", event.target.value === "true")
+                      }
+                      className="h-10 w-full rounded-[8px] border border-stone-200 bg-white px-3"
+                    >
+                      <option value="true">是</option>
+                      <option value="false">否</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-stone-900">主圖 URL</span>
+                  <Input
+                    value={selectedProduct.cover_image_url || ""}
+                    onChange={(event) =>
+                      updateProductField("cover_image_url", event.target.value)
+                    }
+                    placeholder="/shop-products/01.png"
+                    className="rounded-[8px]"
+                  />
+                </label>
+              </div>
+
+              <section className="space-y-3 border-t border-stone-100 pt-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-stone-900">規格</h3>
+                  <span className="text-xs text-stone-400">
+                    只編輯既有規格，不新增不刪除
+                  </span>
+                </div>
+                {selectedProduct.variants.length === 0 ? (
+                  <p className="rounded-[8px] bg-stone-50 p-4 text-sm text-stone-400">
+                    目前沒有規格
+                  </p>
+                ) : (
+                  selectedProduct.variants.map((variant) => (
+                    <div
+                      key={variant.id}
+                      className="space-y-3 rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-4"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-stone-900">
+                          {variant.variant_name || "未命名規格"}
+                        </p>
+                        <StatusPill tone={getVariantTone(variant.status)}>
+                          {variantStatusLabels[variant.status]}
+                        </StatusPill>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="space-y-1 text-xs text-stone-500">
+                          <span>規格名稱</span>
+                          <Input
+                            value={variant.variant_name}
+                            onChange={(event) =>
+                              updateVariantField(variant.id, "variant_name", event.target.value)
+                            }
+                            className="h-9 rounded-[8px] bg-white"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs text-stone-500">
+                          <span>選項</span>
+                          <Input
+                            value={variant.variant_option || ""}
+                            onChange={(event) =>
+                              updateVariantField(variant.id, "variant_option", event.target.value)
+                            }
+                            className="h-9 rounded-[8px] bg-white"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs text-stone-500">
+                          <span>SKU</span>
+                          <Input
+                            value={variant.sku || ""}
+                            onChange={(event) =>
+                              updateVariantField(variant.id, "sku", event.target.value)
+                            }
+                            className="h-9 rounded-[8px] bg-white"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs text-stone-500">
+                          <span>狀態</span>
+                          <select
+                            value={variant.status}
+                            onChange={(event) =>
+                              updateVariantField(
+                                variant.id,
+                                "status",
+                                event.target.value as AdminVariantStatus
+                              )
+                            }
+                            className="h-9 w-full rounded-[8px] border border-stone-200 bg-white px-3"
+                          >
+                            {editableVariantStatuses.map((option) => (
+                              <option key={option} value={option}>
+                                {variantStatusLabels[option]} {option}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="space-y-1 text-xs text-stone-500">
+                          <span>價格</span>
+                          <Input
+                            type="number"
+                            value={variant.price}
+                            onChange={(event) =>
+                              updateVariantField(
+                                variant.id,
+                                "price",
+                                numberValue(event.target.value)
+                              )
+                            }
+                            className="h-9 rounded-[8px] bg-white"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs text-stone-500">
+                          <span>原價</span>
+                          <Input
+                            type="number"
+                            value={variant.compare_at_price ?? ""}
+                            onChange={(event) =>
+                              updateVariantField(
+                                variant.id,
+                                "compare_at_price",
+                                event.target.value === "" ? null : numberValue(event.target.value)
+                              )
+                            }
+                            className="h-9 rounded-[8px] bg-white"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs text-stone-500">
+                          <span>庫存</span>
+                          <Input
+                            type="number"
+                            value={variant.inventory}
+                            onChange={(event) =>
+                              updateVariantField(
+                                variant.id,
+                                "inventory",
+                                numberValue(event.target.value)
+                              )
+                            }
+                            className="h-9 rounded-[8px] bg-white"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs text-stone-500">
+                          <span>排序</span>
+                          <Input
+                            type="number"
+                            value={variant.sort_order}
+                            onChange={(event) =>
+                              updateVariantField(
+                                variant.id,
+                                "sort_order",
+                                numberValue(event.target.value)
+                              )
+                            }
+                            className="h-9 rounded-[8px] bg-white"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </section>
+
+              <section className="space-y-3 border-t border-stone-100 pt-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-stone-900">圖片</h3>
+                  <span className="text-xs text-stone-400">
+                    只編輯既有圖片 URL，不上傳不刪除
+                  </span>
+                </div>
+                {selectedProduct.images.length === 0 ? (
+                  <p className="rounded-[8px] bg-stone-50 p-4 text-sm text-stone-400">
+                    目前沒有圖片
+                  </p>
+                ) : (
+                  selectedProduct.images.map((image) => (
+                    <div
+                      key={image.id}
+                      className="grid gap-3 rounded-[8px] border border-stone-100 p-3 sm:grid-cols-[72px_1fr]"
+                    >
+                      {image.image_url ? (
+                        <img
+                          src={image.image_url}
+                          alt={image.alt || selectedProduct.name}
+                          className="size-16 rounded-[6px] bg-[#f6f1ea] object-cover"
+                        />
+                      ) : (
+                        <span className="flex size-16 items-center justify-center rounded-[6px] bg-[#f6f1ea] text-stone-300">
+                          <ImageOff className="h-5 w-5" />
+                        </span>
+                      )}
+                      <div className="grid gap-2">
+                        <Input
+                          value={image.image_url}
+                          onChange={(event) =>
+                            updateImageField(image.id, "image_url", event.target.value)
+                          }
+                          placeholder="/shop-products/01.png"
+                          className="h-9 rounded-[8px]"
+                        />
+                        <div className="grid gap-2 sm:grid-cols-[1fr_90px]">
+                          <Input
+                            value={image.alt || ""}
+                            onChange={(event) =>
+                              updateImageField(image.id, "alt", event.target.value)
+                            }
+                            placeholder="圖片 alt"
+                            className="h-9 rounded-[8px]"
+                          />
+                          <Input
+                            type="number"
+                            value={image.sort_order}
+                            onChange={(event) =>
+                              updateImageField(
+                                image.id,
+                                "sort_order",
+                                numberValue(event.target.value)
+                              )
+                            }
+                            className="h-9 rounded-[8px]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </section>
+
+              <div className="sticky bottom-4 rounded-[8px] border border-stone-200 bg-white/95 p-3 shadow-lg shadow-stone-200/70 backdrop-blur">
+                <Button
+                  type="button"
+                  onClick={saveProduct}
+                  disabled={isSaving}
+                  className="h-11 w-full rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
+                >
+                  <Save className="h-4 w-4" />
+                  {isSaving ? "儲存中..." : "儲存既有商品"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="py-14 text-center text-sm text-stone-400">
+              <PackageSearch className="mx-auto mb-3 h-9 w-9" />
+              <p>{selectedSummary ? "商品明細準備中..." : "請選擇一個既有商品進行編輯"}</p>
+            </div>
+          )}
+        </aside>
+      </div>
+    </main>
+  );
+}

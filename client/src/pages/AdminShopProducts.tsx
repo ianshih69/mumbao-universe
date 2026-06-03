@@ -462,7 +462,7 @@ export default function AdminShopProducts() {
   }
 
   return (
-    <main className="min-h-[100svh] bg-[#f7f2ea] pb-28 text-stone-900 md:pb-0">
+    <main className="min-h-[100svh] max-w-full overflow-x-hidden bg-[#f7f2ea] pb-[calc(140px+env(safe-area-inset-bottom))] text-stone-900 md:pb-0">
       <header className="border-b border-stone-200 bg-white/95 px-5 py-5 backdrop-blur md:px-8">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
@@ -505,8 +505,8 @@ export default function AdminShopProducts() {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl gap-6 px-5 py-6 xl:grid-cols-[minmax(0,1fr)_520px] md:px-8 md:py-8">
-        <section className="space-y-4">
+      <div className="mx-auto grid w-full max-w-7xl gap-6 overflow-x-hidden px-4 py-6 xl:grid-cols-[minmax(0,1fr)_520px] md:px-8 md:py-8">
+        <section className="min-w-0 max-w-full space-y-4 overflow-hidden">
           <form
             onSubmit={submitSearch}
             className="rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm"
@@ -556,7 +556,63 @@ export default function AdminShopProducts() {
             </div>
           )}
 
-          <div className="overflow-x-auto rounded-[8px] border border-stone-200 bg-white shadow-sm">
+          <div className="grid gap-3 md:hidden">
+            {products.length === 0 ? (
+              <div className="rounded-[8px] border border-stone-200 bg-white px-5 py-14 text-center text-stone-400">
+                <PackageSearch className="mx-auto mb-3 h-9 w-9" />
+                <p>{isLoading ? "商品載入中..." : "目前沒有符合條件的商品"}</p>
+              </div>
+            ) : (
+              products.map((product) => {
+                const isSelected = selectedProductId === product.id;
+
+                return (
+                  <button
+                    key={product.id}
+                    type="button"
+                    onClick={() => loadProductDetail(product.id)}
+                    className={cn(
+                      "grid w-full max-w-full grid-cols-[76px_1fr] gap-3 rounded-[8px] border p-3 text-left shadow-sm transition",
+                      isSelected
+                        ? "border-[#b99aa2] bg-[#f4ece2]"
+                        : "border-stone-200 bg-white hover:bg-stone-50"
+                    )}
+                  >
+                    {product.cover_image_url ? (
+                      <img
+                        src={product.cover_image_url}
+                        alt={product.name}
+                        className="size-[76px] rounded-[6px] bg-[#f6f1ea] object-cover"
+                      />
+                    ) : (
+                      <span className="flex size-[76px] items-center justify-center rounded-[6px] bg-[#f6f1ea] text-stone-300">
+                        <ImageOff className="h-5 w-5" />
+                      </span>
+                    )}
+                    <span className="min-w-0 space-y-2">
+                      <span className="block truncate font-semibold text-stone-900">
+                        {product.name}
+                      </span>
+                      <span className="flex flex-wrap items-center gap-2 text-xs text-stone-500">
+                        <span>{product.category || "未分類"}</span>
+                        <StatusPill tone={getProductTone(product.status)}>
+                          {productStatusLabels[product.status]}
+                        </StatusPill>
+                      </span>
+                      <span className="flex items-center justify-between gap-3 text-sm">
+                        <span className="font-semibold text-stone-900">
+                          {formatPrice(product.min_price)}
+                        </span>
+                        <span className="text-stone-500">庫存 {product.total_inventory}</span>
+                      </span>
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-[8px] border border-stone-200 bg-white shadow-sm md:block">
             <div className="min-w-[860px]">
               <div className="grid grid-cols-[76px_1.4fr_0.9fr_0.8fr_0.7fr_0.7fr_0.7fr_0.7fr_0.9fr] gap-3 border-b border-stone-100 bg-[#fbf7f1] px-4 py-3 text-xs font-medium text-stone-500">
                 <span>主圖</span>
@@ -646,17 +702,17 @@ export default function AdminShopProducts() {
           )}
         </section>
 
-        <aside className="h-fit rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
+        <aside className="h-fit min-w-0 max-w-full overflow-hidden rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm md:p-5">
           {isDetailLoading ? (
             <div className="py-12 text-center text-sm text-stone-400">商品明細載入中...</div>
           ) : selectedProduct ? (
-            <div className="space-y-6">
+            <div className="max-w-full space-y-6 overflow-hidden">
               <div className="flex items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
                     商品詳情
                   </p>
-                  <h2 className="mt-1 text-xl font-semibold">
+                  <h2 className="mt-1 truncate text-xl font-semibold">
                     {isCreating ? "新增商品" : selectedProduct.name}
                   </h2>
                   <p className="mt-1 text-xs text-stone-400">
@@ -678,7 +734,7 @@ export default function AdminShopProducts() {
                 </div>
               </div>
 
-              <section className="space-y-4 rounded-[8px] border border-stone-100 bg-white p-4">
+              <section className="max-w-full space-y-4 overflow-hidden rounded-[8px] border border-stone-100 bg-white p-4">
                 <div>
                   <h3 className="text-base font-semibold text-stone-900">商品基本資料</h3>
                   <p className="mt-1 text-xs text-stone-400">
@@ -752,7 +808,7 @@ export default function AdminShopProducts() {
                 </label>
               </section>
 
-              <section className="space-y-4 rounded-[8px] border border-stone-100 bg-white p-4">
+              <section className="max-w-full space-y-4 overflow-hidden rounded-[8px] border border-stone-100 bg-white p-4">
                 <div>
                   <h3 className="text-base font-semibold text-stone-900">商品圖片</h3>
                   <p className="mt-1 text-xs text-stone-400">
@@ -809,7 +865,7 @@ export default function AdminShopProducts() {
                     selectedProduct.images.map((image) => (
                       <div
                         key={image.id}
-                        className="grid gap-3 rounded-[8px] border border-stone-100 p-3 sm:grid-cols-[72px_1fr]"
+                        className="grid max-w-full gap-3 overflow-hidden rounded-[8px] border border-stone-100 p-3 sm:grid-cols-[72px_1fr]"
                       >
                         {image.image_url ? (
                           <img
@@ -822,7 +878,7 @@ export default function AdminShopProducts() {
                             <ImageOff className="h-5 w-5" />
                           </span>
                         )}
-                        <label className="space-y-1 text-xs text-stone-500">
+                        <label className="min-w-0 space-y-1 text-xs text-stone-500">
                           <span>圖片路徑</span>
                           <Input
                             value={image.image_url}
@@ -830,7 +886,7 @@ export default function AdminShopProducts() {
                               updateImageField(image.id, "image_url", event.target.value)
                             }
                             placeholder="/shop-products/01.png"
-                            className="h-9 rounded-[8px]"
+                            className="h-9 max-w-full rounded-[8px]"
                           />
                         </label>
                       </div>
@@ -839,7 +895,7 @@ export default function AdminShopProducts() {
                 </div>
               </section>
 
-              <section className="space-y-3 rounded-[8px] border border-stone-100 bg-white p-4">
+              <section className="max-w-full space-y-3 overflow-hidden rounded-[8px] border border-stone-100 bg-white p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-base font-semibold text-stone-900">
@@ -861,7 +917,7 @@ export default function AdminShopProducts() {
                   selectedProduct.variants.map((variant) => (
                     <div
                       key={variant.id}
-                      className="space-y-3 rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-4"
+                      className="max-w-full space-y-3 overflow-hidden rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-4"
                     >
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm font-medium text-stone-900">
@@ -897,18 +953,18 @@ export default function AdminShopProducts() {
                           <p className="text-[11px] leading-4 text-stone-400">
                             掃 QR code、進貨入庫、現場銷售時會用到這個編號
                           </p>
-                          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                          <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                             <Input
                               value={variant.sku || ""}
                               onChange={(event) =>
                                 updateVariantField(variant.id, "sku", event.target.value)
                               }
-                              className="h-10 rounded-[8px] bg-white font-mono text-sm"
+                              className="h-10 min-w-0 max-w-full rounded-[8px] bg-white font-mono text-sm"
                             />
                             <Button
                               type="button"
                               variant="outline"
-                              className="h-10 rounded-full bg-white"
+                              className="h-10 w-full rounded-full bg-white sm:w-auto"
                               onClick={() => copySku(variant)}
                               disabled={!variant.sku?.trim()}
                             >
@@ -991,13 +1047,13 @@ export default function AdminShopProducts() {
                 )}
               </section>
 
-              <section className="rounded-[8px] border border-stone-100 bg-stone-50/60 p-3">
+              <section className="max-w-full overflow-hidden rounded-[8px] border border-stone-100 bg-stone-50/60 p-3">
                 <button
                   type="button"
                   onClick={() => setIsAdvancedOpen((current) => !current)}
                   className="flex w-full items-center justify-between text-left text-sm font-medium text-stone-800"
                 >
-                  <span>
+                    <span className="min-w-0">
                     進階設定
                     <span className="ml-2 text-xs font-normal text-stone-400">
                       一般情況不用修改
@@ -1036,16 +1092,16 @@ export default function AdminShopProducts() {
                     </div>
 
                     {selectedProduct.variants.length > 0 && (
-                      <div className="space-y-2">
+                      <div className="max-w-full space-y-2 overflow-hidden">
                         <p className="text-sm font-medium text-stone-900">規格顯示順序</p>
                         <p className="text-xs text-stone-400">數字越小越前面</p>
                         <div className="grid gap-2">
                           {selectedProduct.variants.map((variant) => (
                             <label
                               key={`advanced-variant-${variant.id}`}
-                              className="grid gap-2 text-xs text-stone-500 sm:grid-cols-[1fr_120px] sm:items-center"
+                                className="grid min-w-0 gap-2 text-xs text-stone-500 sm:grid-cols-[minmax(0,1fr)_120px] sm:items-center"
                             >
-                              <span>{variant.variant_name || "未命名規格"}</span>
+                                <span className="min-w-0 truncate">{variant.variant_name || "未命名規格"}</span>
                               <Input
                                 type="number"
                                 value={variant.sort_order}
@@ -1067,16 +1123,16 @@ export default function AdminShopProducts() {
                     {selectedProduct.images.length > 0 && (
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-stone-900">圖片進階設定</p>
-                        <div className="grid gap-3">
+                        <div className="grid max-w-full gap-3 overflow-hidden">
                           {selectedProduct.images.map((image, imageIndex) => (
                             <div
                               key={`advanced-image-${image.id}`}
-                              className="grid gap-2 rounded-[8px] border border-stone-100 bg-white p-3"
+                              className="grid max-w-full gap-2 overflow-hidden rounded-[8px] border border-stone-100 bg-white p-3"
                             >
                               <p className="text-xs font-medium text-stone-500">
                                 圖片 {imageIndex + 1}
                               </p>
-                              <div className="grid gap-2 sm:grid-cols-[1fr_120px]">
+                              <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_120px]">
                                 <label className="space-y-1 text-xs text-stone-500">
                                   <span>圖片說明文字</span>
                                   <Input
@@ -1133,8 +1189,8 @@ export default function AdminShopProducts() {
         </aside>
       </div>
       {selectedProduct && (
-        <div className="fixed inset-x-0 bottom-0 z-40 h-16 border-t border-stone-200 bg-white/95 p-2 shadow-2xl shadow-stone-300/50 backdrop-blur md:hidden">
-          <div className="mx-auto grid max-w-md grid-cols-2 gap-3">
+        <div className="fixed inset-x-0 bottom-0 z-40 min-h-[calc(64px+env(safe-area-inset-bottom))] border-t border-stone-200 bg-white/95 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-2xl shadow-stone-300/50 backdrop-blur md:hidden">
+          <div className="mx-auto grid w-full max-w-md grid-cols-2 gap-3">
             <Button
               type="button"
               variant="outline"

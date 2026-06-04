@@ -30,9 +30,15 @@ import {
   updateAdminShopProduct,
 } from "@/lib/shop/adminProductsApi";
 import { formatPrice } from "@/lib/shop/format";
+import {
+  adminAuthExpiredMessage,
+  clearAdminToken as clearStoredAdminToken,
+  getAdminToken,
+  isAdminAuthError,
+  setAdminToken as setStoredAdminToken,
+} from "@/lib/shop/adminAuth";
 import { cn } from "@/lib/utils";
 
-const adminProductTokenKey = "mumbao-admin-shop-order-token";
 const productListLimit = 30;
 
 const productStatusLabels: Record<AdminProductStatus, string> = {
@@ -57,19 +63,15 @@ const editableProductStatuses: AdminProductStatus[] = ["draft", "published", "ar
 const editableVariantStatuses: AdminVariantStatus[] = ["active", "inactive"];
 
 function getStoredAdminToken() {
-  try {
-    return sessionStorage.getItem(adminProductTokenKey) || "";
-  } catch {
-    return "";
-  }
+  return getAdminToken();
 }
 
 function saveAdminToken(token: string) {
-  sessionStorage.setItem(adminProductTokenKey, token);
+  setStoredAdminToken(token);
 }
 
 function clearAdminToken() {
-  sessionStorage.removeItem(adminProductTokenKey);
+  clearStoredAdminToken();
 }
 
 function formatDateTime(value?: string) {
@@ -188,6 +190,15 @@ export default function AdminShopProducts() {
   const [failedCoverImageUrl, setFailedCoverImageUrl] = useState("");
   const [copiedSkuId, setCopiedSkuId] = useState("");
 
+  const handleAuthFailure = useCallback(() => {
+    clearAdminToken();
+    setToken("");
+    setPassword("");
+    setLoginError(adminAuthExpiredMessage);
+    setError("");
+    setSuccess("");
+  }, []);
+
   const selectedSummary = useMemo(
     () => products.find((product) => product.id === selectedProductId),
     [products, selectedProductId]
@@ -217,12 +228,16 @@ export default function AdminShopProducts() {
         setHasMore(Boolean(data.hasMore));
         setError("");
       } catch (loadError) {
+        if (isAdminAuthError(loadError)) {
+          handleAuthFailure();
+          return;
+        }
         setError(loadError instanceof Error ? loadError.message : "商品列表載入失敗");
       } finally {
         setIsLoading(false);
       }
     },
-    [query, status, token]
+    [handleAuthFailure, query, status, token]
   );
 
   const loadProductDetail = useCallback(
@@ -241,12 +256,16 @@ export default function AdminShopProducts() {
         setSelectedProduct(detail);
         setError("");
       } catch (loadError) {
+        if (isAdminAuthError(loadError)) {
+          handleAuthFailure();
+          return;
+        }
         setError(loadError instanceof Error ? loadError.message : "商品明細載入失敗");
       } finally {
         setIsDetailLoading(false);
       }
     },
-    [token]
+    [handleAuthFailure, token]
   );
 
   useEffect(() => {
@@ -420,6 +439,10 @@ export default function AdminShopProducts() {
       setError("");
       setSuccess(isCreating ? "商品已新增" : "商品已更新");
     } catch (saveError) {
+      if (isAdminAuthError(saveError)) {
+        handleAuthFailure();
+        return;
+      }
       setError(saveError instanceof Error ? saveError.message : "商品更新失敗");
     } finally {
       setIsSaving(false);

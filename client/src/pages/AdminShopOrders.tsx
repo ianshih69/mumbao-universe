@@ -22,9 +22,15 @@ import {
   updateAdminShopOrderStatus,
 } from "@/lib/shop/adminOrdersApi";
 import { formatPrice, getVariantLabel } from "@/lib/shop/format";
+import {
+  adminAuthExpiredMessage,
+  clearAdminToken as clearStoredAdminToken,
+  getAdminToken,
+  isAdminAuthError,
+  setAdminToken as setStoredAdminToken,
+} from "@/lib/shop/adminAuth";
 import { cn } from "@/lib/utils";
 
-const adminOrderTokenKey = "mumbao-admin-shop-order-token";
 const orderListLimit = 30;
 
 const orderStatusLabels: Record<AdminOrderStatus, string> = {
@@ -72,19 +78,15 @@ const paymentStatusOptions: Array<{ value: AdminPaymentStatus; label: string }> 
 ];
 
 function getStoredAdminToken() {
-  try {
-    return sessionStorage.getItem(adminOrderTokenKey) || "";
-  } catch {
-    return "";
-  }
+  return getAdminToken();
 }
 
 function saveAdminToken(token: string) {
-  sessionStorage.setItem(adminOrderTokenKey, token);
+  setStoredAdminToken(token);
 }
 
 function clearAdminToken() {
-  sessionStorage.removeItem(adminOrderTokenKey);
+  clearStoredAdminToken();
 }
 
 function formatDateTime(value?: string) {
@@ -154,6 +156,14 @@ export default function AdminShopOrders() {
   const [draftOrderStatus, setDraftOrderStatus] = useState<AdminOrderStatus>("pending_confirm");
   const [draftPaymentStatus, setDraftPaymentStatus] = useState<AdminPaymentStatus>("pending");
 
+  const handleAuthFailure = useCallback(() => {
+    clearAdminToken();
+    setToken("");
+    setPassword("");
+    setLoginError(adminAuthExpiredMessage);
+    setError("");
+  }, []);
+
   const selectedSummary = useMemo(
     () => orders.find((order) => order.order_number === selectedOrderNumber),
     [orders, selectedOrderNumber]
@@ -180,12 +190,16 @@ export default function AdminShopOrders() {
         setHasMore(Boolean(data.hasMore));
         setError("");
       } catch (loadError) {
+        if (isAdminAuthError(loadError)) {
+          handleAuthFailure();
+          return;
+        }
         setError(loadError instanceof Error ? loadError.message : "訂單載入失敗。");
       } finally {
         setIsLoading(false);
       }
     },
-    [search, source, status, token]
+    [handleAuthFailure, search, source, status, token]
   );
 
   const loadOrderDetail = useCallback(
@@ -201,12 +215,16 @@ export default function AdminShopOrders() {
         setDraftPaymentStatus(detail.payment_status);
         setError("");
       } catch (loadError) {
+        if (isAdminAuthError(loadError)) {
+          handleAuthFailure();
+          return;
+        }
         setError(loadError instanceof Error ? loadError.message : "訂單明細載入失敗。");
       } finally {
         setIsDetailLoading(false);
       }
     },
-    [token]
+    [handleAuthFailure, token]
   );
 
   useEffect(() => {
@@ -270,6 +288,10 @@ export default function AdminShopOrders() {
       );
       setError("");
     } catch (saveError) {
+      if (isAdminAuthError(saveError)) {
+        handleAuthFailure();
+        return;
+      }
       setError(saveError instanceof Error ? saveError.message : "狀態更新失敗。");
     } finally {
       setIsSaving(false);

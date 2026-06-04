@@ -29,9 +29,15 @@ import {
   fetchAdminInventoryMovements,
 } from "@/lib/shop/adminInventoryApi";
 import { formatPrice, getVariantLabel } from "@/lib/shop/format";
+import {
+  adminAuthExpiredMessage,
+  clearAdminToken as clearStoredAdminToken,
+  getAdminToken,
+  isAdminAuthError,
+  setAdminToken as setStoredAdminToken,
+} from "@/lib/shop/adminAuth";
 import { cn } from "@/lib/utils";
 
-const adminInventoryTokenKey = "mumbao-admin-shop-order-token";
 const productListLimit = 50;
 const movementListLimit = 30;
 
@@ -55,19 +61,15 @@ const actionOptions: Array<{
 ];
 
 function getStoredAdminToken() {
-  try {
-    return sessionStorage.getItem(adminInventoryTokenKey) || "";
-  } catch {
-    return "";
-  }
+  return getAdminToken();
 }
 
 function saveAdminToken(token: string) {
-  sessionStorage.setItem(adminInventoryTokenKey, token);
+  setStoredAdminToken(token);
 }
 
 function clearAdminToken() {
-  sessionStorage.removeItem(adminInventoryTokenKey);
+  clearStoredAdminToken();
 }
 
 function formatDateTime(value?: string) {
@@ -129,6 +131,15 @@ export default function AdminShopInventory() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  const handleAuthFailure = useCallback(() => {
+    clearAdminToken();
+    setToken("");
+    setPassword("");
+    setLoginError(adminAuthExpiredMessage);
+    setError("");
+    setSuccess("");
+  }, []);
+
   const selectedVariant = useMemo(
     () => selectedProduct?.variants.find((variant) => variant.id === selectedVariantId) || null,
     [selectedProduct, selectedVariantId]
@@ -150,11 +161,15 @@ export default function AdminShopInventory() {
       setProducts(nextProducts);
       setError("");
     } catch (loadError) {
+      if (isAdminAuthError(loadError)) {
+        handleAuthFailure();
+        return;
+      }
       setError(loadError instanceof Error ? loadError.message : "商品讀取失敗");
     } finally {
       setIsProductsLoading(false);
     }
-  }, [token]);
+  }, [handleAuthFailure, token]);
 
   const loadProductDetail = useCallback(
     async (productId: string) => {
@@ -173,12 +188,16 @@ export default function AdminShopInventory() {
         setSelectedVariantId(firstVariantId);
         setError("");
       } catch (loadError) {
+        if (isAdminAuthError(loadError)) {
+          handleAuthFailure();
+          return;
+        }
         setError(loadError instanceof Error ? loadError.message : "商品規格讀取失敗");
       } finally {
         setIsProductLoading(false);
       }
     },
-    [token]
+    [handleAuthFailure, token]
   );
 
   const loadMovements = useCallback(
@@ -208,12 +227,16 @@ export default function AdminShopInventory() {
         setHasMoreMovements(Boolean(data.hasMore));
         setError("");
       } catch (loadError) {
+        if (isAdminAuthError(loadError)) {
+          handleAuthFailure();
+          return;
+        }
         setError(loadError instanceof Error ? loadError.message : "庫存流水讀取失敗");
       } finally {
         setIsMovementsLoading(false);
       }
     },
-    [selectedVariantId, token]
+    [handleAuthFailure, selectedVariantId, token]
   );
 
   useEffect(() => {
@@ -318,6 +341,10 @@ export default function AdminShopInventory() {
       setSuccess(`庫存已更新，目前庫存 ${nextInventory}`);
       await loadMovements({ nextPage: 0, variantId: selectedVariant.id });
     } catch (saveError) {
+      if (isAdminAuthError(saveError)) {
+        handleAuthFailure();
+        return;
+      }
       setError(saveError instanceof Error ? saveError.message : "庫存調整失敗");
     } finally {
       setIsSaving(false);

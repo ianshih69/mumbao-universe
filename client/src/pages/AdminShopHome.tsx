@@ -1,11 +1,22 @@
+import { FormEvent, useEffect, useState } from "react";
 import {
   Boxes,
   ClipboardList,
+  LogOut,
   PackageCheck,
   ScanLine,
+  ShieldCheck,
   ShoppingBag,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import AdminShopNav from "@/components/shop/AdminShopNav";
+import {
+  adminAuthExpiredMessage,
+  clearAdminToken,
+  getAdminToken,
+  setAdminToken,
+} from "@/lib/shop/adminAuth";
 
 const entryCards = [
   {
@@ -40,20 +51,148 @@ const entryCards = [
   },
 ];
 
+async function validateAdminToken(token: string) {
+  const params = new URLSearchParams({
+    action: "orders",
+    limit: "1",
+  });
+  const response = await fetch(`/api/admin-shop?${params.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (response.status === 401) {
+    throw new Error(adminAuthExpiredMessage);
+  }
+
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error || "後台登入驗證失敗");
+  }
+}
+
 export default function AdminShopHome() {
+  const [token, setTokenState] = useState(() => getAdminToken());
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [isChecking, setIsChecking] = useState(Boolean(token));
+
+  useEffect(() => {
+    if (!token) return;
+
+    let isCurrent = true;
+    setIsChecking(true);
+    validateAdminToken(token)
+      .then(() => {
+        if (!isCurrent) return;
+        setLoginError("");
+      })
+      .catch(() => {
+        if (!isCurrent) return;
+        clearAdminToken();
+        setTokenState("");
+        setLoginError(adminAuthExpiredMessage);
+      })
+      .finally(() => {
+        if (isCurrent) setIsChecking(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [token]);
+
+  const handleLogin = async (event: FormEvent) => {
+    event.preventDefault();
+    const nextToken = password.trim();
+
+    if (!nextToken) {
+      setLoginError("請輸入 ADMIN_PASSWORD");
+      return;
+    }
+
+    setIsChecking(true);
+    try {
+      await validateAdminToken(nextToken);
+      setAdminToken(nextToken);
+      setTokenState(nextToken);
+      setPassword("");
+      setLoginError("");
+    } catch (error) {
+      clearAdminToken();
+      setLoginError(error instanceof Error ? error.message : adminAuthExpiredMessage);
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  const logout = () => {
+    clearAdminToken();
+    setTokenState("");
+    setPassword("");
+    setLoginError("");
+  };
+
+  if (!token || isChecking) {
+    return (
+      <main className="flex min-h-[100svh] items-center justify-center bg-[#f7f2ea] px-5 text-stone-900">
+        <form
+          onSubmit={handleLogin}
+          className="w-full max-w-md rounded-[8px] border border-stone-200 bg-white p-7 shadow-xl shadow-stone-200/70"
+        >
+          <div className="mb-6 flex items-center gap-3">
+            <div className="flex size-11 items-center justify-center rounded-full bg-[#8b6f5b] text-white">
+              <ShieldCheck className="size-5" />
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
+                MUMBAO Admin
+              </p>
+              <h1 className="text-2xl font-semibold">商城後台登入</h1>
+            </div>
+          </div>
+          <Input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="請輸入 ADMIN_PASSWORD"
+            className="h-11 rounded-[8px]"
+            disabled={isChecking}
+          />
+          {loginError && <p className="mt-3 text-sm text-red-600">{loginError}</p>}
+          <Button
+            type="submit"
+            className="mt-5 h-11 w-full rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
+            disabled={isChecking}
+          >
+            {isChecking ? "登入確認中..." : "登入商城後台"}
+          </Button>
+        </form>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-[100svh] bg-[#f7f2ea] text-stone-900">
       <header className="border-b border-stone-200 bg-white/95 px-5 py-7 backdrop-blur md:px-8">
-        <div className="mx-auto max-w-7xl">
-          <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
-            MUMBAO Shop Admin
-          </p>
-          <h1 className="mt-2 font-serif text-3xl font-light tracking-wide">
-            商城後台
-          </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-500">
-            集中管理慢寶商品、訂單、庫存、入庫與現場銷售。這裡只提供入口，實際操作仍會在各功能頁驗證後台密碼。
-          </p>
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
+              MUMBAO Shop Admin
+            </p>
+            <h1 className="mt-2 font-serif text-3xl font-light tracking-wide">
+              商城後台
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-500">
+              集中管理慢寶商品、訂單、庫存、入庫與現場銷售。所有商城後台頁面共用同一份登入狀態。
+            </p>
+          </div>
+          <Button variant="ghost" className="rounded-full" onClick={logout}>
+            <LogOut className="h-4 w-4" />
+            登出
+          </Button>
         </div>
       </header>
 

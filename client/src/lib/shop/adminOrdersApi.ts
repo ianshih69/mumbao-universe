@@ -10,6 +10,8 @@ export type AdminPaymentStatus = "pending" | "confirmed" | "failed" | "refunded"
 
 export type AdminOrderSource = "online" | "pos";
 
+const adminAuthExpiredMessage = "登入已過期，請重新登入";
+
 export type AdminShopOrderSummary = {
   id: string;
   order_number: string;
@@ -64,6 +66,10 @@ async function fetchAdminJson<T>(
   };
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error(adminAuthExpiredMessage);
+    }
+
     throw new Error(data.error || `Request failed: ${response.status}`);
   }
 

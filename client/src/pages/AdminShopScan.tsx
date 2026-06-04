@@ -19,24 +19,25 @@ import {
   adjustAdminInventory,
   lookupAdminInventoryBySku,
 } from "@/lib/shop/adminInventoryApi";
+import {
+  adminAuthExpiredMessage,
+  clearAdminToken as clearStoredAdminToken,
+  getAdminToken,
+  isAdminAuthError,
+  setAdminToken as setStoredAdminToken,
+} from "@/lib/shop/adminAuth";
 import { formatPrice, getVariantLabel } from "@/lib/shop/format";
 
-const adminScanTokenKey = "mumbao-admin-shop-order-token";
-
 function getStoredAdminToken() {
-  try {
-    return sessionStorage.getItem(adminScanTokenKey) || "";
-  } catch {
-    return "";
-  }
+  return getAdminToken();
 }
 
 function saveAdminToken(token: string) {
-  sessionStorage.setItem(adminScanTokenKey, token);
+  setStoredAdminToken(token);
 }
 
 function clearAdminToken() {
-  sessionStorage.removeItem(adminScanTokenKey);
+  clearStoredAdminToken();
 }
 
 function parseSkuFromText(value: string) {
@@ -108,6 +109,16 @@ export default function AdminShopScan() {
     setIsScanning(false);
   }, []);
 
+  const handleAuthFailure = useCallback(() => {
+    stopScanner();
+    clearAdminToken();
+    setToken("");
+    setPassword("");
+    setLoginError(adminAuthExpiredMessage);
+    setError("");
+    setSuccess("");
+  }, [stopScanner]);
+
   const lookupSku = useCallback(
     async (rawSku: string, source: "scan" | "manual" | "url" = "manual") => {
       const sku = parseSkuFromText(rawSku);
@@ -129,6 +140,10 @@ export default function AdminShopScan() {
         setError("");
         scrollToResult();
       } catch (lookupError) {
+        if (isAdminAuthError(lookupError)) {
+          handleAuthFailure();
+          return;
+        }
         setLookup(null);
         setSuccess(source === "scan" ? "掃描成功，但沒有找到對應商品" : "");
         setError(getLookupErrorMessage(lookupError));
@@ -137,7 +152,7 @@ export default function AdminShopScan() {
         setIsLookingUp(false);
       }
     },
-    [scrollToResult, token]
+    [handleAuthFailure, scrollToResult, token]
   );
 
   useEffect(() => {
@@ -272,6 +287,10 @@ export default function AdminShopScan() {
       setSuccess(`入庫成功，庫存已從 ${beforeInventory} 增加到 ${nextInventory}`);
       scrollToResult();
     } catch (saveError) {
+      if (isAdminAuthError(saveError)) {
+        handleAuthFailure();
+        return;
+      }
       setError(saveError instanceof Error ? saveError.message : "入庫失敗");
     } finally {
       setIsSaving(false);

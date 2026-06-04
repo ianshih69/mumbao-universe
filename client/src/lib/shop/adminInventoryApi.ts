@@ -6,6 +6,8 @@ export type AdminInventoryMovementType =
   | "online_order"
   | "return_in";
 
+const adminAuthExpiredMessage = "登入已過期，請重新登入";
+
 export type AdminInventoryMovement = {
   id: string;
   product_id: string;
@@ -71,7 +73,7 @@ async function fetchAdminJson<T>(
 
   if (!response.ok) {
     if (response.status === 401) {
-      throw new Error("後台密碼錯誤或登入已過期，請重新登入");
+      throw new Error(adminAuthExpiredMessage);
     }
 
     throw new Error(data.error || `Request failed: ${response.status}`);

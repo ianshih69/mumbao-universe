@@ -21,6 +21,13 @@ import {
   lookupAdminInventoryBySku,
   type AdminInventoryLookup,
 } from "@/lib/shop/adminInventoryApi";
+import {
+  adminAuthExpiredMessage,
+  clearAdminToken as clearStoredAdminToken,
+  getAdminToken,
+  isAdminAuthError,
+  setAdminToken as setStoredAdminToken,
+} from "@/lib/shop/adminAuth";
 import { parseSkuFromQrValue } from "@/lib/shop/qrCode";
 import {
   type AdminInventorySearchResult,
@@ -31,8 +38,6 @@ import {
 } from "@/lib/shop/adminPosApi";
 import { formatPrice, getVariantLabel } from "@/lib/shop/format";
 import { cn } from "@/lib/utils";
-
-const adminPosTokenKey = "mumbao-admin-shop-order-token";
 
 type PosCartItem = {
   variant_id: string;
@@ -62,19 +67,15 @@ const paymentLabels: Record<PosPaymentMethod, string> = {
 };
 
 function getStoredAdminToken() {
-  try {
-    return sessionStorage.getItem(adminPosTokenKey) || "";
-  } catch {
-    return "";
-  }
+  return getAdminToken();
 }
 
 function saveAdminToken(token: string) {
-  sessionStorage.setItem(adminPosTokenKey, token);
+  setStoredAdminToken(token);
 }
 
 function clearAdminToken() {
-  sessionStorage.removeItem(adminPosTokenKey);
+  clearStoredAdminToken();
 }
 
 function numberValue(value: string) {
@@ -189,6 +190,16 @@ export default function AdminShopPos() {
     setIsScanning(false);
   }, []);
 
+  const handleAuthFailure = useCallback(() => {
+    stopScanner();
+    clearAdminToken();
+    setToken("");
+    setPassword("");
+    setLoginError(adminAuthExpiredMessage);
+    setError("");
+    setSuccess("");
+  }, [stopScanner]);
+
   useEffect(() => {
     return () => {
       stopScanner();
@@ -260,12 +271,16 @@ export default function AdminShopPos() {
         setManualSku("");
         setError("");
       } catch (lookupError) {
+        if (isAdminAuthError(lookupError)) {
+          handleAuthFailure();
+          return;
+        }
         setError(getLookupErrorMessage(lookupError));
       } finally {
         setIsAddingSku(false);
       }
     },
-    [addLookupToCart, token]
+    [addLookupToCart, handleAuthFailure, token]
   );
 
   const startScanner = async () => {
@@ -375,6 +390,10 @@ export default function AdminShopPos() {
       setSearchResults(data.results || []);
       setError("");
     } catch (searchError) {
+      if (isAdminAuthError(searchError)) {
+        handleAuthFailure();
+        return;
+      }
       setError(searchError instanceof Error ? searchError.message : "搜尋失敗");
     } finally {
       setIsSearching(false);
@@ -429,6 +448,10 @@ export default function AdminShopPos() {
       setLastOrder(order);
       setSuccess(`現場銷售完成：${order.order_number}`);
     } catch (saleError) {
+      if (isAdminAuthError(saleError)) {
+        handleAuthFailure();
+        return;
+      }
       setError(saleError instanceof Error ? saleError.message : "現場銷售建立失敗");
     } finally {
       setIsSaving(false);

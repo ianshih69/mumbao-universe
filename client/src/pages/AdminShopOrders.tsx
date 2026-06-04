@@ -840,7 +840,7 @@ export default function AdminShopOrders() {
                   disabled={isExporting}
                 >
                   <Download className="h-4 w-4" />
-                  {isExporting ? "匯出中..." : "匯出訂單 CSV"}
+                  {isExporting ? "匯出中..." : "匯出訂單總表 CSV"}
                 </Button>
                 <Button
                   type="button"

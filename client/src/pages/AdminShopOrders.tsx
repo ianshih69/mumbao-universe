@@ -143,6 +143,7 @@ export default function AdminShopOrders() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const [quickActionMessage, setQuickActionMessage] = useState("");
   const [draftOrderStatus, setDraftOrderStatus] = useState<AdminOrderStatus>("pending_confirm");
   const [draftPaymentStatus, setDraftPaymentStatus] = useState<AdminPaymentStatus>("pending");
 
@@ -203,6 +204,7 @@ export default function AdminShopOrders() {
         setSelectedOrder(detail);
         setDraftOrderStatus(detail.order_status);
         setDraftPaymentStatus(detail.payment_status);
+        setQuickActionMessage("");
         setError("");
       } catch (loadError) {
         if (isAdminAuthError(loadError)) {
@@ -243,27 +245,45 @@ export default function AdminShopOrders() {
     setOrders([]);
     setSelectedOrderNumber("");
     setSelectedOrder(null);
+    setQuickActionMessage("");
   };
 
   const submitSearch = (event: FormEvent) => {
     event.preventDefault();
     setSelectedOrderNumber("");
     setSelectedOrder(null);
+    setQuickActionMessage("");
     loadOrders({ nextPage: 0 });
   };
 
-  const saveStatuses = async () => {
+  const updateSelectedOrderStatuses = async ({
+    order_status,
+    payment_status,
+    confirmMessage,
+    successMessage,
+  }: {
+    order_status?: AdminOrderStatus;
+    payment_status?: AdminPaymentStatus;
+    confirmMessage?: string;
+    successMessage?: string;
+  }) => {
     if (!token || !selectedOrder) return;
+
+    if (confirmMessage && !window.confirm(confirmMessage)) {
+      return;
+    }
 
     setIsSaving(true);
     try {
       const nextOrder = await updateAdminShopOrderStatus({
         token,
         orderNumber: selectedOrder.order_number,
-        order_status: draftOrderStatus,
-        payment_status: draftPaymentStatus,
+        order_status,
+        payment_status,
       });
       setSelectedOrder(nextOrder);
+      setDraftOrderStatus(nextOrder.order_status);
+      setDraftPaymentStatus(nextOrder.payment_status);
       setOrders((current) =>
         current.map((order) =>
           order.order_number === nextOrder.order_number
@@ -276,6 +296,7 @@ export default function AdminShopOrders() {
             : order
         )
       );
+      setQuickActionMessage(successMessage || "");
       setError("");
     } catch (saveError) {
       if (isAdminAuthError(saveError)) {
@@ -286,6 +307,14 @@ export default function AdminShopOrders() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const saveStatuses = async () => {
+    await updateSelectedOrderStatuses({
+      order_status: draftOrderStatus,
+      payment_status: draftPaymentStatus,
+      successMessage: "訂單狀態已更新。",
+    });
   };
 
   if (!token) {
@@ -517,6 +546,113 @@ export default function AdminShopOrders() {
                 <p><span className="font-medium text-stone-900">地址：</span>{selectedOrder.shipping_address}</p>
                 {selectedOrder.note && (
                   <p><span className="font-medium text-stone-900">備註：</span>{selectedOrder.note}</p>
+                )}
+              </div>
+
+              <div className="rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-stone-900">
+                      訂單處理快捷操作
+                    </h3>
+                    <p className="mt-1 text-xs leading-relaxed text-stone-500">
+                      目前可先使用「已付款」作為備貨中處理。
+                    </p>
+                  </div>
+                  <StatusPill tone={getOrderTone(selectedOrder.order_status)}>
+                    {orderStatusLabels[selectedOrder.order_status]}
+                  </StatusPill>
+                </div>
+
+                {(selectedOrder.order_source || "online") === "pos" ? (
+                  <div className="mt-4 rounded-[8px] border border-[#eadfd2] bg-[#fbf7f1] p-3 text-sm leading-relaxed text-stone-600">
+                    此為現場銷售訂單，通常已完成付款與庫存扣除。
+                  </div>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {quickActionMessage && (
+                      <div className="rounded-[8px] border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                        {quickActionMessage}
+                      </div>
+                    )}
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={
+                          isSaving ||
+                          selectedOrder.order_status === "cancelled" ||
+                          selectedOrder.order_status === "completed" ||
+                          (selectedOrder.payment_status === "confirmed" &&
+                            selectedOrder.order_status === "paid")
+                        }
+                        className="justify-center rounded-full border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                        onClick={() =>
+                          updateSelectedOrderStatuses({
+                            payment_status: "confirmed",
+                            order_status: "paid",
+                            successMessage: "已確認付款，訂單狀態已改為已付款。",
+                          })
+                        }
+                      >
+                        確認付款
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={
+                          isSaving ||
+                          selectedOrder.order_status === "cancelled" ||
+                          selectedOrder.order_status === "completed" ||
+                          selectedOrder.order_status === "shipping"
+                        }
+                        className="justify-center rounded-full border-pink-200 bg-pink-50 text-pink-700 hover:bg-pink-100"
+                        onClick={() =>
+                          updateSelectedOrderStatuses({
+                            order_status: "shipping",
+                            successMessage: "訂單已標記為出貨中。",
+                          })
+                        }
+                      >
+                        標記出貨中
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={
+                          isSaving ||
+                          selectedOrder.order_status === "cancelled" ||
+                          selectedOrder.order_status === "completed"
+                        }
+                        className="justify-center rounded-full border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                        onClick={() =>
+                          updateSelectedOrderStatuses({
+                            order_status: "completed",
+                            confirmMessage: "確定要將這筆訂單標記為已完成嗎？",
+                            successMessage: "訂單已標記為已完成。",
+                          })
+                        }
+                      >
+                        標記已完成
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={isSaving || selectedOrder.order_status === "cancelled"}
+                        className="justify-center rounded-full border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                        onClick={() =>
+                          updateSelectedOrderStatuses({
+                            order_status: "cancelled",
+                            confirmMessage:
+                              "確定要取消這筆訂單嗎？此操作只會變更訂單狀態，不會自動補回庫存。",
+                            successMessage: "訂單已標記為已取消。",
+                          })
+                        }
+                      >
+                        取消訂單
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </div>
 

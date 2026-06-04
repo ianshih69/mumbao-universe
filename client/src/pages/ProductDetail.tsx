@@ -31,10 +31,17 @@ export default function ProductDetail() {
     fetchShopProduct(slug)
       .then((nextProduct) => {
         if (!isMounted) return;
+        const initialVariant = nextProduct?.variants.find(
+          (variant) => variant.inventory > 0
+        );
         setProduct(nextProduct);
-        setSelectedVariantId(nextProduct?.variants.find((variant) => variant.inventory > 0)?.id || "");
+        setSelectedVariantId(initialVariant?.id || "");
         setSelectedGalleryImageId(
-          nextProduct?.cover_image_url ? "cover" : nextProduct?.images?.[0]?.id || ""
+          initialVariant?.image_url
+            ? `variant-${initialVariant.id}`
+            : nextProduct?.cover_image_url
+              ? "cover"
+              : nextProduct?.images?.[0]?.id || ""
         );
         setError(nextProduct ? "" : "找不到這項商品。");
       })
@@ -62,6 +69,13 @@ export default function ProductDetail() {
           ? [{ id: "cover", image_url: product.cover_image_url, alt: product.name }]
           : []),
         ...(product.images || []),
+        ...product.variants
+          .filter((variant) => Boolean(variant.image_url?.trim()))
+          .map((variant) => ({
+            id: `variant-${variant.id}`,
+            image_url: variant.image_url || "",
+            alt: getVariantLabel(variant.variant_name, variant.variant_option),
+          })),
       ]
     : [];
   const selectedGalleryImage =
@@ -104,7 +118,7 @@ export default function ProductDetail() {
               </div>
               {gallery.length > 1 && (
                 <div className="grid grid-cols-4 gap-3">
-                  {gallery.slice(0, 4).map((image) => {
+                  {gallery.map((image) => {
                     const isSelected = image.id === selectedGalleryImage?.id;
 
                     return (
@@ -167,6 +181,9 @@ export default function ProductDetail() {
                         onClick={() => {
                           setSelectedVariantId(variant.id);
                           setQuantity(1);
+                          if (variant.image_url?.trim()) {
+                            setSelectedGalleryImageId(`variant-${variant.id}`);
+                          }
                         }}
                         className={cn(
                           "flex items-center justify-between gap-3 rounded-[8px] border px-4 py-3 text-left transition",

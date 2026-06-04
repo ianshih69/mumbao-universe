@@ -4,6 +4,7 @@ export type ShopVariant = {
   sku?: string;
   variant_name: string;
   variant_option?: string;
+  image_url?: string | null;
   price: number;
   compare_at_price?: number | null;
   inventory: number;

@@ -156,6 +156,7 @@ function createEmptyProduct(): AdminShopProductDetail {
         sku: "",
         variant_name: "",
         variant_option: "",
+        image_url: "",
         price: 0,
         compare_at_price: null,
         inventory: 0,
@@ -1039,6 +1040,20 @@ export default function AdminShopProducts() {
                             onChange={(event) =>
                               updateVariantField(variant.id, "variant_option", event.target.value)
                             }
+                            className="h-9 rounded-[8px] bg-white"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs text-stone-500 sm:col-span-2">
+                          <span>規格圖片 URL</span>
+                          <p className="text-[11px] leading-4 text-stone-400">
+                            選擇此規格時，前台商品主圖會切換到這張圖片，可留空。
+                          </p>
+                          <Input
+                            value={variant.image_url || ""}
+                            onChange={(event) =>
+                              updateVariantField(variant.id, "image_url", event.target.value)
+                            }
+                            placeholder="/shop-products/01.png"
                             className="h-9 rounded-[8px] bg-white"
                           />
                         </label>

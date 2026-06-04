@@ -208,6 +208,7 @@ function normalizeVariant(variant) {
     sku: variant.sku || "",
     variant_name: variant.variant_name || "",
     variant_option: variant.variant_option || "",
+    image_url: variant.image_url || null,
     price: Number(variant.price || 0),
     compare_at_price:
       variant.compare_at_price === null || variant.compare_at_price === undefined
@@ -772,7 +773,7 @@ async function loadProducts(req, res) {
     const idList = productIds.join(",");
     const [variants, images] = await Promise.all([
       supabaseRequest(
-        `/shop_product_variants?select=id,product_id,sku,variant_name,variant_option,price,compare_at_price,inventory,status,sort_order,created_at,updated_at&product_id=in.(${idList})&order=sort_order.asc,created_at.asc`
+        `/shop_product_variants?select=id,product_id,sku,variant_name,variant_option,image_url,price,compare_at_price,inventory,status,sort_order,created_at,updated_at&product_id=in.(${idList})&order=sort_order.asc,created_at.asc`
       ),
       supabaseRequest(
         `/shop_product_images?select=id,product_id,image_url,alt,sort_order,created_at&product_id=in.(${idList})&order=sort_order.asc,created_at.asc`
@@ -952,6 +953,7 @@ function buildVariantPatch(variant) {
     sku: nullableText(variant.sku),
     variant_name: variantName,
     variant_option: nullableText(variant.variant_option),
+    image_url: nullableText(variant.image_url),
     price,
     compare_at_price: compareAtPrice,
     inventory,

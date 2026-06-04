@@ -24,6 +24,7 @@ function normalizeVariant(variant) {
     product_id: variant.product_id,
     variant_name: variant.variant_name || "",
     variant_option: variant.variant_option || null,
+    image_url: variant.image_url || null,
     price: Number(variant.price || 0),
     compare_at_price:
       variant.compare_at_price === null || variant.compare_at_price === undefined
@@ -100,7 +101,7 @@ async function loadProducts(req, res) {
 
   if (productIds.length) {
     const variants = await supabaseRequest(
-      `/shop_product_variants?select=id,product_id,sku,variant_name,variant_option,price,compare_at_price,inventory,status,sort_order&product_id=in.(${productIds.join(
+      `/shop_product_variants?select=id,product_id,sku,variant_name,variant_option,image_url,price,compare_at_price,inventory,status,sort_order&product_id=in.(${productIds.join(
         ","
       )})&status=eq.active&order=sort_order.asc,created_at.asc`
     );
@@ -142,7 +143,7 @@ async function loadProduct(req, res) {
     supabaseRequest(
       `/shop_product_variants?product_id=eq.${encodeURIComponent(
         product.id
-      )}&status=eq.active&select=id,product_id,sku,variant_name,variant_option,price,compare_at_price,inventory,status,sort_order&order=sort_order.asc,created_at.asc`
+      )}&status=eq.active&select=id,product_id,sku,variant_name,variant_option,image_url,price,compare_at_price,inventory,status,sort_order&order=sort_order.asc,created_at.asc`
     ),
     supabaseRequest(
       `/shop_product_images?product_id=eq.${encodeURIComponent(

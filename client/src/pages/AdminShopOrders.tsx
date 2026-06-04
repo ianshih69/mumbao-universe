@@ -306,6 +306,20 @@ export default function AdminShopOrders() {
     loadOrders({ nextPage: 0 });
   };
 
+  const clearFilters = () => {
+    setSearch("");
+    setStatus("");
+    setSource("");
+    setPaymentStatusFilter("");
+    setDateFrom("");
+    setDateTo("");
+    setTrackingFilter("");
+    setSelectedOrderNumber("");
+    setSelectedOrder(null);
+    setIsPrintOpen(false);
+    setQuickActionMessage("");
+  };
+
   const updateSelectedOrderStatuses = async ({
     order_status,
     payment_status,
@@ -612,9 +626,19 @@ export default function AdminShopOrders() {
                   ))}
                 </select>
               </label>
-              <Button type="submit" className="h-11 rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a] sm:col-span-2 xl:col-span-3">
-                搜尋
-              </Button>
+              <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2 xl:col-span-3">
+                <Button type="submit" className="h-11 rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]">
+                  搜尋
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 rounded-full border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                  onClick={clearFilters}
+                >
+                  清除篩選
+                </Button>
+              </div>
             </div>
           </form>
 

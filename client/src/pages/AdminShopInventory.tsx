@@ -44,6 +44,15 @@ const movementListLimit = 30;
 const lowInventoryThreshold = 3;
 
 type InventoryStatusFilter = "" | "low" | "soldout";
+type InventoryAlertItem = {
+  productId: string;
+  productName: string;
+  variantId: string;
+  variantName: string;
+  variantOption?: string;
+  sku?: string;
+  inventory: number;
+};
 
 const movementLabels: Record<AdminInventoryMovementType, string> =
   INVENTORY_MOVEMENT_LABELS;
@@ -170,6 +179,47 @@ export default function AdminShopInventory() {
       ),
     [inventoryStatusFilter, selectedProduct]
   );
+  const inventoryAlertItems = useMemo<InventoryAlertItem[]>(() => {
+    if (!inventoryStatusFilter) return [];
+
+    return products.flatMap((product) => {
+      const detailVariants =
+        selectedProduct?.id === product.id ? selectedProduct.variants : [];
+
+      if (detailVariants.length) {
+        return detailVariants
+          .filter((variant) =>
+            matchesInventoryFilter(variant.inventory, inventoryStatusFilter)
+          )
+          .map((variant) => ({
+            productId: product.id,
+            productName: product.name,
+            variantId: variant.id,
+            variantName: variant.variant_name,
+            variantOption: variant.variant_option,
+            sku: variant.sku,
+            inventory: variant.inventory,
+          }));
+      }
+
+      if (!matchesInventoryFilter(product.total_inventory, inventoryStatusFilter)) {
+        return [];
+      }
+
+      return [
+        {
+          productId: product.id,
+          productName: product.name,
+          variantId: "",
+          variantName:
+            product.variant_count > 1 ? `共 ${product.variant_count} 個規格` : "規格待載入",
+          variantOption: "",
+          sku: "",
+          inventory: product.total_inventory,
+        },
+      ];
+    });
+  }, [inventoryStatusFilter, products, selectedProduct]);
   const selectedAction = actionOptions.find((option) => option.value === movementType);
 
   const loadProducts = useCallback(async () => {
@@ -377,6 +427,39 @@ export default function AdminShopInventory() {
       setError(saveError instanceof Error ? saveError.message : "庫存調整失敗");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const selectInventoryAlertItem = async (item: InventoryAlertItem) => {
+    if (!token) return;
+
+    setSelectedProductId(item.productId);
+    setSuccess("");
+
+    if (item.variantId) {
+      setSelectedVariantId(item.variantId);
+      return;
+    }
+
+    setIsProductLoading(true);
+    try {
+      const detail = await fetchAdminShopProduct(token, item.productId);
+      const firstMatchedVariant =
+        detail.variants.find((variant) =>
+          matchesInventoryFilter(variant.inventory, inventoryStatusFilter)
+        ) || detail.variants[0];
+
+      setSelectedProduct(detail);
+      setSelectedVariantId(firstMatchedVariant?.id || "");
+      setError("");
+    } catch (loadError) {
+      if (isAdminAuthError(loadError)) {
+        handleAuthFailure();
+        return;
+      }
+      setError(loadError instanceof Error ? loadError.message : "商品規格讀取失敗");
+    } finally {
+      setIsProductLoading(false);
     }
   };
 
@@ -688,6 +771,73 @@ export default function AdminShopInventory() {
               {isSaving ? "更新中..." : "確認調整庫存"}
             </Button>
           </form>
+
+          {inventoryStatusFilter && (
+            <div className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
+              <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
+                    Inventory Alert
+                  </p>
+                  <h2 className="mt-1 text-xl font-semibold">
+                    {inventoryStatusFilter === "low" ? "低庫存清單" : "售完清單"}
+                  </h2>
+                </div>
+                <p className="text-sm text-stone-500">
+                  {inventoryAlertItems.length} 個項目
+                </p>
+              </div>
+
+              {inventoryAlertItems.length === 0 ? (
+                <div className="rounded-[8px] bg-[#fbf7f1] px-4 py-8 text-center text-sm text-stone-400">
+                  目前沒有符合條件的商品規格。
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {inventoryAlertItems.map((item) => (
+                    <div
+                      key={`${item.productId}-${item.variantId || "summary"}`}
+                      className="grid gap-3 rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-3 sm:grid-cols-[1fr_auto] sm:items-center"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-stone-900">
+                          {item.productName}
+                        </p>
+                        <p className="mt-1 text-xs text-stone-500">
+                          {getVariantLabel(item.variantName, item.variantOption)}
+                        </p>
+                        {item.sku ? (
+                          <p className="mt-1 break-all text-xs text-stone-400">
+                            SKU：{item.sku}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-xs text-stone-400">
+                            選擇後會載入規格資料
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-2 sm:items-end">
+                        <div className="rounded-[8px] bg-white px-3 py-2 text-sm">
+                          <span className="text-stone-500">目前庫存：</span>
+                          <span className="font-semibold text-stone-900">
+                            {item.inventory}
+                          </span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-10 rounded-full bg-white"
+                          onClick={() => selectInventoryAlertItem(item)}
+                        >
+                          選擇調整
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         <aside className="h-fit rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">

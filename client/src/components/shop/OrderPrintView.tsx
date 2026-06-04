@@ -220,6 +220,20 @@ export default function OrderPrintView({ order, onClose }: OrderPrintViewProps) 
             </section>
           </div>
 
+          {(order.shipping_carrier || order.tracking_number) && (
+            <section className="order-print-section mt-5">
+              <h2 className="text-sm font-semibold text-stone-900">出貨資訊</h2>
+              <dl className="mt-3 grid grid-cols-2 gap-3 rounded-[8px] border border-stone-200 p-4">
+                {order.shipping_carrier && (
+                  <Field label="物流方式" value={order.shipping_carrier} />
+                )}
+                {order.tracking_number && (
+                  <Field label="物流單號" value={order.tracking_number} />
+                )}
+              </dl>
+            </section>
+          )}
+
           <section className="order-print-section mt-7">
             <h2 className="text-sm font-semibold text-stone-900">商品明細</h2>
             <div className="mt-3 overflow-hidden rounded-[8px] border border-stone-200">

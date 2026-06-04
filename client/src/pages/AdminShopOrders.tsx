@@ -22,6 +22,7 @@ import {
   fetchAdminShopOrder,
   fetchAdminShopOrders,
   updateAdminShopOrderStatus,
+  updateAdminShopOrderShipping,
 } from "@/lib/shop/adminOrdersApi";
 import { formatPrice, getVariantLabel } from "@/lib/shop/format";
 import {
@@ -149,6 +150,11 @@ export default function AdminShopOrders() {
   const [quickActionMessage, setQuickActionMessage] = useState("");
   const [draftOrderStatus, setDraftOrderStatus] = useState<AdminOrderStatus>("pending_confirm");
   const [draftPaymentStatus, setDraftPaymentStatus] = useState<AdminPaymentStatus>("pending");
+  const [draftShippingCarrier, setDraftShippingCarrier] = useState("");
+  const [draftTrackingNumber, setDraftTrackingNumber] = useState("");
+  const [draftInternalNote, setDraftInternalNote] = useState("");
+  const [isShippingSaving, setIsShippingSaving] = useState(false);
+  const [shippingSaveMessage, setShippingSaveMessage] = useState("");
 
   const handleAuthFailure = useCallback(() => {
     clearAdminToken();
@@ -207,6 +213,10 @@ export default function AdminShopOrders() {
         setSelectedOrder(detail);
         setDraftOrderStatus(detail.order_status);
         setDraftPaymentStatus(detail.payment_status);
+        setDraftShippingCarrier(detail.shipping_carrier || "");
+        setDraftTrackingNumber(detail.tracking_number || "");
+        setDraftInternalNote(detail.internal_note || "");
+        setShippingSaveMessage("");
         setIsPrintOpen(false);
         setQuickActionMessage("");
         setError("");
@@ -321,6 +331,33 @@ export default function AdminShopOrders() {
       payment_status: draftPaymentStatus,
       successMessage: "訂單狀態已更新。",
     });
+  };
+
+  const saveShipping = async () => {
+    if (!token || !selectedOrder) return;
+
+    setIsShippingSaving(true);
+    setShippingSaveMessage("");
+    try {
+      const nextOrder = await updateAdminShopOrderShipping({
+        token,
+        orderNumber: selectedOrder.order_number,
+        shipping_carrier: draftShippingCarrier || undefined,
+        tracking_number: draftTrackingNumber || undefined,
+        internal_note: draftInternalNote || undefined,
+      });
+      setSelectedOrder(nextOrder);
+      setShippingSaveMessage("出貨資訊已儲存。");
+      setError("");
+    } catch (saveError) {
+      if (isAdminAuthError(saveError)) {
+        handleAuthFailure();
+        return;
+      }
+      setError(saveError instanceof Error ? saveError.message : "出貨資訊儲存失敗。");
+    } finally {
+      setIsShippingSaving(false);
+    }
   };
 
   const selectedOrderSource = selectedOrder?.order_source || "online";
@@ -745,6 +782,57 @@ export default function AdminShopOrders() {
                 >
                   <Save className="h-4 w-4" />
                   {isSaving ? "儲存中..." : "儲存狀態"}
+                </Button>
+              </div>
+
+              <div className="grid gap-3 rounded-[8px] bg-[#fbf7f1] p-4">
+                <h3 className="text-sm font-semibold text-stone-900">出貨與內部備註</h3>
+                <label className="space-y-1.5 text-sm">
+                  <span className="font-medium text-stone-900">物流方式</span>
+                  <input
+                    type="text"
+                    value={draftShippingCarrier}
+                    onChange={(event) => setDraftShippingCarrier(event.target.value)}
+                    placeholder="例：黑貓、郵局、7-11、面交、自取"
+                    className="h-10 w-full rounded-[8px] border border-stone-200 bg-white px-3 text-sm outline-none focus:border-[#8b6f5b]"
+                  />
+                </label>
+                <label className="space-y-1.5 text-sm">
+                  <span className="font-medium text-stone-900">物流單號</span>
+                  <input
+                    type="text"
+                    value={draftTrackingNumber}
+                    onChange={(event) => setDraftTrackingNumber(event.target.value)}
+                    placeholder="輸入追蹤號碼"
+                    className="h-10 w-full rounded-[8px] border border-stone-200 bg-white px-3 text-sm outline-none focus:border-[#8b6f5b]"
+                  />
+                </label>
+                <label className="space-y-1.5 text-sm">
+                  <span className="font-medium text-stone-900">
+                    內部備註
+                    <span className="ml-1 text-xs font-normal text-stone-400">（顧客不可見）</span>
+                  </span>
+                  <textarea
+                    value={draftInternalNote}
+                    onChange={(event) => setDraftInternalNote(event.target.value)}
+                    placeholder="後台內部使用，顧客不會看到此備註"
+                    rows={3}
+                    className="w-full resize-none rounded-[8px] border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#8b6f5b]"
+                  />
+                </label>
+                {shippingSaveMessage && (
+                  <div className="rounded-[8px] border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                    {shippingSaveMessage}
+                  </div>
+                )}
+                <Button
+                  type="button"
+                  onClick={saveShipping}
+                  disabled={isShippingSaving}
+                  className="rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
+                >
+                  <Save className="h-4 w-4" />
+                  {isShippingSaving ? "儲存中..." : "儲存出貨資訊"}
                 </Button>
               </div>
 

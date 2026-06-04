@@ -45,6 +45,9 @@ export type AdminShopOrderItem = {
 export type AdminShopOrderDetail = AdminShopOrderSummary & {
   shipping_address: string;
   note?: string;
+  shipping_carrier?: string;
+  tracking_number?: string;
+  internal_note?: string;
   items: AdminShopOrderItem[];
 };
 
@@ -143,6 +146,40 @@ export async function updateAdminShopOrderStatus({
         orderNumber,
         ...(order_status ? { order_status } : {}),
         ...(payment_status ? { payment_status } : {}),
+      }),
+    }
+  );
+
+  if (!data.order) {
+    throw new Error("訂單更新失敗。");
+  }
+
+  return data.order;
+}
+
+export async function updateAdminShopOrderShipping({
+  token,
+  orderNumber,
+  shipping_carrier,
+  tracking_number,
+  internal_note,
+}: {
+  token: string;
+  orderNumber: string;
+  shipping_carrier?: string;
+  tracking_number?: string;
+  internal_note?: string;
+}) {
+  const data = await fetchAdminJson<{ order?: AdminShopOrderDetail }>(
+    "/api/admin-shop?action=order",
+    token,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        orderNumber,
+        shipping_carrier: shipping_carrier ?? null,
+        tracking_number: tracking_number ?? null,
+        internal_note: internal_note ?? null,
       }),
     }
   );

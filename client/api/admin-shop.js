@@ -152,6 +152,9 @@ function normalizeOrder(order, items = []) {
     ...normalizeOrderSummary(order),
     shipping_address: order.shipping_address || "",
     note: order.note || "",
+    shipping_carrier: order.shipping_carrier || "",
+    tracking_number: order.tracking_number || "",
+    internal_note: order.internal_note || "",
     items: items.map(normalizeItem),
   };
 }
@@ -558,8 +561,20 @@ function validateStatusPatch(body) {
     patch.payment_status = value;
   }
 
+  if (Object.prototype.hasOwnProperty.call(body, "shipping_carrier")) {
+    patch.shipping_carrier = nullableText(body.shipping_carrier);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "tracking_number")) {
+    patch.tracking_number = nullableText(body.tracking_number);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "internal_note")) {
+    patch.internal_note = nullableText(body.internal_note);
+  }
+
   if (!Object.keys(patch).length) {
-    const error = new Error("No status fields to update.");
+    const error = new Error("No fields to update.");
     error.status = 400;
     throw error;
   }

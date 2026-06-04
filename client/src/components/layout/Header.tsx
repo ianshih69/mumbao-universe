@@ -53,6 +53,8 @@ export function Header() {
   ];
 
   const languages = ["繁體中文", "日本語", "韓語", "English"];
+  const isShopPage = location === "/shop" || location.startsWith("/shop/");
+  const useDarkControls = isScrolled || isShopPage;
 
   return (
     <header
@@ -68,11 +70,16 @@ export function Header() {
         <Sheet>
           <SheetTrigger asChild>
             <div className="flex items-center gap-2 group cursor-pointer">
-              <div className="p-2 rounded-full hover:bg-black/5 transition-colors">
+              <div
+                className={cn(
+                  "p-2 rounded-full transition-colors",
+                  useDarkControls ? "hover:bg-[#f3eadf]" : "hover:bg-white/15"
+                )}
+              >
                 <Menu
                   className={cn(
                     "w-6 h-6",
-                    isScrolled ? "text-primary" : "text-white"
+                    useDarkControls ? "text-[#8b6f5b]" : "text-white"
                   )}
                 />
               </div>
@@ -135,8 +142,10 @@ export function Header() {
             <DropdownMenuTrigger asChild>
               <div
                 className={cn(
-                  "flex items-center gap-1 text-sm font-medium tracking-wider cursor-pointer hover:opacity-70 transition-opacity",
-                  isScrolled ? "text-primary" : "text-white"
+                  "flex items-center gap-1 rounded-full px-2 py-1 text-sm font-medium tracking-wider cursor-pointer transition-colors",
+                  useDarkControls
+                    ? "text-[#8b6f5b] hover:bg-[#f3eadf]"
+                    : "text-white hover:bg-white/15"
                 )}
               >
                 <Globe className="w-4 h-4 mr-1" />

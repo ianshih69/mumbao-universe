@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import AdminShopNav from "@/components/shop/AdminShopNav";
 import VariantQrCode from "@/components/shop/VariantQrCode";
 import {
   type AdminProductStatus,
@@ -505,6 +506,8 @@ export default function AdminShopProducts() {
           </div>
         </div>
       </header>
+
+      <AdminShopNav current="products" />
 
       <div className="mx-auto grid w-full max-w-7xl gap-6 overflow-x-hidden px-4 py-6 xl:grid-cols-[minmax(0,1fr)_520px] md:px-8 md:py-8">
         <section className="min-w-0 max-w-full space-y-4 overflow-hidden">

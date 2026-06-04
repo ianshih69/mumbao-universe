@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import AdminShopNav from "@/components/shop/AdminShopNav";
 import {
   lookupAdminInventoryBySku,
   type AdminInventoryLookup,
@@ -434,6 +435,18 @@ export default function AdminShopPos() {
     }
   };
 
+  const startNewSale = () => {
+    setLastOrder(null);
+    setLastAddedItem(null);
+    setSearchResults([]);
+    setSearchText("");
+    setManualSku("");
+    setScannedSku("");
+    setSuccess("");
+    setError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   if (!token) {
     return (
       <main className="flex min-h-[100svh] items-center justify-center bg-[#f7f2ea] px-5 text-stone-900">
@@ -506,6 +519,8 @@ export default function AdminShopPos() {
           </div>
         </div>
       </header>
+
+      <AdminShopNav current="pos" />
 
       <div className="sticky top-0 z-20 border-b border-stone-200 bg-white/95 px-5 py-3 shadow-sm backdrop-blur md:hidden">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
@@ -602,6 +617,21 @@ export default function AdminShopPos() {
               <p className="font-semibold text-emerald-700">銷售完成</p>
               <p className="mt-2">訂單編號：{lastOrder.order_number}</p>
               <p>總金額：{formatPrice(lastOrder.total)}</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <a
+                  href="/admin/shop/orders"
+                  className="inline-flex h-10 items-center justify-center rounded-full border border-stone-200 bg-white px-4 text-sm font-medium text-stone-700 hover:bg-stone-50"
+                >
+                  查看訂單
+                </a>
+                <Button
+                  type="button"
+                  className="h-10 rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
+                  onClick={startNewSale}
+                >
+                  再開一筆銷售
+                </Button>
+              </div>
             </div>
           )}
 

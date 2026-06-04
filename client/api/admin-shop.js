@@ -17,6 +17,7 @@ const validOrderStatuses = new Set([
   "completed",
   "cancelled",
 ]);
+const validOrderSources = new Set(["online", "pos"]);
 const validPaymentStatuses = new Set([
   "pending",
   "confirmed",
@@ -140,6 +141,7 @@ function normalizeOrderSummary(order) {
     payment_method: order.payment_method || "manual_confirmation",
     payment_status: order.payment_status || "pending",
     order_status: order.order_status || "pending_confirm",
+    order_source: order.order_source || "online",
     created_at: order.created_at || "",
     updated_at: order.updated_at || "",
   };
@@ -315,21 +317,26 @@ function normalizeInventorySearchItem(product, variant) {
 async function loadOrders(req, res) {
   const search = String(firstQueryValue(req.query?.q) || "").trim();
   const status = String(firstQueryValue(req.query?.status) || "").trim();
+  const source = String(firstQueryValue(req.query?.source) || "").trim();
   const limit = getPositiveInt(firstQueryValue(req.query?.limit), defaultLimit, maxLimit);
   const page = getPage(firstQueryValue(req.query?.page));
   const offset = page * limit;
   const select =
-    "id,order_number,customer_name,customer_phone,customer_email,subtotal,shipping_fee,total,payment_method,payment_status,order_status,created_at,updated_at";
+    "id,order_number,customer_name,customer_phone,customer_email,subtotal,shipping_fee,total,payment_method,payment_status,order_status,order_source,created_at,updated_at";
   const statusFilter =
     status && validOrderStatuses.has(status)
       ? `&order_status=eq.${encodeURIComponent(status)}`
+      : "";
+  const sourceFilter =
+    source && validOrderSources.has(source)
+      ? `&order_source=eq.${encodeURIComponent(source)}`
       : "";
   const searchTerm = encodeURIComponent(`*${search.replace(/[(),]/g, " ")}*`);
   const searchFilter = search
     ? `&or=(order_number.ilike.${searchTerm},customer_name.ilike.${searchTerm},customer_phone.ilike.${searchTerm})`
     : "";
   const orders = await supabaseRequest(
-    `/shop_orders?select=${select}${statusFilter}${searchFilter}&order=created_at.desc&limit=${
+    `/shop_orders?select=${select}${statusFilter}${sourceFilter}${searchFilter}&order=created_at.desc&limit=${
       limit + 1
     }&offset=${offset}`
   );

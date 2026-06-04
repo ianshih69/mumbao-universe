@@ -10,8 +10,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import AdminShopNav from "@/components/shop/AdminShopNav";
 import {
   type AdminOrderStatus,
+  type AdminOrderSource,
   type AdminPaymentStatus,
   type AdminShopOrderDetail,
   type AdminShopOrderSummary,
@@ -41,6 +43,11 @@ const paymentStatusLabels: Record<AdminPaymentStatus, string> = {
   refunded: "已退款",
 };
 
+const orderSourceLabels: Record<AdminOrderSource, string> = {
+  online: "官網訂單",
+  pos: "現場銷售",
+};
+
 const orderStatusOptions: Array<{ value: "" | AdminOrderStatus; label: string }> = [
   { value: "", label: "全部狀態" },
   { value: "pending_confirm", label: "待確認" },
@@ -49,6 +56,12 @@ const orderStatusOptions: Array<{ value: "" | AdminOrderStatus; label: string }>
   { value: "shipping", label: "出貨中" },
   { value: "completed", label: "已完成" },
   { value: "cancelled", label: "已取消" },
+];
+
+const orderSourceOptions: Array<{ value: "" | AdminOrderSource; label: string }> = [
+  { value: "", label: "全部來源" },
+  { value: "online", label: "官網訂單" },
+  { value: "pos", label: "現場銷售" },
 ];
 
 const paymentStatusOptions: Array<{ value: AdminPaymentStatus; label: string }> = [
@@ -131,6 +144,7 @@ export default function AdminShopOrders() {
   const [selectedOrder, setSelectedOrder] = useState<AdminShopOrderDetail | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"" | AdminOrderStatus>("");
+  const [source, setSource] = useState<"" | AdminOrderSource>("");
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -155,6 +169,7 @@ export default function AdminShopOrders() {
           token,
           q: search,
           status,
+          source,
           page: nextPage,
           limit: orderListLimit,
         });
@@ -170,7 +185,7 @@ export default function AdminShopOrders() {
         setIsLoading(false);
       }
     },
-    [search, status, token]
+    [search, source, status, token]
   );
 
   const loadOrderDetail = useCallback(
@@ -325,13 +340,15 @@ export default function AdminShopOrders() {
         </div>
       </header>
 
+      <AdminShopNav current="orders" />
+
       <div className="mx-auto grid max-w-7xl gap-6 px-5 py-6 lg:grid-cols-[minmax(0,1fr)_420px] md:px-8 md:py-8">
         <section className="space-y-4">
           <form
             onSubmit={submitSearch}
             className="rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm"
           >
-            <div className="grid gap-3 md:grid-cols-[1fr_220px_auto] md:items-center">
+            <div className="grid gap-3 md:grid-cols-[1fr_190px_190px_auto] md:items-center">
               <label className="flex h-11 items-center gap-2 rounded-full border border-stone-200 bg-stone-50 px-4">
                 <Search className="h-4 w-4 text-stone-400" />
                 <input
@@ -352,6 +369,21 @@ export default function AdminShopOrders() {
               >
                 {orderStatusOptions.map((option) => (
                   <option key={option.value || "all"} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={source}
+                onChange={(event) => {
+                  setSource(event.target.value as "" | AdminOrderSource);
+                  setSelectedOrderNumber("");
+                  setSelectedOrder(null);
+                }}
+                className="h-11 rounded-full border border-stone-200 bg-white px-4 text-sm outline-none"
+              >
+                {orderSourceOptions.map((option) => (
+                  <option key={option.value || "all-source"} value={option.value}>
                     {option.label}
                   </option>
                 ))}
@@ -400,6 +432,9 @@ export default function AdminShopOrders() {
                     <span className="min-w-0">
                       <span className="block truncate font-semibold text-stone-900">
                         {order.order_number}
+                      </span>
+                      <span className="mt-1 inline-flex rounded-full bg-[#f4ece2] px-2 py-0.5 text-xs text-[#765d4a]">
+                        {orderSourceLabels[order.order_source || "online"]}
                       </span>
                       <span className="mt-1 block text-xs text-stone-400 md:hidden">
                         {formatPrice(order.total)}
@@ -464,6 +499,7 @@ export default function AdminShopOrders() {
 
               <div className="grid gap-2 text-sm text-stone-600">
                 <p><span className="font-medium text-stone-900">姓名：</span>{selectedOrder.customer_name}</p>
+                <p><span className="font-medium text-stone-900">訂單來源：</span>{orderSourceLabels[selectedOrder.order_source || "online"]}</p>
                 <p><span className="font-medium text-stone-900">電話：</span>{selectedOrder.customer_phone}</p>
                 <p><span className="font-medium text-stone-900">Email：</span>{selectedOrder.customer_email || "-"}</p>
                 <p><span className="font-medium text-stone-900">地址：</span>{selectedOrder.shipping_address}</p>

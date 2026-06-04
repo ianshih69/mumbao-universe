@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import AdminShopNav from "@/components/shop/AdminShopNav";
 import {
   type AdminInventoryLookup,
   adjustAdminInventory,
@@ -349,6 +350,8 @@ export default function AdminShopScan() {
           </div>
         </div>
       </header>
+
+      <AdminShopNav current="scan" />
 
       <div className="mx-auto grid max-w-5xl gap-5 px-5 py-6 md:px-8 md:py-8">
         {error && (

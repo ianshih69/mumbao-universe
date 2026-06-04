@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import AdminShopNav from "@/components/shop/AdminShopNav";
 import VariantQrCode from "@/components/shop/VariantQrCode";
 import {
   type AdminShopProductDetail,
@@ -424,6 +425,8 @@ export default function AdminShopInventory() {
           </div>
         </div>
       </header>
+
+      <AdminShopNav current="inventory" />
 
       <div className="mx-auto grid max-w-7xl gap-6 px-5 py-6 lg:grid-cols-[minmax(0,1fr)_430px] md:px-8 md:py-8">
         <section className="space-y-4">

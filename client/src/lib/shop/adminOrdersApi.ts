@@ -8,6 +8,8 @@ export type AdminOrderStatus =
 
 export type AdminPaymentStatus = "pending" | "confirmed" | "failed" | "refunded";
 
+export type AdminOrderSource = "online" | "pos";
+
 export type AdminShopOrderSummary = {
   id: string;
   order_number: string;
@@ -20,6 +22,7 @@ export type AdminShopOrderSummary = {
   payment_method: string;
   payment_status: AdminPaymentStatus;
   order_status: AdminOrderStatus;
+  order_source: AdminOrderSource;
   created_at?: string;
   updated_at?: string;
 };
@@ -71,12 +74,14 @@ export async function fetchAdminShopOrders({
   token,
   q = "",
   status = "",
+  source = "",
   page = 0,
   limit = 30,
 }: {
   token: string;
   q?: string;
   status?: string;
+  source?: string;
   page?: number;
   limit?: number;
 }) {
@@ -87,6 +92,7 @@ export async function fetchAdminShopOrders({
 
   if (q.trim()) params.set("q", q.trim());
   if (status.trim()) params.set("status", status.trim());
+  if (source.trim()) params.set("source", source.trim());
   params.set("action", "orders");
 
   return fetchAdminJson<{

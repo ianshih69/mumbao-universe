@@ -11,6 +11,7 @@ import About from "./pages/About";
 import Mumbao from "./pages/Mumbao";
 import Admin from "./pages/Admin";
 import AdminChats from "./pages/AdminChats";
+import AdminShopHome from "./pages/AdminShopHome";
 import AdminShopOrders from "./pages/AdminShopOrders";
 import AdminShopProducts from "./pages/AdminShopProducts";
 import AdminShopInventory from "./pages/AdminShopInventory";
@@ -31,6 +32,7 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path={"/admin"} component={Admin} />
       <Route path={"/admin/chats"} component={AdminChats} />
+      <Route path={"/admin/shop"} component={AdminShopHome} />
       <Route path={"/admin/shop/orders"} component={AdminShopOrders} />
       <Route path={"/admin/shop/products"} component={AdminShopProducts} />
       <Route path={"/admin/shop/inventory"} component={AdminShopInventory} />

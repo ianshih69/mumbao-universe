@@ -195,6 +195,7 @@ export default function AdminShopProducts() {
   const [isCreating, setIsCreating] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [failedCoverImageUrl, setFailedCoverImageUrl] = useState("");
+  const [failedImageUrls, setFailedImageUrls] = useState<Record<string, string>>({});
   const [copiedSkuId, setCopiedSkuId] = useState("");
 
   const handleAuthFailure = useCallback(() => {
@@ -255,6 +256,7 @@ export default function AdminShopProducts() {
       setIsCreating(false);
       setIsAdvancedOpen(false);
       setFailedCoverImageUrl("");
+      setFailedImageUrls({});
       setCopiedSkuId("");
       setIsDetailLoading(true);
       setSuccess("");
@@ -304,6 +306,7 @@ export default function AdminShopProducts() {
     setIsCreating(false);
     setIsAdvancedOpen(false);
     setFailedCoverImageUrl("");
+    setFailedImageUrls({});
     setCopiedSkuId("");
   };
 
@@ -315,6 +318,7 @@ export default function AdminShopProducts() {
     setIsCreating(false);
     setIsAdvancedOpen(false);
     setFailedCoverImageUrl("");
+    setFailedImageUrls({});
     setCopiedSkuId("");
   };
 
@@ -324,6 +328,7 @@ export default function AdminShopProducts() {
     setIsCreating(true);
     setIsAdvancedOpen(false);
     setFailedCoverImageUrl("");
+    setFailedImageUrls({});
     setCopiedSkuId("");
     setError("");
     setSuccess("");
@@ -351,6 +356,7 @@ export default function AdminShopProducts() {
       setIsCreating(false);
       setIsAdvancedOpen(false);
       setFailedCoverImageUrl("");
+      setFailedImageUrls({});
       setError("");
       setSuccess("");
       return;
@@ -390,6 +396,14 @@ export default function AdminShopProducts() {
     field: K,
     value: AdminShopImage[K]
   ) => {
+    if (field === "image_url") {
+      setFailedImageUrls((current) => {
+        const next = { ...current };
+        delete next[imageId];
+        return next;
+      });
+    }
+
     setSelectedProduct((current) =>
       current
         ? {
@@ -857,12 +871,14 @@ export default function AdminShopProducts() {
               <section className="max-w-full space-y-4 overflow-hidden rounded-[8px] border border-stone-100 bg-white p-4">
                 <div>
                   <h3 className="text-base font-semibold text-stone-900">商品圖片</h3>
-                  <p className="mt-1 text-xs text-stone-400">
-                    前台商品列表會顯示這張圖。
-                  </p>
+                  <div className="mt-1 space-y-1 text-xs text-stone-400">
+                    <p>可貼官網 public 圖片、外部圖床或 CDN 圖片網址。</p>
+                    <p>建議使用 WebP / JPG，寬度 1200～1600px，單張小於 500KB。</p>
+                  </div>
                 </div>
                 <div className="space-y-2 text-sm">
                   <span className="font-medium text-stone-900">商品主圖</span>
+                  <p className="text-xs text-stone-400">前台商品列表會顯示這張圖。</p>
                   {coverImageUrl && !isCoverImageFailed ? (
                     <img
                       src={coverImageUrl}
@@ -876,15 +892,16 @@ export default function AdminShopProducts() {
                       className="h-[280px] max-h-[320px] w-full rounded-[8px] border border-stone-100 bg-[#f6f1ea] object-contain md:h-[320px] md:max-h-[360px]"
                     />
                   ) : (
-                    <div className="flex h-[280px] max-h-[320px] w-full items-center justify-center rounded-[8px] border border-dashed border-stone-200 bg-[#f6f1ea] text-sm text-stone-400 md:h-[320px] md:max-h-[360px]">
-                      {coverImageUrl ? "圖片無法顯示" : "尚未設定商品主圖"}
+                    <div className="flex h-[280px] max-h-[320px] w-full flex-col items-center justify-center rounded-[8px] border border-dashed border-stone-200 bg-[#f6f1ea] text-sm text-stone-400 md:h-[320px] md:max-h-[360px]">
+                      <ImageOff className="mb-2 h-6 w-6" />
+                      {coverImageUrl ? "圖片載入失敗" : "尚未設定商品主圖"}
                     </div>
                   )}
                 </div>
                 <label className="space-y-2 text-sm">
                   <span className="font-medium text-stone-900">主圖圖片位置</span>
                   <p className="text-xs text-stone-400">
-                    目前先貼圖片位置，之後可再改成上傳圖片
+                    可貼官網 public 圖片、外部圖床或 CDN 圖片網址。
                   </p>
                   <Input
                     value={selectedProduct.cover_image_url || ""}
@@ -908,35 +925,66 @@ export default function AdminShopProducts() {
                       目前沒有其他圖片
                     </p>
                   ) : (
-                    selectedProduct.images.map((image) => (
-                      <div
-                        key={image.id}
-                        className="grid max-w-full gap-3 overflow-hidden rounded-[8px] border border-stone-100 p-3 sm:grid-cols-[72px_1fr]"
-                      >
-                        {image.image_url ? (
-                          <img
-                            src={image.image_url}
-                            alt={image.alt || selectedProduct.name}
-                            className="size-16 rounded-[6px] bg-[#f6f1ea] object-cover"
-                          />
-                        ) : (
-                          <span className="flex size-16 items-center justify-center rounded-[6px] bg-[#f6f1ea] text-stone-300">
-                            <ImageOff className="h-5 w-5" />
-                          </span>
-                        )}
-                        <label className="min-w-0 space-y-1 text-xs text-stone-500">
-                          <span>圖片路徑</span>
-                          <Input
-                            value={image.image_url}
-                            onChange={(event) =>
-                              updateImageField(image.id, "image_url", event.target.value)
-                            }
-                            placeholder="/shop-products/01.png"
-                            className="h-9 max-w-full rounded-[8px]"
-                          />
-                        </label>
-                      </div>
-                    ))
+                    selectedProduct.images.map((image) => {
+                      const imageUrl = image.image_url?.trim() || "";
+                      const isImageFailed = Boolean(
+                        imageUrl && failedImageUrls[image.id] === imageUrl
+                      );
+
+                      return (
+                        <div
+                          key={image.id}
+                          className="grid max-w-full gap-3 overflow-hidden rounded-[8px] border border-stone-100 p-3 sm:grid-cols-[112px_1fr]"
+                        >
+                          <div className="min-w-0 space-y-2">
+                            <span className="text-xs font-medium text-stone-500">
+                              縮圖預覽
+                            </span>
+                            {imageUrl && !isImageFailed ? (
+                              <img
+                                src={imageUrl}
+                                alt={image.alt || selectedProduct.name}
+                                onError={() =>
+                                  setFailedImageUrls((current) => ({
+                                    ...current,
+                                    [image.id]: imageUrl,
+                                  }))
+                                }
+                                onLoad={() => {
+                                  if (failedImageUrls[image.id] === imageUrl) {
+                                    setFailedImageUrls((current) => {
+                                      const next = { ...current };
+                                      delete next[image.id];
+                                      return next;
+                                    });
+                                  }
+                                }}
+                                className="h-24 w-full rounded-[6px] border border-stone-100 bg-[#f6f1ea] object-contain"
+                              />
+                            ) : (
+                              <span className="flex h-24 w-full flex-col items-center justify-center rounded-[6px] border border-dashed border-stone-200 bg-[#f6f1ea] text-center text-xs text-stone-400">
+                                <ImageOff className="mb-1 h-5 w-5" />
+                                {imageUrl ? "圖片載入失敗" : "尚未設定圖片"}
+                              </span>
+                            )}
+                          </div>
+                          <label className="min-w-0 space-y-1 text-xs text-stone-500">
+                            <span>圖片路徑</span>
+                            <p className="text-xs text-stone-400">
+                              可貼官網 public 圖片、外部圖床或 CDN 圖片網址。
+                            </p>
+                            <Input
+                              value={image.image_url}
+                              onChange={(event) =>
+                                updateImageField(image.id, "image_url", event.target.value)
+                              }
+                              placeholder="/shop-products/01.png"
+                              className="h-9 max-w-full rounded-[8px]"
+                            />
+                          </label>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </section>

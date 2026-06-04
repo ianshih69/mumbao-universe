@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -155,6 +155,7 @@ export default function AdminShopInventory() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const adjustmentFormRef = useRef<HTMLFormElement | null>(null);
 
   const handleAuthFailure = useCallback(() => {
     clearAdminToken();
@@ -464,11 +465,21 @@ export default function AdminShopInventory() {
   const selectInventoryAlertItem = async (item: InventoryAlertItem) => {
     if (!token) return;
 
+    const scrollToForm = () => {
+      window.requestAnimationFrame(() => {
+        adjustmentFormRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    };
+
     setSelectedProductId(item.productId);
     setSuccess("");
 
     if (item.variantId) {
       setSelectedVariantId(item.variantId);
+      scrollToForm();
       return;
     }
 
@@ -483,6 +494,7 @@ export default function AdminShopInventory() {
       setSelectedProduct(detail);
       setSelectedVariantId(firstMatchedVariant?.id || "");
       setError("");
+      scrollToForm();
     } catch (loadError) {
       if (isAdminAuthError(loadError)) {
         handleAuthFailure();
@@ -612,6 +624,7 @@ export default function AdminShopInventory() {
           )}
 
           <form
+            ref={adjustmentFormRef}
             onSubmit={submitAdjustment}
             className="space-y-5 rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm"
           >
@@ -695,6 +708,24 @@ export default function AdminShopInventory() {
                 )}
               </label>
             </div>
+
+            {selectedProduct && selectedVariant && (
+              <div className="rounded-[8px] border border-[#e5d7c8] bg-[#fbf7f1] p-4">
+                <p className="text-xs font-medium text-stone-500">已選擇</p>
+                <p className="mt-1 text-sm font-semibold text-stone-900">
+                  {selectedProduct.name} / {variantLabel(selectedVariant)}
+                </p>
+                <p className="mt-2 text-sm text-stone-600">
+                  目前庫存：
+                  <span className="font-semibold text-stone-900">
+                    {selectedVariant.inventory}
+                  </span>
+                </p>
+                <p className="mt-1 text-sm text-stone-600">
+                  請選擇入庫、扣庫存或盤點調整。
+                </p>
+              </div>
+            )}
 
             <div className="grid gap-3 rounded-[8px] bg-[#fbf7f1] p-4 md:grid-cols-3">
               <div>
@@ -832,48 +863,60 @@ export default function AdminShopInventory() {
               </div>
             ) : (
               <div className="space-y-3">
-                {inventoryAlertItems.map((item) => (
-                  <div
-                    key={`${item.productId}-${item.variantId}`}
-                    className="grid gap-3 rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-3 sm:grid-cols-[1fr_auto] sm:items-center"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-stone-900">
-                        {item.productName}
-                      </p>
-                      <p className="mt-1 text-xs text-stone-500">
-                        {getVariantLabel(item.variantName, item.variantOption)}
-                      </p>
-                      <p className="mt-1 break-all text-xs text-stone-400">
-                        SKU：{item.sku || "-"}
-                      </p>
-                    </div>
-                    <div className="flex flex-col gap-2 sm:items-end">
-                      <div className="flex flex-wrap gap-2 sm:justify-end">
-                        <div className="rounded-[8px] bg-white px-3 py-2 text-sm">
-                          <span className="text-stone-500">目前庫存：</span>
-                          <span className="font-semibold text-stone-900">
-                            {item.inventory}
-                          </span>
-                        </div>
-                        <div className="rounded-[8px] bg-white px-3 py-2 text-sm">
-                          <span className="text-stone-500">庫存狀態：</span>
-                          <span className="font-semibold text-stone-900">
-                            {getInventoryStatusLabel(item.inventory)}
-                          </span>
-                        </div>
+                {inventoryAlertItems.map((item) => {
+                  const isSelectedItem = selectedVariantId === item.variantId;
+
+                  return (
+                    <div
+                      key={`${item.productId}-${item.variantId}`}
+                      className={cn(
+                        "grid gap-3 rounded-[8px] border p-3 sm:grid-cols-[1fr_auto] sm:items-center",
+                        isSelectedItem
+                          ? "border-[#b99aa2] bg-[#f4ece2]"
+                          : "border-stone-100 bg-[#fbf7f1]"
+                      )}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-stone-900">
+                          {item.productName}
+                        </p>
+                        <p className="mt-1 text-xs text-stone-500">
+                          {getVariantLabel(item.variantName, item.variantOption)}
+                        </p>
+                        <p className="mt-1 break-all text-xs text-stone-400">
+                          SKU：{item.sku || "-"}
+                        </p>
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-10 rounded-full bg-white"
-                        onClick={() => selectInventoryAlertItem(item)}
-                      >
-                        選擇調整
-                      </Button>
+                      <div className="flex flex-col gap-2 sm:items-end">
+                        <div className="flex flex-wrap gap-2 sm:justify-end">
+                          <div className="rounded-[8px] bg-white px-3 py-2 text-sm">
+                            <span className="text-stone-500">目前庫存：</span>
+                            <span className="font-semibold text-stone-900">
+                              {item.inventory}
+                            </span>
+                          </div>
+                          <div className="rounded-[8px] bg-white px-3 py-2 text-sm">
+                            <span className="text-stone-500">庫存狀態：</span>
+                            <span className="font-semibold text-stone-900">
+                              {getInventoryStatusLabel(item.inventory)}
+                            </span>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={cn(
+                            "h-10 rounded-full bg-white",
+                            isSelectedItem && "border-[#8b6f5b] text-[#765d4a]"
+                          )}
+                          onClick={() => selectInventoryAlertItem(item)}
+                        >
+                          {isSelectedItem ? "正在調整" : "選擇調整"}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

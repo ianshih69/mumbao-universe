@@ -49,6 +49,28 @@ export type AdminShopOrderItem = {
   line_total: number;
 };
 
+export type AdminShopOrderItemExportRow = {
+  order_number: string;
+  created_at?: string;
+  order_source: AdminOrderSource;
+  customer_name: string;
+  customer_phone: string;
+  customer_email?: string;
+  order_status: AdminOrderStatus;
+  payment_status: AdminPaymentStatus;
+  shipping_carrier?: string;
+  tracking_number?: string;
+  product_name: string;
+  variant_name?: string;
+  variant_option?: string;
+  sku?: string;
+  unit_price: number;
+  quantity: number;
+  line_total: number;
+  order_total: number;
+  internal_note?: string;
+};
+
 export type AdminShopOrderDetail = AdminShopOrderSummary & {
   shipping_address: string;
   note?: string;
@@ -167,6 +189,42 @@ export async function fetchAdminShopOrdersForExport({
   return fetchAdminJson<{
     orders?: AdminShopOrderSummary[];
     hasMore?: boolean;
+  }>(`/api/admin-shop?${params.toString()}`, token);
+}
+
+export async function fetchAdminShopOrderItemsForExport({
+  token,
+  q = "",
+  status = "",
+  source = "",
+  paymentStatus = "",
+  dateFrom = "",
+  dateTo = "",
+  tracking = "",
+}: {
+  token: string;
+  q?: string;
+  status?: string;
+  source?: string;
+  paymentStatus?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  tracking?: AdminTrackingFilter;
+}) {
+  const params = new URLSearchParams({
+    action: "order-items-export",
+  });
+
+  if (q.trim()) params.set("q", q.trim());
+  if (status.trim()) params.set("status", status.trim());
+  if (source.trim()) params.set("source", source.trim());
+  if (paymentStatus.trim()) params.set("paymentStatus", paymentStatus.trim());
+  if (dateFrom.trim()) params.set("dateFrom", dateFrom.trim());
+  if (dateTo.trim()) params.set("dateTo", dateTo.trim());
+  if (tracking.trim()) params.set("tracking", tracking.trim());
+
+  return fetchAdminJson<{
+    rows?: AdminShopOrderItemExportRow[];
   }>(`/api/admin-shop?${params.toString()}`, token);
 }
 

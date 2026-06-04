@@ -20,8 +20,10 @@ import {
   type AdminPaymentStatus,
   type AdminTrackingFilter,
   type AdminShopOrderDetail,
+  type AdminShopOrderItemExportRow,
   type AdminShopOrderSummary,
   fetchAdminShopOrder,
+  fetchAdminShopOrderItemsForExport,
   fetchAdminShopOrders,
   fetchAdminShopOrdersForExport,
   updateAdminShopOrderStatus,
@@ -212,6 +214,55 @@ function buildOrdersCsv(orders: AdminShopOrderSummary[]) {
     .join("\r\n");
 }
 
+function buildOrderItemsCsv(rows: AdminShopOrderItemExportRow[]) {
+  const headers = [
+    "訂單編號",
+    "建立時間",
+    "訂單來源",
+    "顧客姓名",
+    "電話",
+    "Email",
+    "訂單狀態",
+    "付款狀態",
+    "物流方式",
+    "物流單號",
+    "商品名稱",
+    "規格名稱",
+    "規格選項",
+    "SKU",
+    "單價",
+    "數量",
+    "小計",
+    "訂單總金額",
+    "內部備註",
+  ];
+  const csvRows = rows.map((row) => [
+    row.order_number,
+    formatDateTime(row.created_at),
+    orderSourceLabels[row.order_source || "online"],
+    row.customer_name,
+    row.customer_phone,
+    row.customer_email || "",
+    orderStatusLabels[row.order_status],
+    paymentStatusLabels[row.payment_status],
+    row.shipping_carrier || "",
+    row.tracking_number || "",
+    row.product_name,
+    row.variant_name || "",
+    row.variant_option || "",
+    row.sku || "",
+    row.unit_price,
+    row.quantity,
+    row.line_total,
+    row.order_total,
+    row.internal_note || "",
+  ]);
+
+  return [headers, ...csvRows]
+    .map((row) => row.map((value) => escapeCsvValue(value)).join(","))
+    .join("\r\n");
+}
+
 function downloadCsv(filename: string, csvContent: string) {
   const blob = new Blob([`\uFEFF${csvContent}`], {
     type: "text/csv;charset=utf-8;",
@@ -247,6 +298,7 @@ export default function AdminShopOrders() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isItemsExporting, setIsItemsExporting] = useState(false);
   const [isPrintOpen, setIsPrintOpen] = useState(false);
   const [error, setError] = useState("");
   const [quickActionMessage, setQuickActionMessage] = useState("");
@@ -519,6 +571,37 @@ export default function AdminShopOrders() {
     }
   };
 
+  const exportOrderItemsCsv = async () => {
+    if (!token) return;
+
+    setIsItemsExporting(true);
+    try {
+      const data = await fetchAdminShopOrderItemsForExport({
+        token,
+        q: search,
+        status,
+        source,
+        paymentStatus: paymentStatusFilter,
+        dateFrom,
+        dateTo,
+        tracking: trackingFilter,
+      });
+      const csv = buildOrderItemsCsv(data.rows || []);
+      downloadCsv(`mumbao-order-items-${formatDateForFileName()}.csv`, csv);
+      setError("");
+    } catch (exportError) {
+      if (isAdminAuthError(exportError)) {
+        handleAuthFailure();
+        return;
+      }
+      setError(
+        exportError instanceof Error ? exportError.message : "商品明細匯出失敗。"
+      );
+    } finally {
+      setIsItemsExporting(false);
+    }
+  };
+
   const selectedOrderSource = selectedOrder?.order_source || "online";
   const isSelectedOnlineOrder = selectedOrderSource === "online";
   const isWaitingForPayment =
@@ -737,7 +820,7 @@ export default function AdminShopOrders() {
                   ))}
                 </select>
               </label>
-              <div className="grid gap-2 sm:col-span-2 sm:grid-cols-3 xl:col-span-3">
+              <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2 xl:col-span-3 xl:grid-cols-4">
                 <Button type="submit" className="h-11 rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]">
                   搜尋
                 </Button>
@@ -757,7 +840,17 @@ export default function AdminShopOrders() {
                   disabled={isExporting}
                 >
                   <Download className="h-4 w-4" />
-                  {isExporting ? "匯出中..." : "匯出 CSV"}
+                  {isExporting ? "匯出中..." : "匯出訂單 CSV"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 rounded-full border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                  onClick={exportOrderItemsCsv}
+                  disabled={isItemsExporting}
+                >
+                  <Download className="h-4 w-4" />
+                  {isItemsExporting ? "匯出中..." : "匯出商品明細 CSV"}
                 </Button>
               </div>
             </div>

@@ -501,7 +501,7 @@ async function loadDashboard(req, res) {
   });
 }
 
-async function loadOrders(req, res) {
+function buildOrderListFilters(req) {
   const search = String(firstQueryValue(req.query?.q) || "").trim();
   const status = String(firstQueryValue(req.query?.status) || "").trim();
   const source = String(firstQueryValue(req.query?.source) || "").trim();
@@ -509,15 +509,6 @@ async function loadOrders(req, res) {
   const dateFrom = String(firstQueryValue(req.query?.dateFrom) || "").trim();
   const dateTo = String(firstQueryValue(req.query?.dateTo) || "").trim();
   const tracking = String(firstQueryValue(req.query?.tracking) || "").trim();
-  const isExport = String(firstQueryValue(req.query?.export) || "").trim() === "1";
-  const limit = isExport
-    ? exportLimit
-    : getPositiveInt(firstQueryValue(req.query?.limit), defaultLimit, maxLimit);
-  const page = isExport ? 0 : getPage(firstQueryValue(req.query?.page));
-  const offset = page * limit;
-  const select = isExport
-    ? "id,order_number,customer_name,customer_phone,customer_email,shipping_address,subtotal,shipping_fee,total,payment_method,payment_status,order_status,order_source,shipping_carrier,tracking_number,note,internal_note,created_at,updated_at"
-    : "id,order_number,customer_name,customer_phone,customer_email,subtotal,shipping_fee,total,payment_method,payment_status,order_status,order_source,tracking_number,created_at,updated_at";
   const statusFilter =
     status && validOrderStatuses.has(status)
       ? `&order_status=eq.${encodeURIComponent(status)}`
@@ -547,8 +538,23 @@ async function loadOrders(req, res) {
   const searchFilter = search
     ? `&or=(order_number.ilike.${searchTerm},customer_name.ilike.${searchTerm},customer_phone.ilike.${searchTerm},customer_email.ilike.${searchTerm},tracking_number.ilike.${searchTerm})`
     : "";
+
+  return `${statusFilter}${sourceFilter}${paymentStatusFilter}${dateFromFilter}${dateToFilter}${trackingFilter}${searchFilter}`;
+}
+
+async function loadOrders(req, res) {
+  const isExport = String(firstQueryValue(req.query?.export) || "").trim() === "1";
+  const limit = isExport
+    ? exportLimit
+    : getPositiveInt(firstQueryValue(req.query?.limit), defaultLimit, maxLimit);
+  const page = isExport ? 0 : getPage(firstQueryValue(req.query?.page));
+  const offset = page * limit;
+  const select = isExport
+    ? "id,order_number,customer_name,customer_phone,customer_email,shipping_address,subtotal,shipping_fee,total,payment_method,payment_status,order_status,order_source,shipping_carrier,tracking_number,note,internal_note,created_at,updated_at"
+    : "id,order_number,customer_name,customer_phone,customer_email,subtotal,shipping_fee,total,payment_method,payment_status,order_status,order_source,tracking_number,created_at,updated_at";
+  const orderFilters = buildOrderListFilters(req);
   const orders = await supabaseRequest(
-    `/shop_orders?select=${select}${statusFilter}${sourceFilter}${paymentStatusFilter}${dateFromFilter}${dateToFilter}${trackingFilter}${searchFilter}&order=created_at.desc&limit=${
+    `/shop_orders?select=${select}${orderFilters}&order=created_at.desc&limit=${
       limit + 1
     }&offset=${offset}`
   );
@@ -561,6 +567,76 @@ async function loadOrders(req, res) {
     hasMore,
     nextPage: hasMore ? page + 1 : null,
   });
+}
+
+function normalizeOrderItemExportRow(order, item, variant) {
+  return {
+    order_number: order.order_number || "",
+    created_at: order.created_at || "",
+    order_source: order.order_source || "online",
+    customer_name: order.customer_name || "",
+    customer_phone: order.customer_phone || "",
+    customer_email: order.customer_email || "",
+    order_status: order.order_status || "pending_confirm",
+    payment_status: order.payment_status || "pending",
+    shipping_carrier: order.shipping_carrier || "",
+    tracking_number: order.tracking_number || "",
+    product_name: item.product_name || "",
+    variant_name: item.variant_name || "",
+    variant_option: item.variant_option || "",
+    sku: variant?.sku || "",
+    unit_price: Number(item.unit_price || 0),
+    quantity: Number(item.quantity || 0),
+    line_total: Number(item.line_total || 0),
+    order_total: Number(order.total || 0),
+    internal_note: order.internal_note || "",
+  };
+}
+
+async function loadOrderItemsExport(req, res) {
+  const select =
+    "id,order_number,customer_name,customer_phone,customer_email,total,payment_status,order_status,order_source,shipping_carrier,tracking_number,internal_note,created_at";
+  const orderFilters = buildOrderListFilters(req);
+  const orders = await supabaseRequest(
+    `/shop_orders?select=${select}${orderFilters}&order=created_at.desc&limit=${exportLimit}`
+  );
+
+  if (!orders?.length) {
+    return sendJson(res, 200, { rows: [] });
+  }
+
+  const orderIds = orders.map((order) => order.id).filter(Boolean);
+  const items = orderIds.length
+    ? await supabaseRequest(
+        `/shop_order_items?order_id=in.(${orderIds.join(
+          ","
+        )})&select=*&order=created_at.asc`
+      )
+    : [];
+  const variantsById = await loadVariantsByIds((items || []).map((item) => item.variant_id));
+  const itemsByOrderId = new Map();
+
+  for (const item of items || []) {
+    const orderItems = itemsByOrderId.get(item.order_id) || [];
+    orderItems.push(item);
+    itemsByOrderId.set(item.order_id, orderItems);
+  }
+
+  const rows = [];
+  for (const order of orders || []) {
+    const orderItems = itemsByOrderId.get(order.id) || [];
+    for (const item of orderItems) {
+      rows.push(
+        normalizeOrderItemExportRow(
+          order,
+          item,
+          variantsById.get(item.variant_id)
+        )
+      );
+    }
+  }
+
+  return sendJson(res, 200, { rows });
 }
 
 async function loadOrder(orderNumber) {
@@ -1341,6 +1417,10 @@ export default async function handler(req, res) {
 
     if (req.method === "GET" && action === "orders") {
       return await loadOrders(req, res);
+    }
+
+    if (req.method === "GET" && action === "order-items-export") {
+      return await loadOrderItemsExport(req, res);
     }
 
     if (action === "order") {

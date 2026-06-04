@@ -1,3 +1,5 @@
+export type AdminAuthStatus = "checking" | "loggedIn" | "loggedOut";
+
 export const adminShopTokenKey = "adminShopToken";
 const legacyAdminShopTokenKey = "mumbao-admin-shop-order-token";
 
@@ -18,6 +20,10 @@ export function getAdminToken() {
   } catch {
     return "";
   }
+}
+
+export function getInitialAdminAuthStatus(): AdminAuthStatus {
+  return getAdminToken() ? "loggedIn" : "loggedOut";
 }
 
 export function setAdminToken(token: string) {

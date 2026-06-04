@@ -12,8 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import AdminShopNav from "@/components/shop/AdminShopNav";
 import {
+  type AdminAuthStatus,
   adminAuthExpiredMessage,
   clearAdminToken,
+  getInitialAdminAuthStatus,
   getAdminToken,
   setAdminToken,
 } from "@/lib/shop/adminAuth";
@@ -75,6 +77,9 @@ async function validateAdminToken(token: string) {
 
 export default function AdminShopHome() {
   const [token, setTokenState] = useState(() => getAdminToken());
+  const [authStatus, setAuthStatus] = useState<AdminAuthStatus>(() =>
+    getInitialAdminAuthStatus()
+  );
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [isChecking, setIsChecking] = useState(Boolean(token));
@@ -84,15 +89,18 @@ export default function AdminShopHome() {
 
     let isCurrent = true;
     setIsChecking(true);
+    setAuthStatus("checking");
     validateAdminToken(token)
       .then(() => {
         if (!isCurrent) return;
+        setAuthStatus("loggedIn");
         setLoginError("");
       })
       .catch(() => {
         if (!isCurrent) return;
         clearAdminToken();
         setTokenState("");
+        setAuthStatus("loggedOut");
         setLoginError(adminAuthExpiredMessage);
       })
       .finally(() => {
@@ -114,14 +122,17 @@ export default function AdminShopHome() {
     }
 
     setIsChecking(true);
+    setAuthStatus("checking");
     try {
       await validateAdminToken(nextToken);
       setAdminToken(nextToken);
       setTokenState(nextToken);
+      setAuthStatus("loggedIn");
       setPassword("");
       setLoginError("");
     } catch (error) {
       clearAdminToken();
+      setAuthStatus("loggedOut");
       setLoginError(error instanceof Error ? error.message : adminAuthExpiredMessage);
     } finally {
       setIsChecking(false);
@@ -131,11 +142,20 @@ export default function AdminShopHome() {
   const logout = () => {
     clearAdminToken();
     setTokenState("");
+    setAuthStatus("loggedOut");
     setPassword("");
     setLoginError("");
   };
 
-  if (!token || isChecking) {
+  if (!token && authStatus === "checking") {
+    return (
+      <main className="flex min-h-[100svh] items-center justify-center bg-[#f7f2ea] px-5 text-stone-500">
+        <p className="text-sm">確認登入狀態中...</p>
+      </main>
+    );
+  }
+
+  if (!token) {
     return (
       <main className="flex min-h-[100svh] items-center justify-center bg-[#f7f2ea] px-5 text-stone-900">
         <form
@@ -188,6 +208,9 @@ export default function AdminShopHome() {
             <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-500">
               集中管理慢寶商品、訂單、庫存、入庫與現場銷售。所有商城後台頁面共用同一份登入狀態。
             </p>
+            {isChecking && (
+              <p className="mt-2 text-xs text-stone-400">確認登入狀態中...</p>
+            )}
           </div>
           <Button variant="ghost" className="rounded-full" onClick={logout}>
             <LogOut className="h-4 w-4" />

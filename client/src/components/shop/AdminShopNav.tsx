@@ -34,7 +34,7 @@ export default function AdminShopNav({ current = "home" }: AdminShopNavProps) {
               : "border border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
           )}
         >
-          商城後台
+          總覽
         </Link>
         <div className="flex min-w-max gap-2">
           {navItems.map((item) => {

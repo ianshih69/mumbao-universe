@@ -41,6 +41,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const productListLimit = 30;
+const lowInventoryThreshold = 3;
 
 const productStatusLabels: Record<AdminProductStatus, string> = PRODUCT_STATUS_LABELS;
 
@@ -116,6 +117,18 @@ function getProductTone(status: AdminProductStatus) {
 
 function getVariantTone(status: AdminVariantStatus) {
   return status === "active" ? "green" : "stone";
+}
+
+function getInventoryStatus(inventory: number) {
+  if (inventory <= 0) {
+    return { label: "售完", tone: "red" as const };
+  }
+
+  if (inventory <= lowInventoryThreshold) {
+    return { label: "低庫存", tone: "pink" as const };
+  }
+
+  return { label: "庫存正常", tone: "green" as const };
 }
 
 function createEmptyProduct(): AdminShopProductDetail {
@@ -586,6 +599,7 @@ export default function AdminShopProducts() {
             ) : (
               products.map((product) => {
                 const isSelected = selectedProductId === product.id;
+                const inventoryStatus = getInventoryStatus(product.total_inventory);
 
                 return (
                   <button
@@ -624,7 +638,12 @@ export default function AdminShopProducts() {
                         <span className="font-semibold text-stone-900">
                           {formatPrice(product.min_price)}
                         </span>
-                        <span className="text-stone-500">庫存 {product.total_inventory}</span>
+                        <span className="flex flex-col items-end gap-1 text-stone-500">
+                          <span>庫存 {product.total_inventory}</span>
+                          <StatusPill tone={inventoryStatus.tone}>
+                            {inventoryStatus.label}
+                          </StatusPill>
+                        </span>
                       </span>
                     </span>
                   </button>
@@ -655,6 +674,7 @@ export default function AdminShopProducts() {
               ) : (
                 products.map((product) => {
                   const isSelected = selectedProductId === product.id;
+                  const inventoryStatus = getInventoryStatus(product.total_inventory);
 
                   return (
                     <button
@@ -697,7 +717,12 @@ export default function AdminShopProducts() {
                       <span className="font-medium text-stone-800">
                         {formatPrice(product.min_price)}
                       </span>
-                      <span className="text-stone-700">{product.total_inventory}</span>
+                      <span className="flex flex-col items-start gap-1 text-stone-700">
+                        <span>{product.total_inventory}</span>
+                        <StatusPill tone={inventoryStatus.tone}>
+                          {inventoryStatus.label}
+                        </StatusPill>
+                      </span>
                       <span className="text-stone-600">
                         {product.variant_count} / {product.image_count}
                       </span>

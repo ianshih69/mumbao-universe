@@ -41,6 +41,9 @@ import { cn } from "@/lib/utils";
 
 const productListLimit = 50;
 const movementListLimit = 30;
+const lowInventoryThreshold = 3;
+
+type InventoryStatusFilter = "" | "low" | "soldout";
 
 const movementLabels: Record<AdminInventoryMovementType, string> =
   INVENTORY_MOVEMENT_LABELS;
@@ -104,6 +107,18 @@ function variantLabel(variant?: AdminShopVariant | null) {
   return getVariantLabel(variant.variant_name, variant.variant_option);
 }
 
+function matchesInventoryFilter(inventory: number, filter: InventoryStatusFilter) {
+  if (filter === "low") return inventory >= 1 && inventory <= lowInventoryThreshold;
+  if (filter === "soldout") return inventory <= 0;
+  return true;
+}
+
+function getInventoryStatusLabel(inventory: number) {
+  if (inventory <= 0) return "售完";
+  if (inventory <= lowInventoryThreshold) return "低庫存";
+  return "庫存正常";
+}
+
 export default function AdminShopInventory() {
   const [token, setToken] = useState(() => getStoredAdminToken());
   const [password, setPassword] = useState("");
@@ -112,6 +127,8 @@ export default function AdminShopInventory() {
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<AdminShopProductDetail | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState("");
+  const [inventoryStatusFilter, setInventoryStatusFilter] =
+    useState<InventoryStatusFilter>("");
   const [movementType, setMovementType] =
     useState<"stock_in" | "stock_out" | "adjustment">("stock_in");
   const [quantity, setQuantity] = useState("1");
@@ -138,6 +155,20 @@ export default function AdminShopInventory() {
   const selectedVariant = useMemo(
     () => selectedProduct?.variants.find((variant) => variant.id === selectedVariantId) || null,
     [selectedProduct, selectedVariantId]
+  );
+  const filteredProducts = useMemo(
+    () =>
+      products.filter((product) =>
+        matchesInventoryFilter(product.total_inventory, inventoryStatusFilter)
+      ),
+    [inventoryStatusFilter, products]
+  );
+  const filteredVariants = useMemo(
+    () =>
+      (selectedProduct?.variants || []).filter((variant) =>
+        matchesInventoryFilter(variant.inventory, inventoryStatusFilter)
+      ),
+    [inventoryStatusFilter, selectedProduct]
   );
   const selectedAction = actionOptions.find((option) => option.value === movementType);
 
@@ -177,7 +208,10 @@ export default function AdminShopInventory() {
       setIsProductLoading(true);
       try {
         const detail = await fetchAdminShopProduct(token, productId);
-        const firstVariantId = detail.variants[0]?.id || "";
+        const firstVariantId =
+          detail.variants.find((variant) =>
+            matchesInventoryFilter(variant.inventory, inventoryStatusFilter)
+          )?.id || "";
 
         setSelectedProduct(detail);
         setSelectedVariantId(firstVariantId);
@@ -192,7 +226,7 @@ export default function AdminShopInventory() {
         setIsProductLoading(false);
       }
     },
-    [handleAuthFailure, token]
+    [handleAuthFailure, inventoryStatusFilter, token]
   );
 
   const loadMovements = useCallback(
@@ -477,7 +511,26 @@ export default function AdminShopInventory() {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-3">
+              <label className="space-y-2 text-sm">
+                <span className="font-medium text-stone-900">庫存狀態</span>
+                <select
+                  value={inventoryStatusFilter}
+                  onChange={(event) => {
+                    setInventoryStatusFilter(event.target.value as InventoryStatusFilter);
+                    setSelectedProductId("");
+                    setSelectedProduct(null);
+                    setSelectedVariantId("");
+                    setSuccess("");
+                  }}
+                  className="h-11 w-full rounded-[8px] border border-stone-200 bg-white px-3 outline-none"
+                >
+                  <option value="">全部</option>
+                  <option value="low">低庫存</option>
+                  <option value="soldout">售完</option>
+                </select>
+              </label>
+
               <label className="space-y-2 text-sm">
                 <span className="font-medium text-stone-900">商品</span>
                 <select
@@ -491,9 +544,9 @@ export default function AdminShopInventory() {
                   className="h-11 w-full rounded-[8px] border border-stone-200 bg-white px-3 outline-none"
                 >
                   <option value="">請選擇商品</option>
-                  {products.map((product) => (
+                  {filteredProducts.map((product) => (
                     <option key={product.id} value={product.id}>
-                      {product.name}（{product.category || "未分類"}）
+                      {product.name}（{product.category || "未分類"} / {getInventoryStatusLabel(product.total_inventory)}）
                     </option>
                   ))}
                 </select>
@@ -513,13 +566,19 @@ export default function AdminShopInventory() {
                   <option value="">
                     {isProductLoading ? "規格讀取中..." : "請選擇規格"}
                   </option>
-                  {selectedProduct?.variants.map((variant) => (
+                  {filteredVariants.map((variant) => (
                     <option key={variant.id} value={variant.id}>
                       {variantLabel(variant)}
                       {variant.sku ? ` / ${variant.sku}` : ""}
+                      {` / ${getInventoryStatusLabel(variant.inventory)}`}
                     </option>
                   ))}
                 </select>
+                {selectedProduct && filteredVariants.length === 0 && (
+                  <p className="text-xs text-stone-400">
+                    這個商品目前沒有符合篩選條件的規格。
+                  </p>
+                )}
               </label>
             </div>
 

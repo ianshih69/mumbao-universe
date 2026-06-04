@@ -382,7 +382,7 @@ export default function AdminShopOrders() {
 
   return (
     <>
-      <main className="min-h-[100svh] bg-[#f7f2ea] text-stone-900">
+      <main className="no-print min-h-[100svh] bg-[#f7f2ea] text-stone-900">
       <header className="border-b border-stone-200 bg-white/95 px-5 py-5 backdrop-blur md:px-8">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>

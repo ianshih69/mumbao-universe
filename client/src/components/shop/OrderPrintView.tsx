@@ -46,7 +46,7 @@ function Field({ label, value }: { label: string; value?: string | number | null
 
 export default function OrderPrintView({ order, onClose }: OrderPrintViewProps) {
   return (
-    <div className="order-print-modal fixed inset-0 z-50 overflow-y-auto bg-stone-950/45 px-4 py-6 print:bg-white print:p-0">
+    <div className="order-print-root fixed inset-0 z-50 overflow-y-auto bg-stone-950/45 px-4 py-6 print:bg-white print:p-0">
       <style>{`
         @page {
           size: A4;
@@ -57,22 +57,31 @@ export default function OrderPrintView({ order, onClose }: OrderPrintViewProps) 
           html,
           body {
             background: #fff !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
           }
 
-          body * {
-            visibility: hidden !important;
+          .no-print,
+          .order-print-actions {
+            display: none !important;
           }
 
-          .order-print-modal,
-          .order-print-modal *,
-          .order-print-sheet,
-          .order-print-sheet * {
-            visibility: visible !important;
-          }
-
-          .order-print-modal {
+          .order-print-root {
             position: static !important;
             inset: auto !important;
+            display: block !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            background: #fff !important;
+          }
+
+          .order-print-root * {
+            box-sizing: border-box !important;
             overflow: visible !important;
           }
 
@@ -80,10 +89,7 @@ export default function OrderPrintView({ order, onClose }: OrderPrintViewProps) 
             margin: 0 !important;
             max-width: none !important;
             width: 100% !important;
-          }
-
-          .order-print-actions {
-            display: none !important;
+            height: auto !important;
           }
 
           .order-print-sheet {
@@ -91,8 +97,57 @@ export default function OrderPrintView({ order, onClose }: OrderPrintViewProps) 
             border: 0 !important;
             border-radius: 0 !important;
             width: 100% !important;
+            max-width: 180mm !important;
+            height: auto !important;
             min-height: auto !important;
             padding: 0 !important;
+            margin: 0 auto !important;
+            color: #1c1917 !important;
+            page-break-before: auto !important;
+            page-break-after: auto !important;
+            page-break-inside: auto !important;
+          }
+
+          .order-print-sheet header {
+            padding-bottom: 8px !important;
+          }
+
+          .order-print-sheet h1 {
+            font-size: 22px !important;
+            line-height: 1.2 !important;
+          }
+
+          .order-print-sheet h2 {
+            font-size: 13px !important;
+          }
+
+          .order-print-sheet dl {
+            padding: 8px !important;
+            gap: 6px !important;
+          }
+
+          .order-print-info-grid {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 10px !important;
+            margin-top: 12px !important;
+          }
+
+          .order-print-section {
+            margin-top: 12px !important;
+          }
+
+          .order-print-sheet th {
+            padding: 5px 6px !important;
+          }
+
+          .order-print-sheet td {
+            padding: 6px !important;
+          }
+
+          .order-print-total {
+            margin-top: 10px !important;
+            padding: 8px !important;
           }
         }
       `}</style>
@@ -123,7 +178,7 @@ export default function OrderPrintView({ order, onClose }: OrderPrintViewProps) 
           </div>
         </div>
 
-        <section className="order-print-sheet min-h-[297mm] rounded-[8px] border border-stone-200 bg-white p-8 text-stone-900 shadow-2xl shadow-stone-900/15">
+        <section className="order-print-sheet rounded-[8px] border border-stone-200 bg-white p-8 text-stone-900 shadow-2xl shadow-stone-900/15">
           <header className="border-b-2 border-stone-900 pb-5">
             <p className="text-xs tracking-[0.24em] text-stone-500">MUMBAO SHOP</p>
             <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -136,7 +191,7 @@ export default function OrderPrintView({ order, onClose }: OrderPrintViewProps) 
             </div>
           </header>
 
-          <div className="mt-6 grid gap-6 md:grid-cols-2">
+          <div className="order-print-info-grid mt-6 grid gap-6 md:grid-cols-2">
             <section>
               <h2 className="text-sm font-semibold text-stone-900">訂單資訊</h2>
               <dl className="mt-3 grid grid-cols-2 gap-3 rounded-[8px] border border-stone-200 p-4">
@@ -165,7 +220,7 @@ export default function OrderPrintView({ order, onClose }: OrderPrintViewProps) 
             </section>
           </div>
 
-          <section className="mt-7">
+          <section className="order-print-section mt-7">
             <h2 className="text-sm font-semibold text-stone-900">商品明細</h2>
             <div className="mt-3 overflow-hidden rounded-[8px] border border-stone-200">
               <table className="w-full border-collapse text-left text-sm">
@@ -203,7 +258,7 @@ export default function OrderPrintView({ order, onClose }: OrderPrintViewProps) 
             </div>
           </section>
 
-          <section className="ml-auto mt-6 w-full max-w-sm space-y-2 rounded-[8px] border border-stone-200 p-4 text-sm">
+          <section className="order-print-total ml-auto mt-6 w-full max-w-sm space-y-2 rounded-[8px] border border-stone-200 p-4 text-sm">
             <div className="flex justify-between text-stone-600">
               <span>商品小計</span>
               <span>{formatPrice(order.subtotal)}</span>

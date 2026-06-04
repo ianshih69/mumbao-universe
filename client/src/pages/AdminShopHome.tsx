@@ -84,12 +84,14 @@ function SummaryCard({
   detail,
   icon: Icon,
   tone = "stone",
+  href,
 }: {
   title: string;
   value: string;
   detail: string;
   icon: typeof TrendingUp;
   tone?: "stone" | "green" | "pink" | "amber";
+  href?: string;
 }) {
   const toneClass = {
     stone: "bg-stone-100 text-stone-700",
@@ -98,8 +100,8 @@ function SummaryCard({
     amber: "bg-amber-50 text-amber-700",
   }[tone];
 
-  return (
-    <div className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
+  const content = (
+    <>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm text-stone-500">{title}</p>
@@ -110,6 +112,23 @@ function SummaryCard({
         </div>
       </div>
       <p className="mt-3 text-xs leading-5 text-stone-500">{detail}</p>
+    </>
+  );
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        className="block rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#b99aa2] hover:shadow-md"
+      >
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <div className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
+      {content}
     </div>
   );
 }
@@ -124,7 +143,10 @@ function EmptyState({ text }: { text: string }) {
 
 function RecentOrderRow({ order }: { order: AdminDashboardRecentOrder }) {
   return (
-    <div className="grid gap-3 rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-3 md:grid-cols-[1.1fr_0.8fr_0.8fr_0.8fr] md:items-center">
+    <a
+      href="/admin/shop/orders"
+      className="grid gap-3 rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-3 transition hover:border-[#b99aa2] hover:bg-[#f4ece2] md:grid-cols-[1.1fr_0.8fr_0.8fr_0.8fr] md:items-center"
+    >
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-stone-900">
           {order.order_number}
@@ -143,7 +165,7 @@ function RecentOrderRow({ order }: { order: AdminDashboardRecentOrder }) {
         </span>
       </div>
       <p className="text-xs text-stone-500">{formatDateTime(order.created_at)}</p>
-    </div>
+    </a>
   );
 }
 
@@ -152,54 +174,32 @@ function RecentMovementRow({ movement }: { movement: AdminDashboardRecentMovemen
 
   return (
     <div className="rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-stone-900">
+          <p className="truncate text-sm font-semibold text-stone-900">
             {movement.product_name || "未命名商品"}
           </p>
-          <p className="mt-1 text-xs text-stone-500">
-            {getVariantLabel(movement.variant_name, movement.variant_option) || "-"}
-          </p>
-          {movement.sku && (
-            <p className="mt-1 break-all font-mono text-xs text-stone-400">
-              {movement.sku}
-            </p>
-          )}
+          <p className="mt-1 text-xs text-stone-500">{formatDateTime(movement.created_at)}</p>
         </div>
         <span className="rounded-full bg-white px-2.5 py-1 text-xs text-stone-600">
           {movementTypeLabels[movement.movement_type] || movement.movement_type}
         </span>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-        <div className="rounded-[6px] bg-white p-2">
-          <p className="text-stone-400">異動前</p>
-          <p className="mt-1 font-semibold text-stone-900">
-            {movement.quantity_before}
-          </p>
-        </div>
-        <div className="rounded-[6px] bg-white p-2">
-          <p className="text-stone-400">變化</p>
-          <p
-            className={cn(
-              "mt-1 font-semibold",
-              delta > 0 ? "text-emerald-700" : delta < 0 ? "text-red-600" : "text-stone-700"
-            )}
-          >
-            {getDeltaText(delta)}
-          </p>
-        </div>
-        <div className="rounded-[6px] bg-white p-2">
-          <p className="text-stone-400">異動後</p>
-          <p className="mt-1 font-semibold text-stone-900">
-            {movement.quantity_after}
-          </p>
-        </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+        <span
+          className={cn(
+            "rounded-full bg-white px-2.5 py-1 font-semibold",
+            delta > 0 ? "text-emerald-700" : delta < 0 ? "text-red-600" : "text-stone-700"
+          )}
+        >
+          {getDeltaText(delta)}
+        </span>
+        <span className="text-stone-500">
+          {movement.quantity_before} -&gt; {movement.quantity_after}
+        </span>
       </div>
-      {(movement.note || movement.created_at) && (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500">
-          <span>{movement.note || "-"}</span>
-          <span>{formatDateTime(movement.created_at)}</span>
-        </div>
+      {movement.note && (
+        <p className="mt-2 line-clamp-1 text-xs text-stone-500">{movement.note}</p>
       )}
     </div>
   );
@@ -401,7 +401,9 @@ export default function AdminShopHome() {
           </div>
         )}
 
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="space-y-3">
+          <p className="text-sm text-stone-500">今日統計：台灣時間 00:00 至目前</p>
+          <div className="grid gap-4 md:grid-cols-3">
           <SummaryCard
             title="今日銷售總額"
             value={formatPrice(today?.sales_total || 0)}
@@ -426,7 +428,9 @@ export default function AdminShopHome() {
             detail="官網訂單且狀態為待確認。"
             icon={AlertTriangle}
             tone="amber"
+            href="/admin/shop/orders?source=online&status=pending_confirm"
           />
+          </div>
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
@@ -495,9 +499,10 @@ export default function AdminShopHome() {
               ) : dashboard?.low_inventory.length ? (
                 <div className="space-y-3">
                   {dashboard.low_inventory.map((item) => (
-                    <div
+                    <a
                       key={item.variant_id}
-                      className="rounded-[8px] border border-amber-100 bg-amber-50/60 p-3"
+                      href="/admin/shop/products"
+                      className="block rounded-[8px] border border-amber-100 bg-amber-50/60 p-3 transition hover:border-amber-300 hover:bg-amber-50"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -517,7 +522,7 @@ export default function AdminShopHome() {
                           {item.inventory} 件
                         </span>
                       </div>
-                    </div>
+                    </a>
                   ))}
                 </div>
               ) : (

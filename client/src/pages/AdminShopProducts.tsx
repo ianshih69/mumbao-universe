@@ -197,6 +197,9 @@ export default function AdminShopProducts() {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [failedCoverImageUrl, setFailedCoverImageUrl] = useState("");
   const [failedImageUrls, setFailedImageUrls] = useState<Record<string, string>>({});
+  const [failedVariantImageUrls, setFailedVariantImageUrls] = useState<Record<string, string>>({});
+  const [expandedVariantId, setExpandedVariantId] = useState("");
+  const [visibleQrVariantId, setVisibleQrVariantId] = useState("");
   const [copiedSkuId, setCopiedSkuId] = useState("");
 
   const handleAuthFailure = useCallback(() => {
@@ -258,6 +261,9 @@ export default function AdminShopProducts() {
       setIsAdvancedOpen(false);
       setFailedCoverImageUrl("");
       setFailedImageUrls({});
+      setFailedVariantImageUrls({});
+      setExpandedVariantId("");
+      setVisibleQrVariantId("");
       setCopiedSkuId("");
       setIsDetailLoading(true);
       setSuccess("");
@@ -308,6 +314,9 @@ export default function AdminShopProducts() {
     setIsAdvancedOpen(false);
     setFailedCoverImageUrl("");
     setFailedImageUrls({});
+    setFailedVariantImageUrls({});
+    setExpandedVariantId("");
+    setVisibleQrVariantId("");
     setCopiedSkuId("");
   };
 
@@ -320,6 +329,9 @@ export default function AdminShopProducts() {
     setIsAdvancedOpen(false);
     setFailedCoverImageUrl("");
     setFailedImageUrls({});
+    setFailedVariantImageUrls({});
+    setExpandedVariantId("");
+    setVisibleQrVariantId("");
     setCopiedSkuId("");
   };
 
@@ -330,6 +342,9 @@ export default function AdminShopProducts() {
     setIsAdvancedOpen(false);
     setFailedCoverImageUrl("");
     setFailedImageUrls({});
+    setFailedVariantImageUrls({});
+    setExpandedVariantId("");
+    setVisibleQrVariantId("");
     setCopiedSkuId("");
     setError("");
     setSuccess("");
@@ -358,6 +373,9 @@ export default function AdminShopProducts() {
       setIsAdvancedOpen(false);
       setFailedCoverImageUrl("");
       setFailedImageUrls({});
+      setFailedVariantImageUrls({});
+      setExpandedVariantId("");
+      setVisibleQrVariantId("");
       setError("");
       setSuccess("");
       return;
@@ -380,6 +398,14 @@ export default function AdminShopProducts() {
     field: K,
     value: AdminShopVariant[K]
   ) => {
+    if (field === "image_url") {
+      setFailedVariantImageUrls((current) => {
+        const next = { ...current };
+        delete next[variantId];
+        return next;
+      });
+    }
+
     setSelectedProduct((current) =>
       current
         ? {
@@ -453,6 +479,9 @@ export default function AdminShopProducts() {
       setSelectedProductId(saved.id);
       setIsCreating(false);
       setFailedCoverImageUrl("");
+      setFailedVariantImageUrls({});
+      setExpandedVariantId("");
+      setVisibleQrVariantId("");
       setProducts((current) =>
         isCreating
           ? [saved, ...current.filter((product) => product.id !== saved.id)]
@@ -1009,158 +1038,274 @@ export default function AdminShopProducts() {
                     目前沒有規格
                   </p>
                 ) : (
-                  selectedProduct.variants.map((variant) => (
-                    <div
-                      key={variant.id}
-                      className="max-w-full space-y-3 overflow-hidden rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-4"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium text-stone-900">
-                          {variant.variant_name || "未命名規格"}
-                        </p>
-                        <StatusPill tone={getVariantTone(variant.status)}>
-                          {variantStatusLabels[variant.status]}
-                        </StatusPill>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="space-y-1 text-xs text-stone-500">
-                          <span>規格名稱</span>
-                          <Input
-                            value={variant.variant_name}
-                            onChange={(event) =>
-                              updateVariantField(variant.id, "variant_name", event.target.value)
-                            }
-                            className="h-9 rounded-[8px] bg-white"
-                          />
-                        </label>
-                        <label className="space-y-1 text-xs text-stone-500">
-                          <span>規格選項</span>
-                          <Input
-                            value={variant.variant_option || ""}
-                            onChange={(event) =>
-                              updateVariantField(variant.id, "variant_option", event.target.value)
-                            }
-                            className="h-9 rounded-[8px] bg-white"
-                          />
-                        </label>
-                        <label className="space-y-1 text-xs text-stone-500 sm:col-span-2">
-                          <span>規格圖片 URL</span>
-                          <p className="text-[11px] leading-4 text-stone-400">
-                            選擇此規格時，前台商品主圖會切換到這張圖片，可留空。
-                          </p>
-                          <Input
-                            value={variant.image_url || ""}
-                            onChange={(event) =>
-                              updateVariantField(variant.id, "image_url", event.target.value)
-                            }
-                            placeholder="/shop-products/01.png"
-                            className="h-9 rounded-[8px] bg-white"
-                          />
-                        </label>
-                        <label className="space-y-1 text-xs text-stone-500 sm:col-span-2">
-                          <span>商品編號</span>
-                          <p className="text-[11px] leading-4 text-stone-400">
-                            掃 QR code、進貨入庫、現場銷售時會用到這個編號
-                          </p>
-                          <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                            <Input
-                              value={variant.sku || ""}
-                              onChange={(event) =>
-                                updateVariantField(variant.id, "sku", event.target.value)
-                              }
-                              className="h-10 min-w-0 max-w-full rounded-[8px] bg-white font-mono text-sm"
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-10 w-full rounded-full bg-white sm:w-auto"
-                              onClick={() => copySku(variant)}
-                              disabled={!variant.sku?.trim()}
-                            >
-                              <Copy className="h-4 w-4" />
-                              複製
-                            </Button>
+                  selectedProduct.variants.map((variant) => {
+                    const isExpanded = expandedVariantId === variant.id;
+                    const isQrVisible = visibleQrVariantId === variant.id;
+                    const variantImageUrl = variant.image_url?.trim() || "";
+                    const isVariantImageFailed = Boolean(
+                      variantImageUrl && failedVariantImageUrls[variant.id] === variantImageUrl
+                    );
+
+                    return (
+                      <div
+                        key={variant.id}
+                        className={cn(
+                          "max-w-full overflow-hidden rounded-[8px] border bg-[#fbf7f1] p-4 transition",
+                          isExpanded ? "border-[#d7c6b5] shadow-sm" : "border-stone-100"
+                        )}
+                      >
+                        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                          <div className="min-w-0 space-y-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="min-w-0 font-medium text-stone-900">
+                                {variant.variant_name || "未命名規格"}
+                              </p>
+                              <StatusPill tone={getVariantTone(variant.status)}>
+                                {variantStatusLabels[variant.status]}
+                              </StatusPill>
+                              <StatusPill tone={variantImageUrl ? "green" : "stone"}>
+                                {variantImageUrl ? "有圖片" : "未設定圖片"}
+                              </StatusPill>
+                            </div>
+                            <div className="grid gap-2 text-xs text-stone-500 sm:grid-cols-2 lg:grid-cols-4">
+                              <span>
+                                售價：
+                                <strong className="font-semibold text-[#8b6f5b]">
+                                  {formatPrice(variant.price)}
+                                </strong>
+                              </span>
+                              <span>庫存：{variant.inventory}</span>
+                              <span className="min-w-0 truncate">
+                                商品編號：{variant.sku || "未設定"}
+                              </span>
+                              <span className="min-w-0 truncate">
+                                規格選項：{variant.variant_option || "-"}
+                              </span>
+                            </div>
                           </div>
-                          {copiedSkuId === variant.id && (
-                            <p className="text-xs text-emerald-700">已複製商品編號</p>
-                          )}
-                        </label>
-                        <div className="sm:col-span-2">
-                          <VariantQrCode
-                            sku={variant.sku}
-                            title="商品 QR code"
-                            subtitle="手機相機掃描會開啟掃描入庫頁"
-                            compact
-                          />
-                        </div>
-                        <label className="space-y-1 text-xs text-stone-500">
-                          <span>販售狀態</span>
-                          <select
-                            value={variant.status}
-                            onChange={(event) =>
-                              updateVariantField(
-                                variant.id,
-                                "status",
-                                event.target.value as AdminVariantStatus
-                              )
-                            }
-                            className="h-9 w-full rounded-[8px] border border-stone-200 bg-white px-3"
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-9 rounded-full bg-white"
+                            onClick={() => {
+                              setExpandedVariantId((current) =>
+                                current === variant.id ? "" : variant.id
+                              );
+                              setVisibleQrVariantId("");
+                            }}
                           >
-                            {editableVariantStatuses.map((option) => (
-                              <option key={option} value={option}>
-                                {variantStatusLabels[option]}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="space-y-1 text-xs text-stone-500">
-                          <span>售價</span>
-                          <Input
-                            type="number"
-                            value={variant.price}
-                            onChange={(event) =>
-                              updateVariantField(
-                                variant.id,
-                                "price",
-                                numberValue(event.target.value)
-                              )
-                            }
-                            className="h-9 rounded-[8px] bg-white"
-                          />
-                        </label>
-                        <label className="space-y-1 text-xs text-stone-500">
-                          <span>原價</span>
-                          <Input
-                            type="number"
-                            value={variant.compare_at_price ?? ""}
-                            onChange={(event) =>
-                              updateVariantField(
-                                variant.id,
-                                "compare_at_price",
-                                event.target.value === "" ? null : numberValue(event.target.value)
-                              )
-                            }
-                            className="h-9 rounded-[8px] bg-white"
-                          />
-                        </label>
-                        <label className="space-y-1 text-xs text-stone-500">
-                          <span>庫存</span>
-                          <Input
-                            type="number"
-                            value={variant.inventory}
-                            onChange={(event) =>
-                              updateVariantField(
-                                variant.id,
-                                "inventory",
-                                numberValue(event.target.value)
-                              )
-                            }
-                            className="h-9 rounded-[8px] bg-white"
-                          />
-                        </label>
+                            {isExpanded ? "收合" : "編輯"}
+                          </Button>
+                        </div>
+
+                        {isExpanded && (
+                          <div className="mt-4 space-y-4 border-t border-[#eadfce] pt-4">
+                            <div className="grid gap-3 sm:grid-cols-[96px_1fr] sm:items-start">
+                              <div className="space-y-1 text-xs text-stone-500">
+                                <span>規格圖片</span>
+                                {variantImageUrl && !isVariantImageFailed ? (
+                                  <img
+                                    src={variantImageUrl}
+                                    alt={variant.variant_name || "規格圖片"}
+                                    onError={() =>
+                                      setFailedVariantImageUrls((current) => ({
+                                        ...current,
+                                        [variant.id]: variantImageUrl,
+                                      }))
+                                    }
+                                    onLoad={() => {
+                                      if (failedVariantImageUrls[variant.id] === variantImageUrl) {
+                                        setFailedVariantImageUrls((current) => {
+                                          const next = { ...current };
+                                          delete next[variant.id];
+                                          return next;
+                                        });
+                                      }
+                                    }}
+                                    className="h-20 w-20 rounded-[6px] border border-stone-100 bg-white object-contain"
+                                  />
+                                ) : (
+                                  <span className="flex h-20 w-20 flex-col items-center justify-center rounded-[6px] border border-dashed border-stone-200 bg-white text-center text-[11px] text-stone-400">
+                                    <ImageOff className="mb-1 h-4 w-4" />
+                                    {variantImageUrl ? "圖片載入失敗" : "未設定圖片"}
+                                  </span>
+                                )}
+                              </div>
+                              <label className="space-y-1 text-xs text-stone-500">
+                                <span>規格圖片 URL</span>
+                                <p className="text-[11px] leading-4 text-stone-400">
+                                  選擇此規格時，前台商品主圖會切換到這張圖片，可留空。
+                                </p>
+                                <Input
+                                  value={variant.image_url || ""}
+                                  onChange={(event) =>
+                                    updateVariantField(
+                                      variant.id,
+                                      "image_url",
+                                      event.target.value
+                                    )
+                                  }
+                                  placeholder="/shop-products/01.png"
+                                  className="h-9 rounded-[8px] bg-white"
+                                />
+                              </label>
+                            </div>
+
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <label className="space-y-1 text-xs text-stone-500">
+                                <span>規格名稱</span>
+                                <Input
+                                  value={variant.variant_name}
+                                  onChange={(event) =>
+                                    updateVariantField(
+                                      variant.id,
+                                      "variant_name",
+                                      event.target.value
+                                    )
+                                  }
+                                  className="h-9 rounded-[8px] bg-white"
+                                />
+                              </label>
+                              <label className="space-y-1 text-xs text-stone-500">
+                                <span>規格選項</span>
+                                <Input
+                                  value={variant.variant_option || ""}
+                                  onChange={(event) =>
+                                    updateVariantField(
+                                      variant.id,
+                                      "variant_option",
+                                      event.target.value
+                                    )
+                                  }
+                                  className="h-9 rounded-[8px] bg-white"
+                                />
+                              </label>
+                              <label className="space-y-1 text-xs text-stone-500 sm:col-span-2">
+                                <span>商品編號</span>
+                                <p className="text-[11px] leading-4 text-stone-400">
+                                  掃 QR code、進貨入庫、現場銷售時會用到這個編號
+                                </p>
+                                <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                                  <Input
+                                    value={variant.sku || ""}
+                                    onChange={(event) =>
+                                      updateVariantField(variant.id, "sku", event.target.value)
+                                    }
+                                    className="h-10 min-w-0 max-w-full rounded-[8px] bg-white font-mono text-sm"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-10 w-full rounded-full bg-white sm:w-auto"
+                                    onClick={() => copySku(variant)}
+                                    disabled={!variant.sku?.trim()}
+                                  >
+                                    <Copy className="h-4 w-4" />
+                                    複製
+                                  </Button>
+                                </div>
+                                {copiedSkuId === variant.id && (
+                                  <p className="text-xs text-emerald-700">已複製商品編號</p>
+                                )}
+                              </label>
+                              <label className="space-y-1 text-xs text-stone-500">
+                                <span>販售狀態</span>
+                                <select
+                                  value={variant.status}
+                                  onChange={(event) =>
+                                    updateVariantField(
+                                      variant.id,
+                                      "status",
+                                      event.target.value as AdminVariantStatus
+                                    )
+                                  }
+                                  className="h-9 w-full rounded-[8px] border border-stone-200 bg-white px-3"
+                                >
+                                  {editableVariantStatuses.map((option) => (
+                                    <option key={option} value={option}>
+                                      {variantStatusLabels[option]}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="space-y-1 text-xs text-stone-500">
+                                <span>售價</span>
+                                <Input
+                                  type="number"
+                                  value={variant.price}
+                                  onChange={(event) =>
+                                    updateVariantField(
+                                      variant.id,
+                                      "price",
+                                      numberValue(event.target.value)
+                                    )
+                                  }
+                                  className="h-9 rounded-[8px] bg-white"
+                                />
+                              </label>
+                              <label className="space-y-1 text-xs text-stone-500">
+                                <span>原價</span>
+                                <Input
+                                  type="number"
+                                  value={variant.compare_at_price ?? ""}
+                                  onChange={(event) =>
+                                    updateVariantField(
+                                      variant.id,
+                                      "compare_at_price",
+                                      event.target.value === ""
+                                        ? null
+                                        : numberValue(event.target.value)
+                                    )
+                                  }
+                                  className="h-9 rounded-[8px] bg-white"
+                                />
+                              </label>
+                              <label className="space-y-1 text-xs text-stone-500">
+                                <span>庫存</span>
+                                <Input
+                                  type="number"
+                                  value={variant.inventory}
+                                  onChange={(event) =>
+                                    updateVariantField(
+                                      variant.id,
+                                      "inventory",
+                                      numberValue(event.target.value)
+                                    )
+                                  }
+                                  className="h-9 rounded-[8px] bg-white"
+                                />
+                              </label>
+                            </div>
+
+                            <div className="rounded-[8px] border border-stone-100 bg-white p-3">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-9 rounded-full bg-white"
+                                onClick={() =>
+                                  setVisibleQrVariantId((current) =>
+                                    current === variant.id ? "" : variant.id
+                                  )
+                                }
+                              >
+                                {isQrVisible ? "隱藏 QR code" : "顯示 QR code"}
+                              </Button>
+                              {isQrVisible && (
+                                <div className="mt-3">
+                                  <VariantQrCode
+                                    sku={variant.sku}
+                                    title="商品 QR code"
+                                    subtitle="手機相機掃描會開啟掃描入庫頁"
+                                    compact
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </section>
 

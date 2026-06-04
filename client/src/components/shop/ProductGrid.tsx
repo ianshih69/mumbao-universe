@@ -52,7 +52,7 @@ export function ProductGrid({
 }) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4 lg:grid-cols-4 2xl:grid-cols-5">
         {Array.from({ length: 10 }).map((_, index) => (
           <ProductSkeleton key={index} />
         ))}
@@ -65,7 +65,7 @@ export function ProductGrid({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4 lg:grid-cols-4 2xl:grid-cols-5">
       {products.map((product) => (
         <ProductCard key={product.id} product={product} />
       ))}

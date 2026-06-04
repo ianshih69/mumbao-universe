@@ -121,25 +121,28 @@ export default function Shop() {
       <Header />
       <main className="mx-auto max-w-[1440px] px-3 pb-16 pt-28 sm:px-5 md:px-7 md:pt-32">
         <section className="rounded-[8px] border border-[#eadfce] bg-[#fffdf8] p-3 shadow-sm shadow-stone-200/60 md:p-4">
-          <div className="grid gap-3 lg:grid-cols-[16rem_1fr_auto] lg:items-center">
+          <div className="grid gap-3 lg:grid-cols-[19rem_minmax(22rem,1fr)_auto] lg:items-center">
             <Link
               href="/shop"
               className="flex min-w-0 items-center gap-3 rounded-[8px] bg-[#f3eadf] px-4 py-3"
             >
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#9f7868] shadow-sm">
+              <span className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-white text-[#9f7868] shadow-sm">
                 <Sparkles className="h-5 w-5" />
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold text-stone-900">
-                  慢寶文創小店
+                <span className="block truncate text-base font-semibold text-stone-900">
+                  宇宙碎品商店
                 </span>
-                <span className="block truncate text-xs uppercase tracking-[0.16em] text-[#9f7868]">
-                  MUMBAO Shop
+                <span className="block truncate text-[11px] uppercase tracking-[0.18em] text-[#9f7868]">
+                  MUMBAO SHOP
+                </span>
+                <span className="mt-1 block truncate text-xs text-stone-500">
+                  把慢寶宇宙裡的小小陪伴，帶回你的日常。
                 </span>
               </span>
             </Link>
 
-            <label className="flex h-12 items-center gap-3 rounded-full border border-[#eadfce] bg-white px-4 shadow-inner shadow-stone-100">
+            <label className="flex h-11 items-center gap-3 rounded-full border border-[#eadfce] bg-white px-4 shadow-inner shadow-stone-100">
               <Search className="h-5 w-5 flex-none text-[#b99aa2]" />
               <input
                 value={search}
@@ -151,7 +154,7 @@ export default function Shop() {
 
             <Button
               asChild
-              className="h-12 rounded-full bg-[#8b6f5b] px-5 text-white hover:bg-[#765d4a]"
+              className="h-11 rounded-full bg-[#8b6f5b] px-5 text-white hover:bg-[#765d4a]"
             >
               <Link href="/cart">
                 <ShoppingBag className="h-4 w-4" />
@@ -160,7 +163,7 @@ export default function Shop() {
             </Button>
           </div>
 
-          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
             {categoryTabs.map((category) => {
               const isActive = activeCategory === category;
 
@@ -215,7 +218,17 @@ export default function Shop() {
               {error}
             </div>
           ) : (
-            <ProductGrid products={visibleProducts} isLoading={isLoading} />
+            <>
+              <ProductGrid products={visibleProducts} isLoading={isLoading} />
+              <div className="mt-5 flex flex-col gap-3 rounded-[8px] border border-[#eadfce] bg-[#fbf7f1] px-4 py-3 text-sm leading-6 text-stone-600 sm:flex-row sm:items-center">
+                <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-white text-[#b99aa2] shadow-sm">
+                  <Sparkles className="h-4 w-4" />
+                </span>
+                <p>
+                  每一件宇宙碎品都由慢慢蒔光整理上架，付款採人工確認。若想確認現貨或大量訂購，可先聯繫我們。
+                </p>
+              </div>
+            </>
           )}
         </section>
       </main>

@@ -33,6 +33,7 @@
 - E2 訂單匯出 CSV 正常
 - E2-2 訂單商品明細 CSV 匯出正常
 - E3 / E3-1 低庫存與庫存清單 UX 正常
+- E4 商品圖片 URL 管理優化正常
 
 ## 2. D4 出貨資訊 / 內部備註完成內容
 
@@ -261,7 +262,48 @@ E3 / E3-1 未修改：
 - 訂單管理
 - Vercel function 數量
 
-## 8. 測試通過項目
+## 8. E4 商品圖片 URL 管理優化完成內容
+
+`/admin/shop/products` 已完成商品圖片 URL 管理 UI 優化。
+
+完成項目：
+
+- 商品主圖 URL 有值時會顯示預覽
+- 沒有主圖 URL 時會顯示「尚未設定商品主圖」
+- 主圖載入失敗時會顯示「圖片載入失敗」
+- 商品圖片列表每張都有縮圖預覽
+- 商品圖片列表載入失敗時會顯示「圖片載入失敗」
+- 保留 `cover_image_url` 編輯方式
+- 保留 `image_url` 編輯方式
+- 保留 `alt` 編輯方式
+- 保留 `sort_order` 編輯方式
+- 新增圖片 URL 說明：
+  - 「可貼官網 public 圖片、外部圖床或 CDN 圖片網址」
+  - 「建議使用 WebP / JPG，寬度 1200～1600px，單張小於 500KB」
+
+E4 未實作：
+
+- 圖片上傳
+- Supabase Storage
+- 拖曳排序
+- 圖片壓縮
+- 圖片裁切
+- 刪除 Storage 檔案
+
+E4 未修改：
+
+- API
+- 資料庫 schema
+- RPC
+- 前台購物流程
+- POS 銷售邏輯
+- QR 掃描邏輯
+- 庫存流程
+- 訂單管理
+- CSV 匯出
+- Vercel function 數量
+
+## 9. 測試通過項目
 
 ### 前台購物流程
 
@@ -329,8 +371,19 @@ E3 / E3-1 未修改：
 - E3 / E3-1 下方選中項目有高亮或「正在調整」狀態
 - E3 / E3-1 手機版沒有水平跑版
 - E3 / E3-1 未影響 API、資料庫、RPC、前台、POS、QR、CSV、訂單管理
+- E4 商品主圖 URL 有值時會顯示預覽
+- E4 沒有主圖 URL 時會顯示「尚未設定商品主圖」
+- E4 主圖載入失敗時會顯示「圖片載入失敗」
+- E4 商品圖片列表每張都有縮圖預覽
+- E4 圖片列表載入失敗時會顯示「圖片載入失敗」
+- E4 `image_url`、`alt`、`sort_order` 仍可正常編輯
+- E4 儲存商品後資料可正常保存
+- E4 前台 `/shop` 與商品詳情圖片仍正常
+- E4 未影響 API、資料庫、RPC、前台購物流程、POS、QR、庫存、訂單管理、CSV
+- E4 未新增 Vercel function
+- E4 `npm.cmd run build` 已通過
 
-## 9. 核心資料表
+## 10. 核心資料表
 
 - `shop_products`
 - `shop_product_variants`
@@ -345,7 +398,7 @@ E3 / E3-1 未修改：
 - `tracking_number`
 - `internal_note`
 
-## 10. 核心 RPC
+## 11. 核心 RPC
 
 - `create_shop_order`
   - 官網下單
@@ -370,7 +423,7 @@ E3 / E3-1 未修改：
   - 寫入 `manual_sale` 庫存流水
   - 庫存不足時整筆 rollback
 
-## 11. API 架構與 Vercel Function 限制
+## 12. API 架構與 Vercel Function 限制
 
 目前商城 API 已收斂，避免超過 Vercel Hobby serverless functions 限制。
 
@@ -389,7 +442,7 @@ E3 / E3-1 未修改：
 
 不要新增新的 Vercel function，除非有明確需求並重新評估 function 數量。
 
-## 12. 不可亂改的區塊
+## 13. 不可亂改的區塊
 
 除非有明確需求，請不要修改：
 
@@ -409,7 +462,7 @@ E3 / E3-1 未修改：
 
 任何會影響下單、扣庫存、庫存流水、POS、QR、AI 客服、LIFF session 的修改，都應先規劃並明確列出影響範圍。
 
-## 13. 下一階段候選功能
+## 14. 下一階段候選功能
 
 可評估的後續方向：
 

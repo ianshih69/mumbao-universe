@@ -490,8 +490,8 @@ export default function AdminShopOrders() {
             onSubmit={submitSearch}
             className="rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm"
           >
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.4fr)_170px_170px_170px_150px_150px_170px_auto] xl:items-center">
-              <label className="flex h-11 items-center gap-2 rounded-full border border-stone-200 bg-stone-50 px-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <label className="flex h-11 items-center gap-2 rounded-full border border-stone-200 bg-stone-50 px-4 sm:col-span-2 xl:col-span-3">
                 <Search className="h-4 w-4 text-stone-400" />
                 <input
                   value={search}
@@ -500,89 +500,119 @@ export default function AdminShopOrders() {
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                 />
               </label>
-              <select
-                value={status}
-                onChange={(event) => {
-                  setStatus(event.target.value as "" | AdminOrderStatus);
-                  setSelectedOrderNumber("");
-                  setSelectedOrder(null);
-                }}
-                className="h-11 rounded-full border border-stone-200 bg-white px-4 text-sm outline-none"
-              >
-                {orderStatusOptions.map((option) => (
-                  <option key={option.value || "all"} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={source}
-                onChange={(event) => {
-                  setSource(event.target.value as "" | AdminOrderSource);
-                  setSelectedOrderNumber("");
-                  setSelectedOrder(null);
-                }}
-                className="h-11 rounded-full border border-stone-200 bg-white px-4 text-sm outline-none"
-              >
-                {orderSourceOptions.map((option) => (
-                  <option key={option.value || "all-source"} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={paymentStatusFilter}
-                onChange={(event) => {
-                  setPaymentStatusFilter(event.target.value as "" | AdminPaymentStatus);
-                  setSelectedOrderNumber("");
-                  setSelectedOrder(null);
-                }}
-                className="h-11 rounded-full border border-stone-200 bg-white px-4 text-sm outline-none"
-              >
-                {paymentStatusFilterOptions.map((option) => (
-                  <option key={option.value || "all-payment"} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <Input
-                type="date"
-                value={dateFrom}
-                onChange={(event) => {
-                  setDateFrom(event.target.value);
-                  setSelectedOrderNumber("");
-                  setSelectedOrder(null);
-                }}
-                aria-label="開始日期"
-                className="h-11 rounded-full border-stone-200 bg-white px-4 text-sm"
-              />
-              <Input
-                type="date"
-                value={dateTo}
-                onChange={(event) => {
-                  setDateTo(event.target.value);
-                  setSelectedOrderNumber("");
-                  setSelectedOrder(null);
-                }}
-                aria-label="結束日期"
-                className="h-11 rounded-full border-stone-200 bg-white px-4 text-sm"
-              />
-              <select
-                value={trackingFilter}
-                onChange={(event) => {
-                  setTrackingFilter(event.target.value as AdminTrackingFilter);
-                  setSelectedOrderNumber("");
-                  setSelectedOrder(null);
-                }}
-                className="h-11 rounded-full border border-stone-200 bg-white px-4 text-sm outline-none"
-              >
-                {trackingFilterOptions.map((option) => (
-                  <option key={option.value || "all-tracking"} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <Button type="submit" className="h-11 rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]">
+              <label className="space-y-1">
+                <span className="block px-1 text-xs font-medium text-stone-500">
+                  訂單狀態
+                </span>
+                <select
+                  value={status}
+                  onChange={(event) => {
+                    setStatus(event.target.value as "" | AdminOrderStatus);
+                    setSelectedOrderNumber("");
+                    setSelectedOrder(null);
+                  }}
+                  className="h-11 w-full rounded-full border border-stone-200 bg-white px-4 text-sm outline-none"
+                >
+                  {orderStatusOptions.map((option) => (
+                    <option key={option.value || "all"} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="block px-1 text-xs font-medium text-stone-500">
+                  訂單來源
+                </span>
+                <select
+                  value={source}
+                  onChange={(event) => {
+                    setSource(event.target.value as "" | AdminOrderSource);
+                    setSelectedOrderNumber("");
+                    setSelectedOrder(null);
+                  }}
+                  className="h-11 w-full rounded-full border border-stone-200 bg-white px-4 text-sm outline-none"
+                >
+                  {orderSourceOptions.map((option) => (
+                    <option key={option.value || "all-source"} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="block px-1 text-xs font-medium text-stone-500">
+                  付款狀態
+                </span>
+                <select
+                  value={paymentStatusFilter}
+                  onChange={(event) => {
+                    setPaymentStatusFilter(event.target.value as "" | AdminPaymentStatus);
+                    setSelectedOrderNumber("");
+                    setSelectedOrder(null);
+                  }}
+                  className="h-11 w-full rounded-full border border-stone-200 bg-white px-4 text-sm outline-none"
+                >
+                  {paymentStatusFilterOptions.map((option) => (
+                    <option key={option.value || "all-payment"} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="block px-1 text-xs font-medium text-stone-500">
+                  開始日期
+                </span>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(event) => {
+                    setDateFrom(event.target.value);
+                    setSelectedOrderNumber("");
+                    setSelectedOrder(null);
+                  }}
+                  aria-label="開始日期"
+                  className="h-11 w-full rounded-full border-stone-200 bg-white px-4 text-sm"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="block px-1 text-xs font-medium text-stone-500">
+                  結束日期
+                </span>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(event) => {
+                    setDateTo(event.target.value);
+                    setSelectedOrderNumber("");
+                    setSelectedOrder(null);
+                  }}
+                  aria-label="結束日期"
+                  className="h-11 w-full rounded-full border-stone-200 bg-white px-4 text-sm"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="block px-1 text-xs font-medium text-stone-500">
+                  物流單號
+                </span>
+                <select
+                  value={trackingFilter}
+                  onChange={(event) => {
+                    setTrackingFilter(event.target.value as AdminTrackingFilter);
+                    setSelectedOrderNumber("");
+                    setSelectedOrder(null);
+                  }}
+                  className="h-11 w-full rounded-full border border-stone-200 bg-white px-4 text-sm outline-none"
+                >
+                  {trackingFilterOptions.map((option) => (
+                    <option key={option.value || "all-tracking"} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button type="submit" className="h-11 rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a] sm:col-span-2 xl:col-span-3">
                 搜尋
               </Button>
             </div>

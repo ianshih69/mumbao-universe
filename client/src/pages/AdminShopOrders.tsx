@@ -23,6 +23,11 @@ import {
 } from "@/lib/shop/adminOrdersApi";
 import { formatPrice, getVariantLabel } from "@/lib/shop/format";
 import {
+  ORDER_SOURCE_LABELS,
+  ORDER_STATUS_LABELS,
+  PAYMENT_STATUS_LABELS,
+} from "@/lib/shop/labels";
+import {
   adminAuthExpiredMessage,
   clearAdminToken as clearStoredAdminToken,
   getAdminToken,
@@ -33,48 +38,33 @@ import { cn } from "@/lib/utils";
 
 const orderListLimit = 30;
 
-const orderStatusLabels: Record<AdminOrderStatus, string> = {
-  pending_confirm: "待確認",
-  pending_payment: "待付款",
-  paid: "已付款",
-  shipping: "出貨中",
-  completed: "已完成",
-  cancelled: "已取消",
-};
+const orderStatusLabels: Record<AdminOrderStatus, string> = ORDER_STATUS_LABELS;
 
-const paymentStatusLabels: Record<AdminPaymentStatus, string> = {
-  pending: "待付款",
-  confirmed: "已確認付款",
-  failed: "付款失敗",
-  refunded: "已退款",
-};
+const paymentStatusLabels: Record<AdminPaymentStatus, string> = PAYMENT_STATUS_LABELS;
 
-const orderSourceLabels: Record<AdminOrderSource, string> = {
-  online: "官網訂單",
-  pos: "現場銷售",
-};
+const orderSourceLabels: Record<AdminOrderSource, string> = ORDER_SOURCE_LABELS;
 
 const orderStatusOptions: Array<{ value: "" | AdminOrderStatus; label: string }> = [
   { value: "", label: "全部狀態" },
-  { value: "pending_confirm", label: "待確認" },
-  { value: "pending_payment", label: "待付款" },
-  { value: "paid", label: "已付款" },
-  { value: "shipping", label: "出貨中" },
-  { value: "completed", label: "已完成" },
-  { value: "cancelled", label: "已取消" },
+  { value: "pending_confirm", label: ORDER_STATUS_LABELS.pending_confirm },
+  { value: "pending_payment", label: ORDER_STATUS_LABELS.pending_payment },
+  { value: "paid", label: ORDER_STATUS_LABELS.paid },
+  { value: "shipping", label: ORDER_STATUS_LABELS.shipping },
+  { value: "completed", label: ORDER_STATUS_LABELS.completed },
+  { value: "cancelled", label: ORDER_STATUS_LABELS.cancelled },
 ];
 
 const orderSourceOptions: Array<{ value: "" | AdminOrderSource; label: string }> = [
   { value: "", label: "全部來源" },
-  { value: "online", label: "官網訂單" },
-  { value: "pos", label: "現場銷售" },
+  { value: "online", label: ORDER_SOURCE_LABELS.online },
+  { value: "pos", label: ORDER_SOURCE_LABELS.pos },
 ];
 
 const paymentStatusOptions: Array<{ value: AdminPaymentStatus; label: string }> = [
-  { value: "pending", label: "待付款" },
-  { value: "confirmed", label: "已確認付款" },
-  { value: "failed", label: "付款失敗" },
-  { value: "refunded", label: "已退款" },
+  { value: "pending", label: PAYMENT_STATUS_LABELS.pending },
+  { value: "confirmed", label: PAYMENT_STATUS_LABELS.confirmed },
+  { value: "failed", label: PAYMENT_STATUS_LABELS.failed },
+  { value: "refunded", label: PAYMENT_STATUS_LABELS.refunded },
 ];
 
 function getStoredAdminToken() {
@@ -510,7 +500,7 @@ export default function AdminShopOrders() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
-                    Order Detail
+                    訂單明細
                   </p>
                   <h2 className="mt-1 text-xl font-semibold">
                     {selectedOrder.order_number}

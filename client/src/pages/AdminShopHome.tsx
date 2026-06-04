@@ -28,6 +28,12 @@ import {
   fetchAdminShopDashboard,
 } from "@/lib/shop/adminDashboardApi";
 import { formatPrice, getVariantLabel } from "@/lib/shop/format";
+import {
+  getInventoryMovementLabel,
+  getOrderSourceLabel,
+  getOrderStatusLabel,
+  getPaymentStatusLabel,
+} from "@/lib/shop/labels";
 import { cn } from "@/lib/utils";
 
 const orderSourceLabels = {
@@ -152,16 +158,16 @@ function RecentOrderRow({ order }: { order: AdminDashboardRecentOrder }) {
           {order.order_number}
         </p>
         <p className="mt-1 text-xs text-stone-500">
-          {orderSourceLabels[order.order_source] || "官網訂單"}
+          {getOrderSourceLabel(order.order_source)}
         </p>
       </div>
       <p className="text-sm font-semibold text-stone-900">{formatPrice(order.total)}</p>
       <div className="flex flex-wrap gap-2 text-xs">
         <span className="rounded-full bg-white px-2.5 py-1 text-stone-600">
-          {paymentStatusLabels[order.payment_status] || order.payment_status}
+          {getPaymentStatusLabel(order.payment_status)}
         </span>
         <span className="rounded-full bg-white px-2.5 py-1 text-stone-600">
-          {orderStatusLabels[order.order_status] || order.order_status}
+          {getOrderStatusLabel(order.order_status)}
         </span>
       </div>
       <p className="text-xs text-stone-500">{formatDateTime(order.created_at)}</p>
@@ -182,7 +188,7 @@ function RecentMovementRow({ movement }: { movement: AdminDashboardRecentMovemen
           <p className="mt-1 text-xs text-stone-500">{formatDateTime(movement.created_at)}</p>
         </div>
         <span className="rounded-full bg-white px-2.5 py-1 text-xs text-stone-600">
-          {movementTypeLabels[movement.movement_type] || movement.movement_type}
+          {getInventoryMovementLabel(movement.movement_type)}
         </span>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -439,7 +445,7 @@ export default function AdminShopHome() {
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
-                    Recent Orders
+                    最近訂單
                   </p>
                   <h2 className="mt-1 text-xl font-semibold">最近 5 筆訂單</h2>
                 </div>
@@ -462,7 +468,7 @@ export default function AdminShopHome() {
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
-                    Inventory Movements
+                    最近庫存異動
                   </p>
                   <h2 className="mt-1 text-xl font-semibold">最近 5 筆庫存異動</h2>
                 </div>
@@ -487,7 +493,7 @@ export default function AdminShopHome() {
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
-                    Low Inventory
+                    低庫存商品
                   </p>
                   <h2 className="mt-1 text-xl font-semibold">低庫存商品</h2>
                   <p className="mt-1 text-xs text-stone-500">顯示庫存 3 件以下，最多 10 筆。</p>

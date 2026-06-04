@@ -37,6 +37,7 @@ import {
   searchAdminInventory,
 } from "@/lib/shop/adminPosApi";
 import { formatPrice, getVariantLabel } from "@/lib/shop/format";
+import { PAYMENT_METHOD_LABELS } from "@/lib/shop/labels";
 import { cn } from "@/lib/utils";
 
 type PosCartItem = {
@@ -61,9 +62,9 @@ type LastAddedItem = {
 };
 
 const paymentLabels: Record<PosPaymentMethod, string> = {
-  cash: "現金",
-  transfer: "轉帳",
-  other: "其他",
+  cash: PAYMENT_METHOD_LABELS.cash,
+  transfer: PAYMENT_METHOD_LABELS.transfer,
+  other: PAYMENT_METHOD_LABELS.other,
 };
 
 function getStoredAdminToken() {
@@ -832,7 +833,7 @@ export default function AdminShopPos() {
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
-                POS Cart
+                銷售清單
               </p>
               <h2 className="mt-1 text-xl font-semibold">銷售清單</h2>
             </div>

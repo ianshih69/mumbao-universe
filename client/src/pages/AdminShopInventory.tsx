@@ -29,6 +29,7 @@ import {
   fetchAdminInventoryMovements,
 } from "@/lib/shop/adminInventoryApi";
 import { formatPrice, getVariantLabel } from "@/lib/shop/format";
+import { INVENTORY_MOVEMENT_LABELS } from "@/lib/shop/labels";
 import {
   adminAuthExpiredMessage,
   clearAdminToken as clearStoredAdminToken,
@@ -41,14 +42,8 @@ import { cn } from "@/lib/utils";
 const productListLimit = 50;
 const movementListLimit = 30;
 
-const movementLabels: Record<AdminInventoryMovementType, string> = {
-  stock_in: "入庫",
-  stock_out: "扣庫存",
-  adjustment: "盤點調整",
-  manual_sale: "現場銷售",
-  online_order: "官網訂單",
-  return_in: "退貨補回",
-};
+const movementLabels: Record<AdminInventoryMovementType, string> =
+  INVENTORY_MOVEMENT_LABELS;
 
 const actionOptions: Array<{
   value: "stock_in" | "stock_out" | "adjustment";
@@ -640,7 +635,7 @@ export default function AdminShopInventory() {
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
-                Inventory Movements
+                最近庫存異動
               </p>
               <h2 className="mt-1 text-xl font-semibold">最近庫存流水</h2>
               <p className="mt-1 text-xs text-stone-500">

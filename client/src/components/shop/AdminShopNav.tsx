@@ -18,7 +18,7 @@ const navItems: Array<{
   { key: "orders", label: "訂單", href: "/admin/shop/orders", icon: ClipboardList },
   { key: "inventory", label: "庫存", href: "/admin/shop/inventory", icon: PackageCheck },
   { key: "scan", label: "入庫", href: "/admin/shop/scan", icon: ScanLine },
-  { key: "pos", label: "POS", href: "/admin/shop/pos", icon: ShoppingBag },
+  { key: "pos", label: "現場銷售 POS", href: "/admin/shop/pos", icon: ShoppingBag },
 ];
 
 export default function AdminShopNav({ current = "home" }: AdminShopNavProps) {

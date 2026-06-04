@@ -30,6 +30,7 @@ import {
   updateAdminShopProduct,
 } from "@/lib/shop/adminProductsApi";
 import { formatPrice } from "@/lib/shop/format";
+import { PRODUCT_STATUS_LABELS, VARIANT_STATUS_LABELS } from "@/lib/shop/labels";
 import {
   adminAuthExpiredMessage,
   clearAdminToken as clearStoredAdminToken,
@@ -41,22 +42,15 @@ import { cn } from "@/lib/utils";
 
 const productListLimit = 30;
 
-const productStatusLabels: Record<AdminProductStatus, string> = {
-  draft: "草稿",
-  published: "上架",
-  archived: "封存",
-};
+const productStatusLabels: Record<AdminProductStatus, string> = PRODUCT_STATUS_LABELS;
 
-const variantStatusLabels: Record<AdminVariantStatus, string> = {
-  active: "販售中",
-  inactive: "暫停販售",
-};
+const variantStatusLabels: Record<AdminVariantStatus, string> = VARIANT_STATUS_LABELS;
 
 const productStatusOptions: Array<{ value: "" | AdminProductStatus; label: string }> = [
   { value: "", label: "全部上架狀態" },
-  { value: "published", label: "上架" },
-  { value: "draft", label: "草稿" },
-  { value: "archived", label: "封存" },
+  { value: "published", label: PRODUCT_STATUS_LABELS.published },
+  { value: "draft", label: PRODUCT_STATUS_LABELS.draft },
+  { value: "archived", label: PRODUCT_STATUS_LABELS.archived },
 ];
 
 const editableProductStatuses: AdminProductStatus[] = ["draft", "published", "archived"];

@@ -121,11 +121,8 @@ export default function Shop() {
       <Header />
       <main className="mx-auto max-w-[1440px] px-3 pb-16 pt-28 sm:px-5 md:px-7 md:pt-32">
         <section className="rounded-[8px] border border-[#eadfce] bg-[#fffdf8] p-3 shadow-sm shadow-stone-200/60 md:p-4">
-          <div className="grid gap-3 lg:grid-cols-[19rem_minmax(22rem,1fr)_auto] lg:items-center">
-            <Link
-              href="/shop"
-              className="flex min-w-0 items-center gap-3 rounded-[8px] bg-[#f3eadf] px-4 py-3"
-            >
+          <div className="grid gap-3 lg:grid-cols-[21rem_minmax(20rem,1fr)_auto] lg:items-center">
+            <div className="flex min-w-0 items-center gap-3 rounded-[8px] bg-[#f3eadf] px-4 py-3">
               <span className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-white text-[#9f7868] shadow-sm">
                 <Sparkles className="h-5 w-5" />
               </span>
@@ -136,11 +133,11 @@ export default function Shop() {
                 <span className="block truncate text-[11px] uppercase tracking-[0.18em] text-[#9f7868]">
                   MUMBAO SHOP
                 </span>
-                <span className="mt-1 block truncate text-xs text-stone-500">
+                <span className="mt-1 block text-[11px] leading-4 text-stone-500 xl:text-xs">
                   把慢寶宇宙裡的小小陪伴，帶回你的日常。
                 </span>
               </span>
-            </Link>
+            </div>
 
             <label className="flex h-11 items-center gap-3 rounded-full border border-[#eadfce] bg-white px-4 shadow-inner shadow-stone-100">
               <Search className="h-5 w-5 flex-none text-[#b99aa2]" />

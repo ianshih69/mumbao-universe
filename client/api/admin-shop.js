@@ -314,6 +314,167 @@ function normalizeInventorySearchItem(product, variant) {
   };
 }
 
+function getTaipeiTodayRange() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const year = Number(parts.find((part) => part.type === "year")?.value || 0);
+  const month = Number(parts.find((part) => part.type === "month")?.value || 1);
+  const day = Number(parts.find((part) => part.type === "day")?.value || 1);
+  const taipeiOffsetMs = 8 * 60 * 60 * 1000;
+  const startMs = Date.UTC(year, month - 1, day) - taipeiOffsetMs;
+  const endMs = startMs + 24 * 60 * 60 * 1000;
+
+  return {
+    startIso: new Date(startMs).toISOString(),
+    endIso: new Date(endMs).toISOString(),
+  };
+}
+
+function isPaidOrCompletedOrder(order) {
+  return order.payment_status === "confirmed" || order.order_status === "completed";
+}
+
+function getOrderSource(order) {
+  return order.order_source === "pos" ? "pos" : "online";
+}
+
+function summarizeTodayOrders(orders = []) {
+  const salesOrders = orders.filter(isPaidOrCompletedOrder);
+  const totalBySource = (source) =>
+    salesOrders
+      .filter((order) => getOrderSource(order) === source)
+      .reduce((sum, order) => sum + Number(order.total || 0), 0);
+  const countBySource = (source) =>
+    orders.filter((order) => getOrderSource(order) === source).length;
+
+  return {
+    sales_total: salesOrders.reduce((sum, order) => sum + Number(order.total || 0), 0),
+    online_sales_total: totalBySource("online"),
+    pos_sales_total: totalBySource("pos"),
+    order_count: orders.length,
+    online_order_count: countBySource("online"),
+    pos_order_count: countBySource("pos"),
+  };
+}
+
+async function loadProductsByIds(productIds = []) {
+  const ids = [...new Set(productIds.filter(Boolean))];
+  const productsById = new Map();
+
+  if (!ids.length) return productsById;
+
+  const products = await supabaseRequest(
+    `/shop_products?select=id,slug,name&id=in.(${ids.join(",")})`
+  );
+
+  for (const product of products || []) {
+    productsById.set(product.id, product);
+  }
+
+  return productsById;
+}
+
+async function loadVariantsByIds(variantIds = []) {
+  const ids = [...new Set(variantIds.filter(Boolean))];
+  const variantsById = new Map();
+
+  if (!ids.length) return variantsById;
+
+  const variants = await supabaseRequest(
+    `/shop_product_variants?select=id,product_id,sku,variant_name,variant_option&id=in.(${ids.join(",")})`
+  );
+
+  for (const variant of variants || []) {
+    variantsById.set(variant.id, variant);
+  }
+
+  return variantsById;
+}
+
+function normalizeLowInventoryVariant(variant, productsById = new Map()) {
+  const product = productsById.get(variant.product_id);
+
+  return {
+    product_id: variant.product_id || "",
+    variant_id: variant.id || "",
+    product_name: product?.name || "",
+    variant_name: variant.variant_name || "",
+    variant_option: variant.variant_option || "",
+    sku: variant.sku || "",
+    inventory: Number(variant.inventory || 0),
+  };
+}
+
+async function loadDashboard(req, res) {
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
+    return sendJson(res, 405, { error: "Method not allowed." });
+  }
+
+  const { startIso, endIso } = getTaipeiTodayRange();
+  const orderSelect =
+    "id,order_number,total,payment_status,order_status,order_source,created_at";
+  const movementSelect =
+    "id,product_id,variant_id,movement_type,quantity_delta,quantity_before,quantity_after,reference_type,reference_number,note,created_at,created_by";
+  const [
+    todayOrders,
+    pendingOnlineOrders,
+    recentOrders,
+    lowInventoryVariants,
+    recentMovements,
+  ] = await Promise.all([
+    supabaseRequest(
+      `/shop_orders?select=${orderSelect}&created_at=gte.${encodeURIComponent(
+        startIso
+      )}&created_at=lt.${encodeURIComponent(endIso)}&order=created_at.desc&limit=1000`
+    ),
+    supabaseRequest(
+      "/shop_orders?select=id&order_source=eq.online&order_status=eq.pending_confirm&limit=1000"
+    ),
+    supabaseRequest(
+      `/shop_orders?select=${orderSelect}&order=created_at.desc&limit=5`
+    ),
+    supabaseRequest(
+      "/shop_product_variants?select=id,product_id,sku,variant_name,variant_option,inventory,status&inventory=lte.3&order=inventory.asc,updated_at.desc&limit=10"
+    ),
+    supabaseRequest(
+      `/shop_inventory_movements?select=${movementSelect}&order=created_at.desc&limit=5`
+    ),
+  ]);
+
+  const lowInventoryProductsById = await loadProductsByIds(
+    (lowInventoryVariants || []).map((variant) => variant.product_id)
+  );
+  const movementProductsById = await loadProductsByIds(
+    (recentMovements || []).map((movement) => movement.product_id)
+  );
+  const movementVariantsById = await loadVariantsByIds(
+    (recentMovements || []).map((movement) => movement.variant_id)
+  );
+
+  return sendJson(res, 200, {
+    dashboard: {
+      today: summarizeTodayOrders(todayOrders || []),
+      pending_online_order_count: (pendingOnlineOrders || []).length,
+      low_inventory: (lowInventoryVariants || []).map((variant) =>
+        normalizeLowInventoryVariant(variant, lowInventoryProductsById)
+      ),
+      recent_orders: (recentOrders || []).map(normalizeOrderSummary),
+      recent_movements: (recentMovements || []).map((movement) =>
+        normalizeInventoryMovement(
+          movement,
+          movementProductsById,
+          movementVariantsById
+        )
+      ),
+    },
+  });
+}
+
 async function loadOrders(req, res) {
   const search = String(firstQueryValue(req.query?.q) || "").trim();
   const status = String(firstQueryValue(req.query?.status) || "").trim();
@@ -1110,6 +1271,10 @@ export default async function handler(req, res) {
 
   try {
     requireAdmin(req);
+
+    if (req.method === "GET" && action === "dashboard") {
+      return await loadDashboard(req, res);
+    }
 
     if (req.method === "GET" && action === "orders") {
       return await loadOrders(req, res);

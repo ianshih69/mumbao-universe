@@ -1,12 +1,16 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
+  AlertTriangle,
   Boxes,
   ClipboardList,
+  Clock,
   LogOut,
   PackageCheck,
+  RefreshCw,
   ScanLine,
   ShieldCheck,
   ShoppingBag,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,8 +21,17 @@ import {
   clearAdminToken,
   getInitialAdminAuthStatus,
   getAdminToken,
+  isAdminAuthError,
   setAdminToken,
 } from "@/lib/shop/adminAuth";
+import {
+  type AdminDashboardRecentMovement,
+  type AdminDashboardRecentOrder,
+  type AdminShopDashboard,
+  fetchAdminShopDashboard,
+} from "@/lib/shop/adminDashboardApi";
+import { formatPrice, getVariantLabel } from "@/lib/shop/format";
+import { cn } from "@/lib/utils";
 
 const entryCards = [
   {
@@ -53,26 +66,179 @@ const entryCards = [
   },
 ];
 
-async function validateAdminToken(token: string) {
-  const params = new URLSearchParams({
-    action: "orders",
-    limit: "1",
-  });
-  const response = await fetch(`/api/admin-shop?${params.toString()}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  });
+const orderSourceLabels = {
+  online: "官網訂單",
+  pos: "現場銷售",
+};
 
-  if (response.status === 401) {
-    throw new Error(adminAuthExpiredMessage);
-  }
+const orderStatusLabels = {
+  pending_confirm: "待確認",
+  pending_payment: "待付款",
+  paid: "已付款",
+  shipping: "出貨中",
+  completed: "已完成",
+  cancelled: "已取消",
+};
 
-  if (!response.ok) {
-    const data = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new Error(data.error || "後台登入驗證失敗");
-  }
+const paymentStatusLabels = {
+  pending: "待付款",
+  confirmed: "已確認付款",
+  failed: "付款失敗",
+  refunded: "已退款",
+};
+
+const movementTypeLabels = {
+  stock_in: "入庫",
+  stock_out: "扣庫存",
+  adjustment: "盤點調整",
+  manual_sale: "現場銷售",
+  online_order: "官網訂單",
+  return_in: "退貨補回",
+};
+
+function formatDateTime(value?: string) {
+  if (!value || Number.isNaN(Date.parse(value))) return "-";
+
+  return new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+}
+
+function getDeltaText(delta: number) {
+  return delta > 0 ? `+${delta}` : String(delta);
+}
+
+function SummaryCard({
+  title,
+  value,
+  detail,
+  icon: Icon,
+  tone = "stone",
+}: {
+  title: string;
+  value: string;
+  detail: string;
+  icon: typeof TrendingUp;
+  tone?: "stone" | "green" | "pink" | "amber";
+}) {
+  const toneClass = {
+    stone: "bg-stone-100 text-stone-700",
+    green: "bg-emerald-50 text-emerald-700",
+    pink: "bg-pink-50 text-pink-700",
+    amber: "bg-amber-50 text-amber-700",
+  }[tone];
+
+  return (
+    <div className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm text-stone-500">{title}</p>
+          <p className="mt-3 text-2xl font-semibold text-stone-900">{value}</p>
+        </div>
+        <div className={cn("flex size-10 items-center justify-center rounded-full", toneClass)}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+      <p className="mt-3 text-xs leading-5 text-stone-500">{detail}</p>
+    </div>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div className="rounded-[8px] border border-dashed border-stone-200 bg-white/70 p-6 text-center text-sm text-stone-400">
+      {text}
+    </div>
+  );
+}
+
+function RecentOrderRow({ order }: { order: AdminDashboardRecentOrder }) {
+  return (
+    <div className="grid gap-3 rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-3 md:grid-cols-[1.1fr_0.8fr_0.8fr_0.8fr] md:items-center">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-stone-900">
+          {order.order_number}
+        </p>
+        <p className="mt-1 text-xs text-stone-500">
+          {orderSourceLabels[order.order_source] || "官網訂單"}
+        </p>
+      </div>
+      <p className="text-sm font-semibold text-stone-900">{formatPrice(order.total)}</p>
+      <div className="flex flex-wrap gap-2 text-xs">
+        <span className="rounded-full bg-white px-2.5 py-1 text-stone-600">
+          {paymentStatusLabels[order.payment_status] || order.payment_status}
+        </span>
+        <span className="rounded-full bg-white px-2.5 py-1 text-stone-600">
+          {orderStatusLabels[order.order_status] || order.order_status}
+        </span>
+      </div>
+      <p className="text-xs text-stone-500">{formatDateTime(order.created_at)}</p>
+    </div>
+  );
+}
+
+function RecentMovementRow({ movement }: { movement: AdminDashboardRecentMovement }) {
+  const delta = Number(movement.quantity_delta || 0);
+
+  return (
+    <div className="rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-stone-900">
+            {movement.product_name || "未命名商品"}
+          </p>
+          <p className="mt-1 text-xs text-stone-500">
+            {getVariantLabel(movement.variant_name, movement.variant_option) || "-"}
+          </p>
+          {movement.sku && (
+            <p className="mt-1 break-all font-mono text-xs text-stone-400">
+              {movement.sku}
+            </p>
+          )}
+        </div>
+        <span className="rounded-full bg-white px-2.5 py-1 text-xs text-stone-600">
+          {movementTypeLabels[movement.movement_type] || movement.movement_type}
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+        <div className="rounded-[6px] bg-white p-2">
+          <p className="text-stone-400">異動前</p>
+          <p className="mt-1 font-semibold text-stone-900">
+            {movement.quantity_before}
+          </p>
+        </div>
+        <div className="rounded-[6px] bg-white p-2">
+          <p className="text-stone-400">變化</p>
+          <p
+            className={cn(
+              "mt-1 font-semibold",
+              delta > 0 ? "text-emerald-700" : delta < 0 ? "text-red-600" : "text-stone-700"
+            )}
+          >
+            {getDeltaText(delta)}
+          </p>
+        </div>
+        <div className="rounded-[6px] bg-white p-2">
+          <p className="text-stone-400">異動後</p>
+          <p className="mt-1 font-semibold text-stone-900">
+            {movement.quantity_after}
+          </p>
+        </div>
+      </div>
+      {(movement.note || movement.created_at) && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500">
+          <span>{movement.note || "-"}</span>
+          <span>{formatDateTime(movement.created_at)}</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function AdminShopHome() {
@@ -83,6 +249,43 @@ export default function AdminShopHome() {
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [isChecking, setIsChecking] = useState(Boolean(token));
+  const [dashboard, setDashboard] = useState<AdminShopDashboard | null>(null);
+  const [isDashboardLoading, setIsDashboardLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState("");
+
+  const handleAuthFailure = useCallback(() => {
+    clearAdminToken();
+    setTokenState("");
+    setAuthStatus("loggedOut");
+    setLoginError(adminAuthExpiredMessage);
+    setDashboard(null);
+    setDashboardError("");
+  }, []);
+
+  const loadDashboard = useCallback(
+    async (nextToken = token) => {
+      if (!nextToken) return;
+
+      setIsDashboardLoading(true);
+      setDashboardError("");
+      try {
+        const nextDashboard = await fetchAdminShopDashboard(nextToken);
+        setDashboard(nextDashboard);
+        setAuthStatus("loggedIn");
+        setLoginError("");
+      } catch (error) {
+        if (isAdminAuthError(error)) {
+          handleAuthFailure();
+          return;
+        }
+        setDashboardError(error instanceof Error ? error.message : "儀表板載入失敗");
+      } finally {
+        setIsDashboardLoading(false);
+        setIsChecking(false);
+      }
+    },
+    [handleAuthFailure, token]
+  );
 
   useEffect(() => {
     if (!token) return;
@@ -90,27 +293,15 @@ export default function AdminShopHome() {
     let isCurrent = true;
     setIsChecking(true);
     setAuthStatus("checking");
-    validateAdminToken(token)
-      .then(() => {
-        if (!isCurrent) return;
-        setAuthStatus("loggedIn");
-        setLoginError("");
-      })
-      .catch(() => {
-        if (!isCurrent) return;
-        clearAdminToken();
-        setTokenState("");
-        setAuthStatus("loggedOut");
-        setLoginError(adminAuthExpiredMessage);
-      })
-      .finally(() => {
-        if (isCurrent) setIsChecking(false);
-      });
+
+    loadDashboard(token).finally(() => {
+      if (!isCurrent) return;
+    });
 
     return () => {
       isCurrent = false;
     };
-  }, [token]);
+  }, [loadDashboard, token]);
 
   const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
@@ -124,12 +315,14 @@ export default function AdminShopHome() {
     setIsChecking(true);
     setAuthStatus("checking");
     try {
-      await validateAdminToken(nextToken);
+      const nextDashboard = await fetchAdminShopDashboard(nextToken);
       setAdminToken(nextToken);
       setTokenState(nextToken);
+      setDashboard(nextDashboard);
       setAuthStatus("loggedIn");
       setPassword("");
       setLoginError("");
+      setDashboardError("");
     } catch (error) {
       clearAdminToken();
       setAuthStatus("loggedOut");
@@ -145,6 +338,8 @@ export default function AdminShopHome() {
     setAuthStatus("loggedOut");
     setPassword("");
     setLoginError("");
+    setDashboard(null);
+    setDashboardError("");
   };
 
   if (!token && authStatus === "checking") {
@@ -194,6 +389,8 @@ export default function AdminShopHome() {
     );
   }
 
+  const today = dashboard?.today;
+
   return (
     <main className="min-h-[100svh] bg-[#f7f2ea] text-stone-900">
       <header className="border-b border-stone-200 bg-white/95 px-5 py-7 backdrop-blur md:px-8">
@@ -206,45 +403,194 @@ export default function AdminShopHome() {
               商城後台
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-500">
-              集中管理慢寶商品、訂單、庫存、入庫與現場銷售。所有商城後台頁面共用同一份登入狀態。
+              集中管理慢寶商品、訂單、庫存、入庫與現場銷售。今日統計使用台灣時間。
             </p>
             {isChecking && (
               <p className="mt-2 text-xs text-stone-400">確認登入狀態中...</p>
             )}
           </div>
-          <Button variant="ghost" className="rounded-full" onClick={logout}>
-            <LogOut className="h-4 w-4" />
-            登出
-          </Button>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full bg-white"
+              onClick={() => loadDashboard()}
+              disabled={isDashboardLoading}
+            >
+              <RefreshCw className={cn("h-4 w-4", isDashboardLoading && "animate-spin")} />
+              重新整理
+            </Button>
+            <Button variant="ghost" className="rounded-full" onClick={logout}>
+              <LogOut className="h-4 w-4" />
+              登出
+            </Button>
+          </div>
         </div>
       </header>
 
       <AdminShopNav current="home" />
 
-      <section className="mx-auto grid max-w-7xl gap-4 px-5 py-6 sm:grid-cols-2 lg:grid-cols-3 md:px-8 md:py-8">
-        {entryCards.map((card) => {
-          const Icon = card.icon;
+      <div className="mx-auto max-w-7xl space-y-6 px-5 py-6 md:px-8 md:py-8">
+        {dashboardError && (
+          <div className="rounded-[8px] border border-red-100 bg-red-50 p-4 text-sm text-red-600">
+            {dashboardError}
+          </div>
+        )}
 
-          return (
-            <a
-              key={card.href}
-              href={card.href}
-              className="group rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#b99aa2] hover:shadow-md"
-            >
-              <div className="flex size-11 items-center justify-center rounded-full bg-[#f4ece2] text-[#8b6f5b] group-hover:bg-[#8b6f5b] group-hover:text-white">
-                <Icon className="h-5 w-5" />
+        <section className="grid gap-4 md:grid-cols-3">
+          <SummaryCard
+            title="今日銷售總額"
+            value={formatPrice(today?.sales_total || 0)}
+            detail={`官網 ${formatPrice(today?.online_sales_total || 0)} / POS ${formatPrice(
+              today?.pos_sales_total || 0
+            )}`}
+            icon={TrendingUp}
+            tone="green"
+          />
+          <SummaryCard
+            title="今日訂單數"
+            value={`${today?.order_count || 0} 筆`}
+            detail={`官網 ${today?.online_order_count || 0} 筆 / POS ${
+              today?.pos_order_count || 0
+            } 筆`}
+            icon={ClipboardList}
+            tone="pink"
+          />
+          <SummaryCard
+            title="待確認官網訂單"
+            value={`${dashboard?.pending_online_order_count || 0} 筆`}
+            detail="官網訂單且狀態為待確認。"
+            icon={AlertTriangle}
+            tone="amber"
+          />
+        </section>
+
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="space-y-6">
+            <section className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
+                    Recent Orders
+                  </p>
+                  <h2 className="mt-1 text-xl font-semibold">最近 5 筆訂單</h2>
+                </div>
+                <Clock className="h-5 w-5 text-[#8b6f5b]" />
               </div>
-              <h2 className="mt-5 text-lg font-semibold text-stone-900">{card.title}</h2>
-              <p className="mt-2 min-h-[3rem] text-sm leading-6 text-stone-500">
-                {card.description}
-              </p>
-              <span className="mt-5 inline-flex rounded-full bg-[#8b6f5b] px-4 py-2 text-sm font-medium text-white">
-                進入管理
-              </span>
-            </a>
-          );
-        })}
-      </section>
+              {isDashboardLoading && !dashboard ? (
+                <EmptyState text="儀表板資料載入中..." />
+              ) : dashboard?.recent_orders.length ? (
+                <div className="space-y-3">
+                  {dashboard.recent_orders.map((order) => (
+                    <RecentOrderRow key={order.id} order={order} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState text="目前沒有訂單資料。" />
+              )}
+            </section>
+
+            <section className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
+                    Inventory Movements
+                  </p>
+                  <h2 className="mt-1 text-xl font-semibold">最近 5 筆庫存異動</h2>
+                </div>
+                <PackageCheck className="h-5 w-5 text-[#8b6f5b]" />
+              </div>
+              {isDashboardLoading && !dashboard ? (
+                <EmptyState text="庫存異動載入中..." />
+              ) : dashboard?.recent_movements.length ? (
+                <div className="space-y-3">
+                  {dashboard.recent_movements.map((movement) => (
+                    <RecentMovementRow key={movement.id} movement={movement} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState text="目前沒有庫存異動資料。" />
+              )}
+            </section>
+          </div>
+
+          <aside className="space-y-6">
+            <section className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
+                    Low Inventory
+                  </p>
+                  <h2 className="mt-1 text-xl font-semibold">低庫存商品</h2>
+                  <p className="mt-1 text-xs text-stone-500">顯示庫存 3 件以下，最多 10 筆。</p>
+                </div>
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              </div>
+              {isDashboardLoading && !dashboard ? (
+                <EmptyState text="低庫存資料載入中..." />
+              ) : dashboard?.low_inventory.length ? (
+                <div className="space-y-3">
+                  {dashboard.low_inventory.map((item) => (
+                    <div
+                      key={item.variant_id}
+                      className="rounded-[8px] border border-amber-100 bg-amber-50/60 p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-stone-900">
+                            {item.product_name || "未命名商品"}
+                          </p>
+                          <p className="mt-1 text-xs text-stone-500">
+                            {getVariantLabel(item.variant_name, item.variant_option) || "-"}
+                          </p>
+                          {item.sku && (
+                            <p className="mt-1 break-all font-mono text-xs text-stone-400">
+                              {item.sku}
+                            </p>
+                          )}
+                        </div>
+                        <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-amber-700">
+                          {item.inventory} 件
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState text="目前沒有低庫存商品。" />
+              )}
+            </section>
+
+            <section className="grid gap-4">
+              {entryCards.map((card) => {
+                const Icon = card.icon;
+
+                return (
+                  <a
+                    key={card.href}
+                    href={card.href}
+                    className="group rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#b99aa2] hover:shadow-md"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#f4ece2] text-[#8b6f5b] group-hover:bg-[#8b6f5b] group-hover:text-white">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h2 className="text-base font-semibold text-stone-900">
+                          {card.title}
+                        </h2>
+                        <p className="mt-1 text-sm leading-5 text-stone-500">
+                          {card.description}
+                        </p>
+                      </div>
+                    </div>
+                  </a>
+                );
+              })}
+            </section>
+          </aside>
+        </section>
+      </div>
     </main>
   );
 }

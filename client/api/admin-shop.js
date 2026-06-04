@@ -110,6 +110,23 @@ function nullableText(value) {
   return text ? text : null;
 }
 
+function getNextDateString(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return "";
+
+  const date = new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + 1)
+  );
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  return date.toISOString().slice(0, 10);
+}
+
+function isDateString(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+}
+
 function getKnownInventoryErrorMessage(error) {
   const message = String(error?.details?.message || error?.message || "");
   const matchedKey = Array.from(knownInventoryErrors.keys()).find((key) =>
@@ -142,6 +159,7 @@ function normalizeOrderSummary(order) {
     payment_status: order.payment_status || "pending",
     order_status: order.order_status || "pending_confirm",
     order_source: order.order_source || "online",
+    tracking_number: order.tracking_number || "",
     created_at: order.created_at || "",
     updated_at: order.updated_at || "",
   };
@@ -482,11 +500,15 @@ async function loadOrders(req, res) {
   const search = String(firstQueryValue(req.query?.q) || "").trim();
   const status = String(firstQueryValue(req.query?.status) || "").trim();
   const source = String(firstQueryValue(req.query?.source) || "").trim();
+  const paymentStatus = String(firstQueryValue(req.query?.paymentStatus) || "").trim();
+  const dateFrom = String(firstQueryValue(req.query?.dateFrom) || "").trim();
+  const dateTo = String(firstQueryValue(req.query?.dateTo) || "").trim();
+  const tracking = String(firstQueryValue(req.query?.tracking) || "").trim();
   const limit = getPositiveInt(firstQueryValue(req.query?.limit), defaultLimit, maxLimit);
   const page = getPage(firstQueryValue(req.query?.page));
   const offset = page * limit;
   const select =
-    "id,order_number,customer_name,customer_phone,customer_email,subtotal,shipping_fee,total,payment_method,payment_status,order_status,order_source,created_at,updated_at";
+    "id,order_number,customer_name,customer_phone,customer_email,subtotal,shipping_fee,total,payment_method,payment_status,order_status,order_source,tracking_number,created_at,updated_at";
   const statusFilter =
     status && validOrderStatuses.has(status)
       ? `&order_status=eq.${encodeURIComponent(status)}`
@@ -495,12 +517,29 @@ async function loadOrders(req, res) {
     source && validOrderSources.has(source)
       ? `&order_source=eq.${encodeURIComponent(source)}`
       : "";
+  const paymentStatusFilter =
+    paymentStatus && validPaymentStatuses.has(paymentStatus)
+      ? `&payment_status=eq.${encodeURIComponent(paymentStatus)}`
+      : "";
+  const dateFromFilter = isDateString(dateFrom)
+    ? `&created_at=gte.${encodeURIComponent(`${dateFrom}T00:00:00`)}`
+    : "";
+  const nextDateTo = getNextDateString(dateTo);
+  const dateToFilter = nextDateTo
+    ? `&created_at=lt.${encodeURIComponent(`${nextDateTo}T00:00:00`)}`
+    : "";
+  const trackingFilter =
+    tracking === "with"
+      ? "&tracking_number=not.is.null"
+      : tracking === "without"
+        ? "&tracking_number=is.null"
+        : "";
   const searchTerm = encodeURIComponent(`*${search.replace(/[(),]/g, " ")}*`);
   const searchFilter = search
-    ? `&or=(order_number.ilike.${searchTerm},customer_name.ilike.${searchTerm},customer_phone.ilike.${searchTerm})`
+    ? `&or=(order_number.ilike.${searchTerm},customer_name.ilike.${searchTerm},customer_phone.ilike.${searchTerm},customer_email.ilike.${searchTerm},tracking_number.ilike.${searchTerm})`
     : "";
   const orders = await supabaseRequest(
-    `/shop_orders?select=${select}${statusFilter}${sourceFilter}${searchFilter}&order=created_at.desc&limit=${
+    `/shop_orders?select=${select}${statusFilter}${sourceFilter}${paymentStatusFilter}${dateFromFilter}${dateToFilter}${trackingFilter}${searchFilter}&order=created_at.desc&limit=${
       limit + 1
     }&offset=${offset}`
   );

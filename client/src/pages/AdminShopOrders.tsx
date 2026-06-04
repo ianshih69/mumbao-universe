@@ -17,6 +17,7 @@ import {
   type AdminOrderStatus,
   type AdminOrderSource,
   type AdminPaymentStatus,
+  type AdminTrackingFilter,
   type AdminShopOrderDetail,
   type AdminShopOrderSummary,
   fetchAdminShopOrder,
@@ -68,6 +69,21 @@ const paymentStatusOptions: Array<{ value: AdminPaymentStatus; label: string }> 
   { value: "confirmed", label: PAYMENT_STATUS_LABELS.confirmed },
   { value: "failed", label: PAYMENT_STATUS_LABELS.failed },
   { value: "refunded", label: PAYMENT_STATUS_LABELS.refunded },
+];
+
+const paymentStatusFilterOptions: Array<{
+  value: "" | AdminPaymentStatus;
+  label: string;
+}> = [
+  { value: "", label: "全部付款" },
+  { value: "pending", label: PAYMENT_STATUS_LABELS.pending },
+  { value: "confirmed", label: PAYMENT_STATUS_LABELS.confirmed },
+];
+
+const trackingFilterOptions: Array<{ value: AdminTrackingFilter; label: string }> = [
+  { value: "", label: "全部物流" },
+  { value: "with", label: "有物流單號" },
+  { value: "without", label: "無物流單號" },
 ];
 
 function getStoredAdminToken() {
@@ -140,6 +156,10 @@ export default function AdminShopOrders() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"" | AdminOrderStatus>("");
   const [source, setSource] = useState<"" | AdminOrderSource>("");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<"" | AdminPaymentStatus>("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [trackingFilter, setTrackingFilter] = useState<AdminTrackingFilter>("");
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -180,6 +200,10 @@ export default function AdminShopOrders() {
           q: search,
           status,
           source,
+          paymentStatus: paymentStatusFilter,
+          dateFrom,
+          dateTo,
+          tracking: trackingFilter,
           page: nextPage,
           limit: orderListLimit,
         });
@@ -199,7 +223,17 @@ export default function AdminShopOrders() {
         setIsLoading(false);
       }
     },
-    [handleAuthFailure, search, source, status, token]
+    [
+      dateFrom,
+      dateTo,
+      handleAuthFailure,
+      paymentStatusFilter,
+      search,
+      source,
+      status,
+      token,
+      trackingFilter,
+    ]
   );
 
   const loadOrderDetail = useCallback(
@@ -456,13 +490,13 @@ export default function AdminShopOrders() {
             onSubmit={submitSearch}
             className="rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm"
           >
-            <div className="grid gap-3 md:grid-cols-[1fr_190px_190px_auto] md:items-center">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.4fr)_170px_170px_170px_150px_150px_170px_auto] xl:items-center">
               <label className="flex h-11 items-center gap-2 rounded-full border border-stone-200 bg-stone-50 px-4">
                 <Search className="h-4 w-4 text-stone-400" />
                 <input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="搜尋訂單編號、姓名、電話"
+                  placeholder="搜尋訂單編號、姓名、電話、Email、物流單號"
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                 />
               </label>
@@ -492,6 +526,58 @@ export default function AdminShopOrders() {
               >
                 {orderSourceOptions.map((option) => (
                   <option key={option.value || "all-source"} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={paymentStatusFilter}
+                onChange={(event) => {
+                  setPaymentStatusFilter(event.target.value as "" | AdminPaymentStatus);
+                  setSelectedOrderNumber("");
+                  setSelectedOrder(null);
+                }}
+                className="h-11 rounded-full border border-stone-200 bg-white px-4 text-sm outline-none"
+              >
+                {paymentStatusFilterOptions.map((option) => (
+                  <option key={option.value || "all-payment"} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(event) => {
+                  setDateFrom(event.target.value);
+                  setSelectedOrderNumber("");
+                  setSelectedOrder(null);
+                }}
+                aria-label="開始日期"
+                className="h-11 rounded-full border-stone-200 bg-white px-4 text-sm"
+              />
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(event) => {
+                  setDateTo(event.target.value);
+                  setSelectedOrderNumber("");
+                  setSelectedOrder(null);
+                }}
+                aria-label="結束日期"
+                className="h-11 rounded-full border-stone-200 bg-white px-4 text-sm"
+              />
+              <select
+                value={trackingFilter}
+                onChange={(event) => {
+                  setTrackingFilter(event.target.value as AdminTrackingFilter);
+                  setSelectedOrderNumber("");
+                  setSelectedOrder(null);
+                }}
+                className="h-11 rounded-full border border-stone-200 bg-white px-4 text-sm outline-none"
+              >
+                {trackingFilterOptions.map((option) => (
+                  <option key={option.value || "all-tracking"} value={option.value}>
                     {option.label}
                   </option>
                 ))}

@@ -10,6 +10,8 @@ export type AdminPaymentStatus = "pending" | "confirmed" | "failed" | "refunded"
 
 export type AdminOrderSource = "online" | "pos";
 
+export type AdminTrackingFilter = "" | "with" | "without";
+
 const adminAuthExpiredMessage = "登入已過期，請重新登入";
 
 export type AdminShopOrderSummary = {
@@ -25,6 +27,7 @@ export type AdminShopOrderSummary = {
   payment_status: AdminPaymentStatus;
   order_status: AdminOrderStatus;
   order_source: AdminOrderSource;
+  tracking_number?: string;
   created_at?: string;
   updated_at?: string;
 };
@@ -84,6 +87,10 @@ export async function fetchAdminShopOrders({
   q = "",
   status = "",
   source = "",
+  paymentStatus = "",
+  dateFrom = "",
+  dateTo = "",
+  tracking = "",
   page = 0,
   limit = 30,
 }: {
@@ -91,6 +98,10 @@ export async function fetchAdminShopOrders({
   q?: string;
   status?: string;
   source?: string;
+  paymentStatus?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  tracking?: AdminTrackingFilter;
   page?: number;
   limit?: number;
 }) {
@@ -102,6 +113,10 @@ export async function fetchAdminShopOrders({
   if (q.trim()) params.set("q", q.trim());
   if (status.trim()) params.set("status", status.trim());
   if (source.trim()) params.set("source", source.trim());
+  if (paymentStatus.trim()) params.set("paymentStatus", paymentStatus.trim());
+  if (dateFrom.trim()) params.set("dateFrom", dateFrom.trim());
+  if (dateTo.trim()) params.set("dateTo", dateTo.trim());
+  if (tracking.trim()) params.set("tracking", tracking.trim());
   params.set("action", "orders");
 
   return fetchAdminJson<{

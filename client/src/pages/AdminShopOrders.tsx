@@ -317,6 +317,29 @@ export default function AdminShopOrders() {
     });
   };
 
+  const selectedOrderSource = selectedOrder?.order_source || "online";
+  const isSelectedOnlineOrder = selectedOrderSource === "online";
+  const isWaitingForPayment =
+    isSelectedOnlineOrder &&
+    selectedOrder &&
+    (selectedOrder.order_status === "pending_confirm" ||
+      selectedOrder.payment_status === "pending");
+  const isPaidOrder =
+    isSelectedOnlineOrder &&
+    selectedOrder &&
+    !isWaitingForPayment &&
+    selectedOrder.order_status === "paid";
+  const isShippingOrder =
+    isSelectedOnlineOrder &&
+    selectedOrder &&
+    !isWaitingForPayment &&
+    selectedOrder.order_status === "shipping";
+  const isCompletedOrder =
+    isSelectedOnlineOrder && selectedOrder?.order_status === "completed";
+  const isCancelledOrder =
+    isSelectedOnlineOrder && selectedOrder?.order_status === "cancelled";
+  const canCancelOrder = Boolean(isWaitingForPayment || isPaidOrder || isShippingOrder);
+
   if (!token) {
     return (
       <main className="flex min-h-[100svh] items-center justify-center bg-[#f7f2ea] px-5 text-stone-900">
@@ -555,16 +578,18 @@ export default function AdminShopOrders() {
                     <h3 className="text-sm font-semibold text-stone-900">
                       訂單處理快捷操作
                     </h3>
-                    <p className="mt-1 text-xs leading-relaxed text-stone-500">
-                      目前可先使用「已付款」作為備貨中處理。
-                    </p>
+                    {isPaidOrder && (
+                      <p className="mt-1 text-xs leading-relaxed text-stone-500">
+                        目前可先以「已付款」作為備貨中過渡。
+                      </p>
+                    )}
                   </div>
                   <StatusPill tone={getOrderTone(selectedOrder.order_status)}>
                     {orderStatusLabels[selectedOrder.order_status]}
                   </StatusPill>
                 </div>
 
-                {(selectedOrder.order_source || "online") === "pos" ? (
+                {selectedOrderSource === "pos" ? (
                   <div className="mt-4 rounded-[8px] border border-[#eadfd2] bg-[#fbf7f1] p-3 text-sm leading-relaxed text-stone-600">
                     此為現場銷售訂單，通常已完成付款與庫存扣除。
                   </div>
@@ -575,83 +600,86 @@ export default function AdminShopOrders() {
                         {quickActionMessage}
                       </div>
                     )}
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={
-                          isSaving ||
-                          selectedOrder.order_status === "cancelled" ||
-                          selectedOrder.order_status === "completed" ||
-                          (selectedOrder.payment_status === "confirmed" &&
-                            selectedOrder.order_status === "paid")
-                        }
-                        className="justify-center rounded-full border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                        onClick={() =>
-                          updateSelectedOrderStatuses({
-                            payment_status: "confirmed",
-                            order_status: "paid",
-                            successMessage: "已確認付款，訂單狀態已改為已付款。",
-                          })
-                        }
-                      >
-                        確認付款
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={
-                          isSaving ||
-                          selectedOrder.order_status === "cancelled" ||
-                          selectedOrder.order_status === "completed" ||
-                          selectedOrder.order_status === "shipping"
-                        }
-                        className="justify-center rounded-full border-pink-200 bg-pink-50 text-pink-700 hover:bg-pink-100"
-                        onClick={() =>
-                          updateSelectedOrderStatuses({
-                            order_status: "shipping",
-                            successMessage: "訂單已標記為出貨中。",
-                          })
-                        }
-                      >
-                        標記出貨中
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={
-                          isSaving ||
-                          selectedOrder.order_status === "cancelled" ||
-                          selectedOrder.order_status === "completed"
-                        }
-                        className="justify-center rounded-full border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
-                        onClick={() =>
-                          updateSelectedOrderStatuses({
-                            order_status: "completed",
-                            confirmMessage: "確定要將這筆訂單標記為已完成嗎？",
-                            successMessage: "訂單已標記為已完成。",
-                          })
-                        }
-                      >
-                        標記已完成
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={isSaving || selectedOrder.order_status === "cancelled"}
-                        className="justify-center rounded-full border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
-                        onClick={() =>
-                          updateSelectedOrderStatuses({
-                            order_status: "cancelled",
-                            confirmMessage:
-                              "確定要取消這筆訂單嗎？此操作只會變更訂單狀態，不會自動補回庫存。",
-                            successMessage: "訂單已標記為已取消。",
-                          })
-                        }
-                      >
-                        取消訂單
-                      </Button>
-                    </div>
+                    {isCompletedOrder ? (
+                      <div className="rounded-[8px] border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-700">
+                        訂單已完成。
+                      </div>
+                    ) : isCancelledOrder ? (
+                      <div className="rounded-[8px] border border-red-100 bg-red-50 p-3 text-sm text-red-600">
+                        訂單已取消。
+                      </div>
+                    ) : (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {isWaitingForPayment && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={isSaving}
+                            className="justify-center rounded-full border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            onClick={() =>
+                              updateSelectedOrderStatuses({
+                                payment_status: "confirmed",
+                                order_status: "paid",
+                                successMessage: "已確認付款，訂單狀態已改為已付款。",
+                              })
+                            }
+                          >
+                            確認付款
+                          </Button>
+                        )}
+                        {isPaidOrder && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={isSaving}
+                            className="justify-center rounded-full border-pink-200 bg-pink-50 text-pink-700 hover:bg-pink-100"
+                            onClick={() =>
+                              updateSelectedOrderStatuses({
+                                order_status: "shipping",
+                                successMessage: "訂單已標記為出貨中。",
+                              })
+                            }
+                          >
+                            標記出貨中
+                          </Button>
+                        )}
+                        {isShippingOrder && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={isSaving}
+                            className="justify-center rounded-full border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                            onClick={() =>
+                              updateSelectedOrderStatuses({
+                                order_status: "completed",
+                                confirmMessage: "確定要將這筆訂單標記為已完成嗎？",
+                                successMessage: "訂單已標記為已完成。",
+                              })
+                            }
+                          >
+                            標記已完成
+                          </Button>
+                        )}
+                        {canCancelOrder && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={isSaving}
+                            className="justify-center rounded-full border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                            onClick={() =>
+                              updateSelectedOrderStatuses({
+                                order_status: "cancelled",
+                                confirmMessage:
+                                  "確定要取消這筆訂單嗎？此操作只會變更訂單狀態，不會自動補回庫存。",
+                                successMessage: "訂單已標記為已取消。",
+                              })
+                            }
+                          >
+                            取消訂單
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

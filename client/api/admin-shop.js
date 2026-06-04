@@ -9,6 +9,7 @@ import {
 
 const defaultLimit = 30;
 const maxLimit = 50;
+const exportLimit = 1000;
 const validOrderStatuses = new Set([
   "pending_confirm",
   "pending_payment",
@@ -159,7 +160,11 @@ function normalizeOrderSummary(order) {
     payment_status: order.payment_status || "pending",
     order_status: order.order_status || "pending_confirm",
     order_source: order.order_source || "online",
+    shipping_address: order.shipping_address || "",
+    shipping_carrier: order.shipping_carrier || "",
     tracking_number: order.tracking_number || "",
+    note: order.note || "",
+    internal_note: order.internal_note || "",
     created_at: order.created_at || "",
     updated_at: order.updated_at || "",
   };
@@ -504,11 +509,15 @@ async function loadOrders(req, res) {
   const dateFrom = String(firstQueryValue(req.query?.dateFrom) || "").trim();
   const dateTo = String(firstQueryValue(req.query?.dateTo) || "").trim();
   const tracking = String(firstQueryValue(req.query?.tracking) || "").trim();
-  const limit = getPositiveInt(firstQueryValue(req.query?.limit), defaultLimit, maxLimit);
-  const page = getPage(firstQueryValue(req.query?.page));
+  const isExport = String(firstQueryValue(req.query?.export) || "").trim() === "1";
+  const limit = isExport
+    ? exportLimit
+    : getPositiveInt(firstQueryValue(req.query?.limit), defaultLimit, maxLimit);
+  const page = isExport ? 0 : getPage(firstQueryValue(req.query?.page));
   const offset = page * limit;
-  const select =
-    "id,order_number,customer_name,customer_phone,customer_email,subtotal,shipping_fee,total,payment_method,payment_status,order_status,order_source,tracking_number,created_at,updated_at";
+  const select = isExport
+    ? "id,order_number,customer_name,customer_phone,customer_email,shipping_address,subtotal,shipping_fee,total,payment_method,payment_status,order_status,order_source,shipping_carrier,tracking_number,note,internal_note,created_at,updated_at"
+    : "id,order_number,customer_name,customer_phone,customer_email,subtotal,shipping_fee,total,payment_method,payment_status,order_status,order_source,tracking_number,created_at,updated_at";
   const statusFilter =
     status && validOrderStatuses.has(status)
       ? `&order_status=eq.${encodeURIComponent(status)}`

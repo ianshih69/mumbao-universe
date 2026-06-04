@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ClipboardList,
+  Download,
   LogOut,
   PackageSearch,
   Printer,
@@ -22,6 +23,7 @@ import {
   type AdminShopOrderSummary,
   fetchAdminShopOrder,
   fetchAdminShopOrders,
+  fetchAdminShopOrdersForExport,
   updateAdminShopOrderStatus,
   updateAdminShopOrderShipping,
 } from "@/lib/shop/adminOrdersApi";
@@ -30,6 +32,7 @@ import {
   ORDER_SOURCE_LABELS,
   ORDER_STATUS_LABELS,
   PAYMENT_STATUS_LABELS,
+  getPaymentMethodLabel,
 } from "@/lib/shop/labels";
 import {
   adminAuthExpiredMessage,
@@ -146,6 +149,84 @@ function getPaymentTone(status: AdminPaymentStatus) {
   return "stone";
 }
 
+function escapeCsvValue(value: string | number | null | undefined) {
+  const text = String(value ?? "");
+
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+
+  return text;
+}
+
+function formatDateForFileName(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}${month}${day}`;
+}
+
+function buildOrdersCsv(orders: AdminShopOrderSummary[]) {
+  const headers = [
+    "訂單編號",
+    "建立時間",
+    "訂單來源",
+    "顧客姓名",
+    "電話",
+    "Email",
+    "地址",
+    "付款方式",
+    "付款狀態",
+    "訂單狀態",
+    "商品小計",
+    "運費",
+    "總金額",
+    "物流方式",
+    "物流單號",
+    "顧客備註",
+    "內部備註",
+  ];
+  const rows = orders.map((order) => [
+    order.order_number,
+    formatDateTime(order.created_at),
+    orderSourceLabels[order.order_source || "online"],
+    order.customer_name,
+    order.customer_phone,
+    order.customer_email || "",
+    order.shipping_address || "",
+    getPaymentMethodLabel(order.payment_method),
+    paymentStatusLabels[order.payment_status],
+    orderStatusLabels[order.order_status],
+    order.subtotal,
+    order.shipping_fee,
+    order.total,
+    order.shipping_carrier || "",
+    order.tracking_number || "",
+    order.note || "",
+    order.internal_note || "",
+  ]);
+
+  return [headers, ...rows]
+    .map((row) => row.map((value) => escapeCsvValue(value)).join(","))
+    .join("\r\n");
+}
+
+function downloadCsv(filename: string, csvContent: string) {
+  const blob = new Blob([`\uFEFF${csvContent}`], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 export default function AdminShopOrders() {
   const [token, setToken] = useState(() => getStoredAdminToken());
   const [password, setPassword] = useState("");
@@ -165,6 +246,7 @@ export default function AdminShopOrders() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [isPrintOpen, setIsPrintOpen] = useState(false);
   const [error, setError] = useState("");
   const [quickActionMessage, setQuickActionMessage] = useState("");
@@ -408,6 +490,35 @@ export default function AdminShopOrders() {
     }
   };
 
+  const exportOrdersCsv = async () => {
+    if (!token) return;
+
+    setIsExporting(true);
+    try {
+      const data = await fetchAdminShopOrdersForExport({
+        token,
+        q: search,
+        status,
+        source,
+        paymentStatus: paymentStatusFilter,
+        dateFrom,
+        dateTo,
+        tracking: trackingFilter,
+      });
+      const csv = buildOrdersCsv(data.orders || []);
+      downloadCsv(`mumbao-orders-${formatDateForFileName()}.csv`, csv);
+      setError("");
+    } catch (exportError) {
+      if (isAdminAuthError(exportError)) {
+        handleAuthFailure();
+        return;
+      }
+      setError(exportError instanceof Error ? exportError.message : "訂單匯出失敗。");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const selectedOrderSource = selectedOrder?.order_source || "online";
   const isSelectedOnlineOrder = selectedOrderSource === "online";
   const isWaitingForPayment =
@@ -626,7 +737,7 @@ export default function AdminShopOrders() {
                   ))}
                 </select>
               </label>
-              <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2 xl:col-span-3">
+              <div className="grid gap-2 sm:col-span-2 sm:grid-cols-3 xl:col-span-3">
                 <Button type="submit" className="h-11 rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]">
                   搜尋
                 </Button>
@@ -637,6 +748,16 @@ export default function AdminShopOrders() {
                   onClick={clearFilters}
                 >
                   清除篩選
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 rounded-full border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                  onClick={exportOrdersCsv}
+                  disabled={isExporting}
+                >
+                  <Download className="h-4 w-4" />
+                  {isExporting ? "匯出中..." : "匯出 CSV"}
                 </Button>
               </div>
             </div>

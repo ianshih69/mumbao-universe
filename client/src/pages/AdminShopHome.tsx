@@ -16,8 +16,8 @@ import {
   type AdminAuthStatus,
   adminAuthExpiredMessage,
   clearAdminToken,
-  getInitialAdminAuthStatus,
   getAdminToken,
+  getInitialAdminAuthStatus,
   isAdminAuthError,
   setAdminToken,
 } from "@/lib/shop/adminAuth";
@@ -36,40 +36,8 @@ import {
 } from "@/lib/shop/labels";
 import { cn } from "@/lib/utils";
 
-const orderSourceLabels = {
-  online: "官網訂單",
-  pos: "現場銷售",
-};
-
-const orderStatusLabels = {
-  pending_confirm: "待確認",
-  pending_payment: "待付款",
-  paid: "已付款",
-  shipping: "出貨中",
-  completed: "已完成",
-  cancelled: "已取消",
-};
-
-const paymentStatusLabels = {
-  pending: "待付款",
-  confirmed: "已確認付款",
-  failed: "付款失敗",
-  refunded: "已退款",
-};
-
-const movementTypeLabels = {
-  stock_in: "入庫",
-  stock_out: "扣庫存",
-  adjustment: "盤點調整",
-  manual_sale: "現場銷售",
-  online_order: "官網訂單",
-  return_in: "退貨補回",
-};
-
-function formatDateTime(value?: string) {
-  if (!value || Number.isNaN(Date.parse(value))) return "-";
-
-  return new Intl.DateTimeFormat("zh-TW", {
+function getTaipeiDateParts(value: Date) {
+  const parts = new Intl.DateTimeFormat("zh-TW", {
     timeZone: "Asia/Taipei",
     year: "numeric",
     month: "2-digit",
@@ -77,7 +45,27 @@ function formatDateTime(value?: string) {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-  }).format(new Date(value));
+  }).formatToParts(value);
+
+  return {
+    year: parts.find((part) => part.type === "year")?.value || "",
+    month: parts.find((part) => part.type === "month")?.value || "",
+    day: parts.find((part) => part.type === "day")?.value || "",
+    hour: parts.find((part) => part.type === "hour")?.value || "",
+    minute: parts.find((part) => part.type === "minute")?.value || "",
+  };
+}
+
+function formatDateTime(value?: string) {
+  if (!value || Number.isNaN(Date.parse(value))) return "-";
+
+  const parts = getTaipeiDateParts(new Date(value));
+  return `${parts.year}/${parts.month}/${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
+function formatTodayDate() {
+  const parts = getTaipeiDateParts(new Date());
+  return `${parts.year}/${parts.month}/${parts.day}`;
 }
 
 function getDeltaText(delta: number) {
@@ -105,7 +93,8 @@ function SummaryCard({
     pink: "bg-pink-50 text-pink-700",
     amber: "bg-amber-50 text-amber-700",
   }[tone];
-
+  const baseClass =
+    "rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm transition";
   const content = (
     <>
       <div className="flex items-start justify-between gap-3">
@@ -125,18 +114,14 @@ function SummaryCard({
     return (
       <a
         href={href}
-        className="block rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#b99aa2] hover:shadow-md"
+        className={cn(baseClass, "block hover:-translate-y-0.5 hover:border-[#b99aa2] hover:shadow-md")}
       >
         {content}
       </a>
     );
   }
 
-  return (
-    <div className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
-      {content}
-    </div>
-  );
+  return <div className={baseClass}>{content}</div>;
 }
 
 function EmptyState({ text }: { text: string }) {
@@ -154,9 +139,7 @@ function RecentOrderRow({ order }: { order: AdminDashboardRecentOrder }) {
       className="grid gap-3 rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-3 transition hover:border-[#b99aa2] hover:bg-[#f4ece2] md:grid-cols-[1.1fr_0.8fr_0.8fr_0.8fr] md:items-center"
     >
       <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-stone-900">
-          {order.order_number}
-        </p>
+        <p className="truncate text-sm font-semibold text-stone-900">{order.order_number}</p>
         <p className="mt-1 text-xs text-stone-500">
           {getOrderSourceLabel(order.order_source)}
         </p>
@@ -187,7 +170,7 @@ function RecentMovementRow({ movement }: { movement: AdminDashboardRecentMovemen
           </p>
           <p className="mt-1 text-xs text-stone-500">{formatDateTime(movement.created_at)}</p>
         </div>
-        <span className="rounded-full bg-white px-2.5 py-1 text-xs text-stone-600">
+        <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs text-stone-600">
           {getInventoryMovementLabel(movement.movement_type)}
         </span>
       </div>
@@ -204,9 +187,6 @@ function RecentMovementRow({ movement }: { movement: AdminDashboardRecentMovemen
           {movement.quantity_before} -&gt; {movement.quantity_after}
         </span>
       </div>
-      {movement.note && (
-        <p className="mt-2 line-clamp-1 text-xs text-stone-500">{movement.note}</p>
-      )}
     </div>
   );
 }
@@ -408,34 +388,36 @@ export default function AdminShopHome() {
         )}
 
         <section className="space-y-3">
-          <p className="text-sm text-stone-500">今日統計：台灣時間 00:00 至目前</p>
+          <p className="text-sm text-stone-500">
+            統計日期：{formatTodayDate()}，台灣時間 00:00 至目前
+          </p>
           <div className="grid gap-4 md:grid-cols-3">
-          <SummaryCard
-            title="今日銷售總額"
-            value={formatPrice(today?.sales_total || 0)}
-            detail={`官網 ${formatPrice(today?.online_sales_total || 0)} / POS ${formatPrice(
-              today?.pos_sales_total || 0
-            )}`}
-            icon={TrendingUp}
-            tone="green"
-          />
-          <SummaryCard
-            title="今日訂單數"
-            value={`${today?.order_count || 0} 筆`}
-            detail={`官網 ${today?.online_order_count || 0} 筆 / POS ${
-              today?.pos_order_count || 0
-            } 筆`}
-            icon={ClipboardList}
-            tone="pink"
-          />
-          <SummaryCard
-            title="待確認官網訂單"
-            value={`${dashboard?.pending_online_order_count || 0} 筆`}
-            detail="官網訂單且狀態為待確認。"
-            icon={AlertTriangle}
-            tone="amber"
-            href="/admin/shop/orders?source=online&status=pending_confirm"
-          />
+            <SummaryCard
+              title="今日銷售總額"
+              value={formatPrice(today?.sales_total || 0)}
+              detail={`官網 ${formatPrice(today?.online_sales_total || 0)} / 現場銷售 ${formatPrice(
+                today?.pos_sales_total || 0
+              )}`}
+              icon={TrendingUp}
+              tone="green"
+            />
+            <SummaryCard
+              title="今日訂單數"
+              value={`${today?.order_count || 0} 筆`}
+              detail={`官網訂單 ${today?.online_order_count || 0} 筆｜現場銷售 ${
+                today?.pos_order_count || 0
+              } 筆`}
+              icon={ClipboardList}
+              tone="pink"
+            />
+            <SummaryCard
+              title="待確認官網訂單"
+              value={`${dashboard?.pending_online_order_count || 0} 筆`}
+              detail="官網訂單且狀態為待確認。"
+              icon={AlertTriangle}
+              tone="amber"
+              href="/admin/shop/orders"
+            />
           </div>
         </section>
 
@@ -472,7 +454,12 @@ export default function AdminShopHome() {
                   </p>
                   <h2 className="mt-1 text-xl font-semibold">最近 5 筆庫存異動</h2>
                 </div>
-                <PackageCheck className="h-5 w-5 text-[#8b6f5b]" />
+                <a
+                  href="/admin/shop/inventory"
+                  className="inline-flex h-9 items-center rounded-full border border-stone-200 bg-white px-3 text-sm text-stone-600 hover:bg-stone-50"
+                >
+                  查看全部
+                </a>
               </div>
               {isDashboardLoading && !dashboard ? (
                 <EmptyState text="庫存異動載入中..." />
@@ -496,7 +483,9 @@ export default function AdminShopHome() {
                     低庫存商品
                   </p>
                   <h2 className="mt-1 text-xl font-semibold">低庫存商品</h2>
-                  <p className="mt-1 text-xs text-stone-500">顯示庫存 3 件以下，最多 10 筆。</p>
+                  <p className="mt-1 text-xs text-stone-500">
+                    顯示庫存 3 件以下，最多 10 筆。
+                  </p>
                 </div>
                 <AlertTriangle className="h-5 w-5 text-amber-600" />
               </div>
@@ -507,7 +496,7 @@ export default function AdminShopHome() {
                   {dashboard.low_inventory.map((item) => (
                     <a
                       key={item.variant_id}
-                      href="/admin/shop/products"
+                      href="/admin/shop/inventory"
                       className="block rounded-[8px] border border-amber-100 bg-amber-50/60 p-3 transition hover:border-amber-300 hover:bg-amber-50"
                     >
                       <div className="flex items-start justify-between gap-3">

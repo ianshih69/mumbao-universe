@@ -3,6 +3,7 @@ import {
   ClipboardList,
   LogOut,
   PackageSearch,
+  Printer,
   RefreshCw,
   Save,
   Search,
@@ -11,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import AdminShopNav from "@/components/shop/AdminShopNav";
+import OrderPrintView from "@/components/shop/OrderPrintView";
 import {
   type AdminOrderStatus,
   type AdminOrderSource,
@@ -142,6 +144,7 @@ export default function AdminShopOrders() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPrintOpen, setIsPrintOpen] = useState(false);
   const [error, setError] = useState("");
   const [quickActionMessage, setQuickActionMessage] = useState("");
   const [draftOrderStatus, setDraftOrderStatus] = useState<AdminOrderStatus>("pending_confirm");
@@ -204,6 +207,7 @@ export default function AdminShopOrders() {
         setSelectedOrder(detail);
         setDraftOrderStatus(detail.order_status);
         setDraftPaymentStatus(detail.payment_status);
+        setIsPrintOpen(false);
         setQuickActionMessage("");
         setError("");
       } catch (loadError) {
@@ -245,6 +249,7 @@ export default function AdminShopOrders() {
     setOrders([]);
     setSelectedOrderNumber("");
     setSelectedOrder(null);
+    setIsPrintOpen(false);
     setQuickActionMessage("");
   };
 
@@ -252,6 +257,7 @@ export default function AdminShopOrders() {
     event.preventDefault();
     setSelectedOrderNumber("");
     setSelectedOrder(null);
+    setIsPrintOpen(false);
     setQuickActionMessage("");
     loadOrders({ nextPage: 0 });
   };
@@ -375,7 +381,8 @@ export default function AdminShopOrders() {
   }
 
   return (
-    <main className="min-h-[100svh] bg-[#f7f2ea] text-stone-900">
+    <>
+      <main className="min-h-[100svh] bg-[#f7f2ea] text-stone-900">
       <header className="border-b border-stone-200 bg-white/95 px-5 py-5 backdrop-blur md:px-8">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
@@ -558,7 +565,18 @@ export default function AdminShopOrders() {
                     {selectedOrder.order_number}
                   </h2>
                 </div>
-                <ClipboardList className="h-6 w-6 text-[#b99aa2]" />
+                <div className="flex flex-col items-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full bg-white text-stone-700"
+                    onClick={() => setIsPrintOpen(true)}
+                  >
+                    <Printer className="h-4 w-4" />
+                    列印備貨單
+                  </Button>
+                  <ClipboardList className="h-6 w-6 text-[#b99aa2]" />
+                </div>
               </div>
 
               <div className="grid gap-2 text-sm text-stone-600">
@@ -788,6 +806,11 @@ export default function AdminShopOrders() {
           )}
         </aside>
       </div>
-    </main>
+      </main>
+
+      {isPrintOpen && selectedOrder && (
+        <OrderPrintView order={selectedOrder} onClose={() => setIsPrintOpen(false)} />
+      )}
+    </>
   );
 }

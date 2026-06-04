@@ -133,6 +133,9 @@ export default function AdminShopInventory() {
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [products, setProducts] = useState<AdminShopProductSummary[]>([]);
+  const [inventoryProductDetails, setInventoryProductDetails] = useState<
+    Record<string, AdminShopProductDetail>
+  >({});
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<AdminShopProductDetail | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState("");
@@ -147,6 +150,7 @@ export default function AdminShopInventory() {
   const [movementPage, setMovementPage] = useState(0);
   const [isProductsLoading, setIsProductsLoading] = useState(false);
   const [isProductLoading, setIsProductLoading] = useState(false);
+  const [isInventoryListLoading, setIsInventoryListLoading] = useState(false);
   const [isMovementsLoading, setIsMovementsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
@@ -180,11 +184,12 @@ export default function AdminShopInventory() {
     [inventoryStatusFilter, selectedProduct]
   );
   const inventoryAlertItems = useMemo<InventoryAlertItem[]>(() => {
-    if (!inventoryStatusFilter) return [];
-
     return products.flatMap((product) => {
-      const detailVariants =
-        selectedProduct?.id === product.id ? selectedProduct.variants : [];
+      const detail =
+        selectedProduct?.id === product.id
+          ? selectedProduct
+          : inventoryProductDetails[product.id];
+      const detailVariants = detail?.variants || [];
 
       if (detailVariants.length) {
         return detailVariants
@@ -202,24 +207,9 @@ export default function AdminShopInventory() {
           }));
       }
 
-      if (!matchesInventoryFilter(product.total_inventory, inventoryStatusFilter)) {
-        return [];
-      }
-
-      return [
-        {
-          productId: product.id,
-          productName: product.name,
-          variantId: "",
-          variantName:
-            product.variant_count > 1 ? `共 ${product.variant_count} 個規格` : "規格待載入",
-          variantOption: "",
-          sku: "",
-          inventory: product.total_inventory,
-        },
-      ];
+      return [];
     });
-  }, [inventoryStatusFilter, products, selectedProduct]);
+  }, [inventoryProductDetails, inventoryStatusFilter, products, selectedProduct]);
   const selectedAction = actionOptions.find((option) => option.value === movementType);
 
   const loadProducts = useCallback(async () => {
@@ -236,6 +226,26 @@ export default function AdminShopInventory() {
 
       setProducts(nextProducts);
       setError("");
+      setIsInventoryListLoading(true);
+      const detailEntries = await Promise.all(
+        nextProducts.map(async (product) => {
+          try {
+            const detail = await fetchAdminShopProduct(token, product.id);
+            return [product.id, detail] as const;
+          } catch {
+            return [product.id, null] as const;
+          }
+        })
+      );
+      setInventoryProductDetails(
+        detailEntries.reduce<Record<string, AdminShopProductDetail>>(
+          (details, [productId, detail]) => {
+            if (detail) details[productId] = detail;
+            return details;
+          },
+          {}
+        )
+      );
     } catch (loadError) {
       if (isAdminAuthError(loadError)) {
         handleAuthFailure();
@@ -244,6 +254,7 @@ export default function AdminShopInventory() {
       setError(loadError instanceof Error ? loadError.message : "商品讀取失敗");
     } finally {
       setIsProductsLoading(false);
+      setIsInventoryListLoading(false);
     }
   }, [handleAuthFailure, token]);
 
@@ -264,6 +275,10 @@ export default function AdminShopInventory() {
           )?.id || "";
 
         setSelectedProduct(detail);
+        setInventoryProductDetails((current) => ({
+          ...current,
+          [detail.id]: detail,
+        }));
         setSelectedVariantId(firstVariantId);
         setError("");
       } catch (loadError) {
@@ -353,6 +368,7 @@ export default function AdminShopInventory() {
     setToken("");
     setPassword("");
     setProducts([]);
+    setInventoryProductDetails({});
     setSelectedProductId("");
     setSelectedProduct(null);
     setSelectedVariantId("");
@@ -403,6 +419,21 @@ export default function AdminShopInventory() {
             }
           : current
       );
+      setInventoryProductDetails((current) => {
+        if (!selectedProduct?.id || !current[selectedProduct.id]) return current;
+
+        return {
+          ...current,
+          [selectedProduct.id]: {
+            ...current[selectedProduct.id],
+            variants: current[selectedProduct.id].variants.map((variant) =>
+              variant.id === selectedVariant.id
+                ? { ...variant, inventory: nextInventory }
+                : variant
+            ),
+          },
+        };
+      });
       setProducts((current) =>
         current.map((product) =>
           product.id === selectedProduct?.id
@@ -772,72 +803,80 @@ export default function AdminShopInventory() {
             </Button>
           </form>
 
-          {inventoryStatusFilter && (
-            <div className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
-              <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
-                    Inventory Alert
-                  </p>
-                  <h2 className="mt-1 text-xl font-semibold">
-                    {inventoryStatusFilter === "low" ? "低庫存清單" : "售完清單"}
-                  </h2>
-                </div>
-                <p className="text-sm text-stone-500">
-                  {inventoryAlertItems.length} 個項目
+          <div className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
+                  Inventory List
                 </p>
+                <h2 className="mt-1 text-xl font-semibold">
+                  {inventoryStatusFilter === "low"
+                    ? "低庫存清單"
+                    : inventoryStatusFilter === "soldout"
+                      ? "售完清單"
+                      : "全部庫存清單"}
+                </h2>
               </div>
+              <p className="text-sm text-stone-500">
+                {isInventoryListLoading
+                  ? "清單載入中..."
+                  : `${inventoryAlertItems.length} 個項目`}
+              </p>
+            </div>
 
-              {inventoryAlertItems.length === 0 ? (
-                <div className="rounded-[8px] bg-[#fbf7f1] px-4 py-8 text-center text-sm text-stone-400">
-                  目前沒有符合條件的商品規格。
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {inventoryAlertItems.map((item) => (
-                    <div
-                      key={`${item.productId}-${item.variantId || "summary"}`}
-                      className="grid gap-3 rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-3 sm:grid-cols-[1fr_auto] sm:items-center"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-stone-900">
-                          {item.productName}
-                        </p>
-                        <p className="mt-1 text-xs text-stone-500">
-                          {getVariantLabel(item.variantName, item.variantOption)}
-                        </p>
-                        {item.sku ? (
-                          <p className="mt-1 break-all text-xs text-stone-400">
-                            SKU：{item.sku}
-                          </p>
-                        ) : (
-                          <p className="mt-1 text-xs text-stone-400">
-                            選擇後會載入規格資料
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-col gap-2 sm:items-end">
+            {inventoryAlertItems.length === 0 ? (
+              <div className="rounded-[8px] bg-[#fbf7f1] px-4 py-8 text-center text-sm text-stone-400">
+                {isInventoryListLoading
+                  ? "庫存清單載入中..."
+                  : "目前沒有符合條件的商品規格。"}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {inventoryAlertItems.map((item) => (
+                  <div
+                    key={`${item.productId}-${item.variantId}`}
+                    className="grid gap-3 rounded-[8px] border border-stone-100 bg-[#fbf7f1] p-3 sm:grid-cols-[1fr_auto] sm:items-center"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-stone-900">
+                        {item.productName}
+                      </p>
+                      <p className="mt-1 text-xs text-stone-500">
+                        {getVariantLabel(item.variantName, item.variantOption)}
+                      </p>
+                      <p className="mt-1 break-all text-xs text-stone-400">
+                        SKU：{item.sku || "-"}
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:items-end">
+                      <div className="flex flex-wrap gap-2 sm:justify-end">
                         <div className="rounded-[8px] bg-white px-3 py-2 text-sm">
                           <span className="text-stone-500">目前庫存：</span>
                           <span className="font-semibold text-stone-900">
                             {item.inventory}
                           </span>
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-10 rounded-full bg-white"
-                          onClick={() => selectInventoryAlertItem(item)}
-                        >
-                          選擇調整
-                        </Button>
+                        <div className="rounded-[8px] bg-white px-3 py-2 text-sm">
+                          <span className="text-stone-500">庫存狀態：</span>
+                          <span className="font-semibold text-stone-900">
+                            {getInventoryStatusLabel(item.inventory)}
+                          </span>
+                        </div>
                       </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 rounded-full bg-white"
+                        onClick={() => selectInventoryAlertItem(item)}
+                      >
+                        選擇調整
+                      </Button>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
 
         <aside className="h-fit rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">

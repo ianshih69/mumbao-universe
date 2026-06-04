@@ -1,15 +1,12 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
-  Boxes,
   ClipboardList,
   Clock,
   LogOut,
   PackageCheck,
   RefreshCw,
-  ScanLine,
   ShieldCheck,
-  ShoppingBag,
   TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,39 +29,6 @@ import {
 } from "@/lib/shop/adminDashboardApi";
 import { formatPrice, getVariantLabel } from "@/lib/shop/format";
 import { cn } from "@/lib/utils";
-
-const entryCards = [
-  {
-    title: "商品管理",
-    description: "新增商品、調整價格、庫存、圖片與上架狀態。",
-    href: "/admin/shop/products",
-    icon: Boxes,
-  },
-  {
-    title: "訂單管理",
-    description: "查看官網訂單與現場銷售訂單，更新付款與訂單狀態。",
-    href: "/admin/shop/orders",
-    icon: ClipboardList,
-  },
-  {
-    title: "庫存調整",
-    description: "手動入庫、扣庫存、盤點調整，並查看庫存流水。",
-    href: "/admin/shop/inventory",
-    icon: PackageCheck,
-  },
-  {
-    title: "掃描入庫",
-    description: "用手機掃商品 QR code，確認後快速增加庫存。",
-    href: "/admin/shop/scan",
-    icon: ScanLine,
-  },
-  {
-    title: "現場銷售 POS",
-    description: "掃 QR 或手動 key 單，完成現場銷售並扣庫存。",
-    href: "/admin/shop/pos",
-    icon: ShoppingBag,
-  },
-];
 
 const orderSourceLabels = {
   online: "官網訂單",
@@ -559,34 +523,6 @@ export default function AdminShopHome() {
               ) : (
                 <EmptyState text="目前沒有低庫存商品。" />
               )}
-            </section>
-
-            <section className="grid gap-4">
-              {entryCards.map((card) => {
-                const Icon = card.icon;
-
-                return (
-                  <a
-                    key={card.href}
-                    href={card.href}
-                    className="group rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#b99aa2] hover:shadow-md"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#f4ece2] text-[#8b6f5b] group-hover:bg-[#8b6f5b] group-hover:text-white">
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h2 className="text-base font-semibold text-stone-900">
-                          {card.title}
-                        </h2>
-                        <p className="mt-1 text-sm leading-5 text-stone-500">
-                          {card.description}
-                        </p>
-                      </div>
-                    </div>
-                  </a>
-                );
-              })}
             </section>
           </aside>
         </section>

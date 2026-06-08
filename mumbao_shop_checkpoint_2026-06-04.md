@@ -36,6 +36,7 @@
 - E4 商品圖片 URL 管理優化正常
 - E5-2A Admin UX 商品規格收合式編輯正常
 - D5-2 訂單列表資訊強化與查單自動開明細正常
+- E5-3 前台購物車 / 結帳 / 訂單完成頁電腦版 UI 優化正常
 
 ## 2. D4 出貨資訊 / 內部備註完成內容
 
@@ -410,7 +411,63 @@ D5-2 未修改：
 - CSV
 - Vercel function 數量
 
-## 11. 測試通過項目
+## 11. E5-3 前台購物車 / 結帳 / 訂單完成頁電腦版 UI 優化完成內容
+
+前台下單流程的桌機版 UI 已完成整理，範圍包含：
+
+- `/cart`
+- `/checkout`
+- `/order-complete/:orderNumber`
+
+完成項目：
+
+- `/cart` 商品列可清楚顯示：
+  - 商品圖片
+  - 商品名稱
+  - 規格
+  - 單價
+  - 數量
+  - 小計
+  - 移除按鈕
+- `/cart` 商品卡片式排版已優化，不再裁切操作欄或移除按鈕
+- `/cart` 訂單摘要顯示商品小計、運費與總金額
+- `/cart` 總金額與付款採人工確認說明已加強視覺層級
+- `/checkout` 收件資料表單排版已整理
+- `/checkout` 可填寫姓名、電話、Email、地址與備註
+- `/checkout` 付款方式顯示人工確認付款
+- `/checkout` 訂單摘要清楚顯示商品、規格、數量與金額
+- `/order-complete/:orderNumber` 會明確顯示訂單已送出
+- `/order-complete/:orderNumber` 會顯示訂單編號
+- `/order-complete/:orderNumber` 會說明付款採人工確認
+- `/order-complete/:orderNumber` 會說明管家會再確認付款與出貨
+
+E5-3 測試結果：
+
+- `/cart` 購物車可正常顯示商品、規格、單價、數量、小計與訂單摘要
+- 數量調整正常
+- `/checkout` 可正常填寫姓名、電話、Email、地址、備註
+- 送出訂單後可正常跳轉 `/order-complete/:orderNumber`
+- `/order-complete` 正常顯示訂單已送出、訂單編號與人工確認付款說明
+- 後台 `/admin/shop/orders` 可查到測試訂單
+- 測試訂單資料正確：姓名、電話、Email、地址、備註、商品、金額都有寫入
+- 庫存扣除正常，慢寶宇宙明信片組庫存從 `39` 扣為 `38`
+- `npm.cmd run build` 已通過，只有既有 chunk size warning
+
+E5-3 未修改：
+
+- API
+- 資料庫 schema
+- RPC
+- `cartStore`
+- checkout 下單邏輯
+- 庫存扣除流程
+- 後台
+- POS
+- QR
+- CSV
+- Vercel function 數量
+
+## 12. 測試通過項目
 
 ### 前台購物流程
 
@@ -513,8 +570,20 @@ D5-2 未修改：
 - D5-2 未改資料庫、RPC、前台、cartStore、checkout、下單流程、庫存扣除、POS、QR、CSV
 - D5-2 未新增 Vercel function
 - D5-2 `npm.cmd run build` 已通過，只有既有 chunk size warning
+- E5-3 `/cart` 購物車可正常顯示商品、規格、單價、數量、小計與訂單摘要
+- E5-3 數量調整正常
+- E5-3 `/checkout` 可正常填寫姓名、電話、Email、地址、備註
+- E5-3 付款方式顯示人工確認付款
+- E5-3 送出訂單後可正常跳轉 `/order-complete/:orderNumber`
+- E5-3 `/order-complete` 正常顯示訂單已送出、訂單編號與人工確認付款說明
+- E5-3 後台 `/admin/shop/orders` 可查到測試訂單
+- E5-3 測試訂單資料正確：姓名、電話、Email、地址、備註、商品、金額都有寫入
+- E5-3 庫存扣除正常，慢寶宇宙明信片組庫存從 `39` 扣為 `38`
+- E5-3 未改 API、資料庫、RPC、cartStore、checkout 下單邏輯、庫存扣除流程、後台、POS、QR、CSV
+- E5-3 未新增 Vercel function
+- E5-3 `npm.cmd run build` 已通過，只有既有 chunk size warning
 
-## 12. 核心資料表
+## 13. 核心資料表
 
 - `shop_products`
 - `shop_product_variants`
@@ -529,7 +598,7 @@ D5-2 未修改：
 - `tracking_number`
 - `internal_note`
 
-## 13. 核心 RPC
+## 14. 核心 RPC
 
 - `create_shop_order`
   - 官網下單
@@ -554,7 +623,7 @@ D5-2 未修改：
   - 寫入 `manual_sale` 庫存流水
   - 庫存不足時整筆 rollback
 
-## 14. API 架構與 Vercel Function 限制
+## 15. API 架構與 Vercel Function 限制
 
 目前商城 API 已收斂，避免超過 Vercel Hobby serverless functions 限制。
 
@@ -573,7 +642,7 @@ D5-2 未修改：
 
 不要新增新的 Vercel function，除非有明確需求並重新評估 function 數量。
 
-## 15. 不可亂改的區塊
+## 16. 不可亂改的區塊
 
 除非有明確需求，請不要修改：
 
@@ -593,7 +662,7 @@ D5-2 未修改：
 
 任何會影響下單、扣庫存、庫存流水、POS、QR、AI 客服、LIFF session 的修改，都應先規劃並明確列出影響範圍。
 
-## 16. 下一階段候選功能
+## 17. 下一階段候選功能
 
 可評估的後續方向：
 

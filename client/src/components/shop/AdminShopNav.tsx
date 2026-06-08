@@ -1,8 +1,8 @@
 import { Link } from "wouter";
-import { Boxes, ClipboardList, PackageCheck, ScanLine, ShoppingBag } from "lucide-react";
+import { Boxes, ClipboardList, Megaphone, PackageCheck, ScanLine, ShoppingBag } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type AdminShopNavKey = "home" | "products" | "orders" | "inventory" | "scan" | "pos";
+type AdminShopNavKey = "home" | "products" | "orders" | "inventory" | "scan" | "pos" | "social";
 
 type AdminShopNavProps = {
   current?: AdminShopNavKey;
@@ -19,6 +19,7 @@ const navItems: Array<{
   { key: "inventory", label: "庫存", href: "/admin/shop/inventory", icon: PackageCheck },
   { key: "scan", label: "入庫", href: "/admin/shop/scan", icon: ScanLine },
   { key: "pos", label: "現場銷售 POS", href: "/admin/shop/pos", icon: ShoppingBag },
+  { key: "social", label: "自動發文", href: "/admin/shop/social", icon: Megaphone },
 ];
 
 export default function AdminShopNav({ current = "home" }: AdminShopNavProps) {

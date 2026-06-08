@@ -18,6 +18,7 @@ import AdminShopProducts from "./pages/AdminShopProducts";
 import AdminShopInventory from "./pages/AdminShopInventory";
 import AdminShopScan from "./pages/AdminShopScan";
 import AdminShopPos from "./pages/AdminShopPos";
+import AdminShopSocial from "./pages/AdminShopSocial";
 import AiChat from "./pages/AiChat";
 import Chat from "./pages/Chat";
 import Shop from "./pages/Shop";
@@ -39,6 +40,7 @@ function Router() {
       <Route path={"/admin/shop/inventory"} component={AdminShopInventory} />
       <Route path={"/admin/shop/scan"} component={AdminShopScan} />
       <Route path={"/admin/shop/pos"} component={AdminShopPos} />
+      <Route path={"/admin/shop/social"} component={AdminShopSocial} />
       <Route path={"/about"} component={About} />
       <Route path={"/ai-chat"} component={AiChat} />
       <Route path={"/chat"} component={Chat} />

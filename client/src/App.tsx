@@ -6,6 +6,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import FixedViewport from "@/components/utils/FixedViewport";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { MumbaoChatLauncher } from "./components/ai/MumbaoChatLauncher";
+import { SiteConstructionNotice } from "./components/layout/SiteConstructionNotice";
 import Home from "./pages/Home";
 import About from "./pages/About";
 import Mumbao from "./pages/Mumbao";
@@ -67,6 +68,8 @@ function Router() {
 function App() {
   const [pathname] = useLocation();
   const isAdminRoute = pathname.startsWith("/admin");
+  const isAiRoute = pathname === "/ai-chat" || pathname === "/chat";
+  const showFrontendNotice = !isAdminRoute && !isAiRoute;
 
   return (
     <ErrorBoundary>
@@ -77,6 +80,7 @@ function App() {
       >
         <TooltipProvider>
           <Toaster />
+          {showFrontendNotice && <SiteConstructionNotice />}
           <Router />
           {!isAdminRoute && <MumbaoChatLauncher />}
         </TooltipProvider>

@@ -275,14 +275,25 @@ export default function AdminShopSocial() {
 
     saveStoredDrafts(nextDrafts);
     setSavedDrafts(nextDrafts);
-    setEditingDraftId(nextDraft.id);
+    setEditingDraftId(existingDraft ? nextDraft.id : null);
     setPreview(draft);
-    setNotice(existingDraft ? "草稿已更新。" : "草稿已儲存。");
+    setNotice(
+      existingDraft
+        ? "已更新此任務，目前尚未真的發文。"
+        : "已新增發文任務，目前尚未真的發文。"
+    );
   };
 
   const updatePreview = () => {
     setPreview(draft);
     setNotice("預覽已更新。這只是測試預覽，尚未發文。");
+  };
+
+  const clearForm = () => {
+    setDraft(defaultDraft);
+    setPreview(defaultDraft);
+    setEditingDraftId(null);
+    setNotice("表單已清空，可以新增另一筆發文任務。");
   };
 
   const editSavedDraft = (item: StoredSocialDraft) => {
@@ -550,7 +561,7 @@ export default function AdminShopSocial() {
                 type="submit"
                 className="h-11 rounded-full bg-[#8b6f5b] px-6 text-white hover:bg-[#765d4a]"
               >
-                {editingDraftId ? "更新草稿" : "儲存草稿"}
+                {editingDraftId ? "更新此任務" : "新增發文任務"}
               </Button>
               <Button
                 type="button"
@@ -559,6 +570,14 @@ export default function AdminShopSocial() {
                 className="h-11 rounded-full bg-white px-6"
               >
                 測試預覽
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={clearForm}
+                className="h-11 rounded-full bg-white px-6"
+              >
+                清空表單
               </Button>
               <div className="flex flex-col gap-1 sm:ml-auto sm:items-end">
                 <Button type="button" disabled className="h-11 rounded-full px-6">

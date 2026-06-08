@@ -15,6 +15,21 @@ export function Footer() {
             <p className="text-base md:text-lg text-stone-600 tracking-wide font-serif italic">
               “什麼都不做，也值得被愛”
             </p>
+            <div className="space-y-2 rounded-[8px] border border-stone-200 bg-white/60 p-4 text-sm leading-6 text-stone-700">
+              <p className="font-semibold text-stone-900">
+                慢慢蒔光 STime Villa 官方網站
+              </p>
+              <p>宜蘭包棟民宿｜寵物友善住宿｜慢寶宇宙主題民宿</p>
+              <p>
+                官方網址：
+                <a
+                  href="https://www.mumbao.tw"
+                  className="break-all text-[#8b6f5b] underline-offset-4 hover:underline"
+                >
+                  https://www.mumbao.tw
+                </a>
+              </p>
+            </div>
           </div>
 
           {/* Column 2: Navigation (Desktop: col-span-4) */}

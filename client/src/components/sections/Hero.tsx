@@ -35,7 +35,7 @@ export function Hero() {
       <div className="relative z-10 h-full flex flex-col items-center justify-center text-white text-center px-4">
         {/* Text Content - Fade In Up with Delay */}
         <motion.div
-          className="space-y-8"
+          className="space-y-5 md:space-y-8"
           initial={{ opacity: 0, translateY: 30 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{
@@ -46,21 +46,25 @@ export function Hero() {
         >
           {/* Top Label */}
           <p className="text-sm md:text-base tracking-[0.3em] uppercase opacity-80 text-white/90">
-            宜蘭，台灣
+            宜蘭包棟住宿・寵物友善・慢寶宇宙主題民宿
           </p>
 
           {/* Main Title */}
-          <h2 className="font-serif text-3xl md:text-6xl lg:text-7xl font-light tracking-widest leading-tight">
-            什麼都不做，
-            <br className="block md:hidden" />
-            也值得被愛
-          </h2>
+          <h1 className="font-serif text-3xl md:text-6xl lg:text-7xl font-light tracking-widest leading-tight">
+            慢慢蒔光
+            <br />
+            STime Villa 民宿
+          </h1>
 
-          <div className="w-24 h-[1px] bg-white/50 mx-auto my-8" />
+          <div className="w-24 h-[1px] bg-white/50 mx-auto my-5 md:my-8" />
 
           {/* Subtitle */}
           <p className="font-serif text-base md:text-lg lg:text-xl font-light opacity-90 max-w-2xl mx-auto leading-relaxed tracking-wide">
-            找回你的頻率，成為自己就很好了。
+            什麼都不做，也值得被愛。找回你的頻率，成為自己就很好了。
+          </p>
+
+          <p className="max-w-3xl mx-auto text-sm md:text-base leading-7 md:leading-8 text-white/85 tracking-wide">
+            慢慢蒔光 STime Villa 是位於宜蘭的包棟民宿，結合慢寶宇宙 MUMBAO Universe 原創 IP、寵物友善與療癒住宿空間，適合家庭旅遊、朋友聚會、生日慶祝與宜蘭包棟住宿。
           </p>
         </motion.div>
 

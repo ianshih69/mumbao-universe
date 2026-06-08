@@ -66,13 +66,13 @@ export default function Home() {
         <section className="bg-[#fbf7f1] px-5 py-10 md:px-8 md:py-14">
           <div className="mx-auto max-w-4xl text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#9f7868]">
-              STime Villa Official
+              MUMBAO Universe Theme Stay
             </p>
-            <h1 className="mt-3 font-serif text-2xl font-light tracking-wide text-stone-900 md:text-4xl">
-              慢慢蒔光 STime Villa 民宿
-            </h1>
+            <h2 className="mt-3 font-serif text-2xl font-light tracking-wide text-stone-900 md:text-4xl">
+              宜蘭包棟住宿 × 寵物友善 × 慢寶宇宙主題民宿
+            </h2>
             <p className="mx-auto mt-5 max-w-3xl text-base leading-8 text-stone-600 md:text-lg md:leading-9">
-              慢慢蒔光 STime Villa 是位於宜蘭的包棟民宿，結合慢寶宇宙 MUMBAO Universe 原創 IP、寵物友善與療癒住宿空間，適合家庭旅遊、朋友聚會、生日慶祝與宜蘭包棟住宿。
+              慢慢蒔光 STime Villa 以包棟住宿、療癒空間與慢寶 MUMBAO 原創 IP 為核心，提供適合家庭、朋友、寵物同行的宜蘭住宿體驗。從公共空間、房型設計到文創商品，讓旅人走進慢寶宇宙，感受慢下來的住宿時光。
             </p>
           </div>
         </section>

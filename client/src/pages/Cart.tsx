@@ -62,9 +62,9 @@ export default function Cart() {
             </Button>
           </section>
         ) : (
-          <div className="flex flex-col gap-6 min-[1120px]:flex-row min-[1120px]:items-start">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
             <section className="min-w-0 flex-1 space-y-3">
-              <div className="hidden rounded-[8px] border border-[#eadfce] bg-[#f3eadf] px-5 py-3.5 text-sm font-semibold text-[#5f4b3f] min-[1120px]:grid min-[1120px]:grid-cols-[120px_minmax(180px,1fr)_90px_150px_90px_80px] min-[1120px]:items-center min-[1120px]:gap-4">
+              <div className="hidden rounded-[8px] border border-[#eadfce] bg-[#f3eadf] px-5 py-3.5 text-sm font-semibold text-[#5f4b3f] xl:grid xl:grid-cols-[120px_minmax(180px,1fr)_90px_150px_90px_80px] xl:items-center xl:gap-4">
                 <span>商品</span>
                 <span>商品資訊</span>
                 <span className="text-right">單價</span>
@@ -83,7 +83,7 @@ export default function Cart() {
                 />
               ))}
             </section>
-            <aside className="w-full min-[1120px]:w-[380px] min-[1120px]:shrink-0">
+            <aside className="w-full xl:w-[380px] xl:shrink-0">
               <CheckoutSummary items={items} onAction={() => setLocation("/checkout")} actionLabel="前往結帳" />
             </aside>
           </div>

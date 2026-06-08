@@ -686,3 +686,18 @@ E5-3 未修改：
 - 評價系統
 - 多賣家功能
 - 新 Vercel function
+## 18. 自動發文後台頁面第一版完成
+
+- 新增 /admin/shop/social 自動發文後台頁面。
+- 未登入時會要求先登入商城後台，沿用商城後台共用登入狀態。
+- 商城後台導覽已新增「自動發文」入口。
+- 可填寫發文標題、發文內容、Hashtag、平台、發文模式與排程時間。
+- 圖片 / 影片選擇欄位第一版只顯示檔名，不會上傳。
+- 右側預覽可顯示文案、hashtag、平台、模式、排程時間與檔名。
+- 儲存草稿會寫入 localStorage，key 為 `mumbao_social_post_draft`。
+- 重新整理後文字草稿可保留。
+- 「之後發文」按鈕 disabled，並顯示「Meta API 串接後啟用」。
+- 第一版未新增 API、資料庫、Vercel function。
+- 第一版未串 Meta API、Cloudflare R2，也未上傳圖片 / 影片。
+- 未影響商城前台、商品、訂單、庫存、POS、QR、CSV 或 RPC。
+- `npm.cmd run build` 已通過，只有既有 chunk size warning。

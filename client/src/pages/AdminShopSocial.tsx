@@ -21,7 +21,13 @@ const socialDraftsStorageKey = "mumbao_social_post_drafts";
 
 type PublishMode = "now" | "scheduled";
 type Platform = "Facebook" | "Instagram" | "Threads";
-type DraftStatus = "draft" | "scheduled";
+type DraftStatus =
+  | "pending"
+  | "scheduled"
+  | "published"
+  | "partial_success"
+  | "failed"
+  | "cancelled";
 
 type SocialDraftForm = {
   title: string;
@@ -62,7 +68,7 @@ function createDraftId() {
 }
 
 function getDraftStatus(mode: PublishMode, scheduledAt: string): DraftStatus {
-  return mode === "scheduled" && scheduledAt ? "scheduled" : "draft";
+  return mode === "scheduled" && scheduledAt ? "scheduled" : "pending";
 }
 
 function formFromStoredDraft(draft: StoredSocialDraft): SocialDraftForm {
@@ -104,6 +110,7 @@ function normalizeStoredDraft(value: unknown): StoredSocialDraft | null {
   const source = value as Partial<StoredSocialDraft> & {
     publishMode?: PublishMode;
     fileNames?: string[];
+    status?: DraftStatus | "draft";
   };
   const mode = source.mode || source.publishMode || "now";
   const scheduledAt = source.scheduledAt || "";
@@ -117,7 +124,10 @@ function normalizeStoredDraft(value: unknown): StoredSocialDraft | null {
     platforms: Array.isArray(source.platforms) ? (source.platforms as Platform[]) : [],
     mode,
     scheduledAt,
-    status: source.status || getDraftStatus(mode, scheduledAt),
+    status:
+      source.status === "draft"
+        ? "pending"
+        : source.status || getDraftStatus(mode, scheduledAt),
     mediaFileNames: source.mediaFileNames || source.fileNames || [],
     createdAt: source.createdAt || now,
     updatedAt: source.updatedAt || now,
@@ -186,7 +196,16 @@ function getModeLabel(mode: PublishMode) {
 }
 
 function getStatusLabel(status: DraftStatus) {
-  return status === "scheduled" ? "排程中" : "草稿";
+  const labels: Record<DraftStatus, string> = {
+    pending: "待發文",
+    scheduled: "排程中",
+    published: "已發文",
+    partial_success: "部分成功",
+    failed: "發文失敗",
+    cancelled: "已取消",
+  };
+
+  return labels[status] || "待發文";
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -281,7 +300,7 @@ export default function AdminShopSocial() {
       ...item,
       id: createDraftId(),
       title: item.title ? `${item.title} 副本` : "未命名草稿 副本",
-      status: "draft",
+      status: "pending",
       createdAt: now,
       updatedAt: now,
     };
@@ -656,18 +675,21 @@ export default function AdminShopSocial() {
           <div className="flex flex-col gap-2 border-b border-stone-100 pb-4 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
-                Saved Drafts
+                Social Tasks
               </p>
-              <h2 className="mt-1 font-serif text-2xl font-light">草稿與排程清單</h2>
+              <h2 className="mt-1 font-serif text-2xl font-light">發文任務與紀錄</h2>
             </div>
             <p className="text-sm text-stone-500">
               共 {savedDrafts.length} 筆，僅儲存在此瀏覽器的 localStorage。
             </p>
           </div>
+          <p className="mt-4 rounded-[8px] bg-[#fbf7f1] px-4 py-3 text-sm leading-6 text-stone-600">
+            目前第一版僅保存發文任務，不會真的發文；串接 Meta API 後會顯示發文成功或失敗結果。
+          </p>
 
           {sortedDrafts.length === 0 ? (
             <div className="mt-5 rounded-[8px] border border-dashed border-stone-200 bg-[#fbf7f1] p-6 text-center text-sm text-stone-500">
-              目前沒有草稿或排程發文。填寫上方表單後，點「儲存草稿」即可加入清單。
+              目前沒有發文任務。填寫上方表單後，點「儲存草稿」即可加入清單。
             </div>
           ) : (
             <div className="mt-5 grid gap-3">
@@ -733,8 +755,8 @@ export default function AdminShopSocial() {
                         <p>
                           <span className="text-stone-400">媒體：</span>
                           {item.mediaFileNames.length > 0
-                            ? `${item.mediaFileNames.length} 個檔名`
-                            : "未選檔"}
+                            ? `有檔名（${item.mediaFileNames.length} 個）`
+                            : "未上傳"}
                         </p>
                       </div>
                     </div>

@@ -62,16 +62,9 @@ export default function Cart() {
             </Button>
           </section>
         ) : (
-          <div className="flex flex-col gap-6 2xl:flex-row 2xl:items-start">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+            {/* 左側商品列表 */}
             <section className="min-w-0 flex-1 space-y-3">
-              <div className="hidden rounded-[8px] border border-[#eadfce] bg-[#f3eadf] px-5 py-3.5 text-sm font-semibold text-[#5f4b3f] 2xl:grid 2xl:grid-cols-[140px_minmax(220px,1fr)_100px_160px_100px_90px] 2xl:items-center 2xl:gap-4">
-                <span>商品</span>
-                <span>商品資訊</span>
-                <span className="text-right">單價</span>
-                <span className="text-center">數量</span>
-                <span className="text-right">小計</span>
-                <span className="text-right">操作</span>
-              </div>
               {items.map((item) => (
                 <CartLineItem
                   key={item.variantId}
@@ -83,7 +76,9 @@ export default function Cart() {
                 />
               ))}
             </section>
-            <aside className="w-full 2xl:w-[380px] 2xl:shrink-0">
+
+            {/* 右側訂單摘要 */}
+            <aside className="w-full lg:w-[360px] lg:shrink-0 lg:sticky lg:top-32">
               <CheckoutSummary items={items} onAction={() => setLocation("/checkout")} actionLabel="前往結帳" />
             </aside>
           </div>

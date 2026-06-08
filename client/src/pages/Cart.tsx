@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ShoppingBag } from "lucide-react";
+import { ArrowLeft, ShoppingBag } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
@@ -26,30 +26,52 @@ export default function Cart() {
       <main className="mx-auto max-w-7xl px-5 pb-20 pt-32 md:px-8 md:pt-40">
         <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm text-[#527467]">MUMBAO Shop</p>
+            <p className="text-sm uppercase tracking-[0.2em] text-[#9f7868]">
+              MUMBAO SHOP
+            </p>
             <h1 className="mt-2 font-serif text-4xl font-light tracking-wide">
               購物車
             </h1>
+            <p className="mt-2 text-sm text-stone-500">
+              確認商品、規格與數量後，就可以前往結帳。
+            </p>
           </div>
-          <Button asChild variant="outline" className="rounded-full bg-white">
-            <Link href="/shop">繼續逛逛</Link>
+          <Button
+            asChild
+            variant="outline"
+            className="rounded-full border-[#eadfce] bg-white text-[#8b6f5b] hover:bg-[#f3eadf]"
+          >
+            <Link href="/shop">
+              <ArrowLeft className="h-4 w-4" />
+              返回宇宙碎品商店
+            </Link>
           </Button>
         </div>
 
         {items.length === 0 ? (
-          <section className="rounded-[8px] border border-dashed border-stone-300 bg-white px-6 py-14 text-center">
-            <ShoppingBag className="mx-auto mb-4 h-10 w-10 text-stone-300" />
+          <section className="rounded-[8px] border border-dashed border-[#d7c6b5] bg-[#fffdf8] px-6 py-16 text-center shadow-sm shadow-stone-200/50">
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[#f3eadf] text-[#9f7868]">
+              <ShoppingBag className="h-8 w-8" />
+            </div>
             <h2 className="font-serif text-2xl text-stone-900">購物車還是空的</h2>
-            <p className="mt-2 text-sm text-stone-500">
-              去看看慢寶周邊、明信片、版畫與文創小物吧。
+            <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-stone-500">
+              慢寶宇宙裡的小小陪伴還在架上等你。可以先回商店看看明信片、杯墊、版畫與文創小物。
             </p>
-            <Button asChild className="mt-6 rounded-full bg-[#527467] text-white hover:bg-[#456257]">
-              <Link href="/shop">前往文創商品</Link>
+            <Button asChild className="mt-6 rounded-full bg-[#8b6f5b] px-6 text-white hover:bg-[#765d4a]">
+              <Link href="/shop">返回宇宙碎品商店</Link>
             </Button>
           </section>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
             <section className="space-y-3">
+              <div className="hidden rounded-[8px] border border-[#eadfce] bg-[#f3eadf] px-4 py-3 text-xs font-medium text-[#7b6a58] md:grid md:grid-cols-[6.5rem_minmax(0,1fr)_7rem_9rem_7rem_auto] md:items-center md:gap-4">
+                <span>商品</span>
+                <span>商品資訊</span>
+                <span>單價</span>
+                <span>數量</span>
+                <span>小計</span>
+                <span>操作</span>
+              </div>
               {items.map((item) => (
                 <CartLineItem
                   key={item.variantId}

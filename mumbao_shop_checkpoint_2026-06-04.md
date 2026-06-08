@@ -34,6 +34,7 @@
 - E2-2 訂單商品明細 CSV 匯出正常
 - E3 / E3-1 低庫存與庫存清單 UX 正常
 - E4 商品圖片 URL 管理優化正常
+- E5-2A Admin UX 商品規格收合式編輯正常
 
 ## 2. D4 出貨資訊 / 內部備註完成內容
 
@@ -303,7 +304,62 @@ E4 未修改：
 - CSV 匯出
 - Vercel function 數量
 
-## 9. 測試通過項目
+## 9. E5-2A Admin UX 商品規格收合式編輯完成內容
+
+`/admin/shop/products` 商品編輯頁已完成商品規格區收合式 UI 優化。
+
+完成項目：
+
+- 「價格與庫存 / 販售規格」區塊改成收合式 UI
+- 每個規格預設只顯示摘要列
+- 摘要列顯示：
+  - 規格名稱
+  - 售價
+  - 庫存
+  - 販售狀態
+  - SKU / 商品編號
+  - 是否有規格圖片
+- 點「編輯 / 展開」後才顯示完整欄位
+- 同一時間只展開一個規格
+- 切換規格時，前一個規格會自動收合
+- 展開後保留所有既有欄位：
+  - 規格名稱
+  - 規格選項
+  - 規格圖片 URL
+  - 商品編號
+  - 販售狀態
+  - 售價
+  - 原價
+  - 庫存
+- QR code 不再預設顯示
+- 展開規格後需點「顯示 QR code」才會顯示 QR code 與下載功能
+- 規格圖片 URL 有值時會顯示小縮圖預覽
+- 規格圖片載入失敗時會顯示提示
+- 修改規格圖片 URL、價格、庫存、SKU 後可正常儲存
+
+後續可評估的小優化：
+
+- 商品主圖預覽目前偏大，之後可限制桌機版主圖預覽高度，例如 `max-height: 320px～380px`，避免商品編輯頁過長
+
+E5-2A Admin UX 小修未修改：
+
+- API
+- 資料庫 schema
+- RPC
+- 前台 `/shop`
+- 前台 `/shop/:slug`
+- `ProductDetail`
+- `cartStore`
+- checkout
+- POS
+- QR 產生邏輯
+- QR 掃描
+- 庫存流程
+- 訂單管理
+- CSV
+- Vercel function 數量
+
+## 10. 測試通過項目
 
 ### 前台購物流程
 
@@ -382,8 +438,19 @@ E4 未修改：
 - E4 未影響 API、資料庫、RPC、前台購物流程、POS、QR、庫存、訂單管理、CSV
 - E4 未新增 Vercel function
 - E4 `npm.cmd run build` 已通過
+- E5-2A `/admin/shop/products` 商品規格區已改成收合式 UI
+- E5-2A 每個規格預設只顯示摘要列
+- E5-2A 摘要列可看到規格名稱、售價、庫存、販售狀態、SKU / 商品編號、是否有規格圖片
+- E5-2A 點「編輯 / 展開」後才顯示完整欄位
+- E5-2A 同一時間只展開一個規格，切換規格時前一個會自動收合
+- E5-2A QR code 不再預設顯示，需點「顯示 QR code」才展開
+- E5-2A 規格圖片 URL 有小縮圖預覽，載入失敗會顯示提示
+- E5-2A 修改規格圖片 URL、價格、庫存、SKU 後可正常儲存
+- E5-2A 未改 API、資料庫、RPC、前台、ProductDetail、cartStore、checkout、POS、QR 掃描、庫存、訂單、CSV
+- E5-2A 未新增 Vercel function
+- E5-2A `npm.cmd run build` 已通過，只有既有 chunk size warning
 
-## 10. 核心資料表
+## 11. 核心資料表
 
 - `shop_products`
 - `shop_product_variants`
@@ -398,7 +465,7 @@ E4 未修改：
 - `tracking_number`
 - `internal_note`
 
-## 11. 核心 RPC
+## 12. 核心 RPC
 
 - `create_shop_order`
   - 官網下單
@@ -423,7 +490,7 @@ E4 未修改：
   - 寫入 `manual_sale` 庫存流水
   - 庫存不足時整筆 rollback
 
-## 12. API 架構與 Vercel Function 限制
+## 13. API 架構與 Vercel Function 限制
 
 目前商城 API 已收斂，避免超過 Vercel Hobby serverless functions 限制。
 
@@ -442,7 +509,7 @@ E4 未修改：
 
 不要新增新的 Vercel function，除非有明確需求並重新評估 function 數量。
 
-## 13. 不可亂改的區塊
+## 14. 不可亂改的區塊
 
 除非有明確需求，請不要修改：
 
@@ -462,7 +529,7 @@ E4 未修改：
 
 任何會影響下單、扣庫存、庫存流水、POS、QR、AI 客服、LIFF session 的修改，都應先規劃並明確列出影響範圍。
 
-## 14. 下一階段候選功能
+## 15. 下一階段候選功能
 
 可評估的後續方向：
 
@@ -472,6 +539,7 @@ E4 未修改：
 - 庫存流水查詢篩選優化
 - POS 銷售紀錄整理
 - 商品管理圖片上傳
+- 商品管理桌機版主圖預覽高度限制，例如 `max-height: 320px～380px`
 - 商品批次匯入
 - 退貨 / 取消訂單補庫存流程
 - 基礎營運報表

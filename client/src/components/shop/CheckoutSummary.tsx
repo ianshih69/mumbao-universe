@@ -46,18 +46,18 @@ export function CheckoutSummary({
       </div>
 
       <div className="space-y-3 text-sm">
-        <div className="flex justify-between gap-4 text-stone-600">
+        <div className="flex justify-between gap-4 text-stone-700">
           <span>商品小計</span>
           <span>{formatPrice(subtotal)}</span>
         </div>
-        <div className="flex justify-between gap-4 text-stone-600">
+        <div className="flex justify-between gap-4 text-stone-700">
           <span>運費</span>
           <span>人工確認</span>
         </div>
-        <div className="border-t border-[#f0e5d7] pt-3">
-          <div className="flex justify-between gap-4 text-lg font-semibold text-stone-900">
+        <div className="rounded-[8px] border border-[#eadfce] bg-[#f8f1e8] px-4 py-3">
+          <div className="flex items-end justify-between gap-4 text-lg font-semibold text-stone-900">
             <span>總金額</span>
-            <span className="font-serif text-2xl text-[#9f7868]">{formatPrice(total)}</span>
+            <span className="font-serif text-3xl text-[#9f7868]">{formatPrice(total)}</span>
           </div>
         </div>
       </div>
@@ -80,7 +80,7 @@ export function CheckoutSummary({
           <Link href="/checkout">前往結帳</Link>
         </Button>
       )}
-      <div className="rounded-[8px] bg-[#f3eadf] px-3 py-2 text-xs leading-5 text-[#7b6a58]">
+      <div className="rounded-[8px] bg-[#f3eadf] px-4 py-3 text-sm leading-6 text-[#765d4a]">
         付款採人工確認。送出訂單後，管家會再與你確認付款、庫存與出貨細節。
       </div>
     </aside>

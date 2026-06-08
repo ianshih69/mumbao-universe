@@ -17,68 +17,61 @@ export function CartLineItem({
   const lineTotal = item.price * item.quantity;
 
   return (
-    <article className="flex gap-4 rounded-[8px] border border-[#eadfce] bg-[#fffdf8] p-4 shadow-sm shadow-stone-200/50">
-      {/* 商品圖片 */}
-      <Link href={`/shop/${item.slug}`} className="block shrink-0">
+    <article className="relative grid gap-4 rounded-[8px] border border-[#eadfce] bg-[#fffdf8] p-3.5 shadow-sm shadow-stone-200/50 sm:grid-cols-[120px_minmax(0,1fr)] sm:p-4">
+      <Link href={`/shop/${item.slug}`} className="block w-[116px] shrink-0 sm:w-[120px]">
         <img
           src={item.imageUrl || "/images/logo.webp"}
           alt={item.name}
-          className="h-[110px] w-[110px] rounded-[6px] border border-[#f0e5d7] bg-[#f6f1ea] object-cover sm:h-[120px] sm:w-[120px]"
+          className="aspect-square w-full rounded-[6px] border border-[#f0e5d7] bg-[#f6f1ea] object-cover"
         />
       </Link>
 
-      {/* 商品資訊區 */}
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
-        {/* 商品名稱 + 規格 */}
-        <div className="min-w-0">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="absolute right-3 top-3 h-9 rounded-full border-[#eadfce] bg-white px-3 text-sm font-medium text-[#765d4a] shadow-sm hover:bg-red-50 hover:text-red-600"
+        onClick={onRemove}
+        aria-label="移除商品"
+      >
+        <Trash2 className="h-4 w-4" />
+        移除
+      </Button>
+
+      <div className="min-w-0 pr-0 sm:pr-24">
+        <div className="min-w-0 pr-24 sm:pr-0">
           <Link href={`/shop/${item.slug}`}>
-            <h2 className="break-words text-sm font-semibold leading-6 text-stone-900 hover:text-[#8b6f5b] sm:text-base">
+            <h2 className="break-words text-lg font-semibold leading-7 text-stone-950 hover:text-[#8b6f5b]">
               {item.name}
             </h2>
           </Link>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-stone-400">已選規格</span>
-            <span className="inline-flex rounded-full bg-[#f3eadf] px-2.5 py-0.5 text-xs text-[#7b6a58]">
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <span className="text-sm text-stone-500">已選規格</span>
+            <span className="inline-flex rounded-full bg-[#f3eadf] px-3 py-1 text-sm leading-5 text-[#765d4a]">
               {getVariantLabel(item.variantName, item.variantOption)}
             </span>
           </div>
         </div>
 
-        {/* 單價 / 數量 / 小計 */}
-        <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2">
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-xs text-stone-400">單價</span>
-            <span className="font-serif text-base text-[#9f7868]">
+        <div className="mt-4 grid gap-2 md:grid-cols-[minmax(110px,1fr)_auto_minmax(120px,1fr)] md:items-center">
+          <div className="rounded-[8px] border border-[#f0e5d7] bg-white/70 px-3 py-2">
+            <p className="text-sm font-medium text-stone-600">單價</p>
+            <p className="mt-1 font-serif text-lg text-[#9f7868]">
               {formatPrice(item.price)}
-            </span>
+            </p>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-stone-400">數量</span>
+          <div className="flex items-center justify-between gap-3 rounded-[8px] border border-[#f0e5d7] bg-white/70 px-3 py-2 md:justify-center">
+            <span className="text-sm font-medium text-stone-600 md:hidden">數量</span>
             <QuantityStepper value={item.quantity} onChange={onQuantityChange} />
           </div>
 
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-xs text-stone-400">小計</span>
-            <span className="font-serif text-base font-semibold text-stone-900">
+          <div className="rounded-[8px] border border-[#eadfce] bg-[#f8f1e8] px-3 py-2 text-right">
+            <p className="text-sm font-medium text-[#765d4a]">小計</p>
+            <p className="mt-1 font-serif text-xl font-semibold text-stone-950">
               {formatPrice(lineTotal)}
-            </span>
+            </p>
           </div>
-        </div>
-
-        {/* 移除按鈕 */}
-        <div className="mt-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-8 rounded-full px-3 text-xs text-stone-400 hover:bg-red-50 hover:text-red-600"
-            onClick={onRemove}
-            aria-label="移除商品"
-          >
-            <Trash2 className="mr-1 h-3.5 w-3.5" />
-            移除
-          </Button>
         </div>
       </div>
     </article>

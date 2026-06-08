@@ -27,6 +27,9 @@ export type AdminDashboardRecentOrder = {
   id: string;
   order_number: string;
   order_source: AdminDashboardOrderSource;
+  customer_name?: string;
+  items_summary?: string;
+  item_count?: number;
   total: number;
   payment_status: AdminPaymentStatus;
   order_status: AdminOrderStatus;

@@ -170,6 +170,37 @@ function normalizeOrderSummary(order) {
   };
 }
 
+function buildOrderItemsSummary(items = []) {
+  if (!items.length) {
+    return {
+      items_summary: "尚無商品明細",
+      item_count: 0,
+    };
+  }
+
+  if (items.length === 1) {
+    const item = items[0];
+    return {
+      items_summary: `${item.product_name || "未命名商品"} ×${Number(item.quantity || 0)}`,
+      item_count: 1,
+    };
+  }
+
+  return {
+    items_summary: `共 ${items.length} 項商品`,
+    item_count: items.length,
+  };
+}
+
+function normalizeDashboardOrderSummary(order, itemsByOrderId = new Map()) {
+  const items = itemsByOrderId.get(order.id) || [];
+
+  return {
+    ...normalizeOrderSummary(order),
+    ...buildOrderItemsSummary(items),
+  };
+}
+
 function normalizeOrder(order, items = []) {
   return {
     ...normalizeOrderSummary(order),
@@ -444,7 +475,7 @@ async function loadDashboard(req, res) {
 
   const { startIso, endIso } = getTaipeiTodayRange();
   const orderSelect =
-    "id,order_number,total,payment_status,order_status,order_source,created_at";
+    "id,order_number,customer_name,total,payment_status,order_status,order_source,created_at";
   const movementSelect =
     "id,product_id,variant_id,movement_type,quantity_delta,quantity_before,quantity_after,reference_type,reference_number,note,created_at,created_by";
   const [
@@ -482,6 +513,21 @@ async function loadDashboard(req, res) {
   const movementVariantsById = await loadVariantsByIds(
     (recentMovements || []).map((movement) => movement.variant_id)
   );
+  const recentOrderIds = (recentOrders || []).map((order) => order.id).filter(Boolean);
+  const recentOrderItems = recentOrderIds.length
+    ? await supabaseRequest(
+        `/shop_order_items?order_id=in.(${recentOrderIds.join(
+          ","
+        )})&select=order_id,product_name,quantity,created_at&order=created_at.asc`
+      )
+    : [];
+  const recentOrderItemsByOrderId = new Map();
+
+  for (const item of recentOrderItems || []) {
+    const items = recentOrderItemsByOrderId.get(item.order_id) || [];
+    items.push(item);
+    recentOrderItemsByOrderId.set(item.order_id, items);
+  }
 
   return sendJson(res, 200, {
     dashboard: {
@@ -490,7 +536,9 @@ async function loadDashboard(req, res) {
       low_inventory: (lowInventoryVariants || []).map((variant) =>
         normalizeLowInventoryVariant(variant, lowInventoryProductsById)
       ),
-      recent_orders: (recentOrders || []).map(normalizeOrderSummary),
+      recent_orders: (recentOrders || []).map((order) =>
+        normalizeDashboardOrderSummary(order, recentOrderItemsByOrderId)
+      ),
       recent_movements: (recentMovements || []).map((movement) =>
         normalizeInventoryMovement(
           movement,

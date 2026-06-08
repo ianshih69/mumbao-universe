@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ClipboardList,
   Download,
@@ -113,6 +113,7 @@ function getInitialOrderQuery() {
 
   return {
     search: queryOrderNumber || querySearch,
+    orderNumber: queryOrderNumber,
     status: validStatus ? (queryStatus as AdminOrderStatus) : "",
     source: validSource ? (querySource as AdminOrderSource) : "",
     paymentStatus: validPaymentStatus ? (queryPaymentStatus as AdminPaymentStatus) : "",
@@ -308,6 +309,8 @@ function downloadCsv(filename: string, csvContent: string) {
 
 export default function AdminShopOrders() {
   const [initialQuery] = useState(() => getInitialOrderQuery());
+  const autoOpenOrderNumberRef = useRef(initialQuery.orderNumber);
+  const hasAutoOpenedOrderRef = useRef(false);
   const [token, setToken] = useState(() => getStoredAdminToken());
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -431,6 +434,21 @@ export default function AdminShopOrders() {
     },
     [handleAuthFailure, token]
   );
+
+  useEffect(() => {
+    if (
+      !token ||
+      isLoading ||
+      hasAutoOpenedOrderRef.current ||
+      !autoOpenOrderNumberRef.current ||
+      orders.length !== 1
+    ) {
+      return;
+    }
+
+    hasAutoOpenedOrderRef.current = true;
+    loadOrderDetail(orders[0].order_number);
+  }, [isLoading, loadOrderDetail, orders, token]);
 
   useEffect(() => {
     if (!token) return;
@@ -893,77 +911,77 @@ export default function AdminShopOrders() {
             </div>
           )}
 
-          <div className="overflow-hidden rounded-[8px] border border-stone-200 bg-white shadow-sm">
-            <div className="grid grid-cols-[1.2fr_1fr_0.9fr_0.9fr] gap-3 border-b border-stone-100 bg-[#fbf7f1] px-4 py-3 text-xs font-medium text-stone-500 md:grid-cols-[1.55fr_1fr_0.7fr_0.78fr_0.78fr_0.85fr_0.5fr]">
-              <span>訂單</span>
-              <span>顧客</span>
-              <span className="hidden md:block">金額</span>
-              <span>付款</span>
-              <span>狀態</span>
-              <span className="hidden md:block">建立時間</span>
-              <span className="hidden md:block text-right">操作</span>
-            </div>
-
+          <div className="rounded-[8px] border border-stone-200 bg-white p-3 shadow-sm">
             {orders.length === 0 ? (
               <div className="px-5 py-14 text-center text-stone-400">
                 <PackageSearch className="mx-auto mb-3 h-9 w-9" />
                 <p>{isLoading ? "訂單載入中..." : "目前沒有符合條件的訂單。"}</p>
               </div>
             ) : (
-              orders.map((order) => {
-                const isSelected = selectedOrderNumber === order.order_number;
+              <div className="space-y-3">
+                {orders.map((order) => {
+                  const isSelected = selectedOrderNumber === order.order_number;
+                  const customerName =
+                    order.customer_name?.trim() ||
+                    (order.order_source === "pos" ? "POS 現場銷售" : "未填姓名");
 
-                return (
-                  <button
-                    key={order.id}
-                    type="button"
-                    onClick={() => loadOrderDetail(order.order_number)}
-                    className={cn(
-                      "grid w-full cursor-pointer grid-cols-[1.2fr_1fr_0.9fr_0.9fr] gap-3 border-b border-stone-100 px-4 py-3 text-left text-sm transition last:border-b-0 md:grid-cols-[1.55fr_1fr_0.7fr_0.78fr_0.78fr_0.85fr_0.5fr]",
-                      isSelected
-                        ? "bg-[#f4ece2] ring-1 ring-inset ring-[#b99aa2]"
-                        : "bg-white hover:bg-[#fbf7f1] hover:shadow-sm"
-                    )}
-                  >
-                    <span className="min-w-0">
-                      <span className="block break-all font-mono text-xs font-semibold leading-5 text-stone-900 md:text-[13px]">
-                        {order.order_number}
-                      </span>
-                      <span className="mt-1 inline-flex rounded-full bg-[#f4ece2] px-2 py-0.5 text-xs text-[#765d4a]">
-                        {orderSourceLabels[order.order_source || "online"]}
-                      </span>
-                      <span className="mt-1 block text-xs text-stone-400 md:hidden">
-                        {formatPrice(order.total)}
-                      </span>
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-stone-800">
-                        {order.customer_name}
-                      </span>
-                      <span className="mt-1 block truncate text-xs text-stone-400">
-                        {order.customer_phone}
-                      </span>
-                    </span>
-                    <span className="hidden font-medium text-stone-800 md:block">
-                      {formatPrice(order.total)}
-                    </span>
-                    <StatusPill tone={getPaymentTone(order.payment_status)}>
-                      {paymentStatusLabels[order.payment_status]}
-                    </StatusPill>
-                    <StatusPill tone={getOrderTone(order.order_status)}>
-                      {orderStatusLabels[order.order_status]}
-                    </StatusPill>
-                    <span className="hidden text-xs text-stone-500 md:block">
-                      {formatDateTime(order.created_at)}
-                    </span>
-                    <span className="hidden text-right md:block">
-                      <span className="inline-flex rounded-full bg-[#8b6f5b] px-3 py-1 text-xs font-semibold text-white">
-                        查看
-                      </span>
-                    </span>
-                  </button>
-                );
-              })
+                  return (
+                    <button
+                      key={order.id}
+                      type="button"
+                      onClick={() => loadOrderDetail(order.order_number)}
+                      className={cn(
+                        "block w-full cursor-pointer rounded-[8px] border p-4 text-left transition",
+                        isSelected
+                          ? "border-[#b99aa2] bg-[#f4ece2] shadow-sm ring-1 ring-inset ring-[#b99aa2]"
+                          : "border-stone-100 bg-[#fbf7f1] hover:-translate-y-0.5 hover:border-[#b99aa2] hover:bg-[#f4ece2] hover:shadow-sm"
+                      )}
+                    >
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="break-all font-mono text-xs font-semibold leading-5 text-stone-900 md:text-[13px]">
+                              {order.order_number}
+                            </span>
+                            <span className="rounded-full bg-white px-2.5 py-1 text-xs text-[#765d4a]">
+                              {orderSourceLabels[order.order_source || "online"]}
+                            </span>
+                          </div>
+                          <p className="text-base font-semibold leading-6 text-stone-900">
+                            {order.items_summary || "尚無商品明細"}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-stone-500">
+                            <span>{customerName}</span>
+                            {order.customer_phone && <span>{order.customer_phone}</span>}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-3 md:min-w-[260px] md:items-end">
+                          <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                            <StatusPill tone={getPaymentTone(order.payment_status)}>
+                              {paymentStatusLabels[order.payment_status]}
+                            </StatusPill>
+                            <StatusPill tone={getOrderTone(order.order_status)}>
+                              {orderStatusLabels[order.order_status]}
+                            </StatusPill>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 md:justify-end">
+                            <span className="text-xs text-stone-500">
+                              {formatDateTime(order.created_at)}
+                            </span>
+                            <span className="text-base font-semibold text-[#8b6f5b]">
+                              {formatPrice(order.total)}
+                            </span>
+                          </div>
+                          <span className="inline-flex w-fit rounded-full bg-[#8b6f5b] px-3 py-1.5 text-sm font-semibold text-white">
+                            查看
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </div>
 

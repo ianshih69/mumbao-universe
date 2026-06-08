@@ -20,6 +20,8 @@ export type AdminShopOrderSummary = {
   customer_name: string;
   customer_phone: string;
   customer_email?: string;
+  items_summary?: string;
+  item_count?: number;
   shipping_address?: string;
   subtotal: number;
   shipping_fee: number;

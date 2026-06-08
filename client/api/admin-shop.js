@@ -608,9 +608,27 @@ async function loadOrders(req, res) {
     }&offset=${offset}`
   );
   const hasMore = (orders || []).length > limit;
+  const visibleOrders = (orders || []).slice(0, limit);
+  const visibleOrderIds = visibleOrders.map((order) => order.id).filter(Boolean);
+  const visibleOrderItems = visibleOrderIds.length
+    ? await supabaseRequest(
+        `/shop_order_items?order_id=in.(${visibleOrderIds.join(
+          ","
+        )})&select=order_id,product_name,quantity,created_at&order=created_at.asc`
+      )
+    : [];
+  const visibleOrderItemsByOrderId = new Map();
+
+  for (const item of visibleOrderItems || []) {
+    const items = visibleOrderItemsByOrderId.get(item.order_id) || [];
+    items.push(item);
+    visibleOrderItemsByOrderId.set(item.order_id, items);
+  }
 
   return sendJson(res, 200, {
-    orders: (orders || []).slice(0, limit).map(normalizeOrderSummary),
+    orders: visibleOrders.map((order) =>
+      normalizeDashboardOrderSummary(order, visibleOrderItemsByOrderId)
+    ),
     page,
     limit,
     hasMore,

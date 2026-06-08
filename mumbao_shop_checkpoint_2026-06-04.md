@@ -35,6 +35,7 @@
 - E3 / E3-1 低庫存與庫存清單 UX 正常
 - E4 商品圖片 URL 管理優化正常
 - E5-2A Admin UX 商品規格收合式編輯正常
+- D5-2 訂單列表資訊強化與查單自動開明細正常
 
 ## 2. D4 出貨資訊 / 內部備註完成內容
 
@@ -359,7 +360,57 @@ E5-2A Admin UX 小修未修改：
 - CSV
 - Vercel function 數量
 
-## 10. 測試通過項目
+## 10. D5-2 訂單列表資訊強化 + 查單自動開明細完成內容
+
+`/admin/shop/orders` 訂單管理頁已完成訂單列表資訊強化，並支援從 `orderNumber` query 進入時自動開啟右側明細。
+
+完成項目：
+
+- `/admin/shop/orders?orderNumber=MS...` 會自動帶入訂單編號搜尋
+- 查詢結果只有一筆時，右側訂單明細會自動打開
+- 一般 `/admin/shop/orders` 不會自動選取訂單
+- 訂單列表已顯示商品摘要
+- 單商品訂單顯示「商品名稱 ×數量」
+- 多商品訂單顯示「共 X 項商品」
+- 訂單列表顯示：
+  - 訂單編號
+  - 訂單來源
+  - 顧客姓名
+  - 顧客電話
+  - 商品摘要
+  - 金額
+  - 付款狀態
+  - 訂單狀態
+  - 建立時間
+  - 明確「查看」入口
+- 訂單列有 hover、cursor pointer 與明確可點擊狀態
+- 點不同訂單卡片時，右側明細可正常切換
+- 選中訂單有明顯高亮狀態
+
+D5-2 API 調整：
+
+- 沿用既有 `GET /api/admin-shop?action=orders`
+- 訂單列表回傳補上：
+  - `items_summary`
+  - `item_count`
+- 未新增 endpoint
+- 未新增 Vercel function
+
+D5-2 未修改：
+
+- 資料庫 schema
+- RPC
+- 前台購物流程
+- `cartStore`
+- checkout
+- 下單流程
+- 庫存扣除
+- POS
+- QR
+- CSV
+- Vercel function 數量
+
+## 11. 測試通過項目
 
 ### 前台購物流程
 
@@ -449,8 +500,21 @@ E5-2A Admin UX 小修未修改：
 - E5-2A 未改 API、資料庫、RPC、前台、ProductDetail、cartStore、checkout、POS、QR 掃描、庫存、訂單、CSV
 - E5-2A 未新增 Vercel function
 - E5-2A `npm.cmd run build` 已通過，只有既有 chunk size warning
+- D5-2 `/admin/shop/orders?orderNumber=MS...` 會自動帶入訂單編號搜尋
+- D5-2 查詢結果只有一筆時，右側訂單明細會自動打開
+- D5-2 一般 `/admin/shop/orders` 不會自動選取訂單
+- D5-2 訂單列表已顯示商品摘要
+- D5-2 單商品訂單顯示「商品名稱 ×數量」
+- D5-2 多商品訂單顯示「共 X 項商品」
+- D5-2 訂單列表顯示顧客姓名、電話、金額、付款狀態、訂單狀態、建立時間
+- D5-2 訂單列有 hover、cursor pointer 與明確「查看」入口
+- D5-2 點不同訂單卡片時，右側明細可正常切換
+- D5-2 選中訂單有明顯高亮狀態
+- D5-2 未改資料庫、RPC、前台、cartStore、checkout、下單流程、庫存扣除、POS、QR、CSV
+- D5-2 未新增 Vercel function
+- D5-2 `npm.cmd run build` 已通過，只有既有 chunk size warning
 
-## 11. 核心資料表
+## 12. 核心資料表
 
 - `shop_products`
 - `shop_product_variants`
@@ -465,7 +529,7 @@ E5-2A Admin UX 小修未修改：
 - `tracking_number`
 - `internal_note`
 
-## 12. 核心 RPC
+## 13. 核心 RPC
 
 - `create_shop_order`
   - 官網下單
@@ -490,7 +554,7 @@ E5-2A Admin UX 小修未修改：
   - 寫入 `manual_sale` 庫存流水
   - 庫存不足時整筆 rollback
 
-## 13. API 架構與 Vercel Function 限制
+## 14. API 架構與 Vercel Function 限制
 
 目前商城 API 已收斂，避免超過 Vercel Hobby serverless functions 限制。
 
@@ -509,7 +573,7 @@ E5-2A Admin UX 小修未修改：
 
 不要新增新的 Vercel function，除非有明確需求並重新評估 function 數量。
 
-## 14. 不可亂改的區塊
+## 15. 不可亂改的區塊
 
 除非有明確需求，請不要修改：
 
@@ -529,7 +593,7 @@ E5-2A Admin UX 小修未修改：
 
 任何會影響下單、扣庫存、庫存流水、POS、QR、AI 客服、LIFF session 的修改，都應先規劃並明確列出影響範圍。
 
-## 15. 下一階段候選功能
+## 16. 下一階段候選功能
 
 可評估的後續方向：
 

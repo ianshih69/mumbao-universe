@@ -64,13 +64,13 @@ export default function Cart() {
         ) : (
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
             <section className="space-y-3">
-              <div className="hidden rounded-[8px] border border-[#eadfce] bg-[#f3eadf] px-4 py-3 text-xs font-medium text-[#7b6a58] md:grid md:grid-cols-[6.5rem_minmax(0,1fr)_7rem_9rem_7rem_auto] md:items-center md:gap-4">
+              <div className="hidden rounded-[8px] border border-[#eadfce] bg-[#f3eadf] px-5 py-3.5 text-sm font-semibold text-[#5f4b3f] md:grid md:grid-cols-[7.5rem_minmax(14rem,1fr)_6.5rem_8.5rem_6.8rem_5.5rem] md:items-center md:gap-4">
                 <span>商品</span>
                 <span>商品資訊</span>
-                <span>單價</span>
-                <span>數量</span>
-                <span>小計</span>
-                <span>操作</span>
+                <span className="text-right">單價</span>
+                <span className="text-center">數量</span>
+                <span className="text-right">小計</span>
+                <span className="text-right">操作</span>
               </div>
               {items.map((item) => (
                 <CartLineItem

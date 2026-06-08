@@ -91,6 +91,34 @@ const trackingFilterOptions: Array<{ value: AdminTrackingFilter; label: string }
   { value: "without", label: "無物流單號" },
 ];
 
+function getInitialOrderQuery() {
+  const params =
+    typeof window === "undefined"
+      ? new URLSearchParams()
+      : new URLSearchParams(window.location.search);
+  const querySource = params.get("source") || "";
+  const queryStatus = params.get("status") || "";
+  const queryPaymentStatus = params.get("paymentStatus") || "";
+  const queryOrderNumber = params.get("orderNumber") || "";
+  const querySearch = params.get("q") || "";
+  const validSource = orderSourceOptions.some(
+    (option) => option.value && option.value === querySource
+  );
+  const validStatus = orderStatusOptions.some(
+    (option) => option.value && option.value === queryStatus
+  );
+  const validPaymentStatus = paymentStatusFilterOptions.some(
+    (option) => option.value && option.value === queryPaymentStatus
+  );
+
+  return {
+    search: queryOrderNumber || querySearch,
+    status: validStatus ? (queryStatus as AdminOrderStatus) : "",
+    source: validSource ? (querySource as AdminOrderSource) : "",
+    paymentStatus: validPaymentStatus ? (queryPaymentStatus as AdminPaymentStatus) : "",
+  };
+}
+
 function getStoredAdminToken() {
   return getAdminToken();
 }
@@ -279,16 +307,19 @@ function downloadCsv(filename: string, csvContent: string) {
 }
 
 export default function AdminShopOrders() {
+  const [initialQuery] = useState(() => getInitialOrderQuery());
   const [token, setToken] = useState(() => getStoredAdminToken());
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [orders, setOrders] = useState<AdminShopOrderSummary[]>([]);
   const [selectedOrderNumber, setSelectedOrderNumber] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<AdminShopOrderDetail | null>(null);
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<"" | AdminOrderStatus>("");
-  const [source, setSource] = useState<"" | AdminOrderSource>("");
-  const [paymentStatusFilter, setPaymentStatusFilter] = useState<"" | AdminPaymentStatus>("");
+  const [search, setSearch] = useState(initialQuery.search);
+  const [status, setStatus] = useState<"" | AdminOrderStatus>(initialQuery.status);
+  const [source, setSource] = useState<"" | AdminOrderSource>(initialQuery.source);
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<"" | AdminPaymentStatus>(
+    initialQuery.paymentStatus
+  );
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [trackingFilter, setTrackingFilter] = useState<AdminTrackingFilter>("");
@@ -863,13 +894,14 @@ export default function AdminShopOrders() {
           )}
 
           <div className="overflow-hidden rounded-[8px] border border-stone-200 bg-white shadow-sm">
-            <div className="grid grid-cols-[1.2fr_1fr_0.9fr_0.9fr] gap-3 border-b border-stone-100 bg-[#fbf7f1] px-4 py-3 text-xs font-medium text-stone-500 md:grid-cols-[1.2fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr]">
+            <div className="grid grid-cols-[1.2fr_1fr_0.9fr_0.9fr] gap-3 border-b border-stone-100 bg-[#fbf7f1] px-4 py-3 text-xs font-medium text-stone-500 md:grid-cols-[1.55fr_1fr_0.7fr_0.78fr_0.78fr_0.85fr_0.5fr]">
               <span>訂單</span>
               <span>顧客</span>
               <span className="hidden md:block">金額</span>
               <span>付款</span>
               <span>狀態</span>
               <span className="hidden md:block">建立時間</span>
+              <span className="hidden md:block text-right">操作</span>
             </div>
 
             {orders.length === 0 ? (
@@ -887,12 +919,14 @@ export default function AdminShopOrders() {
                     type="button"
                     onClick={() => loadOrderDetail(order.order_number)}
                     className={cn(
-                      "grid w-full grid-cols-[1.2fr_1fr_0.9fr_0.9fr] gap-3 border-b border-stone-100 px-4 py-3 text-left text-sm transition last:border-b-0 md:grid-cols-[1.2fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr]",
-                      isSelected ? "bg-[#f4ece2]" : "bg-white hover:bg-stone-50"
+                      "grid w-full cursor-pointer grid-cols-[1.2fr_1fr_0.9fr_0.9fr] gap-3 border-b border-stone-100 px-4 py-3 text-left text-sm transition last:border-b-0 md:grid-cols-[1.55fr_1fr_0.7fr_0.78fr_0.78fr_0.85fr_0.5fr]",
+                      isSelected
+                        ? "bg-[#f4ece2] ring-1 ring-inset ring-[#b99aa2]"
+                        : "bg-white hover:bg-[#fbf7f1] hover:shadow-sm"
                     )}
                   >
                     <span className="min-w-0">
-                      <span className="block truncate font-semibold text-stone-900">
+                      <span className="block break-all font-mono text-xs font-semibold leading-5 text-stone-900 md:text-[13px]">
                         {order.order_number}
                       </span>
                       <span className="mt-1 inline-flex rounded-full bg-[#f4ece2] px-2 py-0.5 text-xs text-[#765d4a]">
@@ -921,6 +955,11 @@ export default function AdminShopOrders() {
                     </StatusPill>
                     <span className="hidden text-xs text-stone-500 md:block">
                       {formatDateTime(order.created_at)}
+                    </span>
+                    <span className="hidden text-right md:block">
+                      <span className="inline-flex rounded-full bg-[#8b6f5b] px-3 py-1 text-xs font-semibold text-white">
+                        查看
+                      </span>
                     </span>
                   </button>
                 );

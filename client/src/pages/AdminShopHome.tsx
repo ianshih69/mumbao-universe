@@ -139,7 +139,7 @@ function RecentOrderRow({ order }: { order: AdminDashboardRecentOrder }) {
   const customerName =
     order.customer_name?.trim() ||
     (order.order_source === "pos" ? "POS 現場銷售" : "未填姓名");
-  const orderHref = `/admin/shop/orders?q=${encodeURIComponent(order.order_number)}`;
+  const orderHref = `/admin/shop/orders?orderNumber=${encodeURIComponent(order.order_number)}`;
 
   return (
     <a

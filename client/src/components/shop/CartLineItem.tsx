@@ -17,18 +17,18 @@ export function CartLineItem({
   const lineTotal = item.price * item.quantity;
 
   return (
-    <article className="rounded-[8px] border border-[#eadfce] bg-[#fffdf8] p-4 shadow-sm shadow-stone-200/50 xl:grid xl:grid-cols-[140px_minmax(220px,1fr)_100px_160px_100px_90px] xl:items-center xl:gap-4 xl:p-5">
-      <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-4 xl:contents">
+    <article className="rounded-[8px] border border-[#eadfce] bg-[#fffdf8] p-4 shadow-sm shadow-stone-200/50 2xl:grid 2xl:grid-cols-[140px_minmax(220px,1fr)_100px_160px_100px_90px] 2xl:items-center 2xl:gap-4 2xl:p-5">
+      <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-4 2xl:contents">
         <Link href={`/shop/${item.slug}`} className="block">
           <img
             src={item.imageUrl || "/images/logo.webp"}
             alt={item.name}
-            className="aspect-square w-full rounded-[6px] border border-[#f0e5d7] bg-[#f6f1ea] object-cover xl:w-[120px]"
+            className="aspect-square w-full rounded-[6px] border border-[#f0e5d7] bg-[#f6f1ea] object-cover 2xl:w-[120px]"
           />
         </Link>
         <div className="min-w-0 space-y-2.5">
           <Link href={`/shop/${item.slug}`}>
-            <h2 className="break-words text-base font-semibold leading-6 text-stone-900 hover:text-[#8b6f5b] xl:text-lg">
+            <h2 className="break-words text-base font-semibold leading-6 text-stone-900 hover:text-[#8b6f5b] 2xl:text-lg">
               {item.name}
             </h2>
           </Link>
@@ -38,22 +38,22 @@ export function CartLineItem({
               {getVariantLabel(item.variantName, item.variantOption)}
             </p>
           </div>
-          <p className="font-serif text-lg text-[#9f7868] xl:hidden">
+          <p className="font-serif text-lg text-[#9f7868] 2xl:hidden">
             {formatPrice(item.price)}
           </p>
         </div>
       </div>
-      <div className="hidden text-right text-sm xl:block">
+      <div className="hidden text-right text-sm 2xl:block">
         <p className="text-xs text-stone-400">單價</p>
         <p className="mt-1 font-serif text-lg text-[#9f7868]">{formatPrice(item.price)}</p>
       </div>
-      <div className="mt-4 flex flex-col gap-3 border-t border-[#f0e5d7] pt-4 sm:flex-row sm:items-center sm:justify-between xl:contents xl:border-t-0 xl:pt-0">
-        <div className="flex items-center justify-between gap-3 xl:flex xl:justify-center">
-          <span className="text-xs text-stone-400 xl:hidden">數量</span>
+      <div className="mt-4 flex flex-col gap-3 border-t border-[#f0e5d7] pt-4 sm:flex-row sm:items-center sm:justify-between 2xl:contents 2xl:border-t-0 2xl:pt-0">
+        <div className="flex items-center justify-between gap-3 2xl:flex 2xl:justify-center">
+          <span className="text-xs text-stone-400 2xl:hidden">數量</span>
           <QuantityStepper value={item.quantity} onChange={onQuantityChange} />
         </div>
-        <div className="flex items-center justify-between gap-3 xl:block xl:text-right">
-          <span className="text-xs text-stone-400 xl:hidden">小計</span>
+        <div className="flex items-center justify-between gap-3 2xl:block 2xl:text-right">
+          <span className="text-xs text-stone-400 2xl:hidden">小計</span>
           <span className="font-serif text-lg font-semibold text-stone-900">
             {formatPrice(lineTotal)}
           </span>
@@ -61,7 +61,7 @@ export function CartLineItem({
         <Button
           type="button"
           variant="outline"
-          className="h-10 shrink-0 rounded-full border-[#eadfce] bg-white text-stone-600 hover:bg-red-50 hover:text-red-600 sm:w-auto sm:px-4 xl:w-full xl:px-3"
+          className="h-10 shrink-0 rounded-full border-[#eadfce] bg-white text-stone-600 hover:bg-red-50 hover:text-red-600 sm:w-auto sm:px-4 2xl:w-full 2xl:px-3"
           onClick={onRemove}
           aria-label="移除商品"
         >

@@ -7,13 +7,19 @@ import {
   Edit3,
   FileImage,
   LockKeyhole,
+  Loader2,
   Send,
   Sparkles,
   Trash2,
+  UploadCloud,
 } from "lucide-react";
 import AdminShopNav from "@/components/shop/AdminShopNav";
 import { Button } from "@/components/ui/button";
 import { getAdminToken } from "@/lib/shop/adminAuth";
+import {
+  type SocialMediaFile,
+  uploadSocialMediaFile,
+} from "@/lib/shop/socialUploadApi";
 import { cn } from "@/lib/utils";
 
 const legacySocialDraftStorageKey = "mumbao_social_post_draft";
@@ -37,6 +43,7 @@ type SocialDraftForm = {
   publishMode: PublishMode;
   scheduledAt: string;
   fileNames: string[];
+  mediaFiles: SocialMediaFile[];
 };
 
 type StoredSocialDraft = {
@@ -49,6 +56,7 @@ type StoredSocialDraft = {
   scheduledAt: string;
   status: DraftStatus;
   mediaFileNames: string[];
+  mediaFiles: SocialMediaFile[];
   createdAt: string;
   updatedAt: string;
 };
@@ -61,6 +69,7 @@ const defaultDraft: SocialDraftForm = {
   publishMode: "now",
   scheduledAt: "",
   fileNames: [],
+  mediaFiles: [],
 };
 
 function createDraftId() {
@@ -80,6 +89,7 @@ function formFromStoredDraft(draft: StoredSocialDraft): SocialDraftForm {
     publishMode: draft.mode || "now",
     scheduledAt: draft.scheduledAt || "",
     fileNames: draft.mediaFileNames || [],
+    mediaFiles: draft.mediaFiles || [],
   };
 }
 
@@ -99,6 +109,7 @@ function storedDraftFromForm(
     scheduledAt: form.scheduledAt,
     status: getDraftStatus(form.publishMode, form.scheduledAt),
     mediaFileNames: form.fileNames,
+    mediaFiles: form.mediaFiles,
     createdAt: existingDraft?.createdAt || now,
     updatedAt: now,
   };
@@ -129,6 +140,7 @@ function normalizeStoredDraft(value: unknown): StoredSocialDraft | null {
         ? "pending"
         : source.status || getDraftStatus(mode, scheduledAt),
     mediaFileNames: source.mediaFileNames || source.fileNames || [],
+    mediaFiles: Array.isArray(source.mediaFiles) ? source.mediaFiles : [],
     createdAt: source.createdAt || now,
     updatedAt: source.updatedAt || now,
   };
@@ -208,6 +220,34 @@ function getStatusLabel(status: DraftStatus) {
   return labels[status] || "待發文";
 }
 
+function formatFileSize(size: number) {
+  if (!Number.isFinite(size) || size <= 0) return "0 KB";
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
+function validateMediaFile(file: File) {
+  const allowedTypes = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "video/mp4",
+  ]);
+
+  if (!allowedTypes.has(file.type)) {
+    return "不支援此檔案類型，僅接受 JPG、PNG、WebP 與 MP4。";
+  }
+
+  const maxSize = file.type === "video/mp4" ? 100 * 1024 * 1024 : 10 * 1024 * 1024;
+  if (file.size > maxSize) {
+    return file.type === "video/mp4"
+      ? "影片檔案不可超過 100MB。"
+      : "圖片檔案不可超過 10MB。";
+  }
+
+  return "";
+}
+
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return <span className="text-sm font-semibold text-stone-800">{children}</span>;
 }
@@ -228,6 +268,10 @@ export default function AdminShopSocial() {
     initialState.activeDraftId
   );
   const [notice, setNotice] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [fileInputKey, setFileInputKey] = useState(0);
 
   const platformOptions: Platform[] = useMemo(
     () => ["Facebook", "Instagram", "Threads"],
@@ -258,8 +302,71 @@ export default function AdminShopSocial() {
   };
 
   const handleFilesChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const fileNames = Array.from(event.target.files || []).map((file) => file.name);
+    const files = Array.from(event.target.files || []);
+    const fileNames = files.map((file) => file.name);
+
+    setSelectedFiles(files);
+    setUploadError("");
     updateDraft("fileNames", fileNames);
+  };
+
+  const uploadSelectedFiles = async () => {
+    if (!selectedFiles.length) {
+      setUploadError("請先選擇要上傳的圖片或影片。");
+      return;
+    }
+
+    const invalidFile = selectedFiles.find((file) => validateMediaFile(file));
+    if (invalidFile) {
+      setUploadError(`${invalidFile.name}：${validateMediaFile(invalidFile)}`);
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadError("");
+    setNotice("");
+
+    const results = await Promise.allSettled(
+      selectedFiles.map((file) => uploadSocialMediaFile(token, file))
+    );
+    const uploadedFiles = results.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : []
+    );
+    const failedFiles = selectedFiles.filter(
+      (_, index) => results[index]?.status === "rejected"
+    );
+    const firstFailure = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected"
+    );
+
+    if (uploadedFiles.length) {
+      const nextMediaFiles = [...draft.mediaFiles, ...uploadedFiles];
+      const nextFileNames = Array.from(
+        new Set([...draft.fileNames, ...uploadedFiles.map((file) => file.fileName)])
+      );
+      const nextDraft = {
+        ...draft,
+        fileNames: nextFileNames,
+        mediaFiles: nextMediaFiles,
+      };
+
+      setDraft(nextDraft);
+      setPreview(nextDraft);
+      setNotice(`已上傳 ${uploadedFiles.length} 個暫存檔，儲存任務後會一併保留網址。`);
+    }
+
+    setSelectedFiles(failedFiles);
+    if (!failedFiles.length) {
+      setFileInputKey((current) => current + 1);
+    }
+    setUploadError(
+      firstFailure
+        ? firstFailure.reason instanceof Error
+          ? firstFailure.reason.message
+          : "部分檔案上傳失敗，請稍後再試。"
+        : ""
+    );
+    setIsUploading(false);
   };
 
   const saveDraft = (event: FormEvent) => {
@@ -293,6 +400,9 @@ export default function AdminShopSocial() {
     setDraft(defaultDraft);
     setPreview(defaultDraft);
     setEditingDraftId(null);
+    setSelectedFiles([]);
+    setUploadError("");
+    setFileInputKey((current) => current + 1);
     setNotice("表單已清空，可以新增另一筆發文任務。");
   };
 
@@ -301,6 +411,9 @@ export default function AdminShopSocial() {
     setDraft(nextForm);
     setPreview(nextForm);
     setEditingDraftId(item.id);
+    setSelectedFiles([]);
+    setUploadError("");
+    setFileInputKey((current) => current + 1);
     setNotice(`正在編輯「${item.title || "未命名草稿"}」。`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -517,36 +630,92 @@ export default function AdminShopSocial() {
                   <div>
                     <FieldLabel>圖片 / 影片選擇</FieldLabel>
                     <p className="mt-1 text-sm leading-6 text-stone-500">
-                      第一版只顯示檔名，不會上傳到 Cloudflare R2。
+                      支援 JPG、PNG、WebP 與 MP4。圖片最大 10MB，影片最大 100MB。
                     </p>
                   </div>
                 </div>
                 <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-full bg-white px-5 text-sm font-semibold text-[#8b6f5b] shadow-sm ring-1 ring-stone-200 transition hover:bg-[#f4ece2]">
                   選擇檔案
                   <input
+                    key={fileInputKey}
                     type="file"
                     multiple
-                    accept="image/*,video/*"
+                    accept="image/jpeg,image/png,image/webp,video/mp4"
                     onChange={handleFilesChange}
                     className="sr-only"
                   />
                 </label>
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                {draft.fileNames.length > 0 ? (
-                  draft.fileNames.map((fileName) => (
-                    <span
-                      key={fileName}
-                      className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-stone-600"
+              <div className="mt-4 space-y-3">
+                {selectedFiles.length > 0 ? (
+                  selectedFiles.map((file) => (
+                    <div
+                      key={`${file.name}-${file.size}-${file.lastModified}`}
+                      className="flex flex-col gap-1 rounded-[8px] bg-white px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
                     >
-                      {fileName}
-                    </span>
+                      <span className="break-all font-medium text-stone-700">{file.name}</span>
+                      <span className="shrink-0 text-xs text-stone-500">
+                        {file.type || "未知類型"}・{formatFileSize(file.size)}
+                      </span>
+                    </div>
                   ))
                 ) : (
-                  <p className="text-sm text-stone-400">尚未選擇圖片或影片。</p>
+                  <p className="text-sm text-stone-400">尚未選擇新的圖片或影片。</p>
                 )}
               </div>
+
+              <Button
+                type="button"
+                onClick={uploadSelectedFiles}
+                disabled={!selectedFiles.length || isUploading}
+                className="mt-4 h-11 w-full rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a] sm:w-auto"
+              >
+                {isUploading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <UploadCloud className="size-4" />
+                )}
+                {isUploading ? "上傳中..." : "上傳暫存檔"}
+              </Button>
+
+              {uploadError && (
+                <p className="mt-3 rounded-[8px] border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+                  {uploadError}
+                </p>
+              )}
+
+              {draft.mediaFiles.length > 0 && (
+                <div className="mt-5 space-y-3 border-t border-[#eadfce] pt-4">
+                  <p className="text-sm font-semibold text-stone-800">
+                    已上傳暫存媒體（{draft.mediaFiles.length}）
+                  </p>
+                  {draft.mediaFiles.map((media) => (
+                    <div
+                      key={media.key}
+                      className="rounded-[8px] border border-stone-100 bg-white p-3 text-sm"
+                    >
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                        <p className="break-all font-medium text-stone-800">{media.fileName}</p>
+                        <p className="shrink-0 text-xs text-stone-500">
+                          {media.contentType}・{formatFileSize(media.size)}
+                        </p>
+                      </div>
+                      <a
+                        href={media.publicUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 block break-all text-xs text-[#8b6f5b] underline underline-offset-2"
+                      >
+                        {media.publicUrl}
+                      </a>
+                    </div>
+                  ))}
+                  <p className="text-xs leading-5 text-stone-500">
+                    此檔案位於 R2 social-temp/，約 7 天後會依 lifecycle 設定自動刪除。
+                  </p>
+                </div>
+              )}
             </section>
 
             {notice && (
@@ -669,20 +838,43 @@ export default function AdminShopSocial() {
 
               <div>
                 <p className="text-xs font-semibold tracking-[0.18em] text-stone-400">
-                  已選圖片 / 影片
+                  已上傳媒體（{preview.mediaFiles.length}）
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {preview.fileNames.length > 0 ? (
-                    preview.fileNames.map((fileName) => (
-                      <span
-                        key={fileName}
-                        className="rounded-full bg-[#fbf7f1] px-3 py-1.5 text-xs font-medium text-stone-600"
+                <div className="mt-3 grid gap-3">
+                  {preview.mediaFiles.length > 0 ? (
+                    preview.mediaFiles.map((media) => (
+                      <div
+                        key={media.key}
+                        className="overflow-hidden rounded-[8px] border border-stone-100 bg-[#fbf7f1]"
                       >
-                        {fileName}
-                      </span>
+                        {media.contentType.startsWith("image/") ? (
+                          <img
+                            src={media.publicUrl}
+                            alt={media.fileName}
+                            className="max-h-64 w-full bg-white object-contain"
+                          />
+                        ) : media.contentType === "video/mp4" ? (
+                          <video
+                            src={media.publicUrl}
+                            controls
+                            preload="metadata"
+                            className="max-h-64 w-full bg-black object-contain"
+                          >
+                            {media.fileName}
+                          </video>
+                        ) : null}
+                        <div className="p-3">
+                          <p className="break-all text-xs font-medium text-stone-700">
+                            {media.fileName}
+                          </p>
+                          <p className="mt-1 text-xs text-stone-500">
+                            {media.contentType}・{formatFileSize(media.size)}
+                          </p>
+                        </div>
+                      </div>
                     ))
                   ) : (
-                    <EmptyPreviewLine>尚未選擇檔案</EmptyPreviewLine>
+                    <EmptyPreviewLine>尚未上傳媒體</EmptyPreviewLine>
                   )}
                 </div>
               </div>
@@ -773,8 +965,8 @@ export default function AdminShopSocial() {
                         </p>
                         <p>
                           <span className="text-stone-400">媒體：</span>
-                          {item.mediaFileNames.length > 0
-                            ? `有檔名（${item.mediaFileNames.length} 個）`
+                          {item.mediaFiles.length > 0
+                            ? `已上傳 ${item.mediaFiles.length} 個檔案`
                             : "未上傳"}
                         </p>
                       </div>

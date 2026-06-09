@@ -74,6 +74,166 @@ function requireAdmin(req) {
   }
 }
 
+function createMetaStatus(status, accountName = null, error = null) {
+  return {
+    status,
+    accountName,
+    error,
+  };
+}
+
+function getMetaGraphVersion() {
+  const configuredVersion = String(
+    getServerEnv("META_GRAPH_API_VERSION") || ""
+  ).trim();
+
+  return /^v\d+\.\d+$/.test(configuredVersion)
+    ? configuredVersion
+    : "v25.0";
+}
+
+function getSafeMetaErrorMessage(status, code) {
+  if (code === 190 || status === 401) {
+    return "存取權杖無效或已過期，請更新 Vercel Environment Variables。";
+  }
+
+  if (code === 10 || code === 200 || status === 403) {
+    return "Meta 權限不足，請確認帳號權限與 App 權限設定。";
+  }
+
+  if (status === 404) {
+    return "找不到指定的 Meta 帳號，請確認帳號 ID 是否正確。";
+  }
+
+  if (status === 429) {
+    return "Meta API 請求過於頻繁，請稍後再試。";
+  }
+
+  return "無法連線 Meta 平台，請確認帳號、權杖與 App 設定。";
+}
+
+async function fetchMetaProfile({
+  baseUrl,
+  version,
+  accountId,
+  accessToken,
+  fields,
+}) {
+  const url = new URL(
+    `${baseUrl}/${version}/${encodeURIComponent(accountId)}`
+  );
+  url.searchParams.set("fields", fields.join(","));
+  url.searchParams.set("access_token", accessToken);
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    return createMetaStatus(
+      "error",
+      null,
+      "目前無法連線 Meta API，請稍後再試。"
+    );
+  }
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    return createMetaStatus(
+      "error",
+      null,
+      getSafeMetaErrorMessage(response.status, Number(payload?.error?.code || 0))
+    );
+  }
+
+  const accountName = cleanText(payload?.name || payload?.username);
+  return createMetaStatus(
+    "connected",
+    accountName || "帳號已連線",
+    null
+  );
+}
+
+async function checkFacebookConnection() {
+  const pageId = cleanText(getServerEnv("FACEBOOK_PAGE_ID"));
+  const accessToken = cleanText(
+    getServerEnv("FACEBOOK_PAGE_ACCESS_TOKEN")
+  );
+
+  if (!pageId || !accessToken) {
+    return createMetaStatus("not_configured");
+  }
+
+  return fetchMetaProfile({
+    baseUrl: "https://graph.facebook.com",
+    version: getMetaGraphVersion(),
+    accountId: pageId,
+    accessToken,
+    fields: ["id", "name"],
+  });
+}
+
+async function checkInstagramConnection() {
+  const accountId = cleanText(
+    getServerEnv("INSTAGRAM_BUSINESS_ACCOUNT_ID")
+  );
+  const accessToken = cleanText(
+    getServerEnv("FACEBOOK_PAGE_ACCESS_TOKEN")
+  );
+
+  if (!accountId || !accessToken) {
+    return createMetaStatus("not_configured");
+  }
+
+  return fetchMetaProfile({
+    baseUrl: "https://graph.facebook.com",
+    version: getMetaGraphVersion(),
+    accountId,
+    accessToken,
+    fields: ["id", "username", "name"],
+  });
+}
+
+async function checkThreadsConnection() {
+  const userId = cleanText(getServerEnv("THREADS_USER_ID"));
+  const accessToken = cleanText(getServerEnv("THREADS_ACCESS_TOKEN"));
+
+  if (!userId || !accessToken) {
+    return createMetaStatus("not_configured");
+  }
+
+  return fetchMetaProfile({
+    baseUrl: "https://graph.threads.net",
+    version: "v1.0",
+    accountId: userId,
+    accessToken,
+    fields: ["id", "username", "name"],
+  });
+}
+
+async function loadMetaStatus(_req, res) {
+  const [facebook, instagram, threads] = await Promise.all([
+    checkFacebookConnection(),
+    checkInstagramConnection(),
+    checkThreadsConnection(),
+  ]);
+
+  return sendJson(res, 200, {
+    platforms: {
+      facebook,
+      instagram,
+      threads,
+    },
+    checkedAt: new Date().toISOString(),
+  });
+}
+
 function getPositiveInt(value, fallback, maxValue) {
   const parsed = Number.parseInt(String(value || ""), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -1478,6 +1638,10 @@ export default async function handler(req, res) {
 
   try {
     requireAdmin(req);
+
+    if (req.method === "GET" && action === "meta-status") {
+      return await loadMetaStatus(req, res);
+    }
 
     if (req.method === "GET" && action === "dashboard") {
       return await loadDashboard(req, res);

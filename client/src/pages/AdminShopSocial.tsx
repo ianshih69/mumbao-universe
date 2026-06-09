@@ -1,6 +1,14 @@
-import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import {
+  ChangeEvent,
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Link } from "wouter";
 import {
+  AlertCircle,
   CalendarClock,
   CheckCircle2,
   Copy,
@@ -8,6 +16,7 @@ import {
   FileImage,
   LockKeyhole,
   Loader2,
+  RefreshCw,
   Send,
   Sparkles,
   Trash2,
@@ -16,6 +25,10 @@ import {
 import AdminShopNav from "@/components/shop/AdminShopNav";
 import { Button } from "@/components/ui/button";
 import { getAdminToken } from "@/lib/shop/adminAuth";
+import {
+  fetchMetaConnectionStatus,
+  type MetaPlatformConnection,
+} from "@/lib/shop/metaConnectionApi";
 import {
   type SocialMediaFile,
   uploadSocialMediaFile,
@@ -34,6 +47,13 @@ type DraftStatus =
   | "partial_success"
   | "failed"
   | "cancelled";
+
+type MetaPlatformKey = "facebook" | "instagram" | "threads";
+type MetaConnectionUiStatus = MetaPlatformConnection | {
+  status: "checking";
+  accountName: null;
+  error: null;
+};
 
 type SocialDraftForm = {
   title: string;
@@ -70,6 +90,27 @@ const defaultDraft: SocialDraftForm = {
   scheduledAt: "",
   fileNames: [],
   mediaFiles: [],
+};
+
+const initialMetaConnections: Record<
+  MetaPlatformKey,
+  MetaConnectionUiStatus
+> = {
+  facebook: {
+    status: "checking",
+    accountName: null,
+    error: null,
+  },
+  instagram: {
+    status: "checking",
+    accountName: null,
+    error: null,
+  },
+  threads: {
+    status: "checking",
+    accountName: null,
+    error: null,
+  },
 };
 
 function createDraftId() {
@@ -226,6 +267,33 @@ function formatFileSize(size: number) {
   return `${Math.max(1, Math.round(size / 1024))} KB`;
 }
 
+function getMetaStatusLabel(status: MetaConnectionUiStatus["status"]) {
+  const labels = {
+    checking: "檢查中",
+    connected: "已連線",
+    not_configured: "未設定",
+    error: "錯誤",
+  };
+
+  return labels[status];
+}
+
+function getMetaStatusClasses(status: MetaConnectionUiStatus["status"]) {
+  if (status === "connected") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+
+  if (status === "error") {
+    return "border-red-200 bg-red-50 text-red-700";
+  }
+
+  if (status === "checking") {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+
+  return "border-stone-200 bg-stone-100 text-stone-600";
+}
+
 function validateMediaFile(file: File) {
   const allowedTypes = new Set([
     "image/jpeg",
@@ -272,6 +340,10 @@ export default function AdminShopSocial() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [fileInputKey, setFileInputKey] = useState(0);
+  const [metaConnections, setMetaConnections] = useState(initialMetaConnections);
+  const [metaCheckedAt, setMetaCheckedAt] = useState("");
+  const [metaCheckError, setMetaCheckError] = useState("");
+  const [isCheckingMeta, setIsCheckingMeta] = useState(true);
 
   const platformOptions: Platform[] = useMemo(
     () => ["Facebook", "Instagram", "Threads"],
@@ -282,6 +354,44 @@ export default function AdminShopSocial() {
     () => [...savedDrafts].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     [savedDrafts]
   );
+
+  const checkMetaConnections = useCallback(async () => {
+    if (!token) return;
+
+    setIsCheckingMeta(true);
+    setMetaCheckError("");
+    setMetaConnections(initialMetaConnections);
+
+    try {
+      const result = await fetchMetaConnectionStatus(token);
+      setMetaConnections(result.platforms);
+      setMetaCheckedAt(result.checkedAt);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "無法檢查 Meta 平台連線狀態。";
+      const failedStatus: MetaConnectionUiStatus = {
+        status: "error",
+        accountName: null,
+        error: message,
+      };
+
+      setMetaConnections({
+        facebook: failedStatus,
+        instagram: failedStatus,
+        threads: failedStatus,
+      });
+      setMetaCheckError(message);
+      setMetaCheckedAt(new Date().toISOString());
+    } finally {
+      setIsCheckingMeta(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    void checkMetaConnections();
+  }, [checkMetaConnections]);
 
   const updateDraft = <K extends keyof SocialDraftForm>(
     key: K,
@@ -502,6 +612,106 @@ export default function AdminShopSocial() {
       <AdminShopNav current="social" />
 
       <div className="mx-auto max-w-7xl space-y-6 px-5 py-6 md:px-8 md:py-8">
+        <section className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm md:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-stone-400">
+                Meta Connection
+              </p>
+              <h2 className="mt-1 font-serif text-2xl font-light">
+                平台連線狀態
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-stone-500">
+                這裡只檢查帳號與權杖是否可讀取，不會建立或發布任何貼文。
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void checkMetaConnections()}
+              disabled={isCheckingMeta}
+              className="h-11 rounded-full bg-white px-5"
+            >
+              {isCheckingMeta ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="size-4" />
+              )}
+              {isCheckingMeta ? "檢查中..." : "重新檢查連線"}
+            </Button>
+          </div>
+
+          {metaCheckError && (
+            <div className="mt-4 flex items-start gap-2 rounded-[8px] border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+              <span>{metaCheckError}</span>
+            </div>
+          )}
+
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            {(
+              [
+                ["facebook", "Facebook"],
+                ["instagram", "Instagram"],
+                ["threads", "Threads"],
+              ] as const
+            ).map(([key, label]) => {
+              const connection = metaConnections[key];
+
+              return (
+                <article
+                  key={key}
+                  className="rounded-[8px] border border-stone-200 bg-[#fffaf7] p-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-semibold text-stone-900">{label}</h3>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
+                        getMetaStatusClasses(connection.status)
+                      )}
+                    >
+                      {connection.status === "checking" && (
+                        <Loader2 className="size-3 animate-spin" />
+                      )}
+                      {connection.status === "connected" && (
+                        <CheckCircle2 className="size-3" />
+                      )}
+                      {connection.status === "error" && (
+                        <AlertCircle className="size-3" />
+                      )}
+                      {getMetaStatusLabel(connection.status)}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 min-h-12 text-sm leading-6">
+                    {connection.accountName ? (
+                      <p className="font-medium text-stone-800">
+                        {connection.accountName}
+                      </p>
+                    ) : connection.status === "not_configured" ? (
+                      <p className="text-stone-500">
+                        尚未設定此平台所需的環境變數。
+                      </p>
+                    ) : connection.status === "checking" ? (
+                      <p className="text-stone-500">正在向 Meta 確認帳號資料。</p>
+                    ) : null}
+
+                    {connection.error && (
+                      <p className="text-red-600">{connection.error}</p>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <p className="mt-4 text-xs text-stone-400">
+            最後檢查時間：
+            {metaCheckedAt ? formatDateTime(metaCheckedAt) : "尚未完成檢查"}
+          </p>
+        </section>
+
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
           <form
             onSubmit={saveDraft}

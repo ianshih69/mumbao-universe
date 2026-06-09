@@ -701,3 +701,58 @@ E5-3 未修改：
 - 第一版未串 Meta API、Cloudflare R2，也未上傳圖片 / 影片。
 - 未影響商城前台、商品、訂單、庫存、POS、QR、CSV 或 RPC。
 - `npm.cmd run build` 已通過，只有既有 chunk size warning。
+
+## 19. S2 自動發文 R2 暫存上傳完成
+
+S2 自動發文 R2 暫存上傳已完成並測試 OK。
+
+### 完成內容
+
+- 新增 `/api/social-upload`，用來產生 Cloudflare R2 presigned PUT URL。
+- 使用 presigned PUT URL，前端可直接將圖片 / 影片上傳到 R2，不經過 Vercel Function body，避開 4.5MB 限制。
+- R2 金鑰只存在 Vercel Environment Variables，不會傳到前端。
+- 支援 JPG、PNG、WebP、MP4。
+- 圖片限制 10MB，影片限制 100MB。
+- 上傳路徑為 `social-temp/YYYY-MM-DD/{timestamp}-{random}.{ext}`。
+- R2 bucket `mumbao-media` 已設定 `social-temp/` 7 天自動刪除。
+- R2 Public Development URL 已啟用並填入 `R2_PUBLIC_BASE_URL`。
+- R2 CORS 已設定允許 `mumbao.tw`、`www.mumbao.tw` 與本機測試來源 PUT。
+- `/admin/shop/social` 可選本機圖片 / 影片並上傳暫存檔。
+- 上傳成功後會顯示 publicUrl、檔案資訊、圖片縮圖或影片預覽。
+- 發文任務 localStorage 會保存 `mediaFiles`。
+- 發文任務清單會顯示「未上傳」或「已上傳 X 個檔案」。
+- 已測試圖片與影片上傳成功，public URL 可開啟，預覽正常。
+
+### 修改 / 新增檔案
+
+- 新增 `client/api/social-upload.js`
+- 新增 `client/src/lib/shop/socialUploadApi.ts`
+- 修改 `client/src/pages/AdminShopSocial.tsx`
+- 修改 `client/vercel.json`
+- 修改 `package.json`
+- 修改 `package-lock.json`
+
+### 新增套件
+
+- `@aws-sdk/client-s3`
+- `@aws-sdk/s3-request-presigner`
+
+### 沒有修改
+
+- 沒有新增資料庫。
+- 沒有新增 RPC。
+- 沒有串 Facebook API。
+- 沒有串 Instagram API。
+- 沒有串 Threads API。
+- 沒有真正發文。
+- 沒有真正排程。
+- 沒有改商城商品、訂單、庫存、POS、QR、CSV。
+- 沒有改前台 `/shop`、`/cart`、`/checkout`。
+
+### API Function 數量
+
+- `client/api` 從 5 支增加為 6 支，仍低於 Vercel Hobby 12 支限制。
+
+### 驗證
+
+- `npm.cmd run build` 已通過，只有既有 chunk size warning。

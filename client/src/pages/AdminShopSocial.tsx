@@ -27,6 +27,8 @@ import { Button } from "@/components/ui/button";
 import { getAdminToken } from "@/lib/shop/adminAuth";
 import {
   fetchMetaConnectionStatus,
+  publishFacebookPost,
+  type FacebookPublishErrorDetails,
   type MetaPlatformConnection,
 } from "@/lib/shop/metaConnectionApi";
 import {
@@ -79,6 +81,13 @@ type StoredSocialDraft = {
   status: DraftStatus;
   mediaFileNames: string[];
   mediaFiles: SocialMediaFile[];
+  publishedAt?: string;
+  facebookPostId?: string;
+  publishError?: {
+    errorCode: string;
+    errorMessage: string;
+    metaError: FacebookPublishErrorDetails | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -159,6 +168,9 @@ function storedDraftFromForm(
     status: getDraftStatus(form.publishMode, form.scheduledAt),
     mediaFileNames: form.fileNames,
     mediaFiles: form.mediaFiles,
+    publishedAt: existingDraft?.publishedAt,
+    facebookPostId: existingDraft?.facebookPostId,
+    publishError: existingDraft?.publishError || null,
     createdAt: existingDraft?.createdAt || now,
     updatedAt: now,
   };
@@ -190,6 +202,9 @@ function normalizeStoredDraft(value: unknown): StoredSocialDraft | null {
         : source.status || getDraftStatus(mode, scheduledAt),
     mediaFileNames: source.mediaFileNames || source.fileNames || [],
     mediaFiles: Array.isArray(source.mediaFiles) ? source.mediaFiles : [],
+    publishedAt: source.publishedAt || undefined,
+    facebookPostId: source.facebookPostId || undefined,
+    publishError: source.publishError || null,
     createdAt: source.createdAt || now,
     updatedAt: source.updatedAt || now,
   };
@@ -352,6 +367,9 @@ export default function AdminShopSocial() {
   const [metaCheckedAt, setMetaCheckedAt] = useState("");
   const [metaCheckError, setMetaCheckError] = useState("");
   const [isCheckingMeta, setIsCheckingMeta] = useState(true);
+  const [publishingDraftId, setPublishingDraftId] = useState<string | null>(
+    null
+  );
 
   const platformOptions: Platform[] = useMemo(
     () => ["Facebook", "Instagram", "Threads"],
@@ -545,6 +563,9 @@ export default function AdminShopSocial() {
       id: createDraftId(),
       title: item.title ? `${item.title} 副本` : "未命名草稿 副本",
       status: "pending",
+      publishedAt: undefined,
+      facebookPostId: undefined,
+      publishError: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -553,6 +574,83 @@ export default function AdminShopSocial() {
     saveStoredDrafts(nextDrafts);
     setSavedDrafts(nextDrafts);
     setNotice("已複製成一筆新草稿。");
+  };
+
+  const publishSavedDraftToFacebook = async (item: StoredSocialDraft) => {
+    if (!item.platforms.includes("Facebook")) {
+      setNotice("此任務尚未勾選 Facebook，請先編輯任務。");
+      return;
+    }
+
+    if (!item.content.trim() && !item.hashtags.trim()) {
+      setNotice("發文內容與 Hashtag 不可同時為空。");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "確定要發佈到 Facebook 粉絲專頁嗎？此動作會真的發文。"
+    );
+    if (!confirmed) return;
+
+    setPublishingDraftId(item.id);
+    setNotice("");
+
+    try {
+      const result = await publishFacebookPost(
+        token,
+        item.content,
+        item.hashtags
+      );
+      const nextDrafts = savedDrafts.map((draftItem) =>
+        draftItem.id === item.id
+          ? {
+              ...draftItem,
+              status: "published" as const,
+              publishedAt: result.createdAt,
+              facebookPostId: result.facebookPostId,
+              publishError: null,
+              updatedAt: result.createdAt,
+            }
+          : draftItem
+      );
+
+      saveStoredDrafts(nextDrafts);
+      setSavedDrafts(nextDrafts);
+      setNotice(
+        `已發佈到 Facebook，貼文編號：${result.facebookPostId}`
+      );
+    } catch (error) {
+      const publishError = error as Error & {
+        errorCode?: string;
+        metaError?: FacebookPublishErrorDetails | null;
+      };
+      const updatedAt = new Date().toISOString();
+      const nextDrafts = savedDrafts.map((draftItem) =>
+        draftItem.id === item.id
+          ? {
+              ...draftItem,
+              status: "failed" as const,
+              publishError: {
+                errorCode:
+                  publishError.errorCode || "FACEBOOK_PUBLISH_FAILED",
+                errorMessage:
+                  publishError.message ||
+                  "Facebook 發文失敗，請稍後再試。",
+                metaError: publishError.metaError || null,
+              },
+              updatedAt,
+            }
+          : draftItem
+      );
+
+      saveStoredDrafts(nextDrafts);
+      setSavedDrafts(nextDrafts);
+      setNotice(
+        `Facebook 發文失敗：${publishError.message || "請稍後再試。"}`
+      );
+    } finally {
+      setPublishingDraftId(null);
+    }
   };
 
   const deleteSavedDraft = (item: StoredSocialDraft) => {
@@ -613,8 +711,8 @@ export default function AdminShopSocial() {
             </p>
           </div>
           <div className="rounded-[8px] border border-[#eadfce] bg-[#fffaf3] px-4 py-3 text-sm leading-6 text-stone-600">
-            <p className="font-semibold text-stone-800">第一版狀態</p>
-            <p>只保存草稿與預覽，不會發文、不會上傳檔案。</p>
+            <p className="font-semibold text-stone-800">目前發文狀態</p>
+            <p>Facebook 純文字發文已啟用；Instagram 與 Threads 尚未啟用。</p>
           </div>
         </div>
       </header>
@@ -1020,9 +1118,11 @@ export default function AdminShopSocial() {
               <div className="flex flex-col gap-1 sm:ml-auto sm:items-end">
                 <Button type="button" disabled className="h-11 rounded-full px-6">
                   <Send className="size-4" />
-                  之後發文
+                  請先儲存任務
                 </Button>
-                <p className="text-xs text-stone-400">Meta API 串接後啟用</p>
+                <p className="text-xs text-stone-400">
+                  儲存後可從下方任務清單發佈到 Facebook
+                </p>
               </div>
             </div>
           </form>
@@ -1164,12 +1264,12 @@ export default function AdminShopSocial() {
             </p>
           </div>
           <p className="mt-4 rounded-[8px] bg-[#fbf7f1] px-4 py-3 text-sm leading-6 text-stone-600">
-            目前第一版僅保存發文任務，不會真的發文；串接 Meta API 後會顯示發文成功或失敗結果。
+            Facebook 已支援純文字發文；Instagram、Threads、圖片與影片發文目前尚未啟用。
           </p>
 
           {sortedDrafts.length === 0 ? (
             <div className="mt-5 rounded-[8px] border border-dashed border-stone-200 bg-[#fbf7f1] p-6 text-center text-sm text-stone-500">
-              目前沒有發文任務。填寫上方表單後，點「儲存草稿」即可加入清單。
+              目前沒有發文任務。填寫上方表單後，點「新增發文任務」即可加入清單。
             </div>
           ) : (
             <div className="mt-5 grid gap-3">
@@ -1239,9 +1339,53 @@ export default function AdminShopSocial() {
                             : "未上傳"}
                         </p>
                       </div>
+
+                      {item.status === "published" && (
+                        <div className="rounded-[8px] border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                          <p className="font-semibold">Facebook 已發文</p>
+                          {item.publishedAt && (
+                            <p>發文時間：{formatDateTime(item.publishedAt)}</p>
+                          )}
+                          {item.facebookPostId && (
+                            <p className="break-all">
+                              貼文編號：{item.facebookPostId}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {item.status === "failed" && item.publishError && (
+                        <div className="rounded-[8px] border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+                          <p className="font-semibold">
+                            發文失敗：{item.publishError.errorCode}
+                          </p>
+                          <p>{item.publishError.errorMessage}</p>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="mt-4 grid grid-cols-3 gap-2 md:mt-0 md:w-[240px] md:shrink-0">
+                    <div className="mt-4 grid grid-cols-2 gap-2 md:mt-0 md:w-[280px] md:shrink-0">
+                      <Button
+                        type="button"
+                        onClick={() => void publishSavedDraftToFacebook(item)}
+                        disabled={
+                          publishingDraftId === item.id ||
+                          item.status === "published" ||
+                          !item.platforms.includes("Facebook")
+                        }
+                        className="col-span-2 h-10 rounded-full bg-[#4267b2] px-3 text-white hover:bg-[#365899]"
+                      >
+                        {publishingDraftId === item.id ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Send className="size-4" />
+                        )}
+                        {publishingDraftId === item.id
+                          ? "發佈中..."
+                          : item.status === "published"
+                            ? "已發佈到 Facebook"
+                            : "發佈到 Facebook"}
+                      </Button>
                       <Button
                         type="button"
                         variant="outline"
@@ -1264,7 +1408,7 @@ export default function AdminShopSocial() {
                         type="button"
                         variant="outline"
                         onClick={() => deleteSavedDraft(item)}
-                        className="h-10 rounded-full bg-white px-3 text-red-600 hover:text-red-700"
+                        className="col-span-2 h-10 rounded-full bg-white px-3 text-red-600 hover:text-red-700 sm:col-span-1"
                       >
                         <Trash2 className="size-4" />
                         刪除

@@ -34,6 +34,18 @@ export type MetaConnectionStatusResponse = {
   checkedAt: string;
 };
 
+export type FacebookPublishErrorDetails = {
+  code: number | null;
+  type: string | null;
+  error_subcode: number | null;
+};
+
+export type FacebookPublishResult = {
+  ok: true;
+  facebookPostId: string;
+  createdAt: string;
+};
+
 export async function fetchMetaConnectionStatus(
   token: string
 ): Promise<MetaConnectionStatusResponse> {
@@ -57,4 +69,55 @@ export async function fetchMetaConnectionStatus(
   }
 
   return data;
+}
+
+export async function publishFacebookPost(
+  token: string,
+  content: string,
+  hashtags: string
+): Promise<FacebookPublishResult> {
+  const response = await fetch(
+    "/api/admin-shop?action=publish-facebook-post",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        content,
+        hashtags,
+      }),
+    }
+  );
+  const data = (await response.json().catch(() => null)) as
+    | (Partial<FacebookPublishResult> & {
+        errorCode?: string;
+        errorMessage?: string;
+        metaError?: FacebookPublishErrorDetails | null;
+      })
+    | null;
+
+  if (response.status === 401) {
+    throw new Error(adminAuthExpiredMessage);
+  }
+
+  if (!response.ok || !data?.ok || !data.facebookPostId || !data.createdAt) {
+    const error = new Error(
+      data?.errorMessage || "Facebook 發文失敗，請稍後再試。"
+    ) as Error & {
+      errorCode?: string;
+      metaError?: FacebookPublishErrorDetails | null;
+    };
+    error.errorCode = data?.errorCode;
+    error.metaError = data?.metaError;
+    throw error;
+  }
+
+  return {
+    ok: true,
+    facebookPostId: data.facebookPostId,
+    createdAt: data.createdAt,
+  };
 }

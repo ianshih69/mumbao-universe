@@ -336,6 +336,98 @@ async function loadMetaStatus(_req, res) {
   });
 }
 
+async function handlePublishFacebookPost(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return sendJson(res, 405, {
+      errorCode: "METHOD_NOT_ALLOWED",
+      errorMessage: "Method not allowed.",
+    });
+  }
+
+  const pageId = cleanText(getServerEnv("FACEBOOK_PAGE_ID"));
+  const accessToken = cleanText(
+    getServerEnv("FACEBOOK_PAGE_ACCESS_TOKEN")
+  );
+
+  if (!pageId) {
+    return sendJson(res, 500, {
+      errorCode: "FACEBOOK_PAGE_ID_NOT_CONFIGURED",
+      errorMessage: "FACEBOOK_PAGE_ID 未設定或空白。",
+      metaError: null,
+    });
+  }
+
+  if (!accessToken) {
+    return sendJson(res, 500, {
+      errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
+      errorMessage: "FACEBOOK_PAGE_ACCESS_TOKEN 未設定或空白。",
+      metaError: null,
+    });
+  }
+
+  const body = await readBody(req);
+  const content = cleanText(body?.content);
+  const hashtags = cleanText(body?.hashtags);
+  const message = [content, hashtags].filter(Boolean).join("\n\n");
+
+  if (!message) {
+    return sendJson(res, 400, {
+      errorCode: "FACEBOOK_MESSAGE_REQUIRED",
+      errorMessage: "發文內容與 Hashtag 不可同時為空。",
+      metaError: null,
+    });
+  }
+
+  const url = new URL(
+    `https://graph.facebook.com/v25.0/${encodeURIComponent(pageId)}/feed`
+  );
+  const form = new URLSearchParams();
+  form.set("message", message);
+  form.set("access_token", accessToken);
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: form,
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    return sendJson(res, 502, {
+      errorCode: "META_NETWORK_ERROR",
+      errorMessage: "目前無法連線 Facebook Graph API，請稍後再試。",
+      metaError: null,
+    });
+  }
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok || !payload?.id) {
+    const safeError = getSafeMetaError(response.status, payload?.error);
+
+    return sendJson(res, 502, {
+      errorCode: safeError.code,
+      errorMessage: safeError.reason,
+      metaError: {
+        code: safeError.details.code,
+        type: safeError.details.type,
+        error_subcode: safeError.details.error_subcode,
+      },
+    });
+  }
+
+  return sendJson(res, 200, {
+    ok: true,
+    facebookPostId: cleanText(payload.id),
+    createdAt: new Date().toISOString(),
+  });
+}
+
 function getPositiveInt(value, fallback, maxValue) {
   const parsed = Number.parseInt(String(value || ""), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -1743,6 +1835,10 @@ export default async function handler(req, res) {
 
     if (req.method === "GET" && action === "meta-status") {
       return await loadMetaStatus(req, res);
+    }
+
+    if (action === "publish-facebook-post") {
+      return await handlePublishFacebookPost(req, res);
     }
 
     if (req.method === "GET" && action === "dashboard") {

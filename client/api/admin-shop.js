@@ -336,6 +336,121 @@ async function loadMetaStatus(_req, res) {
   });
 }
 
+function nullableUnixTimestamp(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+async function handleDebugFacebookToken(req, res) {
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
+    return sendJson(res, 405, {
+      ok: false,
+      errorCode: "METHOD_NOT_ALLOWED",
+      errorMessage: "Method not allowed.",
+    });
+  }
+
+  const appId = cleanText(getServerEnv("META_APP_ID"));
+  const appSecret = cleanText(getServerEnv("META_APP_SECRET"));
+  const pageAccessToken = cleanText(
+    getServerEnv("FACEBOOK_PAGE_ACCESS_TOKEN")
+  );
+
+  if (!appId) {
+    return sendJson(res, 500, {
+      ok: false,
+      errorCode: "META_APP_ID_NOT_CONFIGURED",
+      errorMessage: "META_APP_ID 未設定或空白。",
+      metaError: null,
+    });
+  }
+
+  if (!appSecret) {
+    return sendJson(res, 500, {
+      ok: false,
+      errorCode: "META_APP_SECRET_NOT_CONFIGURED",
+      errorMessage: "META_APP_SECRET 未設定或空白。",
+      metaError: null,
+    });
+  }
+
+  if (!pageAccessToken) {
+    return sendJson(res, 500, {
+      ok: false,
+      errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
+      errorMessage: "FACEBOOK_PAGE_ACCESS_TOKEN 未設定或空白。",
+      metaError: null,
+    });
+  }
+
+  const url = new URL(
+    "https://graph.facebook.com/v25.0/debug_token"
+  );
+  url.searchParams.set("input_token", pageAccessToken);
+  url.searchParams.set("access_token", `${appId}|${appSecret}`);
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    return sendJson(res, 502, {
+      ok: false,
+      errorCode: "META_TOKEN_DEBUG_NETWORK_ERROR",
+      errorMessage: "目前無法連線 Meta Token Debug API，請稍後再試。",
+      metaError: null,
+    });
+  }
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok || !payload?.data) {
+    const safeError = getSafeMetaError(response.status, payload?.error);
+
+    return sendJson(res, 502, {
+      ok: false,
+      errorCode: safeError.code || "META_TOKEN_DEBUG_FAILED",
+      errorMessage: safeError.reason,
+      metaError: {
+        code: safeError.details.code,
+        type: safeError.details.type,
+        error_subcode: safeError.details.error_subcode,
+      },
+    });
+  }
+
+  const data = payload.data;
+  const isValid = data?.is_valid === true;
+
+  return sendJson(res, 200, {
+    ok: true,
+    isValid,
+    appId: cleanText(data?.app_id),
+    type: cleanText(data?.type),
+    application: cleanText(data?.application),
+    profileId: cleanText(data?.profile_id),
+    userId: cleanText(data?.user_id),
+    expiresAt: nullableUnixTimestamp(data?.expires_at),
+    dataAccessExpiresAt: nullableUnixTimestamp(
+      data?.data_access_expires_at
+    ),
+    scopes: Array.isArray(data?.scopes)
+      ? data.scopes.map((scope) => cleanText(scope)).filter(Boolean)
+      : [],
+    tokenPrefix: pageAccessToken.slice(0, 6),
+    tokenLength: pageAccessToken.length,
+    checkedAt: new Date().toISOString(),
+    errorCode: isValid ? null : "FACEBOOK_TOKEN_INVALID",
+    errorMessage: isValid
+      ? null
+      : "Meta 判定目前的 FACEBOOK_PAGE_ACCESS_TOKEN 無效，請重新產生並更新 Vercel。",
+  });
+}
+
 async function handlePublishFacebookPost(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -2050,6 +2165,10 @@ export default async function handler(req, res) {
 
     if (req.method === "GET" && action === "meta-status") {
       return await loadMetaStatus(req, res);
+    }
+
+    if (action === "debug-facebook-token") {
+      return await handleDebugFacebookToken(req, res);
     }
 
     if (action === "publish-facebook-post") {

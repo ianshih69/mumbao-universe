@@ -59,6 +59,24 @@ export type MetaTokenExchangeResult = {
   exchangedAt: string;
 };
 
+export type FacebookTokenDebugResult = {
+  ok: true;
+  isValid: boolean;
+  appId: string;
+  type: string;
+  application: string;
+  profileId: string;
+  userId: string;
+  expiresAt: number | null;
+  dataAccessExpiresAt: number | null;
+  scopes: string[];
+  tokenPrefix: string;
+  tokenLength: number;
+  checkedAt: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+};
+
 export async function fetchMetaConnectionStatus(
   token: string
 ): Promise<MetaConnectionStatusResponse> {
@@ -82,6 +100,66 @@ export async function fetchMetaConnectionStatus(
   }
 
   return data;
+}
+
+export async function fetchFacebookTokenDebug(
+  token: string
+): Promise<FacebookTokenDebugResult> {
+  const response = await fetch(
+    "/api/admin-shop?action=debug-facebook-token",
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    }
+  );
+  const data = (await response.json().catch(() => null)) as
+    | (Partial<FacebookTokenDebugResult> & {
+        errorCode?: string;
+        errorMessage?: string;
+        metaError?: FacebookPublishErrorDetails | null;
+      })
+    | null;
+
+  if (response.status === 401) {
+    throw new Error(adminAuthExpiredMessage);
+  }
+
+  if (!response.ok || !data?.ok) {
+    const error = new Error(
+      data?.errorMessage || "無法檢查 Facebook Token 健康狀態。"
+    ) as Error & {
+      errorCode?: string;
+      metaError?: FacebookPublishErrorDetails | null;
+    };
+    error.errorCode = data?.errorCode;
+    error.metaError = data?.metaError;
+    throw error;
+  }
+
+  return {
+    ok: true,
+    isValid: data.isValid === true,
+    appId: data.appId || "",
+    type: data.type || "",
+    application: data.application || "",
+    profileId: data.profileId || "",
+    userId: data.userId || "",
+    expiresAt:
+      typeof data.expiresAt === "number" ? data.expiresAt : null,
+    dataAccessExpiresAt:
+      typeof data.dataAccessExpiresAt === "number"
+        ? data.dataAccessExpiresAt
+        : null,
+    scopes: Array.isArray(data.scopes) ? data.scopes : [],
+    tokenPrefix: data.tokenPrefix || "",
+    tokenLength: Number(data.tokenLength || 0),
+    checkedAt: data.checkedAt || new Date().toISOString(),
+    errorCode: data.errorCode || null,
+    errorMessage: data.errorMessage || null,
+  };
 }
 
 export async function publishFacebookPost(

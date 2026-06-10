@@ -31,8 +31,10 @@ import { Button } from "@/components/ui/button";
 import { getAdminToken } from "@/lib/shop/adminAuth";
 import {
   exchangeMetaToken,
+  fetchFacebookTokenDebug,
   fetchMetaConnectionStatus,
   publishFacebookPost,
+  type FacebookTokenDebugResult,
   type FacebookPublishErrorDetails,
   type MetaPlatformConnection,
   type MetaTokenExchangeResult,
@@ -273,6 +275,16 @@ function formatDateTime(value?: string) {
   }).format(parsed);
 }
 
+function formatUnixTime(value: number | null) {
+  if (!value) return "";
+  return formatDateTime(new Date(value * 1000).toISOString());
+}
+
+function isTimestampWithinDays(value: number | null, days: number) {
+  if (!value) return false;
+  return value * 1000 - Date.now() <= days * 24 * 60 * 60 * 1000;
+}
+
 function getModeLabel(mode: PublishMode) {
   return mode === "scheduled" ? "排程發文" : "立即發文";
 }
@@ -373,6 +385,15 @@ export default function AdminShopSocial() {
   const [metaCheckedAt, setMetaCheckedAt] = useState("");
   const [metaCheckError, setMetaCheckError] = useState("");
   const [isCheckingMeta, setIsCheckingMeta] = useState(true);
+  const [facebookTokenDebug, setFacebookTokenDebug] =
+    useState<FacebookTokenDebugResult | null>(null);
+  const [facebookTokenDebugError, setFacebookTokenDebugError] = useState<{
+    code: string;
+    message: string;
+    metaError: FacebookPublishErrorDetails | null;
+  } | null>(null);
+  const [isCheckingFacebookToken, setIsCheckingFacebookToken] =
+    useState(true);
   const [publishingDraftId, setPublishingDraftId] = useState<string | null>(
     null
   );
@@ -434,9 +455,42 @@ export default function AdminShopSocial() {
     }
   }, [token]);
 
-  useEffect(() => {
+  const checkFacebookTokenHealth = useCallback(async () => {
+    if (!token) return;
+
+    setIsCheckingFacebookToken(true);
+    setFacebookTokenDebugError(null);
+
+    try {
+      const result = await fetchFacebookTokenDebug(token);
+      setFacebookTokenDebug(result);
+    } catch (error) {
+      const debugError = error as Error & {
+        errorCode?: string;
+        metaError?: FacebookPublishErrorDetails | null;
+      };
+
+      setFacebookTokenDebug(null);
+      setFacebookTokenDebugError({
+        code: debugError.errorCode || "FACEBOOK_TOKEN_DEBUG_FAILED",
+        message:
+          debugError.message ||
+          "無法檢查 Facebook Token 健康狀態。",
+        metaError: debugError.metaError || null,
+      });
+    } finally {
+      setIsCheckingFacebookToken(false);
+    }
+  }, [token]);
+
+  const refreshMetaConnections = useCallback(() => {
     void checkMetaConnections();
-  }, [checkMetaConnections]);
+    void checkFacebookTokenHealth();
+  }, [checkFacebookTokenHealth, checkMetaConnections]);
+
+  useEffect(() => {
+    refreshMetaConnections();
+  }, [refreshMetaConnections]);
 
   const handleMetaTokenExchange = async (event: FormEvent) => {
     event.preventDefault();
@@ -832,16 +886,18 @@ export default function AdminShopSocial() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => void checkMetaConnections()}
-              disabled={isCheckingMeta}
+              onClick={refreshMetaConnections}
+              disabled={isCheckingMeta || isCheckingFacebookToken}
               className="h-11 rounded-full bg-white px-5"
             >
-              {isCheckingMeta ? (
+              {isCheckingMeta || isCheckingFacebookToken ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
                 <RefreshCw className="size-4" />
               )}
-              {isCheckingMeta ? "檢查中..." : "重新檢查連線"}
+              {isCheckingMeta || isCheckingFacebookToken
+                ? "檢查中..."
+                : "重新檢查連線"}
             </Button>
           </div>
 
@@ -951,6 +1007,159 @@ export default function AdminShopSocial() {
                             ? `已設定（${connection.diagnostics.facebookPageTokenLength} 字元，開頭 ${connection.diagnostics.facebookPageTokenPrefix}）`
                             : "未設定或空白"}
                         </p>
+                      </div>
+                    )}
+
+                    {key === "facebook" && (
+                      <div className="mt-4 border-t border-stone-200 pt-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-stone-800">
+                            Token 健康檢查
+                          </p>
+                          {isCheckingFacebookToken && (
+                            <span className="inline-flex items-center gap-1 text-xs text-amber-700">
+                              <Loader2 className="size-3 animate-spin" />
+                              檢查中
+                            </span>
+                          )}
+                        </div>
+
+                        {facebookTokenDebugError && (
+                          <div className="mt-3 rounded-[6px] border border-red-100 bg-red-50 p-3 text-xs leading-5 text-red-700">
+                            <p className="font-mono font-semibold">
+                              {facebookTokenDebugError.code}
+                            </p>
+                            <p>{facebookTokenDebugError.message}</p>
+                            {facebookTokenDebugError.metaError && (
+                              <p className="mt-1 font-mono">
+                                Meta code{" "}
+                                {facebookTokenDebugError.metaError.code ??
+                                  "無"}{" "}
+                                /{" "}
+                                {facebookTokenDebugError.metaError.type ||
+                                  "未知類型"}{" "}
+                                / subcode{" "}
+                                {facebookTokenDebugError.metaError
+                                  .error_subcode ?? "無"}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {facebookTokenDebug && (
+                          <div className="mt-3 space-y-3 text-xs leading-5 text-stone-600">
+                            <dl className="grid gap-2">
+                              <div className="flex justify-between gap-3">
+                                <dt>Token 狀態</dt>
+                                <dd
+                                  className={cn(
+                                    "font-semibold",
+                                    facebookTokenDebug.isValid
+                                      ? "text-emerald-700"
+                                      : "text-red-700"
+                                  )}
+                                >
+                                  {facebookTokenDebug.isValid
+                                    ? "有效"
+                                    : "無效"}
+                                </dd>
+                              </div>
+                              <div className="flex justify-between gap-3">
+                                <dt>Token 類型</dt>
+                                <dd className="break-all text-right font-medium text-stone-800">
+                                  {facebookTokenDebug.type || "Meta 未提供"}
+                                </dd>
+                              </div>
+                              <div className="flex justify-between gap-3">
+                                <dt>應用程式</dt>
+                                <dd className="break-all text-right">
+                                  {facebookTokenDebug.application ||
+                                    facebookTokenDebug.appId ||
+                                    "Meta 未提供"}
+                                </dd>
+                              </div>
+                              <div className="flex justify-between gap-3">
+                                <dt>Token</dt>
+                                <dd className="font-mono">
+                                  {facebookTokenDebug.tokenPrefix}
+                                  {"•".repeat(6)}（
+                                  {facebookTokenDebug.tokenLength} 字元）
+                                </dd>
+                              </div>
+                              <div className="grid gap-1">
+                                <dt>到期時間</dt>
+                                <dd className="font-medium text-stone-800">
+                                  {facebookTokenDebug.expiresAt
+                                    ? formatUnixTime(
+                                        facebookTokenDebug.expiresAt
+                                      )
+                                    : "未提供固定到期時間 / 可能為長效 Page Token"}
+                                </dd>
+                              </div>
+                              {facebookTokenDebug.dataAccessExpiresAt && (
+                                <div className="grid gap-1">
+                                  <dt>資料存取到期時間</dt>
+                                  <dd className="font-medium text-stone-800">
+                                    {formatUnixTime(
+                                      facebookTokenDebug.dataAccessExpiresAt
+                                    )}
+                                  </dd>
+                                </div>
+                              )}
+                              <div className="grid gap-1">
+                                <dt>最後檢查時間</dt>
+                                <dd>
+                                  {formatDateTime(
+                                    facebookTokenDebug.checkedAt
+                                  )}
+                                </dd>
+                              </div>
+                            </dl>
+
+                            <div>
+                              <p className="font-semibold text-stone-700">
+                                權限 scopes
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {facebookTokenDebug.scopes.length ? (
+                                  facebookTokenDebug.scopes.map((scope) => (
+                                    <span
+                                      key={scope}
+                                      className="rounded-full border border-stone-200 bg-white px-2 py-0.5 font-mono text-[10px] text-stone-600"
+                                    >
+                                      {scope}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-stone-500">
+                                    Meta 未回傳 scopes
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {(!facebookTokenDebug.isValid ||
+                              isTimestampWithinDays(
+                                facebookTokenDebug.expiresAt,
+                                14
+                              ) ||
+                              isTimestampWithinDays(
+                                facebookTokenDebug.dataAccessExpiresAt,
+                                14
+                              )) && (
+                              <div className="rounded-[6px] border border-amber-200 bg-amber-50 p-3 font-medium text-amber-900">
+                                建議重新產生長效 Page Token 並更新 Vercel。
+                              </div>
+                            )}
+
+                            {facebookTokenDebug.errorMessage && (
+                              <p className="text-red-700">
+                                {facebookTokenDebug.errorCode}：
+                                {facebookTokenDebug.errorMessage}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

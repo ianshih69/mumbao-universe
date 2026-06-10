@@ -172,8 +172,8 @@ function storedDraftFromForm(
   return {
     id: existingDraft?.id || createDraftId(),
     title: form.title.trim(),
-    content: form.content,
-    hashtags: form.hashtags,
+    content: form.content.trim(),
+    hashtags: form.hashtags.trim(),
     platforms: form.platforms,
     mode: form.publishMode,
     scheduledAt: form.scheduledAt,
@@ -743,6 +743,11 @@ export default function AdminShopSocial() {
   const saveDraft = (event: FormEvent) => {
     event.preventDefault();
 
+    if (!draft.content.trim()) {
+      setNotice("請先輸入發文內容。");
+      return;
+    }
+
     const existingDraft = editingDraftId
       ? savedDrafts.find((item) => item.id === editingDraftId)
       : undefined;
@@ -811,20 +816,40 @@ export default function AdminShopSocial() {
   };
 
   const publishSavedDraftToFacebook = async (item: StoredSocialDraft) => {
-    if (!item.platforms.includes("Facebook")) {
+    const isEditingThisTask = editingDraftId === item.id;
+    const latestItem = isEditingThisTask
+      ? storedDraftFromForm(draft, item)
+      : {
+          ...item,
+          content: item.content.trim(),
+          hashtags: item.hashtags.trim(),
+        };
+
+    if (!latestItem.content) {
+      setNotice("請先輸入發文內容。");
+      return;
+    }
+
+    if (!latestItem.platforms.includes("Facebook")) {
       setNotice("此任務尚未勾選 Facebook，請先編輯任務。");
       return;
     }
 
-    if (!item.content.trim() && !item.hashtags.trim()) {
-      setNotice("發文內容與 Hashtag 不可同時為空。");
-      return;
-    }
+    const facebookMessage = [
+      latestItem.content,
+      latestItem.hashtags,
+    ].filter(Boolean).join("\n\n");
 
     const confirmed = window.confirm(
-      "確定要發佈到 Facebook 粉絲專頁嗎？此動作會真的發文。"
+      `確定要發佈到 Facebook 粉絲專頁嗎？此動作會真的發文。\n\n發文內容：\n${facebookMessage}`
     );
     if (!confirmed) return;
+
+    const draftsWithLatestContent = savedDrafts.map((draftItem) =>
+      draftItem.id === item.id ? latestItem : draftItem
+    );
+    saveStoredDrafts(draftsWithLatestContent);
+    setSavedDrafts(draftsWithLatestContent);
 
     setPublishingDraftId(item.id);
     setNotice("");
@@ -832,10 +857,10 @@ export default function AdminShopSocial() {
     try {
       const result = await publishFacebookPost(
         token,
-        item.content,
-        item.hashtags
+        latestItem.content,
+        latestItem.hashtags
       );
-      const nextDrafts = savedDrafts.map((draftItem) =>
+      const nextDrafts = draftsWithLatestContent.map((draftItem) =>
         draftItem.id === item.id
           ? {
               ...draftItem,
@@ -860,7 +885,7 @@ export default function AdminShopSocial() {
         metaError?: FacebookPublishErrorDetails | null;
       };
       const updatedAt = new Date().toISOString();
-      const nextDrafts = savedDrafts.map((draftItem) =>
+      const nextDrafts = draftsWithLatestContent.map((draftItem) =>
         draftItem.id === item.id
           ? {
               ...draftItem,

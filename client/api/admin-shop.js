@@ -479,6 +479,14 @@ function normalizeSocialPostStatus(value) {
   return "draft";
 }
 
+function normalizePlatformStatus(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return value;
+}
+
 function buildSocialPostRow(task) {
   const id = cleanText(task?.id);
   if (!id) {
@@ -506,6 +514,9 @@ function buildSocialPostRow(task) {
     ig_permalink_url: cleanText(task?.instagramPermalinkUrl) || null,
     ig_published_at: cleanText(task?.instagramPublishedAt) || null,
     ig_status: cleanText(task?.instagramStatus) || null,
+    image_url: cleanText(task?.imageUrl) || null,
+    r2_key: cleanText(task?.r2Key) || null,
+    platform_status: normalizePlatformStatus(task?.platformStatus),
     published_at: cleanText(task?.publishedAt) || null,
     deleted_at: cleanText(task?.deletedAt) || null,
     delete_source: cleanText(task?.deleteSource) || null,
@@ -543,6 +554,9 @@ function normalizeSocialPost(row) {
     instagramPermalinkUrl: row.ig_permalink_url || undefined,
     instagramPublishedAt: row.ig_published_at || undefined,
     instagramStatus: row.ig_status || undefined,
+    imageUrl: row.image_url || undefined,
+    r2Key: row.r2_key || undefined,
+    platformStatus: normalizePlatformStatus(row.platform_status),
     publishedAt: row.published_at || undefined,
     deletedAt: row.deleted_at || undefined,
     deleteSource: row.delete_source || undefined,
@@ -785,29 +799,66 @@ async function resolveInstagramBusinessAccountId(pageId, accessToken) {
   return accountId;
 }
 
-function findInstagramImage(task, requestedImageUrl) {
+function findInstagramImage(task, requestedImageUrl, requestedR2Key) {
   const mediaFiles = Array.isArray(task?.media_files)
     ? task.media_files
     : [];
+  const image = mediaFiles[0];
   const requestedUrl = cleanText(requestedImageUrl);
-  const image = mediaFiles.find((media) => {
-    const publicUrl = cleanText(media?.publicUrl);
-    const contentType = cleanText(media?.contentType);
-    return (
-      publicUrl &&
-      contentType.startsWith("image/") &&
-      (!requestedUrl || publicUrl === requestedUrl)
-    );
-  });
+  const requestedKey = cleanText(requestedR2Key);
 
-  if (!image) return null;
+  if (!image) {
+    return {
+      errorCode: "INSTAGRAM_IMAGE_REQUIRED",
+      errorMessage: "Instagram 發文需要上傳 1 張圖片",
+    };
+  }
 
   const publicUrl = cleanText(image.publicUrl);
-  if (!/^https:\/\//i.test(publicUrl)) return null;
+  const contentType = cleanText(image.contentType);
+  const key = cleanText(image.key);
+
+  if (contentType === "video/mp4" || contentType.startsWith("video/")) {
+    return {
+      errorCode: "INSTAGRAM_VIDEO_NOT_SUPPORTED",
+      errorMessage:
+        "Instagram 第一版目前只支援單張圖片貼文，暫不支援影片",
+    };
+  }
+
+  if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
+    return {
+      errorCode: "INSTAGRAM_IMAGE_TYPE_NOT_SUPPORTED",
+      errorMessage: "Instagram 第一版僅支援 JPG、PNG 或 WebP 圖片。",
+    };
+  }
+
+  if (!publicUrl || !/^https:\/\//i.test(publicUrl)) {
+    return {
+      errorCode: "INSTAGRAM_PUBLIC_IMAGE_REQUIRED",
+      errorMessage:
+        "請先上傳圖片，取得公開圖片網址後才能發佈到 Instagram",
+    };
+  }
+
+  if (requestedUrl && requestedUrl !== publicUrl) {
+    return {
+      errorCode: "INSTAGRAM_IMAGE_MISMATCH",
+      errorMessage: "發文圖片與任務中的第一張已上傳圖片不一致，請重新整理後再試。",
+    };
+  }
+
+  if (requestedKey && key && requestedKey !== key) {
+    return {
+      errorCode: "INSTAGRAM_R2_KEY_MISMATCH",
+      errorMessage: "發文圖片識別資料不一致，請重新整理後再試。",
+    };
+  }
 
   return {
     publicUrl,
-    contentType: cleanText(image.contentType),
+    contentType,
+    key,
   };
 }
 
@@ -815,6 +866,10 @@ async function markInstagramPublishFailed(taskId, storedTask, errorDetails) {
   if (!taskId) return;
 
   const updatedAt = new Date().toISOString();
+  const platformStatus = {
+    ...normalizePlatformStatus(storedTask?.platform_status),
+    instagram: "failed",
+  };
   await supabaseRequest(
     `/shop_social_posts?id=eq.${encodeURIComponent(taskId)}`,
     {
@@ -822,6 +877,7 @@ async function markInstagramPublishFailed(taskId, storedTask, errorDetails) {
       body: JSON.stringify({
         status: storedTask?.fb_post_id ? "published" : "failed",
         ig_status: "failed",
+        platform_status: platformStatus,
         publish_error: {
           platform: "instagram",
           errorCode: errorDetails.errorCode,
@@ -849,6 +905,14 @@ async function handlePublishInstagramPost(req, res) {
     getServerEnv("FACEBOOK_PAGE_ACCESS_TOKEN")
   );
   const pageId = cleanText(getServerEnv("FACEBOOK_PAGE_ID"));
+  if (!pageId) {
+    return sendJson(res, 500, {
+      errorCode: "FACEBOOK_PAGE_ID_NOT_CONFIGURED",
+      errorMessage: "FACEBOOK_PAGE_ID 未設定或空白。",
+      metaError: null,
+    });
+  }
+
   if (!accessToken) {
     return sendJson(res, 500, {
       errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
@@ -876,12 +940,11 @@ async function handlePublishInstagramPost(req, res) {
     });
   }
 
-  const image = findInstagramImage(storedTask, body?.imageUrl);
-  if (!image) {
+  const image = findInstagramImage(storedTask, body?.imageUrl, body?.r2Key);
+  if (image.errorCode) {
     const errorDetails = {
-      errorCode: "INSTAGRAM_PUBLIC_IMAGE_REQUIRED",
-      errorMessage:
-        "Instagram 發文圖片需要公開圖片網址，請先完成媒體上傳功能。",
+      errorCode: image.errorCode,
+      errorMessage: image.errorMessage,
       metaError: null,
     };
     await markInstagramPublishFailed(taskId, storedTask, errorDetails);
@@ -1027,13 +1090,14 @@ async function handlePublishInstagramPost(req, res) {
   }
 
   let instagramPermalinkUrl = "";
+  let instagramPublishedAt = "";
   try {
     const permalinkUrl = new URL(
       `https://graph.facebook.com/${getMetaGraphVersion()}/${encodeURIComponent(
         instagramMediaId
       )}`
     );
-    permalinkUrl.searchParams.set("fields", "permalink");
+    permalinkUrl.searchParams.set("fields", "id,permalink,timestamp");
     permalinkUrl.searchParams.set("access_token", accessToken);
     const permalinkResponse = await fetch(permalinkUrl, {
       method: "GET",
@@ -1043,12 +1107,20 @@ async function handlePublishInstagramPost(req, res) {
     const permalinkPayload = await permalinkResponse.json().catch(() => null);
     if (permalinkResponse.ok) {
       instagramPermalinkUrl = cleanText(permalinkPayload?.permalink);
+      instagramPublishedAt = cleanText(permalinkPayload?.timestamp);
     }
   } catch {
     instagramPermalinkUrl = "";
   }
 
-  const createdAt = new Date().toISOString();
+  const createdAt =
+    instagramPublishedAt && !Number.isNaN(Date.parse(instagramPublishedAt))
+      ? new Date(instagramPublishedAt).toISOString()
+      : new Date().toISOString();
+  const platformStatus = {
+    ...normalizePlatformStatus(storedTask.platform_status),
+    instagram: "published",
+  };
   await supabaseRequest(
     `/shop_social_posts?id=eq.${encodeURIComponent(taskId)}`,
     {
@@ -1059,6 +1131,9 @@ async function handlePublishInstagramPost(req, res) {
         ig_media_id: instagramMediaId,
         ig_permalink_url: instagramPermalinkUrl || null,
         ig_published_at: createdAt,
+        image_url: image.publicUrl,
+        r2_key: image.key || null,
+        platform_status: platformStatus,
         publish_error: null,
         published_at: storedTask.published_at || createdAt,
         updated_at: createdAt,
@@ -1070,6 +1145,8 @@ async function handlePublishInstagramPost(req, res) {
     ok: true,
     instagramMediaId,
     instagramPermalinkUrl: instagramPermalinkUrl || null,
+    imageUrl: image.publicUrl,
+    r2Key: image.key || null,
     createdAt,
   });
 }

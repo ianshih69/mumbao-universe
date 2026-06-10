@@ -60,6 +60,7 @@ const socialDraftsStorageKey = "mumbao_social_post_drafts";
 
 type PublishMode = "now" | "scheduled";
 type Platform = "Facebook" | "Instagram" | "Threads";
+type PlatformPublishStatus = "draft" | "published" | "failed";
 type DraftStatus =
   | "pending"
   | "scheduled"
@@ -116,6 +117,11 @@ type StoredSocialDraft = {
   instagramPermalinkUrl?: string;
   instagramPublishedAt?: string;
   instagramStatus?: "draft" | "published" | "failed";
+  imageUrl?: string;
+  r2Key?: string;
+  platformStatus?: {
+    instagram?: PlatformPublishStatus;
+  };
   deletedAt?: string;
   deleteSource?: "admin" | "facebook" | "api";
   lastSyncedAt?: string;
@@ -220,6 +226,15 @@ function storedDraftFromForm(
     instagramStatus:
       existingDraft?.instagramStatus ||
       (form.platforms.includes("Instagram") ? "draft" : undefined),
+    imageUrl: form.mediaFiles[0]?.publicUrl || undefined,
+    r2Key: form.mediaFiles[0]?.key || undefined,
+    platformStatus: {
+      ...existingDraft?.platformStatus,
+      ...(form.platforms.includes("Instagram") &&
+      !existingDraft?.platformStatus?.instagram
+        ? { instagram: "draft" as const }
+        : {}),
+    },
     deletedAt: existingDraft?.deletedAt,
     deleteSource: existingDraft?.deleteSource,
     lastSyncedAt: existingDraft?.lastSyncedAt,
@@ -266,6 +281,14 @@ function normalizeStoredDraft(value: unknown): StoredSocialDraft | null {
       source.instagramStatus === "failed" ||
       source.instagramStatus === "draft"
         ? source.instagramStatus
+        : undefined,
+    imageUrl: source.imageUrl || undefined,
+    r2Key: source.r2Key || undefined,
+    platformStatus:
+      source.platformStatus &&
+      typeof source.platformStatus === "object" &&
+      !Array.isArray(source.platformStatus)
+        ? source.platformStatus
         : undefined,
     deletedAt: source.deletedAt || undefined,
     deleteSource: source.deleteSource || undefined,
@@ -617,9 +640,17 @@ export default function AdminShopSocial() {
   const wantsFacebook = draft.platforms.includes("Facebook");
   const wantsInstagram = draft.platforms.includes("Instagram");
   const wantsThreads = draft.platforms.includes("Threads");
-  const instagramImages = draft.mediaFiles.filter((media) =>
-    media.contentType.startsWith("image/")
+  const firstInstagramMedia = draft.mediaFiles[0];
+  const firstSelectedFile = selectedFiles[0];
+  const isSupportedInstagramImage = Boolean(
+    firstInstagramMedia &&
+      ["image/jpeg", "image/png", "image/webp"].includes(
+        firstInstagramMedia.contentType
+      )
   );
+  const hasPendingLocalMedia =
+    selectedFiles.length > 0 ||
+    (draft.fileNames.length > 0 && draft.mediaFiles.length === 0);
   const isFacebookReady =
     metaConnections.facebook.status === "connected" &&
     facebookTokenDebug?.isValid === true;
@@ -640,10 +671,25 @@ export default function AdminShopSocial() {
       ? "請先輸入發文內容"
       : !wantsFacebook && !wantsInstagram
         ? "請選擇 Facebook 或 Instagram"
-      : wantsInstagram && instagramImages.length === 0
+      : wantsInstagram &&
+          !firstInstagramMedia &&
+          (firstSelectedFile?.type === "video/mp4" ||
+            firstSelectedFile?.type.startsWith("video/"))
+        ? "Instagram 第一版目前只支援單張圖片貼文，暫不支援影片"
+      : wantsInstagram && !firstInstagramMedia && hasPendingLocalMedia
+        ? "請先上傳圖片，取得公開圖片網址後才能發佈到 Instagram"
+      : wantsInstagram && !firstInstagramMedia
         ? "Instagram 發文需要上傳 1 張圖片"
-      : wantsInstagram && instagramImages.length > 1
-        ? "Instagram 第一版僅支援 1 張圖片"
+      : wantsInstagram &&
+          (firstInstagramMedia.contentType === "video/mp4" ||
+            firstInstagramMedia.contentType.startsWith("video/"))
+        ? "Instagram 第一版目前只支援單張圖片貼文，暫不支援影片"
+      : wantsInstagram && !isSupportedInstagramImage
+        ? "Instagram 第一版僅支援 JPG、PNG 或 WebP 圖片"
+      : wantsInstagram &&
+          (!firstInstagramMedia.publicUrl ||
+            !/^https:\/\//i.test(firstInstagramMedia.publicUrl))
+        ? "請先上傳圖片，取得公開圖片網址後才能發佈到 Instagram"
       : wantsFacebook && !isFacebookReady
         ? "尚未連接 Facebook 粉專"
       : wantsInstagram && !isInstagramReady
@@ -1025,6 +1071,13 @@ export default function AdminShopSocial() {
       instagramStatus: item.platforms.includes("Instagram")
         ? "draft"
         : undefined,
+      imageUrl: item.mediaFiles[0]?.publicUrl || undefined,
+      r2Key: item.mediaFiles[0]?.key || undefined,
+      platformStatus: {
+        ...(item.platforms.includes("Instagram")
+          ? { instagram: "draft" as const }
+          : {}),
+      },
       deletedAt: undefined,
       deleteSource: undefined,
       lastSyncedAt: undefined,
@@ -1175,6 +1228,15 @@ export default function AdminShopSocial() {
       instagramStatus: wantsInstagram
         ? generatedDraft.instagramStatus || "draft"
         : generatedDraft.instagramStatus,
+      imageUrl: firstInstagramMedia?.publicUrl || generatedDraft.imageUrl,
+      r2Key: firstInstagramMedia?.key || generatedDraft.r2Key,
+      platformStatus: {
+        ...generatedDraft.platformStatus,
+        ...(wantsInstagram &&
+        !generatedDraft.platformStatus?.instagram
+          ? { instagram: "draft" as const }
+          : {}),
+      },
     };
     const nextDrafts = generatedDrafts.map((item) =>
       item.id === nextDraft.id ? nextDraft : item
@@ -1243,7 +1305,8 @@ export default function AdminShopSocial() {
           const instagramResult = await publishInstagramPost(
             token,
             nextDraft.id,
-            instagramImages[0].publicUrl,
+            firstInstagramMedia!.publicUrl,
+            firstInstagramMedia!.key,
             nextDraft.title,
             nextDraft.content,
             nextDraft.hashtags
@@ -1256,6 +1319,12 @@ export default function AdminShopSocial() {
               instagramResult.instagramPermalinkUrl || undefined,
             instagramPublishedAt: instagramResult.createdAt,
             instagramStatus: "published",
+            imageUrl: instagramResult.imageUrl,
+            r2Key: instagramResult.r2Key || firstInstagramMedia!.key,
+            platformStatus: {
+              ...publishedDraft.platformStatus,
+              instagram: "published",
+            },
             publishedAt:
               publishedDraft.publishedAt || instagramResult.createdAt,
           };
@@ -1271,6 +1340,12 @@ export default function AdminShopSocial() {
           publishedDraft = {
             ...publishedDraft,
             instagramStatus: "failed",
+            imageUrl: firstInstagramMedia!.publicUrl,
+            r2Key: firstInstagramMedia!.key,
+            platformStatus: {
+              ...publishedDraft.platformStatus,
+              instagram: "failed",
+            },
           };
         }
       }

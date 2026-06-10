@@ -51,6 +51,8 @@ export type InstagramPublishResult = {
   ok: true;
   instagramMediaId: string;
   instagramPermalinkUrl: string | null;
+  imageUrl: string;
+  r2Key: string | null;
   createdAt: string;
 };
 
@@ -246,6 +248,7 @@ export async function publishInstagramPost(
   token: string,
   taskId: string,
   imageUrl: string,
+  r2Key: string,
   title: string,
   content: string,
   hashtags: string
@@ -262,6 +265,7 @@ export async function publishInstagramPost(
       body: JSON.stringify({
         taskId,
         imageUrl,
+        r2Key,
         title,
         content,
         hashtags,
@@ -301,6 +305,8 @@ export async function publishInstagramPost(
     ok: true,
     instagramMediaId: data.instagramMediaId,
     instagramPermalinkUrl: data.instagramPermalinkUrl || null,
+    imageUrl: data.imageUrl || imageUrl,
+    r2Key: data.r2Key || r2Key || null,
     createdAt: data.createdAt,
   };
 }

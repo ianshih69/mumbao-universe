@@ -593,18 +593,20 @@ export default function AdminShopSocial() {
 
     return filtered.slice(0, 100);
   }, [sortedDrafts, taskFilter]);
-  const hasFacebookContent = Boolean(draft.content.trim());
-  const hasFacebookPlatform = draft.platforms.includes("Facebook");
+  const hasDraftInput = Boolean(draft.title.trim() || draft.content.trim());
+  const hasUnsupportedPlatforms = draft.platforms.some(
+    (platform) => platform !== "Facebook"
+  );
   const isFacebookReady =
     metaConnections.facebook.status === "connected" &&
     facebookTokenDebug?.isValid === true;
   const isPublishingCurrentDraft = publishingDraftId !== null;
-  const facebookPublishHint = !hasFacebookContent
-    ? "請先輸入發文內容"
-    : !isFacebookReady
-      ? "尚未連接 Facebook 粉專"
-      : !hasFacebookPlatform
-        ? "請先勾選 Facebook 平台"
+  const facebookPublishHint = isPublishingCurrentDraft
+    ? "發佈中，請稍候"
+    : !hasDraftInput
+      ? "請先輸入發文內容"
+      : !isFacebookReady
+        ? "尚未連接 Facebook 粉專"
         : "";
 
   const persistDrafts = (nextDrafts: StoredSocialDraft[]) => {
@@ -891,11 +893,14 @@ export default function AdminShopSocial() {
     setIsUploading(false);
   };
 
-  const buildCurrentDraft = (statusOverride?: DraftStatus) => {
+  const buildCurrentDraft = (
+    statusOverride?: DraftStatus,
+    form: SocialDraftForm = draft
+  ) => {
     const existingDraft = editingDraftId
       ? savedDrafts.find((item) => item.id === editingDraftId)
       : undefined;
-    const generatedDraft = storedDraftFromForm(draft, existingDraft);
+    const generatedDraft = storedDraftFromForm(form, existingDraft);
     const nextDraft = statusOverride
       ? { ...generatedDraft, status: statusOverride }
       : generatedDraft;
@@ -913,7 +918,7 @@ export default function AdminShopSocial() {
   const saveDraft = (event: FormEvent) => {
     event.preventDefault();
 
-    if (!draft.content.trim()) {
+    if (!hasDraftInput) {
       setNotice("請先輸入發文內容。");
       return;
     }
@@ -1004,7 +1009,10 @@ export default function AdminShopSocial() {
           hashtags: item.hashtags.trim(),
         };
 
-    if (!latestItem.content) {
+    const publishContent =
+      latestItem.content.trim() || latestItem.title.trim();
+
+    if (!publishContent) {
       setNotice("請先輸入發文內容。");
       return;
     }
@@ -1015,7 +1023,7 @@ export default function AdminShopSocial() {
     }
 
     const facebookMessage = [
-      latestItem.content,
+      publishContent,
       latestItem.hashtags,
     ].filter(Boolean).join("\n\n");
 
@@ -1040,7 +1048,7 @@ export default function AdminShopSocial() {
       const result = await publishFacebookPost(
         token,
         latestItem.id,
-        latestItem.content,
+        publishContent,
         latestItem.hashtags
       );
       const nextDrafts = draftsWithLatestContent.map((draftItem) =>
@@ -1099,18 +1107,29 @@ export default function AdminShopSocial() {
   };
 
   const publishCurrentDraftToFacebook = async () => {
-    if (!draft.content.trim()) {
+    if (!hasDraftInput) {
       setNotice("請先輸入發文內容。");
       return;
     }
 
-    if (!draft.platforms.includes("Facebook")) {
-      setNotice("請先勾選 Facebook 平台。");
+    if (!isFacebookReady) {
+      setNotice("尚未連接 Facebook 粉專。");
       return;
     }
 
-    const { nextDraft, nextDrafts } = buildCurrentDraft("pending");
-    const facebookMessage = [nextDraft.content, nextDraft.hashtags]
+    const publishForm: SocialDraftForm = {
+      ...draft,
+      platforms: draft.platforms.includes("Facebook")
+        ? draft.platforms
+        : ["Facebook", ...draft.platforms],
+    };
+    const { nextDraft, nextDrafts } = buildCurrentDraft(
+      "pending",
+      publishForm
+    );
+    const publishContent =
+      nextDraft.content.trim() || nextDraft.title.trim();
+    const facebookMessage = [publishContent, nextDraft.hashtags]
       .filter(Boolean)
       .join("\n\n");
     const confirmed = window.confirm(
@@ -1121,7 +1140,9 @@ export default function AdminShopSocial() {
     saveStoredDrafts(nextDrafts);
     setSavedDrafts(nextDrafts);
     setEditingDraftId(nextDraft.id);
-    setPreview(formFromStoredDraft(nextDraft));
+    const nextForm = formFromStoredDraft(nextDraft);
+    setDraft(nextForm);
+    setPreview(nextForm);
 
     await publishSavedDraftToFacebook(nextDraft, {
       sourceDrafts: nextDrafts,
@@ -2454,54 +2475,65 @@ export default function AdminShopSocial() {
               </div>
             )}
 
-            <div className="flex flex-col gap-3 border-t border-stone-100 pt-5 sm:flex-row sm:items-center">
-              <Button
-                type="submit"
-                disabled={!hasFacebookContent}
-                className="h-11 rounded-full bg-[#8b6f5b] px-6 text-white hover:bg-[#765d4a]"
-              >
-                儲存草稿
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={updatePreview}
-                className="h-11 rounded-full bg-white px-6"
-              >
-                測試預覽
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={clearForm}
-                className="h-11 rounded-full bg-white px-6"
-              >
-                清空表單
-              </Button>
-              <div className="flex flex-col gap-1 sm:ml-auto sm:items-end">
-                <Button
-                  type="button"
-                  onClick={() => void publishCurrentDraftToFacebook()}
-                  disabled={
-                    !hasFacebookContent ||
-                    !hasFacebookPlatform ||
-                    !isFacebookReady ||
-                    isPublishingCurrentDraft
-                  }
-                  className="h-11 rounded-full bg-[#4267b2] px-7 text-white hover:bg-[#365899] disabled:bg-stone-200 disabled:text-stone-500"
-                >
-                  {isPublishingCurrentDraft ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Send className="size-4" />
-                  )}
-                  {isPublishingCurrentDraft
-                    ? "發佈中..."
-                    : "發佈到 Facebook"}
-                </Button>
+            <div className="border-t border-stone-100 pt-5">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="grid grid-cols-2 gap-3 sm:flex">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={clearForm}
+                    className="h-11 rounded-full bg-white px-5"
+                  >
+                    清空表單
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={updatePreview}
+                    className="h-11 rounded-full bg-white px-5"
+                  >
+                    測試預覽
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 sm:flex sm:justify-end">
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    disabled={!hasDraftInput || isPublishingCurrentDraft}
+                    className="h-11 rounded-full border-[#bba38e] bg-white px-6 text-[#765d4a] hover:bg-[#fbf0e4]"
+                  >
+                    儲存草稿
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => void publishCurrentDraftToFacebook()}
+                    disabled={
+                      !hasDraftInput ||
+                      !isFacebookReady ||
+                      isPublishingCurrentDraft
+                    }
+                    className="h-11 rounded-full bg-[#4267b2] px-7 font-semibold text-white shadow-sm hover:bg-[#365899] hover:shadow-md disabled:bg-stone-200 disabled:text-stone-500 disabled:shadow-none"
+                  >
+                    {isPublishingCurrentDraft ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Send className="size-4" />
+                    )}
+                    {isPublishingCurrentDraft
+                      ? "發佈中..."
+                      : "發佈到 Facebook"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-2 flex flex-col gap-1 text-xs lg:items-end">
                 {facebookPublishHint && (
-                  <p className="text-xs text-stone-500">
-                    {facebookPublishHint}
+                  <p className="text-stone-500">{facebookPublishHint}</p>
+                )}
+                {hasUnsupportedPlatforms && (
+                  <p className="text-[#8b6f5b]">
+                    目前僅支援 Facebook 發文，Instagram / Threads 尚未啟用。
                   </p>
                 )}
               </div>

@@ -42,6 +42,7 @@ import {
   fetchSocialPosts,
   publishFacebookPost,
   publishInstagramPost,
+  publishThreadsPost,
   syncFacebookPostStatus,
   syncSocialPosts,
   type FacebookTokenDebugResult,
@@ -117,10 +118,16 @@ type StoredSocialDraft = {
   instagramPermalinkUrl?: string;
   instagramPublishedAt?: string;
   instagramStatus?: "draft" | "published" | "failed";
+  threadsMediaId?: string;
+  threadsPermalinkUrl?: string;
+  threadsPublishedAt?: string;
+  threadsStatus?: "draft" | "published" | "failed";
+  threadsError?: string;
   imageUrl?: string;
   r2Key?: string;
   platformStatus?: {
     instagram?: PlatformPublishStatus;
+    threads?: PlatformPublishStatus;
   };
   deletedAt?: string;
   deleteSource?: "admin" | "facebook" | "api";
@@ -226,6 +233,13 @@ function storedDraftFromForm(
     instagramStatus:
       existingDraft?.instagramStatus ||
       (form.platforms.includes("Instagram") ? "draft" : undefined),
+    threadsMediaId: existingDraft?.threadsMediaId,
+    threadsPermalinkUrl: existingDraft?.threadsPermalinkUrl,
+    threadsPublishedAt: existingDraft?.threadsPublishedAt,
+    threadsStatus:
+      existingDraft?.threadsStatus ||
+      (form.platforms.includes("Threads") ? "draft" : undefined),
+    threadsError: existingDraft?.threadsError,
     imageUrl: form.mediaFiles[0]?.publicUrl || undefined,
     r2Key: form.mediaFiles[0]?.key || undefined,
     platformStatus: {
@@ -233,6 +247,10 @@ function storedDraftFromForm(
       ...(form.platforms.includes("Instagram") &&
       !existingDraft?.platformStatus?.instagram
         ? { instagram: "draft" as const }
+        : {}),
+      ...(form.platforms.includes("Threads") &&
+      !existingDraft?.platformStatus?.threads
+        ? { threads: "draft" as const }
         : {}),
     },
     deletedAt: existingDraft?.deletedAt,
@@ -282,6 +300,16 @@ function normalizeStoredDraft(value: unknown): StoredSocialDraft | null {
       source.instagramStatus === "draft"
         ? source.instagramStatus
         : undefined,
+    threadsMediaId: source.threadsMediaId || undefined,
+    threadsPermalinkUrl: source.threadsPermalinkUrl || undefined,
+    threadsPublishedAt: source.threadsPublishedAt || undefined,
+    threadsStatus:
+      source.threadsStatus === "published" ||
+      source.threadsStatus === "failed" ||
+      source.threadsStatus === "draft"
+        ? source.threadsStatus
+        : undefined,
+    threadsError: source.threadsError || undefined,
     imageUrl: source.imageUrl || undefined,
     r2Key: source.r2Key || undefined,
     platformStatus:
@@ -656,21 +684,44 @@ export default function AdminShopSocial() {
     facebookTokenDebug?.isValid === true;
   const isInstagramReady =
     metaConnections.instagram.status === "connected";
+  const isThreadsReady =
+    metaConnections.threads.status === "connected";
+  const threadsText = [
+    draft.content.trim() || draft.title.trim(),
+    draft.hashtags.trim(),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  const threadsCharacterCount = Array.from(threadsText).length;
   const isPublishingCurrentDraft = publishingDraftId !== null;
   const publishButtonLabel =
-    wantsFacebook && wantsInstagram
-      ? "發佈到 Facebook 與 Instagram"
-      : wantsInstagram
-        ? "發佈到 Instagram"
-        : wantsFacebook
-          ? "發佈到 Facebook"
-          : "請選擇發布平台";
+    wantsFacebook && wantsInstagram && wantsThreads
+      ? "發佈到 Facebook、Instagram 與 Threads"
+      : wantsFacebook && wantsInstagram
+        ? "發佈到 Facebook 與 Instagram"
+        : wantsFacebook && wantsThreads
+          ? "發佈到 Facebook 與 Threads"
+          : wantsInstagram && wantsThreads
+            ? "發佈到 Instagram 與 Threads"
+            : wantsInstagram
+              ? "發佈到 Instagram"
+              : wantsFacebook
+                ? "發佈到 Facebook"
+                : wantsThreads
+                  ? "發佈到 Threads"
+                  : "請選擇發布平台";
   const publishDisabledReason = isPublishingCurrentDraft
     ? "發佈中，請稍候"
     : !hasDraftInput
-      ? "請先輸入發文內容"
-      : !wantsFacebook && !wantsInstagram
-        ? "請選擇 Facebook 或 Instagram"
+      ? wantsThreads
+        ? "請先輸入 Threads 發文內容"
+        : "請先輸入發文內容"
+      : !wantsFacebook && !wantsInstagram && !wantsThreads
+        ? "請選擇 Facebook、Instagram 或 Threads"
+      : wantsThreads && draft.publishMode === "scheduled"
+        ? "Threads 第一版暫不支援排程發文"
+      : wantsThreads && threadsCharacterCount > 500
+        ? "Threads 發文內容不可超過 500 字"
       : wantsInstagram &&
           !firstInstagramMedia &&
           (firstSelectedFile?.type === "video/mp4" ||
@@ -694,6 +745,8 @@ export default function AdminShopSocial() {
         ? "尚未連接 Facebook 粉專"
       : wantsInstagram && !isInstagramReady
         ? "尚未連接 Instagram 帳號"
+      : wantsThreads && !isThreadsReady
+        ? "尚未連接 Threads 帳號"
       : "";
   const isPublishDisabled = Boolean(publishDisabledReason);
 
@@ -1071,11 +1124,21 @@ export default function AdminShopSocial() {
       instagramStatus: item.platforms.includes("Instagram")
         ? "draft"
         : undefined,
+      threadsMediaId: undefined,
+      threadsPermalinkUrl: undefined,
+      threadsPublishedAt: undefined,
+      threadsStatus: item.platforms.includes("Threads")
+        ? "draft"
+        : undefined,
+      threadsError: undefined,
       imageUrl: item.mediaFiles[0]?.publicUrl || undefined,
       r2Key: item.mediaFiles[0]?.key || undefined,
       platformStatus: {
         ...(item.platforms.includes("Instagram")
           ? { instagram: "draft" as const }
+          : {}),
+        ...(item.platforms.includes("Threads")
+          ? { threads: "draft" as const }
           : {}),
       },
       deletedAt: undefined,
@@ -1228,6 +1291,9 @@ export default function AdminShopSocial() {
       instagramStatus: wantsInstagram
         ? generatedDraft.instagramStatus || "draft"
         : generatedDraft.instagramStatus,
+      threadsStatus: wantsThreads
+        ? generatedDraft.threadsStatus || "draft"
+        : generatedDraft.threadsStatus,
       imageUrl: firstInstagramMedia?.publicUrl || generatedDraft.imageUrl,
       r2Key: firstInstagramMedia?.key || generatedDraft.r2Key,
       platformStatus: {
@@ -1235,6 +1301,10 @@ export default function AdminShopSocial() {
         ...(wantsInstagram &&
         !generatedDraft.platformStatus?.instagram
           ? { instagram: "draft" as const }
+          : {}),
+        ...(wantsThreads &&
+        !generatedDraft.platformStatus?.threads
+          ? { threads: "draft" as const }
           : {}),
       },
     };
@@ -1262,7 +1332,7 @@ export default function AdminShopSocial() {
 
     let publishedDraft = nextDraft;
     const failures: Array<{
-      platform: "Facebook" | "Instagram";
+      platform: "Facebook" | "Instagram" | "Threads";
       error: Error & {
         errorCode?: string;
         metaError?: FacebookPublishErrorDetails | null;
@@ -1345,6 +1415,53 @@ export default function AdminShopSocial() {
             platformStatus: {
               ...publishedDraft.platformStatus,
               instagram: "failed",
+            },
+          };
+        }
+      }
+
+      if (wantsThreads) {
+        try {
+          const threadsResult = await publishThreadsPost(
+            token,
+            nextDraft.id,
+            nextDraft.title,
+            nextDraft.content,
+            nextDraft.hashtags
+          );
+          successCount += 1;
+          publishedDraft = {
+            ...publishedDraft,
+            threadsMediaId: threadsResult.threadsMediaId,
+            threadsPermalinkUrl:
+              threadsResult.threadsPermalinkUrl || undefined,
+            threadsPublishedAt: threadsResult.createdAt,
+            threadsStatus: "published",
+            threadsError: undefined,
+            platformStatus: {
+              ...publishedDraft.platformStatus,
+              threads: "published",
+            },
+            publishedAt:
+              publishedDraft.publishedAt || threadsResult.createdAt,
+          };
+        } catch (error) {
+          const threadsError = error as Error & {
+            errorCode?: string;
+            metaError?: FacebookPublishErrorDetails | null;
+          };
+          failures.push({
+            platform: "Threads",
+            error: threadsError,
+          });
+          publishedDraft = {
+            ...publishedDraft,
+            threadsStatus: "failed",
+            threadsError:
+              threadsError.message || "Threads 發文失敗，請稍後再試。",
+            platformStatus: {
+              ...publishedDraft.platformStatus,
+              threads: "failed",
             },
           };
         }
@@ -1783,6 +1900,52 @@ export default function AdminShopSocial() {
             </dd>
           </div>
         )}
+        {item.threadsStatus && (
+          <div>
+            <dt className="inline text-stone-400">Threads 狀態：</dt>
+            <dd className="inline">
+              {item.threadsStatus === "published"
+                ? "已發布"
+                : item.threadsStatus === "failed"
+                  ? "發布失敗"
+                  : "草稿"}
+            </dd>
+          </div>
+        )}
+        {item.threadsPublishedAt && (
+          <div>
+            <dt className="inline text-stone-400">Threads 發布時間：</dt>
+            <dd className="inline">
+              {formatDateTime(item.threadsPublishedAt)}
+            </dd>
+          </div>
+        )}
+        {item.threadsMediaId && (
+          <div>
+            <dt className="inline text-stone-400">Threads 媒體編號：</dt>
+            <dd className="inline break-all">{item.threadsMediaId}</dd>
+          </div>
+        )}
+        {item.threadsPermalinkUrl && (
+          <div>
+            <dt className="inline text-stone-400">Threads 文章連結：</dt>
+            <dd className="inline">
+              <a
+                href={item.threadsPermalinkUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="break-all text-[#8b6f5b] underline underline-offset-2"
+              >
+                {item.threadsPermalinkUrl}
+              </a>
+            </dd>
+          </div>
+        )}
+        {item.threadsError && (
+          <div className="mt-1 rounded-[6px] bg-orange-50 px-3 py-2 text-orange-700">
+            Threads 發布失敗：{item.threadsError}
+          </div>
+        )}
         {item.publishError && (
           <div className="mt-1 rounded-[6px] bg-orange-50 px-3 py-2 text-orange-700">
             發布失敗：{item.publishError.errorMessage}
@@ -1834,7 +1997,7 @@ export default function AdminShopSocial() {
           </div>
           <div className="rounded-[8px] border border-[#eadfce] bg-[#fffaf3] px-4 py-3 text-sm leading-6 text-stone-600">
             <p className="font-semibold text-stone-800">目前發文狀態</p>
-            <p>Facebook 純文字與 Instagram 單張圖片發文已啟用；Threads 尚未啟用。</p>
+            <p>Facebook、Threads 純文字與 Instagram 單張圖片發文已啟用。</p>
           </div>
         </div>
       </header>
@@ -2580,6 +2743,18 @@ export default function AdminShopSocial() {
                   rows={8}
                   className="w-full resize-y rounded-[8px] border border-stone-200 bg-[#fffaf7] px-4 py-3 text-base leading-7 outline-none transition focus:border-[#8b6f5b] focus:bg-white"
                 />
+                {wantsThreads && (
+                  <p
+                    className={cn(
+                      "text-right text-xs",
+                      threadsCharacterCount > 500
+                        ? "font-semibold text-red-600"
+                        : "text-stone-500"
+                    )}
+                  >
+                    Threads 文字：{threadsCharacterCount} / 500
+                  </p>
+                )}
               </div>
 
               <div className="grid gap-2">
@@ -2826,7 +3001,7 @@ export default function AdminShopSocial() {
                 )}
                 {wantsThreads && (
                   <p className="text-[#8b6f5b]">
-                    Threads 尚未啟用；目前只會發布到已選取且可用的 Facebook / Instagram。
+                    Threads 第一版只發布純文字，會忽略已上傳的圖片與影片。
                   </p>
                 )}
               </div>
@@ -2970,7 +3145,7 @@ export default function AdminShopSocial() {
             </p>
           </div>
           <p className="mt-4 rounded-[8px] bg-[#fbf7f1] px-4 py-3 text-sm leading-6 text-stone-600">
-            Facebook 已支援純文字發文；Instagram 第一版支援單張圖片；Threads、影片與輪播目前尚未啟用。
+            Facebook 與 Threads 已支援純文字發文；Instagram 第一版支援單張圖片。Threads 圖片、影片、輪播與回覆目前尚未啟用。
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">

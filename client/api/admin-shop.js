@@ -514,6 +514,11 @@ function buildSocialPostRow(task) {
     ig_permalink_url: cleanText(task?.instagramPermalinkUrl) || null,
     ig_published_at: cleanText(task?.instagramPublishedAt) || null,
     ig_status: cleanText(task?.instagramStatus) || null,
+    threads_media_id: cleanText(task?.threadsMediaId) || null,
+    threads_permalink_url: cleanText(task?.threadsPermalinkUrl) || null,
+    threads_published_at: cleanText(task?.threadsPublishedAt) || null,
+    threads_status: cleanText(task?.threadsStatus) || null,
+    threads_error: cleanText(task?.threadsError) || null,
     image_url: cleanText(task?.imageUrl) || null,
     r2_key: cleanText(task?.r2Key) || null,
     platform_status: normalizePlatformStatus(task?.platformStatus),
@@ -554,6 +559,11 @@ function normalizeSocialPost(row) {
     instagramPermalinkUrl: row.ig_permalink_url || undefined,
     instagramPublishedAt: row.ig_published_at || undefined,
     instagramStatus: row.ig_status || undefined,
+    threadsMediaId: row.threads_media_id || undefined,
+    threadsPermalinkUrl: row.threads_permalink_url || undefined,
+    threadsPublishedAt: row.threads_published_at || undefined,
+    threadsStatus: row.threads_status || undefined,
+    threadsError: row.threads_error || undefined,
     imageUrl: row.image_url || undefined,
     r2Key: row.r2_key || undefined,
     platformStatus: normalizePlatformStatus(row.platform_status),
@@ -1147,6 +1157,270 @@ async function handlePublishInstagramPost(req, res) {
     instagramPermalinkUrl: instagramPermalinkUrl || null,
     imageUrl: image.publicUrl,
     r2Key: image.key || null,
+    createdAt,
+  });
+}
+
+async function markThreadsPublishFailed(taskId, storedTask, errorDetails) {
+  if (!taskId) return;
+
+  const updatedAt = new Date().toISOString();
+  const hasPublishedPlatform = Boolean(
+    storedTask?.fb_post_id || storedTask?.ig_media_id
+  );
+  const platformStatus = {
+    ...normalizePlatformStatus(storedTask?.platform_status),
+    threads: "failed",
+  };
+
+  await supabaseRequest(
+    `/shop_social_posts?id=eq.${encodeURIComponent(taskId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: hasPublishedPlatform ? "published" : "failed",
+        threads_status: "failed",
+        threads_error: errorDetails.errorMessage,
+        platform_status: platformStatus,
+        publish_error: {
+          platform: "threads",
+          errorCode: errorDetails.errorCode,
+          errorMessage: errorDetails.errorMessage,
+          metaError: errorDetails.metaError || null,
+        },
+        updated_at: updatedAt,
+      }),
+    }
+  ).catch(() => {
+    // Keep the original Threads error response if task sync also fails.
+  });
+}
+
+async function handlePublishThreadsPost(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return sendJson(res, 405, {
+      errorCode: "METHOD_NOT_ALLOWED",
+      errorMessage: "Method not allowed.",
+    });
+  }
+
+  const userId = cleanText(getServerEnv("THREADS_USER_ID"));
+  const accessToken = cleanText(getServerEnv("THREADS_ACCESS_TOKEN"));
+  if (!userId || !accessToken) {
+    return sendJson(res, 500, {
+      errorCode: "THREADS_NOT_CONFIGURED",
+      errorMessage: "Threads 尚未設定 access token 或 user id",
+      metaError: null,
+    });
+  }
+
+  const body = await readBody(req);
+  const taskId = cleanText(body?.taskId);
+  if (!taskId) {
+    return sendJson(res, 400, {
+      errorCode: "SOCIAL_TASK_ID_REQUIRED",
+      errorMessage: "找不到要發布的發文任務。",
+      metaError: null,
+    });
+  }
+
+  const storedTask = await loadSocialPostById(taskId);
+  if (!storedTask) {
+    return sendJson(res, 404, {
+      errorCode: "SOCIAL_TASK_NOT_FOUND",
+      errorMessage: "找不到這筆發文任務。",
+      metaError: null,
+    });
+  }
+
+  if (storedTask.mode === "scheduled") {
+    const errorDetails = {
+      errorCode: "THREADS_SCHEDULE_NOT_SUPPORTED",
+      errorMessage: "Threads 第一版暫不支援排程發文。",
+      metaError: null,
+    };
+    await markThreadsPublishFailed(taskId, storedTask, errorDetails);
+    return sendJson(res, 400, errorDetails);
+  }
+
+  const content = cleanText(storedTask.content || body?.content);
+  const title = cleanText(storedTask.title || body?.title);
+  const hashtags = cleanText(storedTask.hashtags || body?.hashtags);
+  const text = [content || title, hashtags].filter(Boolean).join("\n\n");
+
+  if (!text) {
+    const errorDetails = {
+      errorCode: "THREADS_TEXT_REQUIRED",
+      errorMessage: "請先輸入 Threads 發文內容",
+      metaError: null,
+    };
+    await markThreadsPublishFailed(taskId, storedTask, errorDetails);
+    return sendJson(res, 400, errorDetails);
+  }
+
+  if (Array.from(text).length > 500) {
+    const errorDetails = {
+      errorCode: "THREADS_TEXT_TOO_LONG",
+      errorMessage: "Threads 發文內容不可超過 500 字",
+      metaError: null,
+    };
+    await markThreadsPublishFailed(taskId, storedTask, errorDetails);
+    return sendJson(res, 400, errorDetails);
+  }
+
+  const createUrl = new URL(
+    `https://graph.threads.net/v1.0/${encodeURIComponent(userId)}/threads`
+  );
+  const createForm = new URLSearchParams();
+  createForm.set("media_type", "TEXT");
+  createForm.set("text", text);
+  createForm.set("access_token", accessToken);
+
+  let createResponse;
+  try {
+    createResponse = await fetch(createUrl, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: createForm,
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch {
+    const errorDetails = {
+      errorCode: "THREADS_NETWORK_ERROR",
+      errorMessage: "目前無法建立 Threads 貼文，請稍後再試。",
+      metaError: null,
+    };
+    await markThreadsPublishFailed(taskId, storedTask, errorDetails);
+    return sendJson(res, 502, errorDetails);
+  }
+
+  const createPayload = await createResponse.json().catch(() => null);
+  const creationId = cleanText(createPayload?.id);
+  if (!createResponse.ok || !creationId) {
+    const safeError = getSafeMetaError(
+      createResponse.status,
+      createPayload?.error
+    );
+    const errorDetails = {
+      errorCode: safeError.code,
+      errorMessage: safeError.reason,
+      metaError: {
+        code: safeError.details.code,
+        type: safeError.details.type,
+        error_subcode: safeError.details.error_subcode,
+      },
+    };
+    await markThreadsPublishFailed(taskId, storedTask, errorDetails);
+    return sendJson(res, 502, errorDetails);
+  }
+
+  const publishUrl = new URL(
+    `https://graph.threads.net/v1.0/${encodeURIComponent(
+      userId
+    )}/threads_publish`
+  );
+  const publishForm = new URLSearchParams();
+  publishForm.set("creation_id", creationId);
+  publishForm.set("access_token", accessToken);
+
+  let publishResponse;
+  try {
+    publishResponse = await fetch(publishUrl, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: publishForm,
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch {
+    const errorDetails = {
+      errorCode: "THREADS_NETWORK_ERROR",
+      errorMessage: "Threads 貼文已建立，但目前無法發布，請稍後再試。",
+      metaError: null,
+    };
+    await markThreadsPublishFailed(taskId, storedTask, errorDetails);
+    return sendJson(res, 502, errorDetails);
+  }
+
+  const publishPayload = await publishResponse.json().catch(() => null);
+  const threadsMediaId = cleanText(publishPayload?.id);
+  if (!publishResponse.ok || !threadsMediaId) {
+    const safeError = getSafeMetaError(
+      publishResponse.status,
+      publishPayload?.error
+    );
+    const errorDetails = {
+      errorCode: safeError.code,
+      errorMessage: safeError.reason,
+      metaError: {
+        code: safeError.details.code,
+        type: safeError.details.type,
+        error_subcode: safeError.details.error_subcode,
+      },
+    };
+    await markThreadsPublishFailed(taskId, storedTask, errorDetails);
+    return sendJson(res, 502, errorDetails);
+  }
+
+  let threadsPermalinkUrl = "";
+  let threadsPublishedAt = "";
+  try {
+    const detailsUrl = new URL(
+      `https://graph.threads.net/v1.0/${encodeURIComponent(threadsMediaId)}`
+    );
+    detailsUrl.searchParams.set("fields", "id,permalink,timestamp");
+    detailsUrl.searchParams.set("access_token", accessToken);
+    const detailsResponse = await fetch(detailsUrl, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(10000),
+    });
+    const detailsPayload = await detailsResponse.json().catch(() => null);
+    if (detailsResponse.ok) {
+      threadsPermalinkUrl = cleanText(detailsPayload?.permalink);
+      threadsPublishedAt = cleanText(detailsPayload?.timestamp);
+    }
+  } catch {
+    threadsPermalinkUrl = "";
+  }
+
+  const createdAt =
+    threadsPublishedAt && !Number.isNaN(Date.parse(threadsPublishedAt))
+      ? new Date(threadsPublishedAt).toISOString()
+      : new Date().toISOString();
+  const platformStatus = {
+    ...normalizePlatformStatus(storedTask.platform_status),
+    threads: "published",
+  };
+
+  await supabaseRequest(
+    `/shop_social_posts?id=eq.${encodeURIComponent(taskId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: "published",
+        threads_media_id: threadsMediaId,
+        threads_permalink_url: threadsPermalinkUrl || null,
+        threads_published_at: createdAt,
+        threads_status: "published",
+        threads_error: null,
+        platform_status: platformStatus,
+        published_at: storedTask.published_at || createdAt,
+        updated_at: createdAt,
+      }),
+    }
+  );
+
+  return sendJson(res, 200, {
+    ok: true,
+    threadsMediaId,
+    threadsPermalinkUrl: threadsPermalinkUrl || null,
     createdAt,
   });
 }
@@ -3084,6 +3358,10 @@ export default async function handler(req, res) {
 
     if (action === "publish-instagram-post") {
       return await handlePublishInstagramPost(req, res);
+    }
+
+    if (action === "publish-threads-post") {
+      return await handlePublishThreadsPost(req, res);
     }
 
     if (action === "social-posts-sync") {

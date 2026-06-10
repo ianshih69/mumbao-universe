@@ -56,6 +56,13 @@ export type InstagramPublishResult = {
   createdAt: string;
 };
 
+export type ThreadsPublishResult = {
+  ok: true;
+  threadsMediaId: string;
+  threadsPermalinkUrl: string | null;
+  createdAt: string;
+};
+
 export type FacebookDeleteResult = {
   ok: true;
   taskId: string;
@@ -307,6 +314,67 @@ export async function publishInstagramPost(
     instagramPermalinkUrl: data.instagramPermalinkUrl || null,
     imageUrl: data.imageUrl || imageUrl,
     r2Key: data.r2Key || r2Key || null,
+    createdAt: data.createdAt,
+  };
+}
+
+export async function publishThreadsPost(
+  token: string,
+  taskId: string,
+  title: string,
+  content: string,
+  hashtags: string
+): Promise<ThreadsPublishResult> {
+  const response = await fetch(
+    "/api/admin-shop?action=publish-threads-post",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        taskId,
+        title,
+        content,
+        hashtags,
+      }),
+    }
+  );
+  const data = (await response.json().catch(() => null)) as
+    | (Partial<ThreadsPublishResult> & {
+        errorCode?: string;
+        errorMessage?: string;
+        metaError?: FacebookPublishErrorDetails | null;
+      })
+    | null;
+
+  if (response.status === 401) {
+    throw new Error(adminAuthExpiredMessage);
+  }
+
+  if (
+    !response.ok ||
+    !data?.ok ||
+    !data.threadsMediaId ||
+    !data.createdAt
+  ) {
+    const error = new Error(
+      data?.errorMessage || "Threads 發文失敗，請稍後再試。"
+    ) as Error & {
+      errorCode?: string;
+      metaError?: FacebookPublishErrorDetails | null;
+    };
+    error.errorCode = data?.errorCode;
+    error.metaError = data?.metaError;
+    throw error;
+  }
+
+  return {
+    ok: true,
+    threadsMediaId: data.threadsMediaId,
+    threadsPermalinkUrl: data.threadsPermalinkUrl || null,
     createdAt: data.createdAt,
   };
 }

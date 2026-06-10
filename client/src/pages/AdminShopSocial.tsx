@@ -280,9 +280,75 @@ function formatUnixTime(value: number | null) {
   return formatDateTime(new Date(value * 1000).toISOString());
 }
 
-function isTimestampWithinDays(value: number | null, days: number) {
-  if (!value) return false;
-  return value * 1000 - Date.now() <= days * 24 * 60 * 60 * 1000;
+function getRemainingDays(value: number | null) {
+  if (!value) return null;
+
+  const difference = value * 1000 - Date.now();
+  const dayMilliseconds = 24 * 60 * 60 * 1000;
+
+  return difference >= 0
+    ? Math.ceil(difference / dayMilliseconds)
+    : -Math.ceil(Math.abs(difference) / dayMilliseconds);
+}
+
+function getExpiryDayLabel(value: number | null, subject: string) {
+  const remainingDays = getRemainingDays(value);
+  if (remainingDays === null) return "";
+  if (remainingDays < 0) {
+    return `${subject}已過期 ${Math.abs(remainingDays)} 天`;
+  }
+  if (remainingDays === 0) return `${subject}今天到期`;
+  return `${subject}剩餘 ${remainingDays} 天`;
+}
+
+function getFacebookTokenHealth(debug: FacebookTokenDebugResult) {
+  const dataAccessDays = getRemainingDays(debug.dataAccessExpiresAt);
+  const tokenDays = getRemainingDays(debug.expiresAt);
+
+  if (!debug.isValid) {
+    return {
+      level: "error" as const,
+      message:
+        "Facebook Token 已無效，可能導致自動發文失敗，請重新產生長效 Page Token 並更新 Vercel。",
+    };
+  }
+
+  if (dataAccessDays !== null && dataAccessDays <= 0) {
+    return {
+      level: "error" as const,
+      message:
+        "Facebook Token 資料存取權限已到期，可能導致自動發文失敗，請重新產生長效 Page Token 並更新 Vercel。",
+    };
+  }
+
+  if (tokenDays !== null && tokenDays <= 0) {
+    return {
+      level: "error" as const,
+      message:
+        "Facebook Token 已到期，可能導致自動發文失敗，請重新產生長效 Page Token 並更新 Vercel。",
+    };
+  }
+
+  if (dataAccessDays !== null && dataAccessDays <= 7) {
+    return {
+      level: "warning" as const,
+      message:
+        "Facebook Token 資料存取權限即將到期，建議盡快重新產生長效 Page Token，並更新 Vercel 的 FACEBOOK_PAGE_ACCESS_TOKEN。",
+    };
+  }
+
+  if (tokenDays !== null && tokenDays <= 7) {
+    return {
+      level: "warning" as const,
+      message:
+        "Facebook Token 即將到期，建議盡快重新產生長效 Page Token，並更新 Vercel 的 FACEBOOK_PAGE_ACCESS_TOKEN。",
+    };
+  }
+
+  return {
+    level: "normal" as const,
+    message: "Token 狀態正常。",
+  };
 }
 
 function getModeLabel(mode: PublishMode) {
@@ -917,6 +983,10 @@ export default function AdminShopSocial() {
               ] as const
             ).map(([key, label]) => {
               const connection = metaConnections[key];
+              const facebookTokenHealth =
+                key === "facebook" && facebookTokenDebug
+                  ? getFacebookTokenHealth(facebookTokenDebug)
+                  : null;
 
               return (
                 <article
@@ -1095,6 +1165,27 @@ export default function AdminShopSocial() {
                                       )
                                     : "未提供固定到期時間 / 可能為長效 Page Token"}
                                 </dd>
+                                {facebookTokenDebug.expiresAt && (
+                                  <dd
+                                    className={cn(
+                                      "font-semibold",
+                                      (getRemainingDays(
+                                        facebookTokenDebug.expiresAt
+                                      ) ?? 0) <= 0
+                                        ? "text-red-700"
+                                        : (getRemainingDays(
+                                              facebookTokenDebug.expiresAt
+                                            ) ?? 8) <= 7
+                                          ? "text-amber-700"
+                                          : "text-stone-500"
+                                    )}
+                                  >
+                                    {getExpiryDayLabel(
+                                      facebookTokenDebug.expiresAt,
+                                      "Token "
+                                    )}
+                                  </dd>
+                                )}
                               </div>
                               {facebookTokenDebug.dataAccessExpiresAt && (
                                 <div className="grid gap-1">
@@ -1102,6 +1193,25 @@ export default function AdminShopSocial() {
                                   <dd className="font-medium text-stone-800">
                                     {formatUnixTime(
                                       facebookTokenDebug.dataAccessExpiresAt
+                                    )}
+                                  </dd>
+                                  <dd
+                                    className={cn(
+                                      "font-semibold",
+                                      (getRemainingDays(
+                                        facebookTokenDebug.dataAccessExpiresAt
+                                      ) ?? 0) <= 0
+                                        ? "text-red-700"
+                                        : (getRemainingDays(
+                                              facebookTokenDebug.dataAccessExpiresAt
+                                            ) ?? 8) <= 7
+                                          ? "text-amber-700"
+                                          : "text-stone-500"
+                                    )}
+                                  >
+                                    {getExpiryDayLabel(
+                                      facebookTokenDebug.dataAccessExpiresAt,
+                                      "資料存取權限 "
                                     )}
                                   </dd>
                                 </div>
@@ -1138,17 +1248,18 @@ export default function AdminShopSocial() {
                               </div>
                             </div>
 
-                            {(!facebookTokenDebug.isValid ||
-                              isTimestampWithinDays(
-                                facebookTokenDebug.expiresAt,
-                                14
-                              ) ||
-                              isTimestampWithinDays(
-                                facebookTokenDebug.dataAccessExpiresAt,
-                                14
-                              )) && (
-                              <div className="rounded-[6px] border border-amber-200 bg-amber-50 p-3 font-medium text-amber-900">
-                                建議重新產生長效 Page Token 並更新 Vercel。
+                            {facebookTokenHealth && (
+                              <div
+                                className={cn(
+                                  "rounded-[6px] border p-3 font-medium",
+                                  facebookTokenHealth.level === "error"
+                                    ? "border-red-200 bg-red-50 text-red-800"
+                                    : facebookTokenHealth.level === "warning"
+                                      ? "border-amber-200 bg-amber-50 text-amber-900"
+                                      : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                )}
+                              >
+                                {facebookTokenHealth.message}
                               </div>
                             )}
 

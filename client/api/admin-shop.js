@@ -78,13 +78,15 @@ function createMetaStatus(
   status,
   accountName = null,
   error = null,
-  errorCode = null
+  errorCode = null,
+  metaError = null
 ) {
   return {
     status,
     accountName,
     error,
     errorCode,
+    metaError,
   };
 }
 
@@ -98,38 +100,80 @@ function getMetaGraphVersion() {
     : "v25.0";
 }
 
-function getSafeMetaError(status, code) {
+function sanitizeMetaErrorMessage(value) {
+  const message = cleanText(value);
+  if (!message) return "";
+
+  return message
+    .replace(/access_token\s*[=:]\s*[^&\s,}"']+/gi, "access_token=[hidden]")
+    .replace(/https?:\/\/\S+/gi, "[URL hidden]")
+    .slice(0, 300);
+}
+
+function getSafeMetaError(status, metaError) {
+  const code = Number(metaError?.code || 0);
+  const safeMessage = sanitizeMetaErrorMessage(metaError?.message);
+  const details = {
+    code: code || null,
+    type: cleanText(metaError?.type) || null,
+    error_subcode: Number(metaError?.error_subcode || 0) || null,
+    message: safeMessage || null,
+  };
+
   if (code === 190 || status === 401) {
     return {
       code: code ? `META_${code}` : "META_HTTP_401",
-      reason: "存取權杖無效或已過期，請更新 Page Access Token。",
+      reason:
+        safeMessage ||
+        "存取權杖無效或已過期，請更新 Page Access Token。",
+      details,
     };
   }
 
   if (code === 10 || code === 200 || status === 403) {
     return {
       code: code ? `META_${code}` : "META_HTTP_403",
-      reason: "Meta 權限不足，請確認 Page 權限與 App 權限設定。",
+      reason:
+        safeMessage ||
+        "Meta 權限不足，請確認 Page 權限與 App 權限設定。",
+      details,
+    };
+  }
+
+  if (code === 100) {
+    return {
+      code: "META_100",
+      reason:
+        safeMessage ||
+        "Meta 無法解析 Page ID 或查詢參數，請確認 FACEBOOK_PAGE_ID。",
+      details,
     };
   }
 
   if (status === 404) {
     return {
       code: code ? `META_${code}` : "META_HTTP_404",
-      reason: "找不到指定的 Meta 帳號，請確認帳號 ID 是否正確。",
+      reason:
+        safeMessage ||
+        "找不到指定的 Meta 帳號，請確認帳號 ID 是否正確。",
+      details,
     };
   }
 
   if (status === 429) {
     return {
       code: code ? `META_${code}` : "META_HTTP_429",
-      reason: "Meta API 請求過於頻繁，請稍後再試。",
+      reason: safeMessage || "Meta API 請求過於頻繁，請稍後再試。",
+      details,
     };
   }
 
   return {
     code: code ? `META_${code}` : `META_HTTP_${status || 500}`,
-    reason: "Meta API 拒絕此項查詢，請確認帳號 ID、Page Access Token 與權限設定。",
+    reason:
+      safeMessage ||
+      "Meta API 拒絕此項查詢，請確認帳號 ID、Page Access Token 與權限設定。",
+    details,
   };
 }
 
@@ -167,16 +211,14 @@ async function fetchMetaProfile({
   const payload = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const safeError = getSafeMetaError(
-      response.status,
-      Number(payload?.error?.code || 0)
-    );
+    const safeError = getSafeMetaError(response.status, payload?.error);
 
     return createMetaStatus(
       "error",
       null,
       safeError.reason,
-      safeError.code
+      safeError.code,
+      safeError.details
     );
   }
 
@@ -193,18 +235,50 @@ async function checkFacebookConnection() {
   const accessToken = cleanText(
     getServerEnv("FACEBOOK_PAGE_ACCESS_TOKEN")
   );
+  const diagnostics = {
+    hasFacebookPageId: Boolean(pageId),
+    facebookPageIdLength: pageId.length,
+    hasFacebookPageToken: Boolean(accessToken),
+    facebookPageTokenPrefix: accessToken.slice(0, 6),
+    facebookPageTokenLength: accessToken.length,
+  };
 
-  if (!pageId || !accessToken) {
-    return createMetaStatus("not_configured");
+  if (!pageId) {
+    return {
+      ...createMetaStatus(
+        "not_configured",
+        null,
+        "FACEBOOK_PAGE_ID 未設定或空白。",
+        "META_NOT_CONFIGURED"
+      ),
+      diagnostics,
+    };
   }
 
-  return fetchMetaProfile({
+  if (!accessToken) {
+    return {
+      ...createMetaStatus(
+        "not_configured",
+        null,
+        "FACEBOOK_PAGE_ACCESS_TOKEN 未設定或空白。",
+        "META_NOT_CONFIGURED"
+      ),
+      diagnostics,
+    };
+  }
+
+  const connection = await fetchMetaProfile({
     baseUrl: "https://graph.facebook.com",
-    version: getMetaGraphVersion(),
+    version: "v25.0",
     accountId: pageId,
     accessToken,
     fields: ["id", "name"],
   });
+
+  return {
+    ...connection,
+    diagnostics,
+  };
 }
 
 async function checkInstagramConnection() {

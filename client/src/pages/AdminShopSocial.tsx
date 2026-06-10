@@ -54,6 +54,7 @@ type MetaConnectionUiStatus = MetaPlatformConnection | {
   accountName: null;
   error: null;
   errorCode: null;
+  metaError: null;
 };
 
 type SocialDraftForm = {
@@ -102,18 +103,21 @@ const initialMetaConnections: Record<
     accountName: null,
     error: null,
     errorCode: null,
+    metaError: null,
   },
   instagram: {
     status: "checking",
     accountName: null,
     error: null,
     errorCode: null,
+    metaError: null,
   },
   threads: {
     status: "checking",
     accountName: null,
     error: null,
     errorCode: null,
+    metaError: null,
   },
 };
 
@@ -380,6 +384,7 @@ export default function AdminShopSocial() {
         accountName: null,
         error: message,
         errorCode: "META_STATUS_REQUEST_FAILED",
+        metaError: null,
       };
 
       setMetaConnections({
@@ -710,6 +715,48 @@ export default function AdminShopSocial() {
                           </p>
                         )}
                         <p>{connection.error}</p>
+                        {connection.metaError && (
+                          <dl className="mt-2 grid gap-1 rounded-[6px] bg-red-100/60 p-2 font-mono text-[11px] leading-5">
+                            <div>
+                              <dt className="inline font-semibold">code：</dt>
+                              <dd className="inline">
+                                {connection.metaError.code ?? "無"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="inline font-semibold">type：</dt>
+                              <dd className="inline">
+                                {connection.metaError.type || "無"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="inline font-semibold">subcode：</dt>
+                              <dd className="inline">
+                                {connection.metaError.error_subcode ?? "無"}
+                              </dd>
+                            </div>
+                          </dl>
+                        )}
+                      </div>
+                    )}
+
+                    {key === "facebook" && connection.diagnostics && (
+                      <div className="mt-3 border-t border-stone-200 pt-3 text-xs leading-5 text-stone-500">
+                        <p className="font-semibold text-stone-700">
+                          環境變數檢查
+                        </p>
+                        <p>
+                          Page ID：
+                          {connection.diagnostics.hasFacebookPageId
+                            ? `已設定（${connection.diagnostics.facebookPageIdLength} 字元）`
+                            : "未設定或空白"}
+                        </p>
+                        <p>
+                          Page Token：
+                          {connection.diagnostics.hasFacebookPageToken
+                            ? `已設定（${connection.diagnostics.facebookPageTokenLength} 字元，開頭 ${connection.diagnostics.facebookPageTokenPrefix}）`
+                            : "未設定或空白"}
+                        </p>
                       </div>
                     )}
                   </div>

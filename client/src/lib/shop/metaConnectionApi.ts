@@ -10,6 +10,19 @@ export type MetaPlatformConnection = {
   accountName: string | null;
   error: string | null;
   errorCode: string | null;
+  metaError?: {
+    code: number | null;
+    type: string | null;
+    error_subcode: number | null;
+    message: string | null;
+  } | null;
+  diagnostics?: {
+    hasFacebookPageId: boolean;
+    facebookPageIdLength: number;
+    hasFacebookPageToken: boolean;
+    facebookPageTokenPrefix: string;
+    facebookPageTokenLength: number;
+  };
 };
 
 export type MetaConnectionStatusResponse = {

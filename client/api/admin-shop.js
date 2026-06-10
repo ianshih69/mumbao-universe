@@ -451,6 +451,116 @@ async function handleDebugFacebookToken(req, res) {
   });
 }
 
+function normalizeSocialPostStatus(value) {
+  const status = cleanText(value);
+  if (status === "pending") return "draft";
+  if (
+    ["draft", "scheduled", "published", "deleted", "failed"].includes(status)
+  ) {
+    return status;
+  }
+  return "draft";
+}
+
+function buildSocialPostRow(task) {
+  const id = cleanText(task?.id);
+  if (!id) {
+    const error = new Error("Social task id is required.");
+    error.status = 400;
+    throw error;
+  }
+
+  return {
+    id,
+    title: cleanText(task?.title),
+    content: cleanText(task?.content),
+    hashtags: cleanText(task?.hashtags),
+    platforms: Array.isArray(task?.platforms) ? task.platforms : [],
+    mode: task?.mode === "scheduled" ? "scheduled" : "now",
+    scheduled_at: cleanText(task?.scheduledAt) || null,
+    status: normalizeSocialPostStatus(task?.status),
+    media_file_names: Array.isArray(task?.mediaFileNames)
+      ? task.mediaFileNames
+      : [],
+    media_files: Array.isArray(task?.mediaFiles) ? task.mediaFiles : [],
+    fb_post_id: cleanText(task?.facebookPostId) || null,
+    fb_permalink_url: cleanText(task?.facebookPermalinkUrl) || null,
+    published_at: cleanText(task?.publishedAt) || null,
+    deleted_at: cleanText(task?.deletedAt) || null,
+    delete_source: cleanText(task?.deleteSource) || null,
+    last_synced_at: cleanText(task?.lastSyncedAt) || null,
+    publish_error: task?.publishError || null,
+    created_at: cleanText(task?.createdAt) || new Date().toISOString(),
+    updated_at: cleanText(task?.updatedAt) || new Date().toISOString(),
+  };
+}
+
+async function loadSocialPostById(taskId) {
+  const rows = await supabaseRequest(
+    `/shop_social_posts?id=eq.${encodeURIComponent(taskId)}&select=*&limit=1`
+  );
+  return rows?.[0] || null;
+}
+
+function normalizeSocialPost(row) {
+  return {
+    id: row.id,
+    title: row.title || "",
+    content: row.content || "",
+    hashtags: row.hashtags || "",
+    platforms: Array.isArray(row.platforms) ? row.platforms : [],
+    mode: row.mode || "now",
+    scheduledAt: row.scheduled_at || "",
+    status: row.status === "draft" ? "pending" : row.status,
+    mediaFileNames: Array.isArray(row.media_file_names)
+      ? row.media_file_names
+      : [],
+    mediaFiles: Array.isArray(row.media_files) ? row.media_files : [],
+    facebookPostId: row.fb_post_id || undefined,
+    facebookPermalinkUrl: row.fb_permalink_url || undefined,
+    publishedAt: row.published_at || undefined,
+    deletedAt: row.deleted_at || undefined,
+    deleteSource: row.delete_source || undefined,
+    lastSyncedAt: row.last_synced_at || undefined,
+    publishError: row.publish_error || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function loadSocialPosts(req, res) {
+  const rows = await supabaseRequest(
+    "/shop_social_posts?select=*&order=updated_at.desc&limit=200"
+  );
+  return sendJson(res, 200, {
+    posts: (rows || []).map(normalizeSocialPost),
+  });
+}
+
+async function handleSocialPostsSync(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return sendJson(res, 405, { error: "Method not allowed." });
+  }
+
+  const body = await readBody(req);
+  const tasks = Array.isArray(body?.tasks) ? body.tasks : [];
+  if (!tasks.length) {
+    return sendJson(res, 200, { ok: true, synced: 0 });
+  }
+
+  const rows = tasks.map(buildSocialPostRow);
+  await supabaseRequest("/shop_social_posts?on_conflict=id", {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation",
+    },
+    body: JSON.stringify(rows),
+  });
+
+  return sendJson(res, 200, { ok: true, synced: rows.length });
+}
+
 async function handlePublishFacebookPost(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -482,8 +592,10 @@ async function handlePublishFacebookPost(req, res) {
   }
 
   const body = await readBody(req);
-  const content = cleanText(body?.content);
-  const hashtags = cleanText(body?.hashtags);
+  const taskId = cleanText(body?.taskId);
+  const storedTask = taskId ? await loadSocialPostById(taskId) : null;
+  const content = cleanText(storedTask?.content || body?.content);
+  const hashtags = cleanText(storedTask?.hashtags || body?.hashtags);
   const message = [content, hashtags].filter(Boolean).join("\n\n");
 
   if (!message) {
@@ -536,10 +648,55 @@ async function handlePublishFacebookPost(req, res) {
     });
   }
 
+  const createdAt = new Date().toISOString();
+  const facebookPostId = cleanText(payload.id);
+  let facebookPermalinkUrl = "";
+
+  try {
+    const permalinkUrl = new URL(
+      `https://graph.facebook.com/${getMetaGraphVersion()}/${encodeURIComponent(
+        facebookPostId
+      )}`
+    );
+    permalinkUrl.searchParams.set("fields", "permalink_url");
+    const permalinkResponse = await fetch(permalinkUrl, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    const permalinkPayload = await permalinkResponse.json().catch(() => null);
+    if (permalinkResponse.ok) {
+      facebookPermalinkUrl = cleanText(permalinkPayload?.permalink_url);
+    }
+  } catch {
+    facebookPermalinkUrl = "";
+  }
+
+  if (taskId) {
+    await supabaseRequest(
+      `/shop_social_posts?id=eq.${encodeURIComponent(taskId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "published",
+          fb_post_id: facebookPostId,
+          fb_permalink_url: facebookPermalinkUrl || null,
+          published_at: createdAt,
+          deleted_at: null,
+          delete_source: null,
+          updated_at: createdAt,
+        }),
+      }
+    );
+  }
+
   return sendJson(res, 200, {
     ok: true,
-    facebookPostId: cleanText(payload.id),
-    createdAt: new Date().toISOString(),
+    facebookPostId,
+    facebookPermalinkUrl: facebookPermalinkUrl || null,
+    createdAt,
   });
 }
 
@@ -567,8 +724,6 @@ async function handleDeleteFacebookPost(req, res) {
 
   const body = await readBody(req);
   const taskId = cleanText(body?.taskId);
-  const taskStatus = cleanText(body?.status);
-  const facebookPostId = cleanText(body?.facebookPostId);
 
   if (!taskId) {
     return sendJson(res, 400, {
@@ -578,6 +733,16 @@ async function handleDeleteFacebookPost(req, res) {
     });
   }
 
+  const task = await loadSocialPostById(taskId);
+  if (!task) {
+    return sendJson(res, 404, {
+      errorCode: "SOCIAL_TASK_NOT_FOUND",
+      errorMessage: "找不到這筆發文任務。",
+      metaError: null,
+    });
+  }
+
+  const facebookPostId = cleanText(task.fb_post_id);
   if (!facebookPostId) {
     return sendJson(res, 400, {
       errorCode: "FACEBOOK_POST_ID_REQUIRED",
@@ -586,7 +751,7 @@ async function handleDeleteFacebookPost(req, res) {
     });
   }
 
-  if (taskStatus !== "published") {
+  if (task.status !== "published") {
     return sendJson(res, 409, {
       errorCode: "FACEBOOK_POST_NOT_PUBLISHED",
       errorMessage: "只有已發布的 Facebook 貼文可以刪除。",
@@ -648,11 +813,189 @@ async function handleDeleteFacebookPost(req, res) {
     });
   }
 
+  const deletedAt = new Date().toISOString();
+  await supabaseRequest(
+    `/shop_social_posts?id=eq.${encodeURIComponent(taskId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: "deleted",
+        deleted_at: deletedAt,
+        delete_source: "admin",
+        last_synced_at: deletedAt,
+        updated_at: deletedAt,
+      }),
+    }
+  );
+
   return sendJson(res, 200, {
     ok: true,
     taskId,
     facebookPostId,
-    deletedAt: new Date().toISOString(),
+    deletedAt,
+    deleteSource: "admin",
+  });
+}
+
+async function handleSyncFacebookPost(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return sendJson(res, 405, {
+      errorCode: "METHOD_NOT_ALLOWED",
+      errorMessage: "Method not allowed.",
+    });
+  }
+
+  const accessToken = cleanText(
+    getServerEnv("FACEBOOK_PAGE_ACCESS_TOKEN")
+  );
+  if (!accessToken) {
+    return sendJson(res, 500, {
+      errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
+      errorMessage:
+        "Facebook Token 無效，請更新 Page Access Token 後再試。",
+      metaError: null,
+    });
+  }
+
+  const body = await readBody(req);
+  const taskId = cleanText(body?.taskId);
+  if (!taskId) {
+    return sendJson(res, 400, {
+      errorCode: "SOCIAL_TASK_NOT_FOUND",
+      errorMessage: "找不到這筆發文任務。",
+      metaError: null,
+    });
+  }
+
+  const task = await loadSocialPostById(taskId);
+  if (!task) {
+    return sendJson(res, 404, {
+      errorCode: "SOCIAL_TASK_NOT_FOUND",
+      errorMessage: "找不到這筆發文任務。",
+      metaError: null,
+    });
+  }
+
+  if (task.status !== "published") {
+    return sendJson(res, 409, {
+      errorCode: "FACEBOOK_POST_NOT_PUBLISHED",
+      errorMessage: "只有已發布的 Facebook 貼文可以同步狀態。",
+      metaError: null,
+    });
+  }
+
+  const facebookPostId = cleanText(task.fb_post_id);
+  if (!facebookPostId) {
+    return sendJson(res, 400, {
+      errorCode: "FACEBOOK_POST_ID_REQUIRED",
+      errorMessage: "這筆任務沒有 Facebook 貼文 ID，無法同步。",
+      metaError: null,
+    });
+  }
+
+  const checkedAt = new Date().toISOString();
+  const url = new URL(
+    `https://graph.facebook.com/${getMetaGraphVersion()}/${encodeURIComponent(
+      facebookPostId
+    )}`
+  );
+  url.searchParams.set("fields", "id,permalink_url");
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    return sendJson(res, 502, {
+      errorCode: "META_NETWORK_ERROR",
+      errorMessage: "Facebook 狀態同步失敗，請稍後再試。",
+      metaError: null,
+    });
+  }
+
+  const payload = await response.json().catch(() => null);
+  if (response.ok && payload?.id) {
+    const permalinkUrl =
+      cleanText(payload?.permalink_url) || cleanText(task.fb_permalink_url);
+    await supabaseRequest(
+      `/shop_social_posts?id=eq.${encodeURIComponent(taskId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          fb_permalink_url: permalinkUrl || null,
+          last_synced_at: checkedAt,
+          updated_at: checkedAt,
+        }),
+      }
+    );
+
+    return sendJson(res, 200, {
+      ok: true,
+      taskId,
+      status: "published",
+      facebookPostId,
+      facebookPermalinkUrl: permalinkUrl || null,
+      lastSyncedAt: checkedAt,
+      deletedAt: null,
+      deleteSource: null,
+    });
+  }
+
+  const safeError = getSafeMetaError(response.status, payload?.error);
+  const safeMessage = String(safeError.details.message || "").toLowerCase();
+  const postDoesNotExist =
+    response.status === 404 ||
+    safeError.details.code === 100 ||
+    safeError.details.code === 803 ||
+    safeMessage.includes("unsupported get request") ||
+    safeMessage.includes("object does not exist") ||
+    safeMessage.includes("cannot be loaded");
+
+  if (postDoesNotExist) {
+    await supabaseRequest(
+      `/shop_social_posts?id=eq.${encodeURIComponent(taskId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "deleted",
+          deleted_at: checkedAt,
+          delete_source: "facebook",
+          last_synced_at: checkedAt,
+          updated_at: checkedAt,
+        }),
+      }
+    );
+
+    return sendJson(res, 200, {
+      ok: true,
+      taskId,
+      status: "deleted",
+      facebookPostId,
+      facebookPermalinkUrl: cleanText(task.fb_permalink_url) || null,
+      lastSyncedAt: checkedAt,
+      deletedAt: checkedAt,
+      deleteSource: "facebook",
+    });
+  }
+
+  return sendJson(res, 502, {
+    errorCode: safeError.code,
+    errorMessage:
+      safeError.details.code === 190
+        ? "Facebook Token 無效，請更新 Page Access Token 後再試。"
+        : "Facebook 狀態同步失敗，請稍後再試。",
+    metaError: {
+      code: safeError.details.code,
+      type: safeError.details.type,
+      error_subcode: safeError.details.error_subcode,
+    },
   });
 }
 
@@ -2286,6 +2629,18 @@ export default async function handler(req, res) {
 
     if (action === "publish-facebook-post") {
       return await handlePublishFacebookPost(req, res);
+    }
+
+    if (action === "social-posts-sync") {
+      return await handleSocialPostsSync(req, res);
+    }
+
+    if (req.method === "GET" && action === "social-posts") {
+      return await loadSocialPosts(req, res);
+    }
+
+    if (action === "sync-facebook-post") {
+      return await handleSyncFacebookPost(req, res);
     }
 
     if (action === "delete-facebook-post") {

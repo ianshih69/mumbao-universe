@@ -35,7 +35,10 @@ import {
   exchangeMetaToken,
   fetchFacebookTokenDebug,
   fetchMetaConnectionStatus,
+  fetchSocialPosts,
   publishFacebookPost,
+  syncFacebookPostStatus,
+  syncSocialPosts,
   type FacebookTokenDebugResult,
   type FacebookPublishErrorDetails,
   type MetaPlatformConnection,
@@ -94,7 +97,10 @@ type StoredSocialDraft = {
   mediaFiles: SocialMediaFile[];
   publishedAt?: string;
   facebookPostId?: string;
+  facebookPermalinkUrl?: string;
   deletedAt?: string;
+  deleteSource?: "admin" | "facebook" | "api";
+  lastSyncedAt?: string;
   publishError?: {
     errorCode: string;
     errorMessage: string;
@@ -189,7 +195,10 @@ function storedDraftFromForm(
     mediaFiles: form.mediaFiles,
     publishedAt: existingDraft?.publishedAt,
     facebookPostId: existingDraft?.facebookPostId,
+    facebookPermalinkUrl: existingDraft?.facebookPermalinkUrl,
     deletedAt: existingDraft?.deletedAt,
+    deleteSource: existingDraft?.deleteSource,
+    lastSyncedAt: existingDraft?.lastSyncedAt,
     publishError: existingDraft?.publishError || null,
     createdAt: existingDraft?.createdAt || now,
     updatedAt: now,
@@ -224,7 +233,10 @@ function normalizeStoredDraft(value: unknown): StoredSocialDraft | null {
     mediaFiles: Array.isArray(source.mediaFiles) ? source.mediaFiles : [],
     publishedAt: source.publishedAt || undefined,
     facebookPostId: source.facebookPostId || undefined,
+    facebookPermalinkUrl: source.facebookPermalinkUrl || undefined,
     deletedAt: source.deletedAt || undefined,
+    deleteSource: source.deleteSource || undefined,
+    lastSyncedAt: source.lastSyncedAt || undefined,
     publishError: source.publishError || null,
     createdAt: source.createdAt || now,
     updatedAt: source.updatedAt || now,
@@ -394,7 +406,7 @@ function getModeLabel(mode: PublishMode) {
 
 function getStatusLabel(status: DraftStatus) {
   const labels: Record<DraftStatus, string> = {
-    pending: "待發文",
+    pending: "草稿",
     scheduled: "排程中",
     published: "已發文",
     deleted: "已刪除",
@@ -509,6 +521,9 @@ export default function AdminShopSocial() {
   const [deletingFacebookDraftId, setDeletingFacebookDraftId] = useState<
     string | null
   >(null);
+  const [syncingFacebookDraftId, setSyncingFacebookDraftId] = useState<
+    string | null
+  >(null);
   const [facebookDeleteTarget, setFacebookDeleteTarget] =
     useState<StoredSocialDraft | null>(null);
   const [shortLivedUserToken, setShortLivedUserToken] = useState("");
@@ -532,6 +547,52 @@ export default function AdminShopSocial() {
     () => [...savedDrafts].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     [savedDrafts]
   );
+
+  const persistDrafts = (nextDrafts: StoredSocialDraft[]) => {
+    saveStoredDrafts(nextDrafts);
+    setSavedDrafts(nextDrafts);
+    void syncSocialPosts(token, nextDrafts).catch((error) => {
+      setNotice(
+        error instanceof Error
+          ? `任務已保存在此瀏覽器，但資料庫同步失敗：${error.message}`
+          : "任務已保存在此瀏覽器，但資料庫同步失敗。"
+      );
+    });
+  };
+
+  useEffect(() => {
+    if (!token) return;
+
+    void fetchSocialPosts<StoredSocialDraft>(token)
+      .then((serverPosts) => {
+        const postsById = new Map<string, StoredSocialDraft>();
+        for (const post of [...initialState.drafts, ...serverPosts]) {
+          const normalized = normalizeStoredDraft(post);
+          if (!normalized) continue;
+          const existing = postsById.get(normalized.id);
+          if (
+            !existing ||
+            normalized.updatedAt.localeCompare(existing.updatedAt) > 0
+          ) {
+            postsById.set(normalized.id, normalized);
+          }
+        }
+
+        const mergedPosts = Array.from(postsById.values());
+        saveStoredDrafts(mergedPosts);
+        setSavedDrafts(mergedPosts);
+        if (mergedPosts.length) {
+          void syncSocialPosts(token, mergedPosts);
+        }
+      })
+      .catch(() => {
+        if (initialState.drafts.length) {
+          void syncSocialPosts(token, initialState.drafts).catch(() => {
+            // Migration 尚未執行時，仍保留原本 localStorage 操作。
+          });
+        }
+      });
+  }, [initialState.drafts, token]);
 
   const checkMetaConnections = useCallback(async () => {
     if (!token) return;
@@ -787,8 +848,7 @@ export default function AdminShopSocial() {
       ? savedDrafts.map((item) => (item.id === existingDraft.id ? nextDraft : item))
       : [nextDraft, ...savedDrafts];
 
-    saveStoredDrafts(nextDrafts);
-    setSavedDrafts(nextDrafts);
+    persistDrafts(nextDrafts);
     if (existingDraft) {
       setEditingDraftId(nextDraft.id);
       setPreview(formFromStoredDraft(nextDraft));
@@ -843,15 +903,17 @@ export default function AdminShopSocial() {
       status: "pending",
       publishedAt: undefined,
       facebookPostId: undefined,
+      facebookPermalinkUrl: undefined,
       deletedAt: undefined,
+      deleteSource: undefined,
+      lastSyncedAt: undefined,
       publishError: null,
       createdAt: now,
       updatedAt: now,
     };
     const nextDrafts = [copiedDraft, ...savedDrafts];
 
-    saveStoredDrafts(nextDrafts);
-    setSavedDrafts(nextDrafts);
+    persistDrafts(nextDrafts);
     setNotice("已複製成一筆新草稿。");
   };
 
@@ -895,8 +957,10 @@ export default function AdminShopSocial() {
     setNotice("");
 
     try {
+      await syncSocialPosts(token, draftsWithLatestContent);
       const result = await publishFacebookPost(
         token,
+        latestItem.id,
         latestItem.content,
         latestItem.hashtags
       );
@@ -907,15 +971,18 @@ export default function AdminShopSocial() {
               status: "published" as const,
               publishedAt: result.createdAt,
               facebookPostId: result.facebookPostId,
+              facebookPermalinkUrl:
+                result.facebookPermalinkUrl || undefined,
               deletedAt: undefined,
+              deleteSource: undefined,
+              lastSyncedAt: undefined,
               publishError: null,
               updatedAt: result.createdAt,
             }
           : draftItem
       );
 
-      saveStoredDrafts(nextDrafts);
-      setSavedDrafts(nextDrafts);
+      persistDrafts(nextDrafts);
       setNotice(
         `已發佈到 Facebook，貼文編號：${result.facebookPostId}`
       );
@@ -943,8 +1010,7 @@ export default function AdminShopSocial() {
           : draftItem
       );
 
-      saveStoredDrafts(nextDrafts);
-      setSavedDrafts(nextDrafts);
+      persistDrafts(nextDrafts);
       setNotice(
         `Facebook 發文失敗：${publishError.message || "請稍後再試。"}`
       );
@@ -980,6 +1046,7 @@ export default function AdminShopSocial() {
     setNotice("");
 
     try {
+      await syncSocialPosts(token, savedDrafts);
       const result = await deleteFacebookPost(
         token,
         item.id,
@@ -991,13 +1058,14 @@ export default function AdminShopSocial() {
               ...draftItem,
               status: "deleted" as const,
               deletedAt: result.deletedAt,
+              deleteSource: "admin" as const,
+              lastSyncedAt: result.deletedAt,
               updatedAt: result.deletedAt,
             }
           : draftItem
       );
 
-      saveStoredDrafts(nextDrafts);
-      setSavedDrafts(nextDrafts);
+      persistDrafts(nextDrafts);
       setFacebookDeleteTarget(null);
       setNotice("Facebook 貼文已刪除，後台已保留刪除紀錄。");
     } catch (error) {
@@ -1012,13 +1080,53 @@ export default function AdminShopSocial() {
     }
   };
 
+  const syncPublishedFacebookPost = async (item: StoredSocialDraft) => {
+    if (item.status !== "published" || !item.facebookPostId) return;
+
+    setSyncingFacebookDraftId(item.id);
+    setNotice("");
+
+    try {
+      await syncSocialPosts(token, savedDrafts);
+      const result = await syncFacebookPostStatus(token, item.id);
+      const nextDrafts = savedDrafts.map((draftItem) =>
+        draftItem.id === item.id
+          ? {
+              ...draftItem,
+              status: result.status,
+              facebookPermalinkUrl:
+                result.facebookPermalinkUrl || undefined,
+              lastSyncedAt: result.lastSyncedAt,
+              deletedAt: result.deletedAt || undefined,
+              deleteSource: result.deleteSource || undefined,
+              updatedAt: result.lastSyncedAt,
+            }
+          : draftItem
+      );
+
+      persistDrafts(nextDrafts);
+      setNotice(
+        result.status === "deleted"
+          ? "Facebook 上已找不到這篇貼文，後台已標記為已刪除。"
+          : "Facebook 貼文狀態已同步，貼文仍正常存在。"
+      );
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Facebook 狀態同步失敗，請稍後再試。"
+      );
+    } finally {
+      setSyncingFacebookDraftId(null);
+    }
+  };
+
   const deleteSavedDraft = (item: StoredSocialDraft) => {
     const confirmed = window.confirm(`確定要刪除「${item.title || "未命名草稿"}」嗎？`);
     if (!confirmed) return;
 
     const nextDrafts = savedDrafts.filter((draftItem) => draftItem.id !== item.id);
-    saveStoredDrafts(nextDrafts);
-    setSavedDrafts(nextDrafts);
+    persistDrafts(nextDrafts);
 
     if (editingDraftId === item.id) {
       setEditingDraftId(null);
@@ -2270,6 +2378,21 @@ export default function AdminShopSocial() {
                               貼文編號：{item.facebookPostId}
                             </p>
                           )}
+                          {item.facebookPermalinkUrl && (
+                            <a
+                              href={item.facebookPermalinkUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-1 inline-block underline underline-offset-2"
+                            >
+                              查看 Facebook 貼文
+                            </a>
+                          )}
+                          {item.lastSyncedAt && (
+                            <p>
+                              最後同步：{formatDateTime(item.lastSyncedAt)}
+                            </p>
+                          )}
                         </div>
                       )}
 
@@ -2281,6 +2404,16 @@ export default function AdminShopSocial() {
                           )}
                           {item.deletedAt && (
                             <p>刪除時間：{formatDateTime(item.deletedAt)}</p>
+                          )}
+                          {item.deleteSource && (
+                            <p>
+                              刪除來源：
+                              {item.deleteSource === "facebook"
+                                ? "Facebook"
+                                : item.deleteSource === "admin"
+                                  ? "後台管理員"
+                                  : "API"}
+                            </p>
                           )}
                           {item.facebookPostId && (
                             <p className="break-all">
@@ -2322,6 +2455,26 @@ export default function AdminShopSocial() {
                             ? "已發佈到 Facebook"
                             : "發佈到 Facebook"}
                       </Button>
+                      {item.status === "published" && item.facebookPostId && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() =>
+                            void syncPublishedFacebookPost(item)
+                          }
+                          disabled={syncingFacebookDraftId === item.id}
+                          className="col-span-2 h-10 rounded-full border-[#cdbba8] bg-white px-3 text-[#765d4a] hover:bg-[#fbf0e4]"
+                        >
+                          {syncingFacebookDraftId === item.id ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="size-4" />
+                          )}
+                          {syncingFacebookDraftId === item.id
+                            ? "同步中..."
+                            : "同步狀態"}
+                        </Button>
+                      )}
                       {item.status === "published" && item.facebookPostId && (
                         <Button
                           type="button"

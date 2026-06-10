@@ -43,6 +43,7 @@ export type FacebookPublishErrorDetails = {
 export type FacebookPublishResult = {
   ok: true;
   facebookPostId: string;
+  facebookPermalinkUrl: string | null;
   createdAt: string;
 };
 
@@ -51,6 +52,17 @@ export type FacebookDeleteResult = {
   taskId: string;
   facebookPostId: string;
   deletedAt: string;
+};
+
+export type FacebookSyncResult = {
+  ok: true;
+  taskId: string;
+  status: "published" | "deleted";
+  facebookPostId: string;
+  facebookPermalinkUrl: string | null;
+  lastSyncedAt: string;
+  deletedAt: string | null;
+  deleteSource: "facebook" | null;
 };
 
 export type MetaTokenExchangeResult = {
@@ -171,6 +183,7 @@ export async function fetchFacebookTokenDebug(
 
 export async function publishFacebookPost(
   token: string,
+  taskId: string,
   content: string,
   hashtags: string
 ): Promise<FacebookPublishResult> {
@@ -184,6 +197,7 @@ export async function publishFacebookPost(
         Accept: "application/json",
       },
       body: JSON.stringify({
+        taskId,
         content,
         hashtags,
       }),
@@ -216,7 +230,109 @@ export async function publishFacebookPost(
   return {
     ok: true,
     facebookPostId: data.facebookPostId,
+    facebookPermalinkUrl: data.facebookPermalinkUrl || null,
     createdAt: data.createdAt,
+  };
+}
+
+export async function syncSocialPosts(
+  token: string,
+  tasks: unknown[]
+): Promise<void> {
+  const response = await fetch(
+    "/api/admin-shop?action=social-posts-sync",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ tasks }),
+    }
+  );
+  const data = (await response.json().catch(() => null)) as
+    | { ok?: boolean; error?: string }
+    | null;
+
+  if (response.status === 401) {
+    throw new Error(adminAuthExpiredMessage);
+  }
+  if (!response.ok || !data?.ok) {
+    throw new Error(data?.error || "發文任務同步失敗。");
+  }
+}
+
+export async function fetchSocialPosts<T>(token: string): Promise<T[]> {
+  const response = await fetch("/api/admin-shop?action=social-posts", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+  });
+  const data = (await response.json().catch(() => null)) as
+    | { posts?: T[]; error?: string }
+    | null;
+
+  if (response.status === 401) {
+    throw new Error(adminAuthExpiredMessage);
+  }
+  if (!response.ok || !Array.isArray(data?.posts)) {
+    throw new Error(data?.error || "無法讀取發文任務。");
+  }
+
+  return data.posts;
+}
+
+export async function syncFacebookPostStatus(
+  token: string,
+  taskId: string
+): Promise<FacebookSyncResult> {
+  const response = await fetch(
+    "/api/admin-shop?action=sync-facebook-post",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ taskId }),
+    }
+  );
+  const data = (await response.json().catch(() => null)) as
+    | (Partial<FacebookSyncResult> & {
+        errorCode?: string;
+        errorMessage?: string;
+      })
+    | null;
+
+  if (response.status === 401) {
+    throw new Error(adminAuthExpiredMessage);
+  }
+  if (
+    !response.ok ||
+    !data?.ok ||
+    !data.taskId ||
+    !data.facebookPostId ||
+    !data.lastSyncedAt ||
+    (data.status !== "published" && data.status !== "deleted")
+  ) {
+    throw new Error(
+      data?.errorMessage || "Facebook 狀態同步失敗，請稍後再試。"
+    );
+  }
+
+  return {
+    ok: true,
+    taskId: data.taskId,
+    status: data.status,
+    facebookPostId: data.facebookPostId,
+    facebookPermalinkUrl: data.facebookPermalinkUrl || null,
+    lastSyncedAt: data.lastSyncedAt,
+    deletedAt: data.deletedAt || null,
+    deleteSource: data.deleteSource === "facebook" ? "facebook" : null,
   };
 }
 

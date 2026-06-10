@@ -451,6 +451,8 @@ export default function AdminShopSocial() {
   const [metaConnections, setMetaConnections] = useState(initialMetaConnections);
   const [expandedMetaPlatform, setExpandedMetaPlatform] =
     useState<MetaPlatformKey | null>(null);
+  const [isMetaTokenHelperExpanded, setIsMetaTokenHelperExpanded] =
+    useState(false);
   const [metaCheckedAt, setMetaCheckedAt] = useState("");
   const [metaCheckError, setMetaCheckError] = useState("");
   const [isCheckingMeta, setIsCheckingMeta] = useState(true);
@@ -1317,25 +1319,61 @@ export default function AdminShopSocial() {
           </p>
         </section>
 
-        <section className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm md:p-6">
-          <div className="flex items-start gap-3">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[#fbf0e4] text-[#8b6f5b]">
-              <KeyRound className="size-5" />
+        <section className="rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm md:p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#fbf0e4] text-[#8b6f5b]">
+                <KeyRound className="size-5" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="font-serif text-xl font-light text-stone-900 md:text-2xl">
+                  進階工具：Facebook Token 更新
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-stone-500">
+                  只有管理者需要更新 Facebook Token
+                  時才使用，管家日常發文不需要操作。
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-stone-400">
-                Meta Token Helper
-              </p>
-              <h2 className="mt-1 font-serif text-2xl font-light">
-                Facebook 長效 Page Token 輔助工具
-              </h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
-                將 Graph API Explorer 產生的短效 User Token
-                交換為長效 User Token，再取得目前 FACEBOOK_PAGE_ID
-                對應的 Page Access Token。輸入內容不會保存。
-              </p>
-            </div>
+            <Button
+              type="button"
+              variant="outline"
+              aria-expanded={isMetaTokenHelperExpanded}
+              onClick={() =>
+                setIsMetaTokenHelperExpanded((isExpanded) => !isExpanded)
+              }
+              className="h-10 w-full shrink-0 rounded-full bg-white px-4 text-sm sm:w-auto"
+            >
+              {isMetaTokenHelperExpanded ? "收合" : "展開"}
+              <ChevronDown
+                className={cn(
+                  "size-4 transition-transform",
+                  isMetaTokenHelperExpanded && "rotate-180"
+                )}
+              />
+            </Button>
           </div>
+
+          {isMetaTokenHelperExpanded && (
+            <div className="mt-5 border-t border-stone-200 pt-5">
+              <div className="rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+                此工具只給管理者更新 Facebook Token
+                使用。若只是建立發文草稿、發布文章或查看任務紀錄，不需要操作這裡。
+              </div>
+
+              <div className="mt-5">
+                <p className="text-xs uppercase tracking-[0.2em] text-stone-400">
+                  Meta Token Helper
+                </p>
+                <h3 className="mt-1 font-serif text-2xl font-light">
+                  Facebook 長效 Page Token 輔助工具
+                </h3>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
+                  將 Graph API Explorer 產生的短效 User Token
+                  交換為長效 User Token，再取得目前 FACEBOOK_PAGE_ID
+                  對應的 Page Access Token。輸入內容不會保存。
+                </p>
+              </div>
 
           <form
             onSubmit={handleMetaTokenExchange}
@@ -1511,6 +1549,8 @@ export default function AdminShopSocial() {
                 ，儲存後重新部署。Vercel Environment Variables
                 無法由本工具直接修改。
               </div>
+            </div>
+          )}
             </div>
           )}
         </section>

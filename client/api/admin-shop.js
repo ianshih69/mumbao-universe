@@ -428,6 +428,221 @@ async function handlePublishFacebookPost(req, res) {
   });
 }
 
+function parseMetaTokenExchangePayload(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    const params = new URLSearchParams(text);
+    return {
+      access_token: params.get("access_token"),
+      token_type: params.get("token_type"),
+      expires_in: params.get("expires_in"),
+    };
+  }
+}
+
+function createMetaActionError(status, errorCode, errorMessage, metaError = null) {
+  return {
+    status,
+    body: {
+      ok: false,
+      errorCode,
+      errorMessage,
+      metaError,
+    },
+  };
+}
+
+async function handleExchangeMetaToken(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return sendJson(res, 405, {
+      ok: false,
+      errorCode: "METHOD_NOT_ALLOWED",
+      errorMessage: "Method not allowed.",
+      metaError: null,
+    });
+  }
+
+  const appId = cleanText(getServerEnv("META_APP_ID"));
+  const appSecret = cleanText(getServerEnv("META_APP_SECRET"));
+  const pageId = cleanText(getServerEnv("FACEBOOK_PAGE_ID"));
+
+  if (!appId) {
+    return sendJson(res, 500, {
+      ok: false,
+      errorCode: "META_APP_ID_NOT_CONFIGURED",
+      errorMessage: "META_APP_ID 未設定或空白。",
+      metaError: null,
+    });
+  }
+
+  if (!appSecret) {
+    return sendJson(res, 500, {
+      ok: false,
+      errorCode: "META_APP_SECRET_NOT_CONFIGURED",
+      errorMessage: "META_APP_SECRET 未設定或空白。",
+      metaError: null,
+    });
+  }
+
+  if (!pageId) {
+    return sendJson(res, 500, {
+      ok: false,
+      errorCode: "FACEBOOK_PAGE_ID_NOT_CONFIGURED",
+      errorMessage: "FACEBOOK_PAGE_ID 未設定或空白。",
+      metaError: null,
+    });
+  }
+
+  const body = await readBody(req);
+  const shortLivedUserToken = cleanText(body?.shortLivedUserToken);
+
+  if (!shortLivedUserToken) {
+    return sendJson(res, 400, {
+      ok: false,
+      errorCode: "SHORT_LIVED_USER_TOKEN_REQUIRED",
+      errorMessage: "請貼上 Graph API Explorer 產生的短效 User Token。",
+      metaError: null,
+    });
+  }
+
+  const exchangeUrl = new URL(
+    "https://graph.facebook.com/v25.0/oauth/access_token"
+  );
+  exchangeUrl.searchParams.set("grant_type", "fb_exchange_token");
+  exchangeUrl.searchParams.set("client_id", appId);
+  exchangeUrl.searchParams.set("client_secret", appSecret);
+  exchangeUrl.searchParams.set(
+    "fb_exchange_token",
+    shortLivedUserToken
+  );
+
+  let exchangeResponse;
+  try {
+    exchangeResponse = await fetch(exchangeUrl, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    const safeError = createMetaActionError(
+      502,
+      "META_TOKEN_EXCHANGE_NETWORK_ERROR",
+      "目前無法連線 Meta Token Exchange API，請稍後再試。"
+    );
+    return sendJson(res, safeError.status, safeError.body);
+  }
+
+  const exchangeText = await exchangeResponse.text();
+  const exchangePayload = parseMetaTokenExchangePayload(exchangeText);
+
+  if (!exchangeResponse.ok || !exchangePayload?.access_token) {
+    const safeError = getSafeMetaError(
+      exchangeResponse.status,
+      exchangePayload?.error
+    );
+    return sendJson(res, 502, {
+      ok: false,
+      errorCode: safeError.code || "META_TOKEN_EXCHANGE_FAILED",
+      errorMessage: safeError.reason,
+      metaError: {
+        code: safeError.details.code,
+        type: safeError.details.type,
+        error_subcode: safeError.details.error_subcode,
+      },
+    });
+  }
+
+  const longLivedUserToken = cleanText(exchangePayload.access_token);
+  const accountsUrl = new URL(
+    "https://graph.facebook.com/v25.0/me/accounts"
+  );
+  accountsUrl.searchParams.set("fields", "id,name,tasks,access_token");
+  accountsUrl.searchParams.set("access_token", longLivedUserToken);
+
+  let accountsResponse;
+  try {
+    accountsResponse = await fetch(accountsUrl, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    const safeError = createMetaActionError(
+      502,
+      "META_PAGE_LIST_NETWORK_ERROR",
+      "已交換 User Token，但目前無法讀取 Facebook 粉絲專頁清單。"
+    );
+    return sendJson(res, safeError.status, safeError.body);
+  }
+
+  const accountsPayload = await accountsResponse.json().catch(() => null);
+
+  if (!accountsResponse.ok) {
+    const safeError = getSafeMetaError(
+      accountsResponse.status,
+      accountsPayload?.error
+    );
+    return sendJson(res, 502, {
+      ok: false,
+      errorCode: safeError.code || "META_PAGE_LIST_FAILED",
+      errorMessage: safeError.reason,
+      metaError: {
+        code: safeError.details.code,
+        type: safeError.details.type,
+        error_subcode: safeError.details.error_subcode,
+      },
+    });
+  }
+
+  const pages = Array.isArray(accountsPayload?.data)
+    ? accountsPayload.data
+    : [];
+  const page = pages.find((item) => cleanText(item?.id) === pageId);
+
+  if (!page) {
+    return sendJson(res, 404, {
+      ok: false,
+      errorCode: "FACEBOOK_PAGE_NOT_FOUND",
+      errorMessage:
+        "此 User Token 可管理的粉絲專頁中找不到 FACEBOOK_PAGE_ID，請確認帳號權限與粉絲專頁 ID。",
+      metaError: null,
+    });
+  }
+
+  const pageAccessToken = cleanText(page?.access_token);
+  if (!pageAccessToken) {
+    return sendJson(res, 403, {
+      ok: false,
+      errorCode: "FACEBOOK_PAGE_TOKEN_MISSING",
+      errorMessage:
+        "已找到粉絲專頁，但 Meta 未回傳 Page Access Token，請確認 User Token 權限。",
+      metaError: null,
+    });
+  }
+
+  const expiresIn = Number.parseInt(
+    String(exchangePayload?.expires_in || ""),
+    10
+  );
+
+  return sendJson(res, 200, {
+    ok: true,
+    pageId: cleanText(page.id),
+    pageName: cleanText(page.name) || "Facebook 粉絲專頁",
+    hasPageAccessToken: true,
+    pageAccessTokenPrefix: pageAccessToken.slice(0, 6),
+    pageAccessTokenLength: pageAccessToken.length,
+    pageAccessToken,
+    tasks: Array.isArray(page.tasks)
+      ? page.tasks.map((task) => cleanText(task)).filter(Boolean)
+      : [],
+    expiresIn: Number.isFinite(expiresIn) ? expiresIn : null,
+    exchangedAt: new Date().toISOString(),
+  });
+}
+
 function getPositiveInt(value, fallback, maxValue) {
   const parsed = Number.parseInt(String(value || ""), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -1839,6 +2054,10 @@ export default async function handler(req, res) {
 
     if (action === "publish-facebook-post") {
       return await handlePublishFacebookPost(req, res);
+    }
+
+    if (action === "exchange-meta-token") {
+      return await handleExchangeMetaToken(req, res);
     }
 
     if (req.method === "GET" && action === "dashboard") {

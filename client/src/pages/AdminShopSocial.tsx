@@ -11,9 +11,13 @@ import {
   AlertCircle,
   CalendarClock,
   CheckCircle2,
+  Clipboard,
   Copy,
   Edit3,
+  Eye,
+  EyeOff,
   FileImage,
+  KeyRound,
   LockKeyhole,
   Loader2,
   RefreshCw,
@@ -26,10 +30,12 @@ import AdminShopNav from "@/components/shop/AdminShopNav";
 import { Button } from "@/components/ui/button";
 import { getAdminToken } from "@/lib/shop/adminAuth";
 import {
+  exchangeMetaToken,
   fetchMetaConnectionStatus,
   publishFacebookPost,
   type FacebookPublishErrorDetails,
   type MetaPlatformConnection,
+  type MetaTokenExchangeResult,
 } from "@/lib/shop/metaConnectionApi";
 import {
   type SocialMediaFile,
@@ -370,6 +376,17 @@ export default function AdminShopSocial() {
   const [publishingDraftId, setPublishingDraftId] = useState<string | null>(
     null
   );
+  const [shortLivedUserToken, setShortLivedUserToken] = useState("");
+  const [isExchangingMetaToken, setIsExchangingMetaToken] = useState(false);
+  const [metaTokenResult, setMetaTokenResult] =
+    useState<MetaTokenExchangeResult | null>(null);
+  const [metaTokenError, setMetaTokenError] = useState<{
+    code: string;
+    message: string;
+    metaError: FacebookPublishErrorDetails | null;
+  } | null>(null);
+  const [isPageTokenVisible, setIsPageTokenVisible] = useState(false);
+  const [pageTokenCopied, setPageTokenCopied] = useState(false);
 
   const platformOptions: Platform[] = useMemo(
     () => ["Facebook", "Instagram", "Threads"],
@@ -420,6 +437,85 @@ export default function AdminShopSocial() {
   useEffect(() => {
     void checkMetaConnections();
   }, [checkMetaConnections]);
+
+  const handleMetaTokenExchange = async (event: FormEvent) => {
+    event.preventDefault();
+
+    const submittedToken = shortLivedUserToken.trim();
+    if (!submittedToken) {
+      setMetaTokenError({
+        code: "SHORT_LIVED_USER_TOKEN_REQUIRED",
+        message: "請貼上 Graph API Explorer 產生的短效 User Token。",
+        metaError: null,
+      });
+      return;
+    }
+
+    setShortLivedUserToken("");
+    setIsExchangingMetaToken(true);
+    setMetaTokenResult(null);
+    setMetaTokenError(null);
+    setIsPageTokenVisible(false);
+    setPageTokenCopied(false);
+
+    try {
+      const result = await exchangeMetaToken(token, submittedToken);
+      setMetaTokenResult(result);
+    } catch (error) {
+      const exchangeError = error as Error & {
+        errorCode?: string;
+        metaError?: FacebookPublishErrorDetails | null;
+      };
+      setMetaTokenError({
+        code: exchangeError.errorCode || "META_TOKEN_EXCHANGE_FAILED",
+        message:
+          exchangeError.message || "Meta Token 交換失敗，請稍後再試。",
+        metaError: exchangeError.metaError || null,
+      });
+    } finally {
+      setIsExchangingMetaToken(false);
+    }
+  };
+
+  const revealPageAccessTokenOnce = () => {
+    if (!metaTokenResult || isPageTokenVisible) return;
+
+    const confirmed = window.confirm(
+      "確定要顯示完整 Page Access Token 嗎？請確認目前畫面不會被他人看到，也不要截圖或分享。"
+    );
+    if (confirmed) {
+      setIsPageTokenVisible(true);
+    }
+  };
+
+  const copyPageAccessToken = async () => {
+    if (!metaTokenResult) return;
+
+    const confirmed = window.confirm(
+      "確定要複製 Page Access Token 嗎？複製後請立即貼到 Vercel Environment Variables，並避免貼到聊天、Email 或公開文件。"
+    );
+    if (!confirmed) return;
+
+    try {
+      await navigator.clipboard.writeText(metaTokenResult.pageAccessToken);
+      setPageTokenCopied(true);
+    } catch {
+      setMetaTokenError({
+        code: "CLIPBOARD_WRITE_FAILED",
+        message:
+          "瀏覽器無法寫入剪貼簿。請使用「顯示一次」後手動複製。",
+        metaError: null,
+      });
+    }
+  };
+
+  const clearMetaTokenResult = () => {
+    setMetaTokenResult(null);
+    setMetaTokenError(null);
+    setIsPageTokenVisible(false);
+    setPageTokenCopied(false);
+    setShortLivedUserToken("");
+  };
 
   const updateDraft = <K extends keyof SocialDraftForm>(
     key: K,
@@ -867,6 +963,204 @@ export default function AdminShopSocial() {
             最後檢查時間：
             {metaCheckedAt ? formatDateTime(metaCheckedAt) : "尚未完成檢查"}
           </p>
+        </section>
+
+        <section className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm md:p-6">
+          <div className="flex items-start gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[#fbf0e4] text-[#8b6f5b]">
+              <KeyRound className="size-5" />
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-stone-400">
+                Meta Token Helper
+              </p>
+              <h2 className="mt-1 font-serif text-2xl font-light">
+                Facebook 長效 Page Token 輔助工具
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
+                將 Graph API Explorer 產生的短效 User Token
+                交換為長效 User Token，再取得目前 FACEBOOK_PAGE_ID
+                對應的 Page Access Token。輸入內容不會保存。
+              </p>
+            </div>
+          </div>
+
+          <form
+            onSubmit={handleMetaTokenExchange}
+            className="mt-5 rounded-[8px] border border-[#eadfce] bg-[#fffaf5] p-4 md:p-5"
+          >
+            <label
+              htmlFor="short-lived-user-token"
+              className="text-sm font-semibold text-stone-800"
+            >
+              短效 User Token
+            </label>
+            <div className="mt-2 flex flex-col gap-3 md:flex-row">
+              <input
+                id="short-lived-user-token"
+                type="password"
+                value={shortLivedUserToken}
+                onChange={(event) =>
+                  setShortLivedUserToken(event.target.value)
+                }
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="貼上 Graph API Explorer 產生的短效 User Token"
+                className="h-11 min-w-0 flex-1 rounded-[8px] border border-stone-200 bg-white px-4 text-base outline-none transition focus:border-[#8b6f5b]"
+              />
+              <Button
+                type="submit"
+                disabled={
+                  isExchangingMetaToken || !shortLivedUserToken.trim()
+                }
+                className="h-11 rounded-full bg-[#8b6f5b] px-6 text-white hover:bg-[#765d4a]"
+              >
+                {isExchangingMetaToken ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <KeyRound className="size-4" />
+                )}
+                {isExchangingMetaToken ? "交換中..." : "交換長效 Token"}
+              </Button>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-stone-500">
+              送出後輸入框會立即清空。Token
+              不會寫入 localStorage、資料庫或網站紀錄。
+            </p>
+          </form>
+
+          {metaTokenError && (
+            <div className="mt-4 rounded-[8px] border border-red-100 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
+              <p className="font-mono text-xs font-semibold">
+                {metaTokenError.code}
+              </p>
+              <p>{metaTokenError.message}</p>
+              {metaTokenError.metaError && (
+                <p className="mt-1 font-mono text-xs">
+                  Meta code {metaTokenError.metaError.code ?? "無"} /{" "}
+                  {metaTokenError.metaError.type || "未知類型"} / subcode{" "}
+                  {metaTokenError.metaError.error_subcode ?? "無"}
+                </p>
+              )}
+            </div>
+          )}
+
+          {metaTokenResult && (
+            <div className="mt-5 space-y-4 rounded-[8px] border border-emerald-200 bg-emerald-50 p-4 md:p-5">
+              <div className="flex items-start gap-2 text-emerald-800">
+                <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
+                <div>
+                  <p className="font-semibold">已取得 Page Access Token</p>
+                  <p className="mt-1 text-sm">
+                    {metaTokenResult.pageName}（{metaTokenResult.pageId}）
+                  </p>
+                </div>
+              </div>
+
+              <dl className="grid gap-3 text-sm text-stone-700 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <dt className="text-stone-500">Token 狀態</dt>
+                  <dd className="mt-1 font-medium">
+                    {metaTokenResult.hasPageAccessToken ? "已取得" : "未取得"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-stone-500">Token 開頭</dt>
+                  <dd className="mt-1 font-mono font-medium">
+                    {metaTokenResult.pageAccessTokenPrefix}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-stone-500">Token 長度</dt>
+                  <dd className="mt-1 font-medium">
+                    {metaTokenResult.pageAccessTokenLength} 字元
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-stone-500">User Token 有效秒數</dt>
+                  <dd className="mt-1 font-medium">
+                    {metaTokenResult.expiresIn ?? "Meta 未回傳"}
+                  </dd>
+                </div>
+              </dl>
+
+              <div>
+                <p className="text-sm text-stone-500">粉絲專頁 tasks</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {metaTokenResult.tasks.length ? (
+                    metaTokenResult.tasks.map((task) => (
+                      <span
+                        key={task}
+                        className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-stone-600"
+                      >
+                        {task}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-sm text-stone-500">
+                      Meta 未回傳 tasks
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-[8px] border border-emerald-200 bg-white p-4">
+                <p className="text-sm font-semibold text-stone-800">
+                  Page Access Token
+                </p>
+                <div className="mt-2 rounded-[8px] bg-stone-100 p-3 font-mono text-xs leading-6 text-stone-700">
+                  {isPageTokenVisible
+                    ? metaTokenResult.pageAccessToken
+                    : `${metaTokenResult.pageAccessTokenPrefix}${"•".repeat(
+                        18
+                      )}`}
+                </div>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={revealPageAccessTokenOnce}
+                    disabled={isPageTokenVisible}
+                    className="h-10 rounded-full bg-white px-4"
+                  >
+                    {isPageTokenVisible ? (
+                      <EyeOff className="size-4" />
+                    ) : (
+                      <Eye className="size-4" />
+                    )}
+                    {isPageTokenVisible ? "已顯示完整 Token" : "顯示一次"}
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => void copyPageAccessToken()}
+                    className="h-10 rounded-full bg-[#8b6f5b] px-4 text-white hover:bg-[#765d4a]"
+                  >
+                    <Clipboard className="size-4" />
+                    {pageTokenCopied
+                      ? "已複製 Page Access Token"
+                      : "複製 Page Access Token"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={clearMetaTokenResult}
+                    className="h-10 rounded-full bg-white px-4 sm:ml-auto"
+                  >
+                    清除結果
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+                請將 Page Access Token 手動貼到 Vercel 專案的{" "}
+                <code className="font-mono font-semibold">
+                  FACEBOOK_PAGE_ACCESS_TOKEN
+                </code>
+                ，儲存後重新部署。Vercel Environment Variables
+                無法由本工具直接修改。
+              </div>
+            </div>
+          )}
         </section>
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">

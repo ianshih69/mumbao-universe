@@ -46,6 +46,19 @@ export type FacebookPublishResult = {
   createdAt: string;
 };
 
+export type MetaTokenExchangeResult = {
+  ok: true;
+  pageId: string;
+  pageName: string;
+  hasPageAccessToken: true;
+  pageAccessTokenPrefix: string;
+  pageAccessTokenLength: number;
+  pageAccessToken: string;
+  tasks: string[];
+  expiresIn: number | null;
+  exchangedAt: string;
+};
+
 export async function fetchMetaConnectionStatus(
   token: string
 ): Promise<MetaConnectionStatusResponse> {
@@ -119,5 +132,65 @@ export async function publishFacebookPost(
     ok: true,
     facebookPostId: data.facebookPostId,
     createdAt: data.createdAt,
+  };
+}
+
+export async function exchangeMetaToken(
+  token: string,
+  shortLivedUserToken: string
+): Promise<MetaTokenExchangeResult> {
+  const response = await fetch(
+    "/api/admin-shop?action=exchange-meta-token",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ shortLivedUserToken }),
+    }
+  );
+  const data = (await response.json().catch(() => null)) as
+    | (Partial<MetaTokenExchangeResult> & {
+        errorCode?: string;
+        errorMessage?: string;
+        metaError?: FacebookPublishErrorDetails | null;
+      })
+    | null;
+
+  if (response.status === 401) {
+    throw new Error(adminAuthExpiredMessage);
+  }
+
+  if (
+    !response.ok ||
+    !data?.ok ||
+    !data.pageId ||
+    !data.pageAccessToken
+  ) {
+    const error = new Error(
+      data?.errorMessage || "Meta Token 交換失敗，請稍後再試。"
+    ) as Error & {
+      errorCode?: string;
+      metaError?: FacebookPublishErrorDetails | null;
+    };
+    error.errorCode = data?.errorCode;
+    error.metaError = data?.metaError;
+    throw error;
+  }
+
+  return {
+    ok: true,
+    pageId: data.pageId,
+    pageName: data.pageName || "Facebook 粉絲專頁",
+    hasPageAccessToken: true,
+    pageAccessTokenPrefix: data.pageAccessTokenPrefix || "",
+    pageAccessTokenLength: Number(data.pageAccessTokenLength || 0),
+    pageAccessToken: data.pageAccessToken,
+    tasks: Array.isArray(data.tasks) ? data.tasks : [],
+    expiresIn:
+      typeof data.expiresIn === "number" ? data.expiresIn : null,
+    exchangedAt: data.exchangedAt || new Date().toISOString(),
   };
 }

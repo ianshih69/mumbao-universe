@@ -26,6 +26,9 @@ import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
 import OrderComplete from "./pages/OrderComplete";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
+import DataDeletion from "./pages/DataDeletion";
 
 
 function Router() {
@@ -49,6 +52,9 @@ function Router() {
       <Route path={"/cart"} component={Cart} />
       <Route path={"/checkout"} component={Checkout} />
       <Route path={"/order-complete/:orderNumber"} component={OrderComplete} />
+      <Route path={"/privacy"} component={Privacy} />
+      <Route path={"/terms"} component={Terms} />
+      <Route path={"/data-deletion"} component={DataDeletion} />
       <Route path={"/about-mumbao"} component={Mumbao} />
       <Route path={"/mumbao"} component={Mumbao} />
       <Route path={"/zh-TW/about-mumbao"} component={Mumbao} />

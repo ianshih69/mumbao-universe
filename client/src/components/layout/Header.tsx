@@ -54,7 +54,10 @@ export function Header() {
 
   const languages = ["繁體中文", "日本語", "韓語", "English"];
   const isShopPage = location === "/shop" || location.startsWith("/shop/");
-  const useDarkControls = isScrolled || isShopPage;
+  const isLegalPage = ["/privacy", "/terms", "/data-deletion"].includes(
+    location
+  );
+  const useDarkControls = isScrolled || isShopPage || isLegalPage;
 
   return (
     <header

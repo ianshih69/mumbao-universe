@@ -74,11 +74,17 @@ function requireAdmin(req) {
   }
 }
 
-function createMetaStatus(status, accountName = null, error = null) {
+function createMetaStatus(
+  status,
+  accountName = null,
+  error = null,
+  errorCode = null
+) {
   return {
     status,
     accountName,
     error,
+    errorCode,
   };
 }
 
@@ -92,24 +98,39 @@ function getMetaGraphVersion() {
     : "v25.0";
 }
 
-function getSafeMetaErrorMessage(status, code) {
+function getSafeMetaError(status, code) {
   if (code === 190 || status === 401) {
-    return "存取權杖無效或已過期，請更新 Vercel Environment Variables。";
+    return {
+      code: code ? `META_${code}` : "META_HTTP_401",
+      reason: "存取權杖無效或已過期，請更新 Page Access Token。",
+    };
   }
 
   if (code === 10 || code === 200 || status === 403) {
-    return "Meta 權限不足，請確認帳號權限與 App 權限設定。";
+    return {
+      code: code ? `META_${code}` : "META_HTTP_403",
+      reason: "Meta 權限不足，請確認 Page 權限與 App 權限設定。",
+    };
   }
 
   if (status === 404) {
-    return "找不到指定的 Meta 帳號，請確認帳號 ID 是否正確。";
+    return {
+      code: code ? `META_${code}` : "META_HTTP_404",
+      reason: "找不到指定的 Meta 帳號，請確認帳號 ID 是否正確。",
+    };
   }
 
   if (status === 429) {
-    return "Meta API 請求過於頻繁，請稍後再試。";
+    return {
+      code: code ? `META_${code}` : "META_HTTP_429",
+      reason: "Meta API 請求過於頻繁，請稍後再試。",
+    };
   }
 
-  return "無法連線 Meta 平台，請確認帳號、權杖與 App 設定。";
+  return {
+    code: code ? `META_${code}` : `META_HTTP_${status || 500}`,
+    reason: "Meta API 拒絕此項查詢，請確認帳號 ID、Page Access Token 與權限設定。",
+  };
 }
 
 async function fetchMetaProfile({
@@ -138,17 +159,24 @@ async function fetchMetaProfile({
     return createMetaStatus(
       "error",
       null,
-      "目前無法連線 Meta API，請稍後再試。"
+      "目前無法連線 Meta API，請稍後再試。",
+      "META_NETWORK_ERROR"
     );
   }
 
   const payload = await response.json().catch(() => null);
 
   if (!response.ok) {
+    const safeError = getSafeMetaError(
+      response.status,
+      Number(payload?.error?.code || 0)
+    );
+
     return createMetaStatus(
       "error",
       null,
-      getSafeMetaErrorMessage(response.status, Number(payload?.error?.code || 0))
+      safeError.reason,
+      safeError.code
     );
   }
 

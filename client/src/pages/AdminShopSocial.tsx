@@ -53,6 +53,7 @@ type MetaConnectionUiStatus = MetaPlatformConnection | {
   status: "checking";
   accountName: null;
   error: null;
+  errorCode: null;
 };
 
 type SocialDraftForm = {
@@ -100,16 +101,19 @@ const initialMetaConnections: Record<
     status: "checking",
     accountName: null,
     error: null,
+    errorCode: null,
   },
   instagram: {
     status: "checking",
     accountName: null,
     error: null,
+    errorCode: null,
   },
   threads: {
     status: "checking",
     accountName: null,
     error: null,
+    errorCode: null,
   },
 };
 
@@ -375,6 +379,7 @@ export default function AdminShopSocial() {
         status: "error",
         accountName: null,
         error: message,
+        errorCode: "META_STATUS_REQUEST_FAILED",
       };
 
       setMetaConnections({
@@ -698,7 +703,14 @@ export default function AdminShopSocial() {
                     ) : null}
 
                     {connection.error && (
-                      <p className="text-red-600">{connection.error}</p>
+                      <div className="text-red-600">
+                        {connection.errorCode && (
+                          <p className="font-mono text-xs font-semibold">
+                            {connection.errorCode}
+                          </p>
+                        )}
+                        <p>{connection.error}</p>
+                      </div>
                     )}
                   </div>
                 </article>

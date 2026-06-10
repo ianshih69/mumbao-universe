@@ -9,6 +9,7 @@ export type MetaPlatformConnection = {
   status: MetaPlatformConnectionStatus;
   accountName: string | null;
   error: string | null;
+  errorCode: string | null;
 };
 
 export type MetaConnectionStatusResponse = {

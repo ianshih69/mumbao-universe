@@ -543,6 +543,119 @@ async function handlePublishFacebookPost(req, res) {
   });
 }
 
+async function handleDeleteFacebookPost(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return sendJson(res, 405, {
+      errorCode: "METHOD_NOT_ALLOWED",
+      errorMessage: "Method not allowed.",
+    });
+  }
+
+  const accessToken = cleanText(
+    getServerEnv("FACEBOOK_PAGE_ACCESS_TOKEN")
+  );
+
+  if (!accessToken) {
+    return sendJson(res, 500, {
+      errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
+      errorMessage:
+        "Facebook Token 無效，請更新 Page Access Token 後再試。",
+      metaError: null,
+    });
+  }
+
+  const body = await readBody(req);
+  const taskId = cleanText(body?.taskId);
+  const taskStatus = cleanText(body?.status);
+  const facebookPostId = cleanText(body?.facebookPostId);
+
+  if (!taskId) {
+    return sendJson(res, 400, {
+      errorCode: "SOCIAL_TASK_NOT_FOUND",
+      errorMessage: "找不到這筆發文任務。",
+      metaError: null,
+    });
+  }
+
+  if (!facebookPostId) {
+    return sendJson(res, 400, {
+      errorCode: "FACEBOOK_POST_ID_REQUIRED",
+      errorMessage: "這筆任務沒有 Facebook 貼文 ID，無法刪除。",
+      metaError: null,
+    });
+  }
+
+  if (taskStatus !== "published") {
+    return sendJson(res, 409, {
+      errorCode: "FACEBOOK_POST_NOT_PUBLISHED",
+      errorMessage: "只有已發布的 Facebook 貼文可以刪除。",
+      metaError: null,
+    });
+  }
+
+  const version = getMetaGraphVersion();
+  const url = new URL(
+    `https://graph.facebook.com/${version}/${encodeURIComponent(
+      facebookPostId
+    )}`
+  );
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    return sendJson(res, 502, {
+      errorCode: "META_NETWORK_ERROR",
+      errorMessage: "Facebook 貼文刪除失敗，請稍後再試。",
+      metaError: null,
+    });
+  }
+
+  const payload = await response.json().catch(() => null);
+  const deleteSucceeded =
+    response.ok && (payload === true || payload?.success === true);
+
+  if (!deleteSucceeded) {
+    const safeError = getSafeMetaError(response.status, payload?.error);
+    const tokenInvalid =
+      safeError.details.code === 190 || response.status === 401;
+
+    console.error("facebook post delete failed:", {
+      status: response.status,
+      metaCode: safeError.details.code,
+      metaType: safeError.details.type,
+      metaSubcode: safeError.details.error_subcode,
+    });
+
+    return sendJson(res, 502, {
+      errorCode: safeError.code,
+      errorMessage: tokenInvalid
+        ? "Facebook Token 無效，請更新 Page Access Token 後再試。"
+        : "Facebook 貼文刪除失敗，請稍後再試。",
+      metaError: {
+        code: safeError.details.code,
+        type: safeError.details.type,
+        error_subcode: safeError.details.error_subcode,
+      },
+    });
+  }
+
+  return sendJson(res, 200, {
+    ok: true,
+    taskId,
+    facebookPostId,
+    deletedAt: new Date().toISOString(),
+  });
+}
+
 function parseMetaTokenExchangePayload(text) {
   try {
     return JSON.parse(text);
@@ -2173,6 +2286,10 @@ export default async function handler(req, res) {
 
     if (action === "publish-facebook-post") {
       return await handlePublishFacebookPost(req, res);
+    }
+
+    if (action === "delete-facebook-post") {
+      return await handleDeleteFacebookPost(req, res);
     }
 
     if (action === "exchange-meta-token") {

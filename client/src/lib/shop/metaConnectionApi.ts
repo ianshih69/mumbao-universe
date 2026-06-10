@@ -46,6 +46,13 @@ export type FacebookPublishResult = {
   createdAt: string;
 };
 
+export type FacebookDeleteResult = {
+  ok: true;
+  taskId: string;
+  facebookPostId: string;
+  deletedAt: string;
+};
+
 export type MetaTokenExchangeResult = {
   ok: true;
   pageId: string;
@@ -210,6 +217,65 @@ export async function publishFacebookPost(
     ok: true,
     facebookPostId: data.facebookPostId,
     createdAt: data.createdAt,
+  };
+}
+
+export async function deleteFacebookPost(
+  token: string,
+  taskId: string,
+  facebookPostId: string
+): Promise<FacebookDeleteResult> {
+  const response = await fetch(
+    "/api/admin-shop?action=delete-facebook-post",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        taskId,
+        status: "published",
+        facebookPostId,
+      }),
+    }
+  );
+  const data = (await response.json().catch(() => null)) as
+    | (Partial<FacebookDeleteResult> & {
+        errorCode?: string;
+        errorMessage?: string;
+        metaError?: FacebookPublishErrorDetails | null;
+      })
+    | null;
+
+  if (response.status === 401) {
+    throw new Error(adminAuthExpiredMessage);
+  }
+
+  if (
+    !response.ok ||
+    !data?.ok ||
+    !data.taskId ||
+    !data.facebookPostId ||
+    !data.deletedAt
+  ) {
+    const error = new Error(
+      data?.errorMessage || "Facebook 貼文刪除失敗，請稍後再試。"
+    ) as Error & {
+      errorCode?: string;
+      metaError?: FacebookPublishErrorDetails | null;
+    };
+    error.errorCode = data?.errorCode;
+    error.metaError = data?.metaError;
+    throw error;
+  }
+
+  return {
+    ok: true,
+    taskId: data.taskId,
+    facebookPostId: data.facebookPostId,
+    deletedAt: data.deletedAt,
   };
 }
 

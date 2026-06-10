@@ -31,6 +31,7 @@ import AdminShopNav from "@/components/shop/AdminShopNav";
 import { Button } from "@/components/ui/button";
 import { getAdminToken } from "@/lib/shop/adminAuth";
 import {
+  deleteFacebookPost,
   exchangeMetaToken,
   fetchFacebookTokenDebug,
   fetchMetaConnectionStatus,
@@ -55,6 +56,7 @@ type DraftStatus =
   | "pending"
   | "scheduled"
   | "published"
+  | "deleted"
   | "partial_success"
   | "failed"
   | "cancelled";
@@ -92,6 +94,7 @@ type StoredSocialDraft = {
   mediaFiles: SocialMediaFile[];
   publishedAt?: string;
   facebookPostId?: string;
+  deletedAt?: string;
   publishError?: {
     errorCode: string;
     errorMessage: string;
@@ -179,6 +182,7 @@ function storedDraftFromForm(
     mediaFiles: form.mediaFiles,
     publishedAt: existingDraft?.publishedAt,
     facebookPostId: existingDraft?.facebookPostId,
+    deletedAt: existingDraft?.deletedAt,
     publishError: existingDraft?.publishError || null,
     createdAt: existingDraft?.createdAt || now,
     updatedAt: now,
@@ -213,6 +217,7 @@ function normalizeStoredDraft(value: unknown): StoredSocialDraft | null {
     mediaFiles: Array.isArray(source.mediaFiles) ? source.mediaFiles : [],
     publishedAt: source.publishedAt || undefined,
     facebookPostId: source.facebookPostId || undefined,
+    deletedAt: source.deletedAt || undefined,
     publishError: source.publishError || null,
     createdAt: source.createdAt || now,
     updatedAt: source.updatedAt || now,
@@ -361,6 +366,7 @@ function getStatusLabel(status: DraftStatus) {
     pending: "待發文",
     scheduled: "排程中",
     published: "已發文",
+    deleted: "已刪除",
     partial_success: "部分成功",
     failed: "發文失敗",
     cancelled: "已取消",
@@ -469,6 +475,11 @@ export default function AdminShopSocial() {
   const [publishingDraftId, setPublishingDraftId] = useState<string | null>(
     null
   );
+  const [deletingFacebookDraftId, setDeletingFacebookDraftId] = useState<
+    string | null
+  >(null);
+  const [facebookDeleteTarget, setFacebookDeleteTarget] =
+    useState<StoredSocialDraft | null>(null);
   const [shortLivedUserToken, setShortLivedUserToken] = useState("");
   const [isExchangingMetaToken, setIsExchangingMetaToken] = useState(false);
   const [metaTokenResult, setMetaTokenResult] =
@@ -787,6 +798,7 @@ export default function AdminShopSocial() {
       status: "pending",
       publishedAt: undefined,
       facebookPostId: undefined,
+      deletedAt: undefined,
       publishError: null,
       createdAt: now,
       updatedAt: now,
@@ -830,6 +842,7 @@ export default function AdminShopSocial() {
               status: "published" as const,
               publishedAt: result.createdAt,
               facebookPostId: result.facebookPostId,
+              deletedAt: undefined,
               publishError: null,
               updatedAt: result.createdAt,
             }
@@ -872,6 +885,65 @@ export default function AdminShopSocial() {
       );
     } finally {
       setPublishingDraftId(null);
+    }
+  };
+
+  const requestFacebookPostDelete = (item: StoredSocialDraft) => {
+    if (item.status !== "published") {
+      setNotice("只有已發布的 Facebook 貼文可以刪除。");
+      return;
+    }
+
+    if (!item.facebookPostId) {
+      setNotice("這筆任務沒有 Facebook 貼文 ID，無法刪除。");
+      return;
+    }
+
+    setNotice("");
+    setFacebookDeleteTarget(item);
+  };
+
+  const confirmFacebookPostDelete = async () => {
+    const item = facebookDeleteTarget;
+    if (!item?.facebookPostId) {
+      setFacebookDeleteTarget(null);
+      setNotice("這筆任務沒有 Facebook 貼文 ID，無法刪除。");
+      return;
+    }
+
+    setDeletingFacebookDraftId(item.id);
+    setNotice("");
+
+    try {
+      const result = await deleteFacebookPost(
+        token,
+        item.id,
+        item.facebookPostId
+      );
+      const nextDrafts = savedDrafts.map((draftItem) =>
+        draftItem.id === item.id
+          ? {
+              ...draftItem,
+              status: "deleted" as const,
+              deletedAt: result.deletedAt,
+              updatedAt: result.deletedAt,
+            }
+          : draftItem
+      );
+
+      saveStoredDrafts(nextDrafts);
+      setSavedDrafts(nextDrafts);
+      setFacebookDeleteTarget(null);
+      setNotice("Facebook 貼文已刪除，後台已保留刪除紀錄。");
+    } catch (error) {
+      const deleteError = error as Error & {
+        errorCode?: string;
+      };
+      setNotice(
+        deleteError.message || "Facebook 貼文刪除失敗，請稍後再試。"
+      );
+    } finally {
+      setDeletingFacebookDraftId(null);
     }
   };
 
@@ -2077,6 +2149,8 @@ export default function AdminShopSocial() {
                             "rounded-full px-2.5 py-1 text-xs font-semibold",
                             item.status === "scheduled"
                               ? "bg-[#fbf0e4] text-[#8b6f5b]"
+                              : item.status === "deleted"
+                                ? "bg-red-50 text-red-700"
                               : "bg-stone-100 text-stone-600"
                           )}
                         >
@@ -2134,6 +2208,23 @@ export default function AdminShopSocial() {
                         </div>
                       )}
 
+                      {item.status === "deleted" && (
+                        <div className="rounded-[8px] border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+                          <p className="font-semibold">Facebook 貼文已刪除</p>
+                          {item.publishedAt && (
+                            <p>原發文時間：{formatDateTime(item.publishedAt)}</p>
+                          )}
+                          {item.deletedAt && (
+                            <p>刪除時間：{formatDateTime(item.deletedAt)}</p>
+                          )}
+                          {item.facebookPostId && (
+                            <p className="break-all">
+                              原貼文編號：{item.facebookPostId}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
                       {item.status === "failed" && item.publishError && (
                         <div className="rounded-[8px] border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
                           <p className="font-semibold">
@@ -2166,6 +2257,24 @@ export default function AdminShopSocial() {
                             ? "已發佈到 Facebook"
                             : "發佈到 Facebook"}
                       </Button>
+                      {item.status === "published" && item.facebookPostId && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => requestFacebookPostDelete(item)}
+                          disabled={deletingFacebookDraftId === item.id}
+                          className="col-span-2 h-10 rounded-full border-red-200 bg-red-50 px-3 text-red-700 hover:bg-red-100 hover:text-red-800"
+                        >
+                          {deletingFacebookDraftId === item.id ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="size-4" />
+                          )}
+                          {deletingFacebookDraftId === item.id
+                            ? "刪除中..."
+                            : "刪除貼文"}
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         variant="outline"
@@ -2201,6 +2310,58 @@ export default function AdminShopSocial() {
           )}
         </section>
       </div>
+
+      {facebookDeleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-5 py-8"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="facebook-delete-title"
+        >
+          <div className="w-full max-w-md rounded-[8px] border border-red-100 bg-white p-5 shadow-2xl md:p-6">
+            <div className="flex size-11 items-center justify-center rounded-full bg-red-50 text-red-700">
+              <Trash2 className="size-5" />
+            </div>
+            <h2
+              id="facebook-delete-title"
+              className="mt-4 text-xl font-semibold text-stone-900"
+            >
+              刪除 Facebook 貼文
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-stone-600">
+              確定要刪除這篇 Facebook
+              貼文嗎？刪除後粉專上將看不到，且無法復原。後台仍會保留刪除紀錄。
+            </p>
+            <p className="mt-3 break-all rounded-[8px] bg-stone-50 px-3 py-2 text-xs text-stone-500">
+              貼文編號：{facebookDeleteTarget.facebookPostId}
+            </p>
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setFacebookDeleteTarget(null)}
+                disabled={Boolean(deletingFacebookDraftId)}
+                className="h-11 rounded-full bg-white"
+              >
+                取消
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void confirmFacebookPostDelete()}
+                disabled={Boolean(deletingFacebookDraftId)}
+                className="h-11 rounded-full bg-red-700 text-white hover:bg-red-800"
+              >
+                {deletingFacebookDraftId ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Trash2 className="size-4" />
+                )}
+                {deletingFacebookDraftId ? "刪除中..." : "確認刪除"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

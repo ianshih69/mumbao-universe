@@ -11,6 +11,7 @@ import {
   AlertCircle,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
   Clipboard,
   Copy,
   Edit3,
@@ -448,6 +449,8 @@ export default function AdminShopSocial() {
   const [uploadError, setUploadError] = useState("");
   const [fileInputKey, setFileInputKey] = useState(0);
   const [metaConnections, setMetaConnections] = useState(initialMetaConnections);
+  const [expandedMetaPlatform, setExpandedMetaPlatform] =
+    useState<MetaPlatformKey | null>(null);
   const [metaCheckedAt, setMetaCheckedAt] = useState("");
   const [metaCheckError, setMetaCheckError] = useState("");
   const [isCheckingMeta, setIsCheckingMeta] = useState(true);
@@ -974,7 +977,7 @@ export default function AdminShopSocial() {
             </div>
           )}
 
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="mt-5 grid gap-3">
             {(
               [
                 ["facebook", "Facebook"],
@@ -987,45 +990,81 @@ export default function AdminShopSocial() {
                 key === "facebook" && facebookTokenDebug
                   ? getFacebookTokenHealth(facebookTokenDebug)
                   : null;
+              const isExpanded = expandedMetaPlatform === key;
 
               return (
                 <article
                   key={key}
-                  className="rounded-[8px] border border-stone-200 bg-[#fffaf7] p-4"
+                  className={cn(
+                    "rounded-[8px] border border-stone-200 bg-[#fffaf7] transition-colors",
+                    isExpanded ? "p-4 md:p-5" : "p-3.5 md:p-4"
+                  )}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="font-semibold text-stone-900">{label}</h3>
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
-                        getMetaStatusClasses(connection.status)
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-stone-900">{label}</h3>
+                      {key === "facebook" && connection.accountName && (
+                        <p className="mt-1 truncate text-sm text-stone-600">
+                          {connection.accountName}
+                        </p>
                       )}
-                    >
-                      {connection.status === "checking" && (
-                        <Loader2 className="size-3 animate-spin" />
-                      )}
-                      {connection.status === "connected" && (
-                        <CheckCircle2 className="size-3" />
-                      )}
-                      {connection.status === "error" && (
-                        <AlertCircle className="size-3" />
-                      )}
-                      {getMetaStatusLabel(connection.status)}
-                    </span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 sm:justify-end">
+                      <span
+                        className={cn(
+                          "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
+                          getMetaStatusClasses(connection.status)
+                        )}
+                      >
+                        {connection.status === "checking" && (
+                          <Loader2 className="size-3 animate-spin" />
+                        )}
+                        {connection.status === "connected" && (
+                          <CheckCircle2 className="size-3" />
+                        )}
+                        {connection.status === "error" && (
+                          <AlertCircle className="size-3" />
+                        )}
+                        {getMetaStatusLabel(connection.status)}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        aria-expanded={isExpanded}
+                        onClick={() =>
+                          setExpandedMetaPlatform((current) =>
+                            current === key ? null : key
+                          )
+                        }
+                        className="h-9 shrink-0 rounded-full bg-white px-3 text-xs"
+                      >
+                        {isExpanded ? "收合" : "展開"}
+                        <ChevronDown
+                          className={cn(
+                            "size-3.5 transition-transform",
+                            isExpanded && "rotate-180"
+                          )}
+                        />
+                      </Button>
+                    </div>
                   </div>
 
-                  <div className="mt-4 min-h-12 text-sm leading-6">
-                    {connection.accountName ? (
-                      <p className="font-medium text-stone-800">
-                        {connection.accountName}
-                      </p>
-                    ) : connection.status === "not_configured" ? (
-                      <p className="text-stone-500">
-                        尚未設定此平台所需的環境變數。
-                      </p>
-                    ) : connection.status === "checking" ? (
-                      <p className="text-stone-500">正在向 Meta 確認帳號資料。</p>
-                    ) : null}
+                  {isExpanded && (
+                    <div className="mt-4 border-t border-stone-200 pt-4 text-sm leading-6">
+                      {connection.accountName ? (
+                        <p className="font-medium text-stone-800">
+                          {connection.accountName}
+                        </p>
+                      ) : connection.status === "not_configured" ? (
+                        <p className="text-stone-500">
+                          尚未設定此平台所需的環境變數。
+                        </p>
+                      ) : connection.status === "checking" ? (
+                        <p className="text-stone-500">
+                          正在向 Meta 確認帳號資料。
+                        </p>
+                      ) : null}
 
                     {connection.error && (
                       <div className="text-red-600">
@@ -1216,14 +1255,6 @@ export default function AdminShopSocial() {
                                   </dd>
                                 </div>
                               )}
-                              <div className="grid gap-1">
-                                <dt>最後檢查時間</dt>
-                                <dd>
-                                  {formatDateTime(
-                                    facebookTokenDebug.checkedAt
-                                  )}
-                                </dd>
-                              </div>
                             </dl>
 
                             <div>
@@ -1273,7 +1304,8 @@ export default function AdminShopSocial() {
                         )}
                       </div>
                     )}
-                  </div>
+                    </div>
+                  )}
                 </article>
               );
             })}

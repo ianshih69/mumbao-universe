@@ -282,15 +282,32 @@ async function checkFacebookConnection() {
 }
 
 async function checkInstagramConnection() {
-  const accountId = cleanText(
-    getServerEnv("INSTAGRAM_BUSINESS_ACCOUNT_ID")
-  );
   const accessToken = cleanText(
     getServerEnv("FACEBOOK_PAGE_ACCESS_TOKEN")
   );
+  const pageId = cleanText(getServerEnv("FACEBOOK_PAGE_ID"));
+  const configuredAccountId = cleanText(
+    getServerEnv("INSTAGRAM_BUSINESS_ACCOUNT_ID")
+  );
 
-  if (!accountId || !accessToken) {
+  if (!accessToken || (!configuredAccountId && !pageId)) {
     return createMetaStatus("not_configured");
+  }
+
+  let accountId;
+  try {
+    accountId = await resolveInstagramBusinessAccountId(
+      pageId,
+      accessToken
+    );
+  } catch (error) {
+    return createMetaStatus(
+      "error",
+      null,
+      error.message || "無法取得 Instagram 商業帳號。",
+      error.code || "INSTAGRAM_ACCOUNT_LOOKUP_FAILED",
+      error.metaError || null
+    );
   }
 
   return fetchMetaProfile({
@@ -485,6 +502,10 @@ function buildSocialPostRow(task) {
     media_files: Array.isArray(task?.mediaFiles) ? task.mediaFiles : [],
     fb_post_id: cleanText(task?.facebookPostId) || null,
     fb_permalink_url: cleanText(task?.facebookPermalinkUrl) || null,
+    ig_media_id: cleanText(task?.instagramMediaId) || null,
+    ig_permalink_url: cleanText(task?.instagramPermalinkUrl) || null,
+    ig_published_at: cleanText(task?.instagramPublishedAt) || null,
+    ig_status: cleanText(task?.instagramStatus) || null,
     published_at: cleanText(task?.publishedAt) || null,
     deleted_at: cleanText(task?.deletedAt) || null,
     delete_source: cleanText(task?.deleteSource) || null,
@@ -518,6 +539,10 @@ function normalizeSocialPost(row) {
     mediaFiles: Array.isArray(row.media_files) ? row.media_files : [],
     facebookPostId: row.fb_post_id || undefined,
     facebookPermalinkUrl: row.fb_permalink_url || undefined,
+    instagramMediaId: row.ig_media_id || undefined,
+    instagramPermalinkUrl: row.ig_permalink_url || undefined,
+    instagramPublishedAt: row.ig_published_at || undefined,
+    instagramStatus: row.ig_status || undefined,
     publishedAt: row.published_at || undefined,
     deletedAt: row.deleted_at || undefined,
     deleteSource: row.delete_source || undefined,
@@ -696,6 +721,355 @@ async function handlePublishFacebookPost(req, res) {
     ok: true,
     facebookPostId,
     facebookPermalinkUrl: facebookPermalinkUrl || null,
+    createdAt,
+  });
+}
+
+async function resolveInstagramBusinessAccountId(pageId, accessToken) {
+  const configuredAccountId = cleanText(
+    getServerEnv("INSTAGRAM_BUSINESS_ACCOUNT_ID")
+  );
+  if (configuredAccountId) return configuredAccountId;
+
+  if (!pageId) {
+    const error = new Error(
+      "INSTAGRAM_BUSINESS_ACCOUNT_ID 與 FACEBOOK_PAGE_ID 均未設定。"
+    );
+    error.code = "INSTAGRAM_ACCOUNT_NOT_CONFIGURED";
+    error.status = 500;
+    throw error;
+  }
+
+  const url = new URL(
+    `https://graph.facebook.com/${getMetaGraphVersion()}/${encodeURIComponent(
+      pageId
+    )}`
+  );
+  url.searchParams.set("fields", "instagram_business_account");
+  url.searchParams.set("access_token", accessToken);
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    const error = new Error("目前無法查詢 Instagram 商業帳號，請稍後再試。");
+    error.code = "META_NETWORK_ERROR";
+    error.status = 502;
+    throw error;
+  }
+
+  const payload = await response.json().catch(() => null);
+  const accountId = cleanText(payload?.instagram_business_account?.id);
+  if (!response.ok) {
+    const safeError = getSafeMetaError(response.status, payload?.error);
+    const error = new Error(safeError.reason);
+    error.code = safeError.code;
+    error.status = 502;
+    error.metaError = safeError.details;
+    throw error;
+  }
+
+  if (!accountId) {
+    const error = new Error(
+      "Facebook 粉專尚未連結 Instagram 專業帳號。"
+    );
+    error.code = "INSTAGRAM_ACCOUNT_NOT_LINKED";
+    error.status = 502;
+    throw error;
+  }
+
+  return accountId;
+}
+
+function findInstagramImage(task, requestedImageUrl) {
+  const mediaFiles = Array.isArray(task?.media_files)
+    ? task.media_files
+    : [];
+  const requestedUrl = cleanText(requestedImageUrl);
+  const image = mediaFiles.find((media) => {
+    const publicUrl = cleanText(media?.publicUrl);
+    const contentType = cleanText(media?.contentType);
+    return (
+      publicUrl &&
+      contentType.startsWith("image/") &&
+      (!requestedUrl || publicUrl === requestedUrl)
+    );
+  });
+
+  if (!image) return null;
+
+  const publicUrl = cleanText(image.publicUrl);
+  if (!/^https:\/\//i.test(publicUrl)) return null;
+
+  return {
+    publicUrl,
+    contentType: cleanText(image.contentType),
+  };
+}
+
+async function markInstagramPublishFailed(taskId, storedTask, errorDetails) {
+  if (!taskId) return;
+
+  const updatedAt = new Date().toISOString();
+  await supabaseRequest(
+    `/shop_social_posts?id=eq.${encodeURIComponent(taskId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: storedTask?.fb_post_id ? "published" : "failed",
+        ig_status: "failed",
+        publish_error: {
+          platform: "instagram",
+          errorCode: errorDetails.errorCode,
+          errorMessage: errorDetails.errorMessage,
+          metaError: errorDetails.metaError || null,
+        },
+        updated_at: updatedAt,
+      }),
+    }
+  ).catch(() => {
+    // Publishing error response should not be replaced by a sync failure.
+  });
+}
+
+async function handlePublishInstagramPost(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return sendJson(res, 405, {
+      errorCode: "METHOD_NOT_ALLOWED",
+      errorMessage: "Method not allowed.",
+    });
+  }
+
+  const accessToken = cleanText(
+    getServerEnv("FACEBOOK_PAGE_ACCESS_TOKEN")
+  );
+  const pageId = cleanText(getServerEnv("FACEBOOK_PAGE_ID"));
+  if (!accessToken) {
+    return sendJson(res, 500, {
+      errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
+      errorMessage: "Facebook Page Access Token 未設定或無效。",
+      metaError: null,
+    });
+  }
+
+  const body = await readBody(req);
+  const taskId = cleanText(body?.taskId);
+  if (!taskId) {
+    return sendJson(res, 400, {
+      errorCode: "SOCIAL_TASK_ID_REQUIRED",
+      errorMessage: "找不到要發布的發文任務。",
+      metaError: null,
+    });
+  }
+
+  const storedTask = await loadSocialPostById(taskId);
+  if (!storedTask) {
+    return sendJson(res, 404, {
+      errorCode: "SOCIAL_TASK_NOT_FOUND",
+      errorMessage: "找不到這筆發文任務。",
+      metaError: null,
+    });
+  }
+
+  const image = findInstagramImage(storedTask, body?.imageUrl);
+  if (!image) {
+    const errorDetails = {
+      errorCode: "INSTAGRAM_PUBLIC_IMAGE_REQUIRED",
+      errorMessage:
+        "Instagram 發文圖片需要公開圖片網址，請先完成媒體上傳功能。",
+      metaError: null,
+    };
+    await markInstagramPublishFailed(taskId, storedTask, errorDetails);
+    return sendJson(res, 400, errorDetails);
+  }
+
+  const content = cleanText(storedTask.content || body?.content);
+  const title = cleanText(storedTask.title || body?.title);
+  const hashtags = cleanText(storedTask.hashtags || body?.hashtags);
+  const caption = [content || title, hashtags].filter(Boolean).join("\n\n");
+  if (!caption) {
+    const errorDetails = {
+      errorCode: "INSTAGRAM_CAPTION_REQUIRED",
+      errorMessage: "請先輸入發文標題或內容。",
+      metaError: null,
+    };
+    await markInstagramPublishFailed(taskId, storedTask, errorDetails);
+    return sendJson(res, 400, errorDetails);
+  }
+
+  let instagramAccountId;
+  try {
+    instagramAccountId = await resolveInstagramBusinessAccountId(
+      pageId,
+      accessToken
+    );
+  } catch (error) {
+    const errorDetails = {
+      errorCode: error.code || "INSTAGRAM_ACCOUNT_LOOKUP_FAILED",
+      errorMessage:
+        error.message || "無法取得 Instagram 商業帳號，請稍後再試。",
+      metaError: error.metaError
+        ? {
+            code: error.metaError.code,
+            type: error.metaError.type,
+            error_subcode: error.metaError.error_subcode,
+          }
+        : null,
+    };
+    await markInstagramPublishFailed(taskId, storedTask, errorDetails);
+    return sendJson(res, error.status || 502, errorDetails);
+  }
+
+  const createUrl = new URL(
+    `https://graph.facebook.com/${getMetaGraphVersion()}/${encodeURIComponent(
+      instagramAccountId
+    )}/media`
+  );
+  const createForm = new URLSearchParams();
+  createForm.set("image_url", image.publicUrl);
+  createForm.set("caption", caption);
+  createForm.set("access_token", accessToken);
+
+  let createResponse;
+  try {
+    createResponse = await fetch(createUrl, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: createForm,
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch {
+    const errorDetails = {
+      errorCode: "META_NETWORK_ERROR",
+      errorMessage: "目前無法建立 Instagram 圖片貼文，請稍後再試。",
+      metaError: null,
+    };
+    await markInstagramPublishFailed(taskId, storedTask, errorDetails);
+    return sendJson(res, 502, errorDetails);
+  }
+
+  const createPayload = await createResponse.json().catch(() => null);
+  const creationId = cleanText(createPayload?.id);
+  if (!createResponse.ok || !creationId) {
+    const safeError = getSafeMetaError(
+      createResponse.status,
+      createPayload?.error
+    );
+    const errorDetails = {
+      errorCode: safeError.code,
+      errorMessage: safeError.reason,
+      metaError: {
+        code: safeError.details.code,
+        type: safeError.details.type,
+        error_subcode: safeError.details.error_subcode,
+      },
+    };
+    await markInstagramPublishFailed(taskId, storedTask, errorDetails);
+    return sendJson(res, 502, errorDetails);
+  }
+
+  const publishUrl = new URL(
+    `https://graph.facebook.com/${getMetaGraphVersion()}/${encodeURIComponent(
+      instagramAccountId
+    )}/media_publish`
+  );
+  const publishForm = new URLSearchParams();
+  publishForm.set("creation_id", creationId);
+  publishForm.set("access_token", accessToken);
+
+  let publishResponse;
+  try {
+    publishResponse = await fetch(publishUrl, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: publishForm,
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch {
+    const errorDetails = {
+      errorCode: "META_NETWORK_ERROR",
+      errorMessage: "Instagram 圖片已建立，但目前無法發布，請稍後再試。",
+      metaError: null,
+    };
+    await markInstagramPublishFailed(taskId, storedTask, errorDetails);
+    return sendJson(res, 502, errorDetails);
+  }
+
+  const publishPayload = await publishResponse.json().catch(() => null);
+  const instagramMediaId = cleanText(publishPayload?.id);
+  if (!publishResponse.ok || !instagramMediaId) {
+    const safeError = getSafeMetaError(
+      publishResponse.status,
+      publishPayload?.error
+    );
+    const errorDetails = {
+      errorCode: safeError.code,
+      errorMessage: safeError.reason,
+      metaError: {
+        code: safeError.details.code,
+        type: safeError.details.type,
+        error_subcode: safeError.details.error_subcode,
+      },
+    };
+    await markInstagramPublishFailed(taskId, storedTask, errorDetails);
+    return sendJson(res, 502, errorDetails);
+  }
+
+  let instagramPermalinkUrl = "";
+  try {
+    const permalinkUrl = new URL(
+      `https://graph.facebook.com/${getMetaGraphVersion()}/${encodeURIComponent(
+        instagramMediaId
+      )}`
+    );
+    permalinkUrl.searchParams.set("fields", "permalink");
+    permalinkUrl.searchParams.set("access_token", accessToken);
+    const permalinkResponse = await fetch(permalinkUrl, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(10000),
+    });
+    const permalinkPayload = await permalinkResponse.json().catch(() => null);
+    if (permalinkResponse.ok) {
+      instagramPermalinkUrl = cleanText(permalinkPayload?.permalink);
+    }
+  } catch {
+    instagramPermalinkUrl = "";
+  }
+
+  const createdAt = new Date().toISOString();
+  await supabaseRequest(
+    `/shop_social_posts?id=eq.${encodeURIComponent(taskId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: "published",
+        ig_status: "published",
+        ig_media_id: instagramMediaId,
+        ig_permalink_url: instagramPermalinkUrl || null,
+        ig_published_at: createdAt,
+        publish_error: null,
+        published_at: storedTask.published_at || createdAt,
+        updated_at: createdAt,
+      }),
+    }
+  );
+
+  return sendJson(res, 200, {
+    ok: true,
+    instagramMediaId,
+    instagramPermalinkUrl: instagramPermalinkUrl || null,
     createdAt,
   });
 }
@@ -2629,6 +3003,10 @@ export default async function handler(req, res) {
 
     if (action === "publish-facebook-post") {
       return await handlePublishFacebookPost(req, res);
+    }
+
+    if (action === "publish-instagram-post") {
+      return await handlePublishInstagramPost(req, res);
     }
 
     if (action === "social-posts-sync") {

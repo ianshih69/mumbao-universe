@@ -41,6 +41,7 @@ import {
   fetchMetaConnectionStatus,
   fetchSocialPosts,
   publishFacebookPost,
+  publishInstagramPost,
   syncFacebookPostStatus,
   syncSocialPosts,
   type FacebookTokenDebugResult,
@@ -111,6 +112,10 @@ type StoredSocialDraft = {
   publishedAt?: string;
   facebookPostId?: string;
   facebookPermalinkUrl?: string;
+  instagramMediaId?: string;
+  instagramPermalinkUrl?: string;
+  instagramPublishedAt?: string;
+  instagramStatus?: "draft" | "published" | "failed";
   deletedAt?: string;
   deleteSource?: "admin" | "facebook" | "api";
   lastSyncedAt?: string;
@@ -209,6 +214,12 @@ function storedDraftFromForm(
     publishedAt: existingDraft?.publishedAt,
     facebookPostId: existingDraft?.facebookPostId,
     facebookPermalinkUrl: existingDraft?.facebookPermalinkUrl,
+    instagramMediaId: existingDraft?.instagramMediaId,
+    instagramPermalinkUrl: existingDraft?.instagramPermalinkUrl,
+    instagramPublishedAt: existingDraft?.instagramPublishedAt,
+    instagramStatus:
+      existingDraft?.instagramStatus ||
+      (form.platforms.includes("Instagram") ? "draft" : undefined),
     deletedAt: existingDraft?.deletedAt,
     deleteSource: existingDraft?.deleteSource,
     lastSyncedAt: existingDraft?.lastSyncedAt,
@@ -247,6 +258,15 @@ function normalizeStoredDraft(value: unknown): StoredSocialDraft | null {
     publishedAt: source.publishedAt || undefined,
     facebookPostId: source.facebookPostId || undefined,
     facebookPermalinkUrl: source.facebookPermalinkUrl || undefined,
+    instagramMediaId: source.instagramMediaId || undefined,
+    instagramPermalinkUrl: source.instagramPermalinkUrl || undefined,
+    instagramPublishedAt: source.instagramPublishedAt || undefined,
+    instagramStatus:
+      source.instagramStatus === "published" ||
+      source.instagramStatus === "failed" ||
+      source.instagramStatus === "draft"
+        ? source.instagramStatus
+        : undefined,
     deletedAt: source.deletedAt || undefined,
     deleteSource: source.deleteSource || undefined,
     lastSyncedAt: source.lastSyncedAt || undefined,
@@ -594,20 +614,42 @@ export default function AdminShopSocial() {
     return filtered.slice(0, 100);
   }, [sortedDrafts, taskFilter]);
   const hasDraftInput = Boolean(draft.title.trim() || draft.content.trim());
-  const hasUnsupportedPlatforms = draft.platforms.some(
-    (platform) => platform !== "Facebook"
+  const wantsFacebook = draft.platforms.includes("Facebook");
+  const wantsInstagram = draft.platforms.includes("Instagram");
+  const wantsThreads = draft.platforms.includes("Threads");
+  const instagramImages = draft.mediaFiles.filter((media) =>
+    media.contentType.startsWith("image/")
   );
   const isFacebookReady =
     metaConnections.facebook.status === "connected" &&
     facebookTokenDebug?.isValid === true;
+  const isInstagramReady =
+    metaConnections.instagram.status === "connected";
   const isPublishingCurrentDraft = publishingDraftId !== null;
-  const facebookPublishHint = isPublishingCurrentDraft
+  const publishButtonLabel =
+    wantsFacebook && wantsInstagram
+      ? "發佈到 Facebook 與 Instagram"
+      : wantsInstagram
+        ? "發佈到 Instagram"
+        : wantsFacebook
+          ? "發佈到 Facebook"
+          : "請選擇發布平台";
+  const publishDisabledReason = isPublishingCurrentDraft
     ? "發佈中，請稍候"
     : !hasDraftInput
       ? "請先輸入發文內容"
-      : !isFacebookReady
+      : !wantsFacebook && !wantsInstagram
+        ? "請選擇 Facebook 或 Instagram"
+      : wantsInstagram && instagramImages.length === 0
+        ? "Instagram 發文需要上傳 1 張圖片"
+      : wantsInstagram && instagramImages.length > 1
+        ? "Instagram 第一版僅支援 1 張圖片"
+      : wantsFacebook && !isFacebookReady
         ? "尚未連接 Facebook 粉專"
-        : "";
+      : wantsInstagram && !isInstagramReady
+        ? "尚未連接 Instagram 帳號"
+      : "";
+  const isPublishDisabled = Boolean(publishDisabledReason);
 
   const persistDrafts = (nextDrafts: StoredSocialDraft[]) => {
     saveStoredDrafts(nextDrafts);
@@ -977,6 +1019,12 @@ export default function AdminShopSocial() {
       publishedAt: undefined,
       facebookPostId: undefined,
       facebookPermalinkUrl: undefined,
+      instagramMediaId: undefined,
+      instagramPermalinkUrl: undefined,
+      instagramPublishedAt: undefined,
+      instagramStatus: item.platforms.includes("Instagram")
+        ? "draft"
+        : undefined,
       deletedAt: undefined,
       deleteSource: undefined,
       lastSyncedAt: undefined,
@@ -1106,26 +1154,30 @@ export default function AdminShopSocial() {
     }
   };
 
-  const publishCurrentDraftToFacebook = async () => {
+  const publishCurrentDraft = async () => {
     if (!hasDraftInput) {
       setNotice("請先輸入發文內容。");
       return;
     }
 
-    if (!isFacebookReady) {
-      setNotice("尚未連接 Facebook 粉專。");
+    if (publishDisabledReason) {
+      setNotice(`${publishDisabledReason}。`);
       return;
     }
 
-    const publishForm: SocialDraftForm = {
-      ...draft,
-      platforms: draft.platforms.includes("Facebook")
-        ? draft.platforms
-        : ["Facebook", ...draft.platforms],
-    };
-    const { nextDraft, nextDrafts } = buildCurrentDraft(
+    const { nextDraft: generatedDraft, nextDrafts: generatedDrafts } =
+      buildCurrentDraft(
       "pending",
-      publishForm
+      draft
+    );
+    const nextDraft: StoredSocialDraft = {
+      ...generatedDraft,
+      instagramStatus: wantsInstagram
+        ? generatedDraft.instagramStatus || "draft"
+        : generatedDraft.instagramStatus,
+    };
+    const nextDrafts = generatedDrafts.map((item) =>
+      item.id === nextDraft.id ? nextDraft : item
     );
     const publishContent =
       nextDraft.content.trim() || nextDraft.title.trim();
@@ -1133,7 +1185,7 @@ export default function AdminShopSocial() {
       .filter(Boolean)
       .join("\n\n");
     const confirmed = window.confirm(
-      `確定要發佈到 Facebook 粉絲專頁嗎？此動作會真的發文。\n\n發文內容：\n${facebookMessage}`
+      `確定要${publishButtonLabel}嗎？此動作會真的發文。\n\n發文內容：\n${facebookMessage}`
     );
     if (!confirmed) return;
 
@@ -1143,12 +1195,140 @@ export default function AdminShopSocial() {
     const nextForm = formFromStoredDraft(nextDraft);
     setDraft(nextForm);
     setPreview(nextForm);
+    setPublishingDraftId(nextDraft.id);
+    setNotice("");
 
-    await publishSavedDraftToFacebook(nextDraft, {
-      sourceDrafts: nextDrafts,
-      useCurrentForm: false,
-      skipConfirmation: true,
-    });
+    let publishedDraft = nextDraft;
+    const failures: Array<{
+      platform: "Facebook" | "Instagram";
+      error: Error & {
+        errorCode?: string;
+        metaError?: FacebookPublishErrorDetails | null;
+      };
+    }> = [];
+    let successCount = 0;
+
+    try {
+      await syncSocialPosts(token, nextDrafts);
+
+      if (wantsFacebook) {
+        try {
+          const facebookResult = await publishFacebookPost(
+            token,
+            nextDraft.id,
+            publishContent,
+            nextDraft.hashtags
+          );
+          successCount += 1;
+          publishedDraft = {
+            ...publishedDraft,
+            facebookPostId: facebookResult.facebookPostId,
+            facebookPermalinkUrl:
+              facebookResult.facebookPermalinkUrl || undefined,
+            publishedAt: facebookResult.createdAt,
+          };
+        } catch (error) {
+          failures.push({
+            platform: "Facebook",
+            error: error as Error & {
+              errorCode?: string;
+              metaError?: FacebookPublishErrorDetails | null;
+            },
+          });
+        }
+      }
+
+      if (wantsInstagram) {
+        try {
+          const instagramResult = await publishInstagramPost(
+            token,
+            nextDraft.id,
+            instagramImages[0].publicUrl,
+            nextDraft.title,
+            nextDraft.content,
+            nextDraft.hashtags
+          );
+          successCount += 1;
+          publishedDraft = {
+            ...publishedDraft,
+            instagramMediaId: instagramResult.instagramMediaId,
+            instagramPermalinkUrl:
+              instagramResult.instagramPermalinkUrl || undefined,
+            instagramPublishedAt: instagramResult.createdAt,
+            instagramStatus: "published",
+            publishedAt:
+              publishedDraft.publishedAt || instagramResult.createdAt,
+          };
+        } catch (error) {
+          const instagramError = error as Error & {
+            errorCode?: string;
+            metaError?: FacebookPublishErrorDetails | null;
+          };
+          failures.push({
+            platform: "Instagram",
+            error: instagramError,
+          });
+          publishedDraft = {
+            ...publishedDraft,
+            instagramStatus: "failed",
+          };
+        }
+      }
+
+      const updatedAt = new Date().toISOString();
+      const firstFailure = failures[0];
+      const finalDraft: StoredSocialDraft = {
+        ...publishedDraft,
+        status: successCount > 0 ? "published" : "failed",
+        publishError: firstFailure
+          ? {
+              errorCode:
+                firstFailure.error.errorCode ||
+                `${firstFailure.platform.toUpperCase()}_PUBLISH_FAILED`,
+              errorMessage: `${firstFailure.platform}：${
+                firstFailure.error.message || "發文失敗，請稍後再試。"
+              }`,
+              metaError: firstFailure.error.metaError || null,
+            }
+          : null,
+        updatedAt,
+      };
+      const finalDrafts = nextDrafts.map((item) =>
+        item.id === finalDraft.id ? finalDraft : item
+      );
+
+      persistDrafts(finalDrafts);
+      setDraft(formFromStoredDraft(finalDraft));
+      setPreview(formFromStoredDraft(finalDraft));
+
+      if (!failures.length) {
+        setNotice(`${publishButtonLabel}成功。`);
+      } else if (successCount > 0) {
+        setNotice(
+          `部分平台發布成功；${failures
+            .map(
+              ({ platform, error }) =>
+                `${platform}：${error.message || "發布失敗"}`
+            )
+            .join("；")}`
+        );
+      } else {
+        setNotice(
+          failures
+            .map(
+              ({ platform, error }) =>
+                `${platform} 發文失敗：${error.message || "請稍後再試。"}`
+            )
+            .join("；")
+        );
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "發文任務同步失敗。";
+      setNotice(`無法開始發布：${message}`);
+    } finally {
+      setPublishingDraftId(null);
+    }
   };
 
   const requestFacebookPostDelete = (item: StoredSocialDraft) => {
@@ -1334,6 +1514,19 @@ export default function AdminShopSocial() {
               </span>
             )}
 
+            {item.instagramPermalinkUrl && (
+              <a
+                href={item.instagramPermalinkUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={closeMenu}
+                className={actionClasses}
+              >
+                <ExternalLink className="size-4" />
+                查看 Instagram 文章
+              </a>
+            )}
+
             {item.status === "published" && item.facebookPostId && (
               <button
                 type="button"
@@ -1486,6 +1679,35 @@ export default function AdminShopSocial() {
             </dd>
           </div>
         )}
+        {item.instagramPublishedAt && (
+          <div>
+            <dt className="inline text-stone-400">Instagram 發布時間：</dt>
+            <dd className="inline">
+              {formatDateTime(item.instagramPublishedAt)}
+            </dd>
+          </div>
+        )}
+        {item.instagramMediaId && (
+          <div>
+            <dt className="inline text-stone-400">Instagram 媒體編號：</dt>
+            <dd className="inline break-all">{item.instagramMediaId}</dd>
+          </div>
+        )}
+        {item.instagramPermalinkUrl && (
+          <div>
+            <dt className="inline text-stone-400">Instagram 文章連結：</dt>
+            <dd className="inline">
+              <a
+                href={item.instagramPermalinkUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="break-all text-[#8b6f5b] underline underline-offset-2"
+              >
+                {item.instagramPermalinkUrl}
+              </a>
+            </dd>
+          </div>
+        )}
         {item.publishError && (
           <div className="mt-1 rounded-[6px] bg-orange-50 px-3 py-2 text-orange-700">
             發布失敗：{item.publishError.errorMessage}
@@ -1537,7 +1759,7 @@ export default function AdminShopSocial() {
           </div>
           <div className="rounded-[8px] border border-[#eadfce] bg-[#fffaf3] px-4 py-3 text-sm leading-6 text-stone-600">
             <p className="font-semibold text-stone-800">目前發文狀態</p>
-            <p>Facebook 純文字發文已啟用；Instagram 與 Threads 尚未啟用。</p>
+            <p>Facebook 純文字與 Instagram 單張圖片發文已啟用；Threads 尚未啟用。</p>
           </div>
         </div>
       </header>
@@ -2507,12 +2729,8 @@ export default function AdminShopSocial() {
                   </Button>
                   <Button
                     type="button"
-                    onClick={() => void publishCurrentDraftToFacebook()}
-                    disabled={
-                      !hasDraftInput ||
-                      !isFacebookReady ||
-                      isPublishingCurrentDraft
-                    }
+                    onClick={() => void publishCurrentDraft()}
+                    disabled={isPublishDisabled}
                     className="h-11 rounded-full bg-[#4267b2] px-7 font-semibold text-white shadow-sm hover:bg-[#365899] hover:shadow-md disabled:bg-stone-200 disabled:text-stone-500 disabled:shadow-none"
                   >
                     {isPublishingCurrentDraft ? (
@@ -2522,18 +2740,18 @@ export default function AdminShopSocial() {
                     )}
                     {isPublishingCurrentDraft
                       ? "發佈中..."
-                      : "發佈到 Facebook"}
+                      : publishButtonLabel}
                   </Button>
                 </div>
               </div>
 
               <div className="mt-2 flex flex-col gap-1 text-xs lg:items-end">
-                {facebookPublishHint && (
-                  <p className="text-stone-500">{facebookPublishHint}</p>
+                {publishDisabledReason && (
+                  <p className="text-stone-500">{publishDisabledReason}</p>
                 )}
-                {hasUnsupportedPlatforms && (
+                {wantsThreads && (
                   <p className="text-[#8b6f5b]">
-                    目前僅支援 Facebook 發文，Instagram / Threads 尚未啟用。
+                    Threads 尚未啟用；目前只會發布到已選取且可用的 Facebook / Instagram。
                   </p>
                 )}
               </div>
@@ -2677,7 +2895,7 @@ export default function AdminShopSocial() {
             </p>
           </div>
           <p className="mt-4 rounded-[8px] bg-[#fbf7f1] px-4 py-3 text-sm leading-6 text-stone-600">
-            Facebook 已支援純文字發文；Instagram、Threads、圖片與影片發文目前尚未啟用。
+            Facebook 已支援純文字發文；Instagram 第一版支援單張圖片；Threads、影片與輪播目前尚未啟用。
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">

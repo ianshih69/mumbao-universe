@@ -47,6 +47,13 @@ export type FacebookPublishResult = {
   createdAt: string;
 };
 
+export type InstagramPublishResult = {
+  ok: true;
+  instagramMediaId: string;
+  instagramPermalinkUrl: string | null;
+  createdAt: string;
+};
+
 export type FacebookDeleteResult = {
   ok: true;
   taskId: string;
@@ -231,6 +238,69 @@ export async function publishFacebookPost(
     ok: true,
     facebookPostId: data.facebookPostId,
     facebookPermalinkUrl: data.facebookPermalinkUrl || null,
+    createdAt: data.createdAt,
+  };
+}
+
+export async function publishInstagramPost(
+  token: string,
+  taskId: string,
+  imageUrl: string,
+  title: string,
+  content: string,
+  hashtags: string
+): Promise<InstagramPublishResult> {
+  const response = await fetch(
+    "/api/admin-shop?action=publish-instagram-post",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        taskId,
+        imageUrl,
+        title,
+        content,
+        hashtags,
+      }),
+    }
+  );
+  const data = (await response.json().catch(() => null)) as
+    | (Partial<InstagramPublishResult> & {
+        errorCode?: string;
+        errorMessage?: string;
+        metaError?: FacebookPublishErrorDetails | null;
+      })
+    | null;
+
+  if (response.status === 401) {
+    throw new Error(adminAuthExpiredMessage);
+  }
+
+  if (
+    !response.ok ||
+    !data?.ok ||
+    !data.instagramMediaId ||
+    !data.createdAt
+  ) {
+    const error = new Error(
+      data?.errorMessage || "Instagram 發文失敗，請稍後再試。"
+    ) as Error & {
+      errorCode?: string;
+      metaError?: FacebookPublishErrorDetails | null;
+    };
+    error.errorCode = data?.errorCode;
+    error.metaError = data?.metaError;
+    throw error;
+  }
+
+  return {
+    ok: true,
+    instagramMediaId: data.instagramMediaId,
+    instagramPermalinkUrl: data.instagramPermalinkUrl || null,
     createdAt: data.createdAt,
   };
 }

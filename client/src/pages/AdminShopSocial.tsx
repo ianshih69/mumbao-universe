@@ -593,6 +593,19 @@ export default function AdminShopSocial() {
 
     return filtered.slice(0, 100);
   }, [sortedDrafts, taskFilter]);
+  const hasFacebookContent = Boolean(draft.content.trim());
+  const hasFacebookPlatform = draft.platforms.includes("Facebook");
+  const isFacebookReady =
+    metaConnections.facebook.status === "connected" &&
+    facebookTokenDebug?.isValid === true;
+  const isPublishingCurrentDraft = publishingDraftId !== null;
+  const facebookPublishHint = !hasFacebookContent
+    ? "請先輸入發文內容"
+    : !isFacebookReady
+      ? "尚未連接 Facebook 粉專"
+      : !hasFacebookPlatform
+        ? "請先勾選 Facebook 平台"
+        : "";
 
   const persistDrafts = (nextDrafts: StoredSocialDraft[]) => {
     saveStoredDrafts(nextDrafts);
@@ -878,6 +891,25 @@ export default function AdminShopSocial() {
     setIsUploading(false);
   };
 
+  const buildCurrentDraft = (statusOverride?: DraftStatus) => {
+    const existingDraft = editingDraftId
+      ? savedDrafts.find((item) => item.id === editingDraftId)
+      : undefined;
+    const generatedDraft = storedDraftFromForm(draft, existingDraft);
+    const nextDraft = statusOverride
+      ? { ...generatedDraft, status: statusOverride }
+      : generatedDraft;
+    const nextDrafts = existingDraft
+      ? savedDrafts.map((item) => (item.id === existingDraft.id ? nextDraft : item))
+      : [nextDraft, ...savedDrafts];
+
+    return {
+      existingDraft,
+      nextDraft,
+      nextDrafts,
+    };
+  };
+
   const saveDraft = (event: FormEvent) => {
     event.preventDefault();
 
@@ -886,14 +918,8 @@ export default function AdminShopSocial() {
       return;
     }
 
-    const existingDraft = editingDraftId
-      ? savedDrafts.find((item) => item.id === editingDraftId)
-      : undefined;
-    const nextDraft = storedDraftFromForm(draft, existingDraft);
-    const nextDrafts = existingDraft
-      ? savedDrafts.map((item) => (item.id === existingDraft.id ? nextDraft : item))
-      : [nextDraft, ...savedDrafts];
-
+    const { existingDraft, nextDraft, nextDrafts } =
+      buildCurrentDraft("pending");
     persistDrafts(nextDrafts);
     if (existingDraft) {
       setEditingDraftId(nextDraft.id);
@@ -906,11 +932,7 @@ export default function AdminShopSocial() {
       setUploadError("");
       setFileInputKey((current) => current + 1);
     }
-    setNotice(
-      existingDraft
-        ? "已更新此任務，目前尚未真的發文。"
-        : "已新增發文任務，目前尚未真的發文。表單已清空，可繼續新增下一筆。"
-    );
+    setNotice("已儲存草稿");
   };
 
   const updatePreview = () => {
@@ -963,8 +985,17 @@ export default function AdminShopSocial() {
     setNotice("已複製成一筆新草稿。");
   };
 
-  const publishSavedDraftToFacebook = async (item: StoredSocialDraft) => {
-    const isEditingThisTask = editingDraftId === item.id;
+  const publishSavedDraftToFacebook = async (
+    item: StoredSocialDraft,
+    options?: {
+      sourceDrafts?: StoredSocialDraft[];
+      useCurrentForm?: boolean;
+      skipConfirmation?: boolean;
+    }
+  ) => {
+    const sourceDrafts = options?.sourceDrafts || savedDrafts;
+    const isEditingThisTask =
+      options?.useCurrentForm ?? editingDraftId === item.id;
     const latestItem = isEditingThisTask
       ? storedDraftFromForm(draft, item)
       : {
@@ -988,12 +1019,14 @@ export default function AdminShopSocial() {
       latestItem.hashtags,
     ].filter(Boolean).join("\n\n");
 
-    const confirmed = window.confirm(
-      `確定要發佈到 Facebook 粉絲專頁嗎？此動作會真的發文。\n\n發文內容：\n${facebookMessage}`
-    );
-    if (!confirmed) return;
+    if (!options?.skipConfirmation) {
+      const confirmed = window.confirm(
+        `確定要發佈到 Facebook 粉絲專頁嗎？此動作會真的發文。\n\n發文內容：\n${facebookMessage}`
+      );
+      if (!confirmed) return;
+    }
 
-    const draftsWithLatestContent = savedDrafts.map((draftItem) =>
+    const draftsWithLatestContent = sourceDrafts.map((draftItem) =>
       draftItem.id === item.id ? latestItem : draftItem
     );
     saveStoredDrafts(draftsWithLatestContent);
@@ -1063,6 +1096,38 @@ export default function AdminShopSocial() {
     } finally {
       setPublishingDraftId(null);
     }
+  };
+
+  const publishCurrentDraftToFacebook = async () => {
+    if (!draft.content.trim()) {
+      setNotice("請先輸入發文內容。");
+      return;
+    }
+
+    if (!draft.platforms.includes("Facebook")) {
+      setNotice("請先勾選 Facebook 平台。");
+      return;
+    }
+
+    const { nextDraft, nextDrafts } = buildCurrentDraft("pending");
+    const facebookMessage = [nextDraft.content, nextDraft.hashtags]
+      .filter(Boolean)
+      .join("\n\n");
+    const confirmed = window.confirm(
+      `確定要發佈到 Facebook 粉絲專頁嗎？此動作會真的發文。\n\n發文內容：\n${facebookMessage}`
+    );
+    if (!confirmed) return;
+
+    saveStoredDrafts(nextDrafts);
+    setSavedDrafts(nextDrafts);
+    setEditingDraftId(nextDraft.id);
+    setPreview(formFromStoredDraft(nextDraft));
+
+    await publishSavedDraftToFacebook(nextDraft, {
+      sourceDrafts: nextDrafts,
+      useCurrentForm: false,
+      skipConfirmation: true,
+    });
   };
 
   const requestFacebookPostDelete = (item: StoredSocialDraft) => {
@@ -2392,9 +2457,10 @@ export default function AdminShopSocial() {
             <div className="flex flex-col gap-3 border-t border-stone-100 pt-5 sm:flex-row sm:items-center">
               <Button
                 type="submit"
+                disabled={!hasFacebookContent}
                 className="h-11 rounded-full bg-[#8b6f5b] px-6 text-white hover:bg-[#765d4a]"
               >
-                {editingDraftId ? "更新此任務" : "新增發文任務"}
+                儲存草稿
               </Button>
               <Button
                 type="button"
@@ -2413,13 +2479,31 @@ export default function AdminShopSocial() {
                 清空表單
               </Button>
               <div className="flex flex-col gap-1 sm:ml-auto sm:items-end">
-                <Button type="button" disabled className="h-11 rounded-full px-6">
-                  <Send className="size-4" />
-                  請先儲存任務
+                <Button
+                  type="button"
+                  onClick={() => void publishCurrentDraftToFacebook()}
+                  disabled={
+                    !hasFacebookContent ||
+                    !hasFacebookPlatform ||
+                    !isFacebookReady ||
+                    isPublishingCurrentDraft
+                  }
+                  className="h-11 rounded-full bg-[#4267b2] px-7 text-white hover:bg-[#365899] disabled:bg-stone-200 disabled:text-stone-500"
+                >
+                  {isPublishingCurrentDraft ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Send className="size-4" />
+                  )}
+                  {isPublishingCurrentDraft
+                    ? "發佈中..."
+                    : "發佈到 Facebook"}
                 </Button>
-                <p className="text-xs text-stone-400">
-                  儲存後可從下方任務清單發佈到 Facebook
-                </p>
+                {facebookPublishHint && (
+                  <p className="text-xs text-stone-500">
+                    {facebookPublishHint}
+                  </p>
+                )}
               </div>
             </div>
           </form>
@@ -2721,7 +2805,7 @@ export default function AdminShopSocial() {
             <div className="mt-5 rounded-[8px] border border-dashed border-stone-200 bg-[#fbf7f1] p-6 text-center text-sm text-stone-500">
               {savedDrafts.length
                 ? "目前篩選條件下沒有發文任務。"
-                : "目前沒有發文任務。填寫上方表單後，點「新增發文任務」即可加入清單。"}
+                : "目前沒有發文任務。填寫上方表單後，點「儲存草稿」即可加入清單。"}
             </div>
           ) : (
             <div className="mt-4 grid gap-2 xl:hidden">

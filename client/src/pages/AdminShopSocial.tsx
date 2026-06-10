@@ -451,6 +451,7 @@ export default function AdminShopSocial() {
   const [metaConnections, setMetaConnections] = useState(initialMetaConnections);
   const [expandedMetaPlatform, setExpandedMetaPlatform] =
     useState<MetaPlatformKey | null>(null);
+  const [isMetaDetailsExpanded, setIsMetaDetailsExpanded] = useState(false);
   const [isMetaTokenHelperExpanded, setIsMetaTokenHelperExpanded] =
     useState(false);
   const [metaCheckedAt, setMetaCheckedAt] = useState("");
@@ -941,6 +942,97 @@ export default function AdminShopSocial() {
       <AdminShopNav current="social" />
 
       <div className="mx-auto max-w-7xl space-y-6 px-5 py-6 md:px-8 md:py-8">
+        <section className="rounded-[8px] border border-stone-200 bg-white px-4 py-3 shadow-sm md:px-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+              {(
+                [
+                  ["facebook", "Facebook", "Facebook"],
+                  ["instagram", "Instagram", "IG"],
+                  ["threads", "Threads", "Threads"],
+                ] as const
+              ).map(([key, desktopLabel, mobileLabel]) => {
+                const connection = metaConnections[key];
+
+                return (
+                  <div
+                    key={key}
+                    className="flex min-w-0 items-center gap-2 text-sm"
+                  >
+                    <span className="font-semibold text-stone-800">
+                      <span className="sm:hidden">{mobileLabel}</span>
+                      <span className="hidden sm:inline">{desktopLabel}</span>
+                    </span>
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
+                        getMetaStatusClasses(connection.status)
+                      )}
+                    >
+                      {connection.status === "checking" && (
+                        <Loader2 className="size-3 animate-spin" />
+                      )}
+                      {connection.status === "connected" && (
+                        <CheckCircle2 className="size-3" />
+                      )}
+                      {connection.status === "error" && (
+                        <AlertCircle className="size-3" />
+                      )}
+                      {getMetaStatusLabel(connection.status)}
+                    </span>
+                  </div>
+                );
+              })}
+
+              <span className="hidden text-stone-300 sm:inline">｜</span>
+              <p className="text-xs text-stone-500 sm:text-sm">
+                最後檢查：
+                {metaCheckedAt
+                  ? formatDateTime(metaCheckedAt)
+                  : "尚未完成檢查"}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={refreshMetaConnections}
+                disabled={isCheckingMeta || isCheckingFacebookToken}
+                className="h-10 rounded-full bg-white px-4 text-sm"
+              >
+                {isCheckingMeta || isCheckingFacebookToken ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-4" />
+                )}
+                {isCheckingMeta || isCheckingFacebookToken
+                  ? "檢查中..."
+                  : "重新檢查"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                aria-expanded={isMetaDetailsExpanded}
+                onClick={() =>
+                  setIsMetaDetailsExpanded((isExpanded) => !isExpanded)
+                }
+                className="h-10 rounded-full bg-[#fffaf7] px-4 text-sm"
+              >
+                {isMetaDetailsExpanded ? "收合設定" : "詳細設定"}
+                <ChevronDown
+                  className={cn(
+                    "size-4 transition-transform",
+                    isMetaDetailsExpanded && "rotate-180"
+                  )}
+                />
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        {isMetaDetailsExpanded && (
+          <div className="space-y-6">
         <section className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm md:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -1554,6 +1646,8 @@ export default function AdminShopSocial() {
             </div>
           )}
         </section>
+          </div>
+        )}
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
           <form

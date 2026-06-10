@@ -143,7 +143,14 @@ const initialMetaConnections: Record<
 };
 
 function createDraftId() {
-  return `social-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  if (
+    typeof globalThis.crypto !== "undefined" &&
+    typeof globalThis.crypto.randomUUID === "function"
+  ) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `social-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function getDraftStatus(mode: PublishMode, scheduledAt: string): DraftStatus {
@@ -230,9 +237,34 @@ function loadStoredDrafts(): StoredSocialDraft[] {
 
     if (rawDrafts) {
       const parsed = JSON.parse(rawDrafts);
-      return Array.isArray(parsed)
-        ? parsed.map(normalizeStoredDraft).filter(Boolean) as StoredSocialDraft[]
-        : [];
+      const sourceDrafts = Array.isArray(parsed) ? parsed : [parsed];
+      const seenIds = new Set<string>();
+      let repaired = !Array.isArray(parsed);
+      const drafts = sourceDrafts.flatMap((value) => {
+        const sourceId =
+          value && typeof value === "object" && "id" in value
+            ? String((value as { id?: unknown }).id || "").trim()
+            : "";
+        const normalized = normalizeStoredDraft(value);
+        if (!normalized) {
+          repaired = true;
+          return [];
+        }
+
+        if (!sourceId || seenIds.has(normalized.id)) {
+          normalized.id = createDraftId();
+          repaired = true;
+        }
+
+        seenIds.add(normalized.id);
+        return [normalized];
+      });
+
+      if (repaired) {
+        localStorage.setItem(socialDraftsStorageKey, JSON.stringify(drafts));
+      }
+
+      return drafts;
     }
 
     const legacyDraft = localStorage.getItem(legacySocialDraftStorageKey);
@@ -256,12 +288,11 @@ function saveStoredDrafts(drafts: StoredSocialDraft[]) {
 
 function getInitialSocialState() {
   const drafts = loadStoredDrafts();
-  const latestDraft = [...drafts].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
 
   return {
     drafts,
-    activeDraftId: latestDraft?.id || null,
-    form: latestDraft ? formFromStoredDraft(latestDraft) : defaultDraft,
+    activeDraftId: null,
+    form: defaultDraft,
   };
 }
 
@@ -758,12 +789,21 @@ export default function AdminShopSocial() {
 
     saveStoredDrafts(nextDrafts);
     setSavedDrafts(nextDrafts);
-    setEditingDraftId(existingDraft ? nextDraft.id : null);
-    setPreview(draft);
+    if (existingDraft) {
+      setEditingDraftId(nextDraft.id);
+      setPreview(formFromStoredDraft(nextDraft));
+    } else {
+      setEditingDraftId(null);
+      setDraft(defaultDraft);
+      setPreview(defaultDraft);
+      setSelectedFiles([]);
+      setUploadError("");
+      setFileInputKey((current) => current + 1);
+    }
     setNotice(
       existingDraft
         ? "已更新此任務，目前尚未真的發文。"
-        : "已新增發文任務，目前尚未真的發文。"
+        : "已新增發文任務，目前尚未真的發文。表單已清空，可繼續新增下一筆。"
     );
   };
 

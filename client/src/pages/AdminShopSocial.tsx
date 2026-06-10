@@ -1,5 +1,6 @@
 import {
   ChangeEvent,
+  Fragment,
   FormEvent,
   useCallback,
   useEffect,
@@ -12,15 +13,18 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Clipboard,
   Copy,
   Edit3,
+  ExternalLink,
   Eye,
   EyeOff,
   FileImage,
   KeyRound,
   LockKeyhole,
   Loader2,
+  MoreHorizontal,
   RefreshCw,
   Send,
   Sparkles,
@@ -65,6 +69,15 @@ type DraftStatus =
   | "cancelled";
 
 type MetaPlatformKey = "facebook" | "instagram" | "threads";
+type TaskFilter =
+  | "all"
+  | "draft"
+  | "published"
+  | "deleted"
+  | "failed"
+  | "facebook"
+  | "instagram"
+  | "threads";
 type MetaConnectionUiStatus = MetaPlatformConnection | {
   status: "checking";
   accountName: null;
@@ -408,7 +421,7 @@ function getStatusLabel(status: DraftStatus) {
   const labels: Record<DraftStatus, string> = {
     pending: "草稿",
     scheduled: "排程中",
-    published: "已發文",
+    published: "已發布",
     deleted: "已刪除",
     partial_success: "部分成功",
     failed: "發文失敗",
@@ -416,6 +429,14 @@ function getStatusLabel(status: DraftStatus) {
   };
 
   return labels[status] || "待發文";
+}
+
+function getTaskStatusClasses(status: DraftStatus) {
+  if (status === "published") return "bg-emerald-50 text-emerald-700";
+  if (status === "deleted") return "bg-red-50 text-red-700";
+  if (status === "failed") return "bg-orange-50 text-orange-700";
+  if (status === "scheduled") return "bg-sky-50 text-sky-700";
+  return "bg-stone-100 text-stone-600";
 }
 
 function formatFileSize(size: number) {
@@ -526,6 +547,12 @@ export default function AdminShopSocial() {
   >(null);
   const [facebookDeleteTarget, setFacebookDeleteTarget] =
     useState<StoredSocialDraft | null>(null);
+  const [taskFilter, setTaskFilter] = useState<TaskFilter>("all");
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [openTaskMenuId, setOpenTaskMenuId] = useState<string | null>(null);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [shortLivedUserToken, setShortLivedUserToken] = useState("");
   const [isExchangingMetaToken, setIsExchangingMetaToken] = useState(false);
   const [metaTokenResult, setMetaTokenResult] =
@@ -547,6 +574,25 @@ export default function AdminShopSocial() {
     () => [...savedDrafts].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     [savedDrafts]
   );
+  const visibleDrafts = useMemo(() => {
+    const filtered = sortedDrafts.filter((item) => {
+      if (taskFilter === "all") return true;
+      if (taskFilter === "draft") return item.status === "pending";
+      if (taskFilter === "published") return item.status === "published";
+      if (taskFilter === "deleted") return item.status === "deleted";
+      if (taskFilter === "failed") return item.status === "failed";
+
+      const platform =
+        taskFilter === "facebook"
+          ? "Facebook"
+          : taskFilter === "instagram"
+            ? "Instagram"
+            : "Threads";
+      return item.platforms.includes(platform);
+    });
+
+    return filtered.slice(0, 100);
+  }, [sortedDrafts, taskFilter]);
 
   const persistDrafts = (nextDrafts: StoredSocialDraft[]) => {
     saveStoredDrafts(nextDrafts);
@@ -1136,6 +1182,232 @@ export default function AdminShopSocial() {
 
     setNotice("草稿已刪除。");
   };
+
+  const toggleTaskSelection = (taskId: string) => {
+    setSelectedTaskIds((current) => {
+      const next = new Set(current);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
+
+  const getTaskSummary = (item: StoredSocialDraft) =>
+    item.title.trim() || item.content.trim() || "未命名發文任務";
+
+  const getTaskPublishTime = (item: StoredSocialDraft) => {
+    if (item.status === "scheduled" && item.scheduledAt) {
+      return formatDateTime(item.scheduledAt);
+    }
+    if (item.publishedAt) return formatDateTime(item.publishedAt);
+    return "尚未發布";
+  };
+
+  const renderTaskActionMenu = (item: StoredSocialDraft) => {
+    const isOpen = openTaskMenuId === item.id;
+    const closeMenu = () => setOpenTaskMenuId(null);
+    const actionClasses =
+      "flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-stone-700 transition hover:bg-[#fbf7f1]";
+
+    return (
+      <div
+        className="relative"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          aria-label={`開啟 ${getTaskSummary(item)} 操作選單`}
+          aria-expanded={isOpen}
+          onClick={() =>
+            setOpenTaskMenuId((current) =>
+              current === item.id ? null : item.id
+            )
+          }
+          className="flex size-9 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-600 transition hover:border-[#cdbba8] hover:bg-[#fbf7f1]"
+        >
+          <MoreHorizontal className="size-4" />
+        </button>
+
+        {isOpen && (
+          <div className="absolute right-0 top-11 z-40 w-52 overflow-hidden rounded-[8px] border border-stone-200 bg-white py-1 shadow-xl">
+            {item.facebookPermalinkUrl ? (
+              <a
+                href={item.facebookPermalinkUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={closeMenu}
+                className={actionClasses}
+              >
+                <ExternalLink className="size-4" />
+                查看 FB 文章
+              </a>
+            ) : (
+              <span className="flex w-full items-center gap-2 px-3 py-2 text-sm text-stone-300">
+                <ExternalLink className="size-4" />
+                查看 FB 文章
+              </span>
+            )}
+
+            {item.status === "published" && item.facebookPostId && (
+              <button
+                type="button"
+                disabled={syncingFacebookDraftId === item.id}
+                onClick={() => {
+                  closeMenu();
+                  void syncPublishedFacebookPost(item);
+                }}
+                className={actionClasses}
+              >
+                {syncingFacebookDraftId === item.id ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-4" />
+                )}
+                同步狀態
+              </button>
+            )}
+
+            {item.status !== "published" &&
+              item.status !== "deleted" &&
+              item.platforms.includes("Facebook") && (
+                <button
+                  type="button"
+                  disabled={publishingDraftId === item.id}
+                  onClick={() => {
+                    closeMenu();
+                    void publishSavedDraftToFacebook(item);
+                  }}
+                  className={actionClasses}
+                >
+                  {publishingDraftId === item.id ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Send className="size-4" />
+                  )}
+                  發佈到 Facebook
+                </button>
+              )}
+
+            <button
+              type="button"
+              onClick={() => {
+                closeMenu();
+                copySavedDraft(item);
+              }}
+              className={actionClasses}
+            >
+              <Copy className="size-4" />
+              複製
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                closeMenu();
+                editSavedDraft(item);
+              }}
+              className={actionClasses}
+            >
+              <Edit3 className="size-4" />
+              編輯
+            </button>
+
+            {item.status === "published" && item.facebookPostId && (
+              <button
+                type="button"
+                disabled={deletingFacebookDraftId === item.id}
+                onClick={() => {
+                  closeMenu();
+                  requestFacebookPostDelete(item);
+                }}
+                className={`${actionClasses} text-red-700`}
+              >
+                <Trash2 className="size-4" />
+                刪除 FB 貼文
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                closeMenu();
+                deleteSavedDraft(item);
+              }}
+              className={`${actionClasses} border-t border-stone-100 text-red-700`}
+            >
+              <Trash2 className="size-4" />
+              刪除任務紀錄
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderTaskDetails = (item: StoredSocialDraft) => (
+    <div className="grid gap-3 bg-[#fffaf7] p-4 text-sm text-stone-600 lg:grid-cols-2">
+      <div>
+        <p className="text-xs font-semibold text-stone-400">發文內容</p>
+        <p className="mt-1 whitespace-pre-wrap leading-6">
+          {item.content || "尚未填寫內容"}
+        </p>
+        {item.hashtags && (
+          <p className="mt-2 text-[#8b6f5b]">{item.hashtags}</p>
+        )}
+      </div>
+      <dl className="grid gap-1.5">
+        {item.publishedAt && (
+          <div>
+            <dt className="inline text-stone-400">原發文時間：</dt>
+            <dd className="inline">{formatDateTime(item.publishedAt)}</dd>
+          </div>
+        )}
+        {item.deletedAt && (
+          <div>
+            <dt className="inline text-stone-400">刪除時間：</dt>
+            <dd className="inline">{formatDateTime(item.deletedAt)}</dd>
+          </div>
+        )}
+        {item.deleteSource && (
+          <div>
+            <dt className="inline text-stone-400">刪除來源：</dt>
+            <dd className="inline">
+              {item.deleteSource === "facebook"
+                ? "Facebook"
+                : item.deleteSource === "admin"
+                  ? "後台管理員"
+                  : "API"}
+            </dd>
+          </div>
+        )}
+        {item.facebookPostId && (
+          <div>
+            <dt className="inline text-stone-400">Facebook 貼文編號：</dt>
+            <dd className="inline break-all">{item.facebookPostId}</dd>
+          </div>
+        )}
+        {item.facebookPermalinkUrl && (
+          <div>
+            <dt className="inline text-stone-400">文章連結：</dt>
+            <dd className="inline">
+              <a
+                href={item.facebookPermalinkUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="break-all text-[#8b6f5b] underline underline-offset-2"
+              >
+                {item.facebookPermalinkUrl}
+              </a>
+            </dd>
+          </div>
+        )}
+        {item.publishError && (
+          <div className="mt-1 rounded-[6px] bg-orange-50 px-3 py-2 text-orange-700">
+            發布失敗：{item.publishError.errorMessage}
+          </div>
+        )}
+      </dl>
+    </div>
+  );
 
   if (!token) {
     return (
@@ -2292,235 +2564,243 @@ export default function AdminShopSocial() {
             Facebook 已支援純文字發文；Instagram、Threads、圖片與影片發文目前尚未啟用。
           </p>
 
-          {sortedDrafts.length === 0 ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {(
+              [
+                ["all", "全部"],
+                ["draft", "草稿"],
+                ["published", "已發布"],
+                ["deleted", "已刪除"],
+                ["failed", "發布失敗"],
+                ["facebook", "Facebook"],
+                ["instagram", "Instagram"],
+                ["threads", "Threads"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setTaskFilter(value)}
+                className={cn(
+                  "h-9 rounded-full border px-4 text-sm font-medium transition",
+                  taskFilter === value
+                    ? "border-[#8b6f5b] bg-[#8b6f5b] text-white"
+                    : "border-stone-200 bg-white text-stone-600 hover:border-[#cdbba8] hover:bg-[#fffaf7]"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-4 hidden xl:block">
+            <div className="overflow-visible rounded-[8px] border border-stone-200">
+              <table className="w-full table-fixed border-collapse text-left">
+                <colgroup>
+                  <col className="w-11" />
+                  <col />
+                  <col className="w-32" />
+                  <col className="w-24" />
+                  <col className="w-40" />
+                  <col className="w-24" />
+                  <col className="w-24" />
+                  <col className="w-36" />
+                  <col className="w-14" />
+                </colgroup>
+                <thead className="bg-[#f7f1e8] text-xs font-semibold text-stone-600">
+                  <tr>
+                    <th className="px-3 py-3">
+                      <span className="sr-only">選取</span>
+                    </th>
+                    <th className="px-3 py-3">標題或內容摘要</th>
+                    <th className="px-3 py-3">平台</th>
+                    <th className="px-3 py-3">發文模式</th>
+                    <th className="px-3 py-3">發布／排程時間</th>
+                    <th className="px-3 py-3">媒體</th>
+                    <th className="px-3 py-3">狀態</th>
+                    <th className="px-3 py-3">最後同步</th>
+                    <th className="px-3 py-3 text-center">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {visibleDrafts.map((item) => {
+                    const isExpanded = expandedTaskId === item.id;
+                    const isSelected = selectedTaskIds.has(item.id);
+
+                    return (
+                      <Fragment key={item.id}>
+                        <tr
+                          onClick={() =>
+                            setExpandedTaskId((current) =>
+                              current === item.id ? null : item.id
+                            )
+                          }
+                          className={cn(
+                            "h-[64px] cursor-pointer bg-white transition hover:bg-[#fffaf7]",
+                            editingDraftId === item.id && "bg-[#fbf0e4]/60",
+                            isExpanded && "bg-[#fffaf7]"
+                          )}
+                        >
+                          <td className="px-3 py-2">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={() => toggleTaskSelection(item.id)}
+                              aria-label={`選取 ${getTaskSummary(item)}`}
+                              className="size-4 accent-[#8b6f5b]"
+                            />
+                          </td>
+                          <td className="min-w-0 px-3 py-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <ChevronRight
+                                className={cn(
+                                  "size-4 shrink-0 text-stone-400 transition-transform",
+                                  isExpanded && "rotate-90"
+                                )}
+                              />
+                              <p
+                                className="truncate font-medium text-stone-900"
+                                title={getTaskSummary(item)}
+                              >
+                                {getTaskSummary(item)}
+                              </p>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-stone-600">
+                            <p className="truncate">
+                              {item.platforms.join(" / ") || "未選擇"}
+                            </p>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-stone-600">
+                            {getModeLabel(item.mode)}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-stone-600">
+                            {getTaskPublishTime(item)}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-stone-600">
+                            {item.mediaFiles.length
+                              ? `已上傳 ${item.mediaFiles.length}`
+                              : "未上傳"}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={cn(
+                                "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
+                                getTaskStatusClasses(item.status)
+                              )}
+                            >
+                              {getStatusLabel(item.status)}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-stone-500">
+                            {item.lastSyncedAt
+                              ? formatDateTime(item.lastSyncedAt)
+                              : "尚未同步"}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {renderTaskActionMenu(item)}
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={9} className="p-0">
+                              {renderTaskDetails(item)}
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {visibleDrafts.length === 0 ? (
             <div className="mt-5 rounded-[8px] border border-dashed border-stone-200 bg-[#fbf7f1] p-6 text-center text-sm text-stone-500">
-              目前沒有發文任務。填寫上方表單後，點「新增發文任務」即可加入清單。
+              {savedDrafts.length
+                ? "目前篩選條件下沒有發文任務。"
+                : "目前沒有發文任務。填寫上方表單後，點「新增發文任務」即可加入清單。"}
             </div>
           ) : (
-            <div className="mt-5 grid gap-3">
-              {sortedDrafts.map((item) => {
+            <div className="mt-4 grid gap-2 xl:hidden">
+              {visibleDrafts.map((item) => {
                 const isActive = editingDraftId === item.id;
-                const title = item.title || "未命名草稿";
+                const isExpanded = expandedTaskId === item.id;
 
                 return (
                   <article
                     key={item.id}
+                    onClick={() =>
+                      setExpandedTaskId((current) =>
+                        current === item.id ? null : item.id
+                      )
+                    }
                     className={cn(
-                      "rounded-[8px] border bg-[#fffaf7] p-4 transition md:flex md:items-start md:justify-between md:gap-5",
+                      "cursor-pointer rounded-[8px] border bg-[#fffaf7] p-3 transition",
                       isActive
                         ? "border-[#8b6f5b] shadow-sm"
                         : "border-stone-100 hover:border-[#d7c4ae] hover:shadow-sm"
                     )}
                   >
-                    <div className="min-w-0 space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-semibold text-stone-900">
-                          {title}
-                        </h3>
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedTaskIds.has(item.id)}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={() => toggleTaskSelection(item.id)}
+                        aria-label={`選取 ${getTaskSummary(item)}`}
+                        className="mt-1 size-4 shrink-0 accent-[#8b6f5b]"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <ChevronRight
+                            className={cn(
+                              "size-4 shrink-0 text-stone-400 transition-transform",
+                              isExpanded && "rotate-90"
+                            )}
+                          />
+                          <h3 className="truncate text-sm font-semibold text-stone-900">
+                            {getTaskSummary(item)}
+                          </h3>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-500">
+                          <span>{item.platforms.join(" / ") || "未選擇平台"}</span>
+                          <span>·</span>
+                          <span>{getModeLabel(item.mode)}</span>
+                          <span>·</span>
+                          <span>
+                            {item.mediaFiles.length ? "已上傳媒體" : "未上傳"}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
                         <span
                           className={cn(
-                            "rounded-full px-2.5 py-1 text-xs font-semibold",
-                            item.status === "scheduled"
-                              ? "bg-[#fbf0e4] text-[#8b6f5b]"
-                              : item.status === "deleted"
-                                ? "bg-red-50 text-red-700"
-                              : "bg-stone-100 text-stone-600"
+                              "rounded-full px-2.5 py-1 text-xs font-semibold",
+                              getTaskStatusClasses(item.status)
                           )}
                         >
                           {getStatusLabel(item.status)}
                         </span>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        {item.platforms.length > 0 ? (
-                          item.platforms.map((platform) => (
-                            <span
-                              key={platform}
-                              className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-stone-600"
-                            >
-                              {platform}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-sm text-stone-400">尚未選擇平台</span>
-                        )}
-                      </div>
-
-                      <div className="grid gap-2 text-sm text-stone-600 sm:grid-cols-2 lg:grid-cols-4">
-                        <p>
-                          <span className="text-stone-400">發文模式：</span>
-                          {getModeLabel(item.mode)}
-                        </p>
-                        <p>
-                          <span className="text-stone-400">排程時間：</span>
-                          {item.scheduledAt ? formatDateTime(item.scheduledAt) : "未排程"}
-                        </p>
-                        <p>
-                          <span className="text-stone-400">最後更新：</span>
-                          {formatDateTime(item.updatedAt)}
-                        </p>
-                        <p>
-                          <span className="text-stone-400">媒體：</span>
-                          {item.mediaFiles.length > 0
-                            ? `已上傳 ${item.mediaFiles.length} 個檔案`
-                            : "未上傳"}
-                        </p>
-                      </div>
-
-                      {item.status === "published" && (
-                        <div className="rounded-[8px] border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                          <p className="font-semibold">Facebook 已發文</p>
-                          {item.publishedAt && (
-                            <p>發文時間：{formatDateTime(item.publishedAt)}</p>
-                          )}
-                          {item.facebookPostId && (
-                            <p className="break-all">
-                              貼文編號：{item.facebookPostId}
-                            </p>
-                          )}
-                          {item.facebookPermalinkUrl && (
-                            <a
-                              href={item.facebookPermalinkUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="mt-1 inline-block underline underline-offset-2"
-                            >
-                              查看 Facebook 貼文
-                            </a>
-                          )}
+                          <span className="text-xs text-stone-500">
+                            {getTaskPublishTime(item)}
+                          </span>
                           {item.lastSyncedAt && (
-                            <p>
-                              最後同步：{formatDateTime(item.lastSyncedAt)}
-                            </p>
+                            <span className="text-xs text-stone-400">
+                              最後同步 {formatDateTime(item.lastSyncedAt)}
+                            </span>
                           )}
                         </div>
-                      )}
-
-                      {item.status === "deleted" && (
-                        <div className="rounded-[8px] border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
-                          <p className="font-semibold">Facebook 貼文已刪除</p>
-                          {item.publishedAt && (
-                            <p>原發文時間：{formatDateTime(item.publishedAt)}</p>
-                          )}
-                          {item.deletedAt && (
-                            <p>刪除時間：{formatDateTime(item.deletedAt)}</p>
-                          )}
-                          {item.deleteSource && (
-                            <p>
-                              刪除來源：
-                              {item.deleteSource === "facebook"
-                                ? "Facebook"
-                                : item.deleteSource === "admin"
-                                  ? "後台管理員"
-                                  : "API"}
-                            </p>
-                          )}
-                          {item.facebookPostId && (
-                            <p className="break-all">
-                              原貼文編號：{item.facebookPostId}
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {item.status === "failed" && item.publishError && (
-                        <div className="rounded-[8px] border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
-                          <p className="font-semibold">
-                            發文失敗：{item.publishError.errorCode}
-                          </p>
-                          <p>{item.publishError.errorMessage}</p>
-                        </div>
-                      )}
+                      </div>
+                      {renderTaskActionMenu(item)}
                     </div>
 
-                    <div className="mt-4 grid grid-cols-2 gap-2 md:mt-0 md:w-[280px] md:shrink-0">
-                      <Button
-                        type="button"
-                        onClick={() => void publishSavedDraftToFacebook(item)}
-                        disabled={
-                          publishingDraftId === item.id ||
-                          item.status === "published" ||
-                          !item.platforms.includes("Facebook")
-                        }
-                        className="col-span-2 h-10 rounded-full bg-[#4267b2] px-3 text-white hover:bg-[#365899]"
-                      >
-                        {publishingDraftId === item.id ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <Send className="size-4" />
-                        )}
-                        {publishingDraftId === item.id
-                          ? "發佈中..."
-                          : item.status === "published"
-                            ? "已發佈到 Facebook"
-                            : "發佈到 Facebook"}
-                      </Button>
-                      {item.status === "published" && item.facebookPostId && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() =>
-                            void syncPublishedFacebookPost(item)
-                          }
-                          disabled={syncingFacebookDraftId === item.id}
-                          className="col-span-2 h-10 rounded-full border-[#cdbba8] bg-white px-3 text-[#765d4a] hover:bg-[#fbf0e4]"
-                        >
-                          {syncingFacebookDraftId === item.id ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="size-4" />
-                          )}
-                          {syncingFacebookDraftId === item.id
-                            ? "同步中..."
-                            : "同步狀態"}
-                        </Button>
-                      )}
-                      {item.status === "published" && item.facebookPostId && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => requestFacebookPostDelete(item)}
-                          disabled={deletingFacebookDraftId === item.id}
-                          className="col-span-2 h-10 rounded-full border-red-200 bg-red-50 px-3 text-red-700 hover:bg-red-100 hover:text-red-800"
-                        >
-                          {deletingFacebookDraftId === item.id ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="size-4" />
-                          )}
-                          {deletingFacebookDraftId === item.id
-                            ? "刪除中..."
-                            : "刪除貼文"}
-                        </Button>
-                      )}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => editSavedDraft(item)}
-                        className="h-10 rounded-full bg-white px-3"
-                      >
-                        <Edit3 className="size-4" />
-                        編輯
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => copySavedDraft(item)}
-                        className="h-10 rounded-full bg-white px-3"
-                      >
-                        <Copy className="size-4" />
-                        複製
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => deleteSavedDraft(item)}
-                        className="col-span-2 h-10 rounded-full bg-white px-3 text-red-600 hover:text-red-700 sm:col-span-1"
-                      >
-                        <Trash2 className="size-4" />
-                        刪除
-                      </Button>
-                    </div>
+                    {isExpanded && (
+                      <div className="mt-3 border-t border-stone-100">
+                        {renderTaskDetails(item)}
+                      </div>
+                    )}
                   </article>
                 );
               })}

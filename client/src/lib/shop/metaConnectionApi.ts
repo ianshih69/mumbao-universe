@@ -17,11 +17,21 @@ export type MetaPlatformConnection = {
     message: string | null;
   } | null;
   diagnostics?: {
-    hasFacebookPageId: boolean;
-    facebookPageIdLength: number;
-    hasFacebookPageToken: boolean;
-    facebookPageTokenPrefix: string;
-    facebookPageTokenLength: number;
+    hasFacebookPageId?: boolean;
+    facebookPageIdLength?: number;
+    hasFacebookPageToken?: boolean;
+    facebookPageTokenPrefix?: string;
+    facebookPageTokenLength?: number;
+    pageId?: string;
+    pageName?: string;
+    instagramBusinessAccountId?: string;
+    hasInstagramBusinessAccount?: boolean;
+    scopeCheckAvailable?: boolean;
+    grantedScopes?: string[];
+    requiredScopes?: string[];
+    missingScopes?: string[];
+    canPublishInstagram?: boolean;
+    scopeCheckError?: string | null;
   };
 };
 

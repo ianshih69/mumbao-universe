@@ -51,6 +51,14 @@ const knownManualSaleErrors = new Map([
   ["PRODUCT_NOT_FOUND", "Product not found."],
   ["INSUFFICIENT_INVENTORY", "Inventory is not enough for this sale."],
 ]);
+const instagramRequiredScopes = [
+  "pages_show_list",
+  "pages_read_engagement",
+  "pages_manage_metadata",
+  "pages_manage_posts",
+  "instagram_basic",
+  "instagram_content_publish",
+];
 
 function requireAdmin(req) {
   const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
@@ -281,7 +289,60 @@ async function checkFacebookConnection() {
   };
 }
 
-async function checkInstagramConnection() {
+async function inspectFacebookTokenScopes() {
+  const appId = cleanText(getServerEnv("META_APP_ID"));
+  const appSecret = cleanText(getServerEnv("META_APP_SECRET"));
+  const pageAccessToken = cleanText(
+    getServerEnv("FACEBOOK_PAGE_ACCESS_TOKEN")
+  );
+
+  if (!appId || !appSecret || !pageAccessToken) {
+    return {
+      available: false,
+      scopes: [],
+      error: "無法檢查 Token scopes，請確認 Meta App 與 Page Token 環境變數。",
+    };
+  }
+
+  const url = new URL("https://graph.facebook.com/v25.0/debug_token");
+  url.searchParams.set("input_token", pageAccessToken);
+  url.searchParams.set("access_token", `${appId}|${appSecret}`);
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    return {
+      available: false,
+      scopes: [],
+      error: "目前無法檢查 Meta Token scopes，請稍後再試。",
+    };
+  }
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.data) {
+    const safeError = getSafeMetaError(response.status, payload?.error);
+    return {
+      available: false,
+      scopes: [],
+      error: safeError.reason,
+    };
+  }
+
+  return {
+    available: true,
+    scopes: Array.isArray(payload.data.scopes)
+      ? payload.data.scopes.map((scope) => cleanText(scope)).filter(Boolean)
+      : [],
+    error: null,
+  };
+}
+
+async function checkInstagramConnection(tokenInspection) {
   const accessToken = cleanText(
     getServerEnv("FACEBOOK_PAGE_ACCESS_TOKEN")
   );
@@ -294,29 +355,77 @@ async function checkInstagramConnection() {
     return createMetaStatus("not_configured");
   }
 
-  let accountId;
+  const grantedScopes = tokenInspection?.scopes || [];
+  const missingScopes = tokenInspection?.available
+    ? instagramRequiredScopes.filter(
+        (scope) => !grantedScopes.includes(scope)
+      )
+    : [];
+  const scopeDiagnostics = {
+    scopeCheckAvailable: tokenInspection?.available === true,
+    grantedScopes,
+    requiredScopes: instagramRequiredScopes,
+    missingScopes,
+    canPublishInstagram:
+      tokenInspection?.available === true && missingScopes.length === 0,
+    scopeCheckError: tokenInspection?.error || null,
+  };
+
+  let pageLink;
   try {
-    accountId = await resolveInstagramBusinessAccountId(
+    pageLink = await fetchInstagramPageLink(
       pageId,
       accessToken
     );
   } catch (error) {
-    return createMetaStatus(
-      "error",
-      null,
-      error.message || "無法取得 Instagram 商業帳號。",
-      error.code || "INSTAGRAM_ACCOUNT_LOOKUP_FAILED",
-      error.metaError || null
-    );
+    const missingScopeMessage = missingScopes.includes("instagram_basic")
+      ? "目前 token 缺少 instagram_basic，請重新授權 Meta App。"
+      : missingScopes.includes("instagram_content_publish")
+        ? "目前 token 缺少 instagram_content_publish，無法發布 Instagram 貼文，請重新授權 Meta App。"
+        : null;
+
+    return {
+      ...createMetaStatus(
+        "error",
+        null,
+        missingScopeMessage ||
+          error.message ||
+          "無法取得 Instagram 商業帳號。",
+        missingScopeMessage
+          ? "INSTAGRAM_REQUIRED_SCOPE_MISSING"
+          : error.code || "INSTAGRAM_ACCOUNT_LOOKUP_FAILED",
+        error.metaError || null
+      ),
+      diagnostics: scopeDiagnostics,
+    };
   }
 
-  return fetchMetaProfile({
+  const profile = await fetchMetaProfile({
     baseUrl: "https://graph.facebook.com",
     version: getMetaGraphVersion(),
-    accountId,
+    accountId: pageLink.accountId,
     accessToken,
     fields: ["id", "username", "name"],
   });
+
+  return {
+    ...createMetaStatus(
+      "connected",
+      profile.status === "connected"
+        ? profile.accountName
+        : `Instagram 帳號 ${pageLink.accountId}`,
+      profile.status === "error" ? profile.error : null,
+      profile.status === "error" ? profile.errorCode : null,
+      profile.status === "error" ? profile.metaError : null
+    ),
+    diagnostics: {
+      pageId: pageLink.pageId,
+      pageName: pageLink.pageName,
+      instagramBusinessAccountId: pageLink.accountId,
+      hasInstagramBusinessAccount: true,
+      ...scopeDiagnostics,
+    },
+  };
 }
 
 async function checkThreadsConnection() {
@@ -337,9 +446,10 @@ async function checkThreadsConnection() {
 }
 
 async function loadMetaStatus(_req, res) {
+  const tokenInspection = await inspectFacebookTokenScopes();
   const [facebook, instagram, threads] = await Promise.all([
     checkFacebookConnection(),
-    checkInstagramConnection(),
+    checkInstagramConnection(tokenInspection),
     checkThreadsConnection(),
   ]);
 
@@ -749,13 +859,20 @@ async function handlePublishFacebookPost(req, res) {
   });
 }
 
-async function resolveInstagramBusinessAccountId(pageId, accessToken) {
+async function fetchInstagramPageLink(pageId, accessToken) {
   const configuredAccountId = cleanText(
     getServerEnv("INSTAGRAM_BUSINESS_ACCOUNT_ID")
   );
-  if (configuredAccountId) return configuredAccountId;
 
   if (!pageId) {
+    if (configuredAccountId) {
+      return {
+        pageId: "",
+        pageName: "",
+        accountId: configuredAccountId,
+      };
+    }
+
     const error = new Error(
       "INSTAGRAM_BUSINESS_ACCOUNT_ID 與 FACEBOOK_PAGE_ID 均未設定。"
     );
@@ -769,7 +886,7 @@ async function resolveInstagramBusinessAccountId(pageId, accessToken) {
       pageId
     )}`
   );
-  url.searchParams.set("fields", "instagram_business_account");
+  url.searchParams.set("fields", "id,name,instagram_business_account");
   url.searchParams.set("access_token", accessToken);
 
   let response;
@@ -806,7 +923,16 @@ async function resolveInstagramBusinessAccountId(pageId, accessToken) {
     throw error;
   }
 
-  return accountId;
+  return {
+    pageId: cleanText(payload?.id) || pageId,
+    pageName: cleanText(payload?.name),
+    accountId,
+  };
+}
+
+async function resolveInstagramBusinessAccountId(pageId, accessToken) {
+  const pageLink = await fetchInstagramPageLink(pageId, accessToken);
+  return pageLink.accountId;
 }
 
 function findInstagramImage(task, requestedImageUrl, requestedR2Key) {

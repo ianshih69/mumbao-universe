@@ -683,7 +683,10 @@ export default function AdminShopSocial() {
     metaConnections.facebook.status === "connected" &&
     facebookTokenDebug?.isValid === true;
   const isInstagramReady =
-    metaConnections.instagram.status === "connected";
+    metaConnections.instagram.status === "connected" &&
+    metaConnections.instagram.diagnostics?.canPublishInstagram !== false;
+  const instagramMissingScopes =
+    metaConnections.instagram.diagnostics?.missingScopes || [];
   const isThreadsReady =
     metaConnections.threads.status === "connected";
   const threadsText = [
@@ -744,7 +747,13 @@ export default function AdminShopSocial() {
       : wantsFacebook && !isFacebookReady
         ? "尚未連接 Facebook 粉專"
       : wantsInstagram && !isInstagramReady
-        ? "尚未連接 Instagram 帳號"
+        ? instagramMissingScopes.includes("instagram_basic")
+          ? "目前 token 缺少 instagram_basic，請重新授權 Meta App"
+          : instagramMissingScopes.includes("instagram_content_publish")
+            ? "目前 token 缺少 instagram_content_publish，無法發布 Instagram 貼文，請重新授權 Meta App"
+            : metaConnections.instagram.status === "connected"
+              ? "目前 token 缺少必要 Meta 權限，請重新授權 Meta App"
+              : "尚未連接 Instagram 帳號"
       : wantsThreads && !isThreadsReady
         ? "尚未連接 Threads 帳號"
       : "";
@@ -2160,7 +2169,7 @@ export default function AdminShopSocial() {
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <h3 className="font-semibold text-stone-900">{label}</h3>
-                      {key === "facebook" && connection.accountName && (
+                      {connection.accountName && (
                         <p className="mt-1 truncate text-sm text-stone-600">
                           {connection.accountName}
                         </p>
@@ -2273,6 +2282,79 @@ export default function AdminShopSocial() {
                             ? `已設定（${connection.diagnostics.facebookPageTokenLength} 字元，開頭 ${connection.diagnostics.facebookPageTokenPrefix}）`
                             : "未設定或空白"}
                         </p>
+                      </div>
+                    )}
+
+                    {key === "instagram" && connection.diagnostics && (
+                      <div className="mt-3 space-y-3 border-t border-stone-200 pt-3 text-xs leading-5 text-stone-600">
+                        <div>
+                          <p className="font-semibold text-stone-700">
+                            Facebook 粉專連結診斷
+                          </p>
+                          <p>
+                            Page：
+                            {connection.diagnostics.pageName ||
+                              connection.diagnostics.pageId ||
+                              "Meta 未回傳"}
+                          </p>
+                          <p>
+                            Instagram Business Account：
+                            {connection.diagnostics
+                              .instagramBusinessAccountId || "未取得"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="font-semibold text-stone-700">
+                            Instagram 發布權限
+                          </p>
+                          {connection.diagnostics.scopeCheckAvailable ? (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {connection.diagnostics.requiredScopes?.map(
+                                (scope) => {
+                                  const isMissing =
+                                    connection.diagnostics?.missingScopes?.includes(
+                                      scope
+                                    );
+                                  return (
+                                    <span
+                                      key={scope}
+                                      className={cn(
+                                        "rounded-full border px-2 py-0.5 font-mono text-[10px]",
+                                        isMissing
+                                          ? "border-red-200 bg-red-50 text-red-700"
+                                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                      )}
+                                    >
+                                      {scope}
+                                    </span>
+                                  );
+                                }
+                              )}
+                            </div>
+                          ) : (
+                            <p className="mt-1 text-amber-700">
+                              {connection.diagnostics.scopeCheckError ||
+                                "Meta 未回傳 Token scopes。"}
+                            </p>
+                          )}
+                        </div>
+
+                        {connection.diagnostics.missingScopes?.includes(
+                          "instagram_basic"
+                        ) && (
+                          <div className="rounded-[6px] border border-amber-200 bg-amber-50 px-3 py-2 font-medium text-amber-900">
+                            目前 token 缺少 instagram_basic，請重新授權 Meta App。
+                          </div>
+                        )}
+
+                        {connection.diagnostics.missingScopes?.includes(
+                          "instagram_content_publish"
+                        ) && (
+                          <div className="rounded-[6px] border border-red-200 bg-red-50 px-3 py-2 font-medium text-red-800">
+                            目前 token 缺少 instagram_content_publish，無法發布 Instagram 貼文，請重新授權 Meta App。
+                          </div>
+                        )}
                       </div>
                     )}
 

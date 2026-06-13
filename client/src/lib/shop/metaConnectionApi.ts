@@ -31,7 +31,14 @@ export type MetaPlatformConnection = {
     requiredScopes?: string[];
     missingScopes?: string[];
     canPublishInstagram?: boolean;
+    publishingEnabled?: boolean;
     scopeCheckError?: string | null;
+    instagramUserId?: string;
+    username?: string;
+    accountType?: string;
+    tokenExpiresAt?: string | null;
+    tokenLastFour?: string;
+    credentialSource?: "environment" | "oauth_store";
   };
 };
 
@@ -121,6 +128,50 @@ export type FacebookTokenDebugResult = {
   errorCode: string | null;
   errorMessage: string | null;
 };
+
+export type InstagramOAuthStartResult = {
+  ok: true;
+  authorizationUrl: string;
+};
+
+export async function startInstagramOAuth(
+  token: string,
+  forceReauth = false
+): Promise<InstagramOAuthStartResult> {
+  const response = await fetch(
+    "/api/admin-shop?action=instagram-oauth-start",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ forceReauth }),
+    }
+  );
+  const data = (await response.json().catch(() => null)) as
+    | (Partial<InstagramOAuthStartResult> & {
+        errorCode?: string;
+        errorMessage?: string;
+      })
+    | null;
+
+  if (response.status === 401) {
+    throw new Error(adminAuthExpiredMessage);
+  }
+
+  if (!response.ok || !data?.ok || !data.authorizationUrl) {
+    throw new Error(
+      data?.errorMessage || "無法啟動 Instagram 授權，請稍後再試。"
+    );
+  }
+
+  return {
+    ok: true,
+    authorizationUrl: data.authorizationUrl,
+  };
+}
 
 export async function fetchMetaConnectionStatus(
   token: string

@@ -6,6 +6,7 @@ import {
   supabaseRequest,
   supabaseRpc,
 } from "../server/shopShared.js";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 
 const defaultLimit = 30;
 const maxLimit = 50;
@@ -59,6 +60,12 @@ const instagramRequiredScopes = [
   "instagram_basic",
   "instagram_content_publish",
 ];
+const instagramLoginRequiredScopes = [
+  "instagram_business_basic",
+  "instagram_business_content_publish",
+];
+const instagramOAuthStateCookie = "mumbao_instagram_oauth_state";
+const instagramExpectedUsername = "mumbao.tw";
 
 function requireAdmin(req) {
   const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
@@ -80,6 +87,77 @@ function requireAdmin(req) {
     error.status = 401;
     throw error;
   }
+}
+
+function parseCookies(req) {
+  const cookieHeader = String(req.headers?.cookie || "");
+  const cookies = {};
+
+  for (const entry of cookieHeader.split(";")) {
+    const separatorIndex = entry.indexOf("=");
+    if (separatorIndex < 0) continue;
+
+    const name = entry.slice(0, separatorIndex).trim();
+    const value = entry.slice(separatorIndex + 1).trim();
+    if (!name) continue;
+
+    try {
+      cookies[name] = decodeURIComponent(value);
+    } catch {
+      cookies[name] = value;
+    }
+  }
+
+  return cookies;
+}
+
+function isSecureRequest(req) {
+  const forwardedProto = String(req.headers?.["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+  return forwardedProto === "https";
+}
+
+function setInstagramOAuthStateCookie(req, res, state) {
+  const secure = isSecureRequest(req) ? "; Secure" : "";
+  res.setHeader(
+    "Set-Cookie",
+    `${instagramOAuthStateCookie}=${encodeURIComponent(
+      state
+    )}; Path=/api/admin-shop; HttpOnly; SameSite=Lax; Max-Age=600${secure}`
+  );
+}
+
+function clearInstagramOAuthStateCookie(req, res) {
+  const secure = isSecureRequest(req) ? "; Secure" : "";
+  res.setHeader(
+    "Set-Cookie",
+    `${instagramOAuthStateCookie}=; Path=/api/admin-shop; HttpOnly; SameSite=Lax; Max-Age=0${secure}`
+  );
+}
+
+function safeStateEquals(expected, received) {
+  const expectedBuffer = Buffer.from(String(expected || ""));
+  const receivedBuffer = Buffer.from(String(received || ""));
+
+  return (
+    expectedBuffer.length > 0 &&
+    expectedBuffer.length === receivedBuffer.length &&
+    timingSafeEqual(expectedBuffer, receivedBuffer)
+  );
+}
+
+function redirectToInstagramOAuthResult(req, res, status, code = "") {
+  const protocol = isSecureRequest(req) ? "https" : "http";
+  const host = cleanText(req.headers?.host) || "www.mumbao.tw";
+  const target = new URL("/admin/shop/social", `${protocol}://${host}`);
+  target.searchParams.set("instagramOAuth", status);
+  if (code) target.searchParams.set("instagramOAuthCode", code);
+
+  res.statusCode = 302;
+  res.setHeader("Location", target.toString());
+  res.end();
 }
 
 function createMetaStatus(
@@ -342,7 +420,7 @@ async function inspectFacebookTokenScopes() {
   };
 }
 
-async function checkInstagramConnection(tokenInspection) {
+async function checkInstagramConnectionWithFacebookLoginLegacy(tokenInspection) {
   const accessToken = cleanText(
     getServerEnv("FACEBOOK_PAGE_ACCESS_TOKEN")
   );
@@ -428,6 +506,231 @@ async function checkInstagramConnection(tokenInspection) {
   };
 }
 
+function normalizeInstagramProfile(payload) {
+  const profile = Array.isArray(payload?.data) ? payload.data[0] : payload;
+  return {
+    userId: cleanText(profile?.user_id || profile?.id),
+    username: cleanText(profile?.username),
+    name: cleanText(profile?.name),
+    accountType: cleanText(profile?.account_type),
+  };
+}
+
+function normalizeGrantedScopes(value) {
+  if (Array.isArray(value)) {
+    return value.map((scope) => cleanText(scope)).filter(Boolean);
+  }
+
+  return cleanText(value)
+    .split(/[,\s]+/)
+    .map((scope) => scope.trim())
+    .filter(Boolean);
+}
+
+function parseExpiryDate(value) {
+  const text = cleanText(value);
+  if (!text) return null;
+
+  const numericValue = Number(text);
+  if (Number.isFinite(numericValue) && numericValue > 0) {
+    const milliseconds = numericValue > 10_000_000_000
+      ? numericValue
+      : numericValue * 1000;
+    return new Date(milliseconds).toISOString();
+  }
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+async function loadStoredInstagramCredential() {
+  const rows = await supabaseRequest(
+    "/shop_social_platform_credentials?platform=eq.instagram&select=external_user_id,username,account_name,account_type,access_token,token_expires_at,granted_scopes,updated_at&limit=1"
+  ).catch(() => []);
+
+  return Array.isArray(rows) && rows.length ? rows[0] : null;
+}
+
+async function loadInstagramCredential() {
+  const envToken = cleanText(getServerEnv("INSTAGRAM_USER_ACCESS_TOKEN"));
+  const envUserId = cleanText(getServerEnv("INSTAGRAM_USER_ID"));
+
+  if (envToken) {
+    return {
+      accessToken: envToken,
+      userId: envUserId,
+      username: "",
+      name: "",
+      accountType: "",
+      expiresAt: parseExpiryDate(
+        getServerEnv("INSTAGRAM_TOKEN_EXPIRES_AT")
+      ),
+      grantedScopes: [],
+      source: "environment",
+    };
+  }
+
+  const stored = await loadStoredInstagramCredential();
+  if (!stored?.access_token) return null;
+
+  return {
+    accessToken: cleanText(stored.access_token),
+    userId: cleanText(stored.external_user_id),
+    username: cleanText(stored.username),
+    name: cleanText(stored.account_name),
+    accountType: cleanText(stored.account_type),
+    expiresAt: parseExpiryDate(stored.token_expires_at),
+    grantedScopes: normalizeGrantedScopes(stored.granted_scopes),
+    source: "oauth_store",
+  };
+}
+
+async function fetchInstagramProfile(accessToken) {
+  const url = new URL(
+    `https://graph.instagram.com/${getMetaGraphVersion()}/me`
+  );
+  url.searchParams.set("fields", "user_id,username,name,account_type");
+  url.searchParams.set("access_token", accessToken);
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    const error = new Error(
+      "無法連線 Instagram API，請稍後再試。"
+    );
+    error.code = "INSTAGRAM_NETWORK_ERROR";
+    error.status = 502;
+    throw error;
+  }
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const safeError = getSafeMetaError(response.status, payload?.error);
+    const error = new Error(safeError.reason);
+    error.code = safeError.code;
+    error.status = 502;
+    error.metaError = safeError.details;
+    throw error;
+  }
+
+  const profile = normalizeInstagramProfile(payload);
+  if (!profile.userId || !profile.username) {
+    const error = new Error("Instagram API 未回傳完整帳號資料。");
+    error.code = "INSTAGRAM_PROFILE_INCOMPLETE";
+    error.status = 502;
+    throw error;
+  }
+
+  return profile;
+}
+
+async function checkInstagramConnection() {
+  const credential = await loadInstagramCredential();
+  if (!credential?.accessToken) {
+    return {
+      ...createMetaStatus(
+        "not_configured",
+        null,
+        "Instagram 尚未授權，請使用 @mumbao.tw 登入並授權。",
+        "INSTAGRAM_NOT_AUTHORIZED"
+      ),
+      diagnostics: {
+        requiredScopes: instagramLoginRequiredScopes,
+        grantedScopes: [],
+        missingScopes: instagramLoginRequiredScopes,
+        scopeCheckAvailable: false,
+        canPublishInstagram: false,
+        publishingEnabled: false,
+      },
+    };
+  }
+
+  const grantedScopes = credential.grantedScopes;
+  const scopeCheckAvailable = grantedScopes.length > 0;
+  const missingScopes = scopeCheckAvailable
+    ? instagramLoginRequiredScopes.filter(
+        (scope) => !grantedScopes.includes(scope)
+      )
+    : [];
+
+  try {
+    const profile = await fetchInstagramProfile(credential.accessToken);
+    if (profile.username.toLowerCase() !== instagramExpectedUsername) {
+      return {
+        ...createMetaStatus(
+          "error",
+          `@${profile.username}`,
+          "目前授權的 Instagram 帳號不是 @mumbao.tw，請重新授權正確帳號。",
+          "INSTAGRAM_USERNAME_MISMATCH"
+        ),
+        diagnostics: {
+          instagramUserId: profile.userId,
+          username: profile.username,
+          accountType: profile.accountType,
+          tokenExpiresAt: credential.expiresAt,
+          tokenLastFour: credential.accessToken.slice(-4),
+          credentialSource: credential.source,
+          requiredScopes: instagramLoginRequiredScopes,
+          grantedScopes,
+          missingScopes,
+          scopeCheckAvailable,
+          canPublishInstagram: false,
+          publishingEnabled: false,
+        },
+      };
+    }
+
+    return {
+      ...createMetaStatus(
+        "connected",
+        `@${profile.username}`,
+        null
+      ),
+      diagnostics: {
+        instagramUserId: profile.userId,
+        username: profile.username,
+        accountType: profile.accountType,
+        tokenExpiresAt: credential.expiresAt,
+        tokenLastFour: credential.accessToken.slice(-4),
+        credentialSource: credential.source,
+        requiredScopes: instagramLoginRequiredScopes,
+        grantedScopes,
+        missingScopes,
+        scopeCheckAvailable,
+        canPublishInstagram:
+          scopeCheckAvailable && missingScopes.length === 0,
+        publishingEnabled: false,
+      },
+    };
+  } catch (error) {
+    return {
+      ...createMetaStatus(
+        "error",
+        null,
+        error.message || "Instagram 連線檢查失敗。",
+        error.code || "INSTAGRAM_CONNECTION_FAILED",
+        error.metaError || null
+      ),
+      diagnostics: {
+        tokenExpiresAt: credential.expiresAt,
+        tokenLastFour: credential.accessToken.slice(-4),
+        credentialSource: credential.source,
+        requiredScopes: instagramLoginRequiredScopes,
+        grantedScopes,
+        missingScopes,
+        scopeCheckAvailable,
+        canPublishInstagram: false,
+        publishingEnabled: false,
+      },
+    };
+  }
+}
+
 async function checkThreadsConnection() {
   const userId = cleanText(getServerEnv("THREADS_USER_ID"));
   const accessToken = cleanText(getServerEnv("THREADS_ACCESS_TOKEN"));
@@ -446,10 +749,9 @@ async function checkThreadsConnection() {
 }
 
 async function loadMetaStatus(_req, res) {
-  const tokenInspection = await inspectFacebookTokenScopes();
   const [facebook, instagram, threads] = await Promise.all([
     checkFacebookConnection(),
-    checkInstagramConnection(tokenInspection),
+    checkInstagramConnection(),
     checkThreadsConnection(),
   ]);
 
@@ -461,6 +763,263 @@ async function loadMetaStatus(_req, res) {
     },
     checkedAt: new Date().toISOString(),
   });
+}
+
+async function saveInstagramCredential({
+  profile,
+  accessToken,
+  expiresAt,
+  grantedScopes,
+}) {
+  const now = new Date().toISOString();
+  const rows = await supabaseRequest(
+    "/shop_social_platform_credentials?on_conflict=platform",
+    {
+      method: "POST",
+      headers: {
+        Prefer: "resolution=merge-duplicates,return=representation",
+      },
+      body: JSON.stringify({
+        platform: "instagram",
+        external_user_id: profile.userId,
+        username: profile.username,
+        account_name: profile.name || null,
+        account_type: profile.accountType || null,
+        access_token: accessToken,
+        token_expires_at: expiresAt,
+        granted_scopes: grantedScopes,
+        updated_at: now,
+      }),
+    }
+  );
+
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+
+async function handleInstagramOAuthStart(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return sendJson(res, 405, {
+      ok: false,
+      errorCode: "METHOD_NOT_ALLOWED",
+      errorMessage: "Method not allowed.",
+    });
+  }
+
+  const appId = cleanText(getServerEnv("INSTAGRAM_APP_ID"));
+  const redirectUri = cleanText(getServerEnv("INSTAGRAM_REDIRECT_URI"));
+  if (!appId || !redirectUri) {
+    return sendJson(res, 500, {
+      ok: false,
+      errorCode: "INSTAGRAM_OAUTH_NOT_CONFIGURED",
+      errorMessage:
+        "INSTAGRAM_APP_ID 或 INSTAGRAM_REDIRECT_URI 尚未設定。",
+    });
+  }
+
+  const body = await readBody(req);
+  const state = randomBytes(32).toString("base64url");
+  setInstagramOAuthStateCookie(req, res, state);
+
+  const authorizationUrl = new URL(
+    "https://www.instagram.com/oauth/authorize"
+  );
+  authorizationUrl.searchParams.set("client_id", appId);
+  authorizationUrl.searchParams.set("redirect_uri", redirectUri);
+  authorizationUrl.searchParams.set("response_type", "code");
+  authorizationUrl.searchParams.set(
+    "scope",
+    instagramLoginRequiredScopes.join(",")
+  );
+  authorizationUrl.searchParams.set("state", state);
+  authorizationUrl.searchParams.set("enable_fb_login", "0");
+  if (body?.forceReauth === true) {
+    authorizationUrl.searchParams.set("force_reauth", "true");
+  }
+
+  return sendJson(res, 200, {
+    ok: true,
+    authorizationUrl: authorizationUrl.toString(),
+  });
+}
+
+function getInstagramOAuthErrorCode(error) {
+  const code = cleanText(error?.code);
+  if (
+    code === "INSTAGRAM_USERNAME_MISMATCH" ||
+    code === "INSTAGRAM_PROFILE_INCOMPLETE"
+  ) {
+    return code;
+  }
+  return "INSTAGRAM_OAUTH_FAILED";
+}
+
+async function handleInstagramOAuthCallback(req, res) {
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
+    return sendJson(res, 405, {
+      ok: false,
+      errorCode: "METHOD_NOT_ALLOWED",
+      errorMessage: "Method not allowed.",
+    });
+  }
+
+  const queryState = cleanText(firstQueryValue(req.query?.state));
+  const authorizationCode = cleanText(firstQueryValue(req.query?.code))
+    .replace(/#_$/, "");
+  const oauthError = cleanText(firstQueryValue(req.query?.error));
+  const storedState = cleanText(
+    parseCookies(req)[instagramOAuthStateCookie]
+  );
+  clearInstagramOAuthStateCookie(req, res);
+
+  if (oauthError) {
+    return redirectToInstagramOAuthResult(
+      req,
+      res,
+      "error",
+      "INSTAGRAM_AUTHORIZATION_DENIED"
+    );
+  }
+
+  if (!safeStateEquals(storedState, queryState)) {
+    return redirectToInstagramOAuthResult(
+      req,
+      res,
+      "error",
+      "INSTAGRAM_OAUTH_STATE_INVALID"
+    );
+  }
+
+  if (!authorizationCode) {
+    return redirectToInstagramOAuthResult(
+      req,
+      res,
+      "error",
+      "INSTAGRAM_AUTHORIZATION_CODE_MISSING"
+    );
+  }
+
+  const appId = cleanText(getServerEnv("INSTAGRAM_APP_ID"));
+  const appSecret = cleanText(getServerEnv("INSTAGRAM_APP_SECRET"));
+  const redirectUri = cleanText(getServerEnv("INSTAGRAM_REDIRECT_URI"));
+  if (!appId || !appSecret || !redirectUri) {
+    return redirectToInstagramOAuthResult(
+      req,
+      res,
+      "error",
+      "INSTAGRAM_OAUTH_NOT_CONFIGURED"
+    );
+  }
+
+  try {
+    const shortTokenForm = new URLSearchParams();
+    shortTokenForm.set("client_id", appId);
+    shortTokenForm.set("client_secret", appSecret);
+    shortTokenForm.set("grant_type", "authorization_code");
+    shortTokenForm.set("redirect_uri", redirectUri);
+    shortTokenForm.set("code", authorizationCode);
+
+    const shortTokenResponse = await fetch(
+      "https://api.instagram.com/oauth/access_token",
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: shortTokenForm,
+        signal: AbortSignal.timeout(15000),
+      }
+    );
+    const shortTokenPayload = await shortTokenResponse
+      .json()
+      .catch(() => null);
+    if (!shortTokenResponse.ok) {
+      const safeError = getSafeMetaError(
+        shortTokenResponse.status,
+        shortTokenPayload?.error
+      );
+      const error = new Error(safeError.reason);
+      error.code = safeError.code;
+      throw error;
+    }
+
+    const shortTokenData = Array.isArray(shortTokenPayload?.data)
+      ? shortTokenPayload.data[0]
+      : shortTokenPayload;
+    const shortLivedToken = cleanText(shortTokenData?.access_token);
+    const grantedScopes = normalizeGrantedScopes(
+      shortTokenData?.permissions
+    );
+    if (!shortLivedToken) {
+      const error = new Error("Instagram 未回傳短效 access token。");
+      error.code = "INSTAGRAM_SHORT_TOKEN_MISSING";
+      throw error;
+    }
+
+    const longTokenUrl = new URL(
+      "https://graph.instagram.com/access_token"
+    );
+    longTokenUrl.searchParams.set("grant_type", "ig_exchange_token");
+    longTokenUrl.searchParams.set("client_secret", appSecret);
+    longTokenUrl.searchParams.set("access_token", shortLivedToken);
+    const longTokenResponse = await fetch(longTokenUrl, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15000),
+    });
+    const longTokenPayload = await longTokenResponse
+      .json()
+      .catch(() => null);
+    if (!longTokenResponse.ok) {
+      const safeError = getSafeMetaError(
+        longTokenResponse.status,
+        longTokenPayload?.error
+      );
+      const error = new Error(safeError.reason);
+      error.code = safeError.code;
+      throw error;
+    }
+
+    const longLivedToken = cleanText(longTokenPayload?.access_token);
+    const expiresIn = Number(longTokenPayload?.expires_in || 0);
+    if (!longLivedToken) {
+      const error = new Error("Instagram 未回傳長效 access token。");
+      error.code = "INSTAGRAM_LONG_TOKEN_MISSING";
+      throw error;
+    }
+
+    const profile = await fetchInstagramProfile(longLivedToken);
+    if (profile.username.toLowerCase() !== instagramExpectedUsername) {
+      const error = new Error(
+        "目前授權的 Instagram 帳號不是 @mumbao.tw。"
+      );
+      error.code = "INSTAGRAM_USERNAME_MISMATCH";
+      throw error;
+    }
+
+    const expiresAt =
+      Number.isFinite(expiresIn) && expiresIn > 0
+        ? new Date(Date.now() + expiresIn * 1000).toISOString()
+        : null;
+
+    await saveInstagramCredential({
+      profile,
+      accessToken: longLivedToken,
+      expiresAt,
+      grantedScopes,
+    });
+
+    return redirectToInstagramOAuthResult(req, res, "success");
+  } catch (error) {
+    return redirectToInstagramOAuthResult(
+      req,
+      res,
+      "error",
+      getInstagramOAuthErrorCode(error)
+    );
+  }
 }
 
 function nullableUnixTimestamp(value) {
@@ -3468,7 +4027,15 @@ export default async function handler(req, res) {
   const action = String(firstQueryValue(req.query?.action) || "").trim();
 
   try {
+    if (action === "instagram-oauth-callback") {
+      return await handleInstagramOAuthCallback(req, res);
+    }
+
     requireAdmin(req);
+
+    if (action === "instagram-oauth-start") {
+      return await handleInstagramOAuthStart(req, res);
+    }
 
     if (req.method === "GET" && action === "meta-status") {
       return await loadMetaStatus(req, res);

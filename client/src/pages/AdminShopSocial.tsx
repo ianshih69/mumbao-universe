@@ -43,6 +43,7 @@ import {
   publishFacebookPost,
   publishInstagramPost,
   publishThreadsPost,
+  startInstagramOAuth,
   syncFacebookPostStatus,
   syncSocialPosts,
   type FacebookTokenDebugResult,
@@ -598,6 +599,8 @@ export default function AdminShopSocial() {
   const [metaCheckedAt, setMetaCheckedAt] = useState("");
   const [metaCheckError, setMetaCheckError] = useState("");
   const [isCheckingMeta, setIsCheckingMeta] = useState(true);
+  const [isStartingInstagramOAuth, setIsStartingInstagramOAuth] =
+    useState(false);
   const [facebookTokenDebug, setFacebookTokenDebug] =
     useState<FacebookTokenDebugResult | null>(null);
   const [facebookTokenDebugError, setFacebookTokenDebugError] = useState<{
@@ -684,7 +687,8 @@ export default function AdminShopSocial() {
     facebookTokenDebug?.isValid === true;
   const isInstagramReady =
     metaConnections.instagram.status === "connected" &&
-    metaConnections.instagram.diagnostics?.canPublishInstagram !== false;
+    metaConnections.instagram.diagnostics?.canPublishInstagram === true &&
+    metaConnections.instagram.diagnostics?.publishingEnabled === true;
   const instagramMissingScopes =
     metaConnections.instagram.diagnostics?.missingScopes || [];
   const isThreadsReady =
@@ -747,12 +751,14 @@ export default function AdminShopSocial() {
       : wantsFacebook && !isFacebookReady
         ? "尚未連接 Facebook 粉專"
       : wantsInstagram && !isInstagramReady
-        ? instagramMissingScopes.includes("instagram_basic")
-          ? "目前 token 缺少 instagram_basic，請重新授權 Meta App"
-          : instagramMissingScopes.includes("instagram_content_publish")
-            ? "目前 token 缺少 instagram_content_publish，無法發布 Instagram 貼文，請重新授權 Meta App"
-            : metaConnections.instagram.status === "connected"
-              ? "目前 token 缺少必要 Meta 權限，請重新授權 Meta App"
+        ? metaConnections.instagram.status === "connected"
+          ? "Instagram OAuth 已連線，正式發文將於下一階段啟用"
+          : instagramMissingScopes.includes("instagram_business_basic")
+            ? "目前授權缺少 instagram_business_basic，請重新授權 Instagram"
+            : instagramMissingScopes.includes(
+                  "instagram_business_content_publish"
+                )
+              ? "目前授權缺少 instagram_business_content_publish，請重新授權 Instagram"
               : "尚未連接 Instagram 帳號"
       : wantsThreads && !isThreadsReady
         ? "尚未連接 Threads 帳號"
@@ -877,6 +883,56 @@ export default function AdminShopSocial() {
   useEffect(() => {
     refreshMetaConnections();
   }, [refreshMetaConnections]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthStatus = params.get("instagramOAuth");
+    if (!oauthStatus) return;
+
+    const oauthCode = params.get("instagramOAuthCode");
+    if (oauthStatus === "success") {
+      setNotice("Instagram 已連線：@mumbao.tw");
+    } else {
+      const messages: Record<string, string> = {
+        INSTAGRAM_AUTHORIZATION_DENIED:
+          "Instagram 授權已取消，尚未建立連線。",
+        INSTAGRAM_OAUTH_STATE_INVALID:
+          "Instagram 授權驗證失敗，請重新開始授權。",
+        INSTAGRAM_USERNAME_MISMATCH:
+          "授權帳號不是 @mumbao.tw，請使用正確帳號重新授權。",
+        INSTAGRAM_OAUTH_NOT_CONFIGURED:
+          "Instagram OAuth 環境變數尚未設定完整。",
+      };
+      setNotice(
+        messages[oauthCode || ""] ||
+          "Instagram 授權失敗，請稍後重新嘗試。"
+      );
+    }
+
+    window.history.replaceState(
+      {},
+      document.title,
+      window.location.pathname
+    );
+  }, []);
+
+  const handleInstagramOAuthStart = async (forceReauth: boolean) => {
+    if (!token || isStartingInstagramOAuth) return;
+
+    setIsStartingInstagramOAuth(true);
+    setNotice("");
+    try {
+      const result = await startInstagramOAuth(token, forceReauth);
+      window.location.assign(result.authorizationUrl);
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "無法啟動 Instagram 授權，請稍後再試。"
+      );
+      setIsStartingInstagramOAuth(false);
+    }
+  };
 
   const handleMetaTokenExchange = async (event: FormEvent) => {
     event.preventDefault();
@@ -2285,7 +2341,144 @@ export default function AdminShopSocial() {
                       </div>
                     )}
 
-                    {key === "instagram" && connection.diagnostics && (
+                    {key === "instagram" && (
+                      <div className="mt-3 space-y-4 border-t border-stone-200 pt-4">
+                        <div
+                          className={cn(
+                            "rounded-[8px] border px-4 py-3 text-sm leading-6",
+                            connection.status === "connected"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                              : "border-amber-200 bg-amber-50 text-amber-900"
+                          )}
+                        >
+                          {connection.status === "connected"
+                            ? `Instagram 已連線：${
+                                connection.accountName || "@mumbao.tw"
+                              }`
+                            : "Instagram 尚未授權，請使用 @mumbao.tw 登入並授權。"}
+                        </div>
+
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                          <Button
+                            type="button"
+                            onClick={() =>
+                              void handleInstagramOAuthStart(
+                                connection.status === "connected"
+                              )
+                            }
+                            disabled={isStartingInstagramOAuth}
+                            className="h-10 rounded-full bg-[#9b7b65] px-5 text-white hover:bg-[#856651]"
+                          >
+                            {isStartingInstagramOAuth && (
+                              <Loader2 className="size-4 animate-spin" />
+                            )}
+                            {connection.status === "connected"
+                              ? "重新授權 Instagram"
+                              : "連接 Instagram"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => void checkMetaConnections()}
+                            disabled={isCheckingMeta}
+                            className="h-10 rounded-full bg-white px-5"
+                          >
+                            {isCheckingMeta ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <RefreshCw className="size-4" />
+                            )}
+                            重新檢查
+                          </Button>
+                        </div>
+
+                        {connection.diagnostics && (
+                          <dl className="grid gap-2 rounded-[8px] bg-white p-3 text-xs leading-5 text-stone-600 sm:grid-cols-2">
+                            <div>
+                              <dt className="font-semibold text-stone-800">
+                                Instagram User ID
+                              </dt>
+                              <dd className="break-all">
+                                {connection.diagnostics.instagramUserId ||
+                                  "尚未取得"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-stone-800">
+                                帳號類型
+                              </dt>
+                              <dd>
+                                {connection.diagnostics.accountType ||
+                                  "尚未取得"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-stone-800">
+                                Token 到期時間
+                              </dt>
+                              <dd>
+                                {connection.diagnostics.tokenExpiresAt
+                                  ? formatDateTime(
+                                      connection.diagnostics.tokenExpiresAt
+                                    )
+                                  : "尚未提供"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-stone-800">
+                                Token 識別
+                              </dt>
+                              <dd>
+                                {connection.diagnostics.tokenLastFour
+                                  ? `末四碼 ${connection.diagnostics.tokenLastFour}`
+                                  : "不顯示 Token"}
+                              </dd>
+                            </div>
+                          </dl>
+                        )}
+
+                        {connection.diagnostics?.requiredScopes && (
+                          <div>
+                            <p className="text-xs font-semibold text-stone-700">
+                              Instagram Login 權限
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {connection.diagnostics.requiredScopes.map(
+                                (scope) => {
+                                  const isMissing =
+                                    connection.diagnostics?.missingScopes?.includes(
+                                      scope
+                                    );
+                                  return (
+                                    <span
+                                      key={scope}
+                                      className={cn(
+                                        "rounded-full border px-2 py-0.5 font-mono text-[10px]",
+                                        isMissing
+                                          ? "border-amber-200 bg-amber-50 text-amber-800"
+                                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                      )}
+                                    >
+                                      {scope}
+                                    </span>
+                                  );
+                                }
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {connection.status === "connected" && (
+                          <p className="text-xs leading-5 text-stone-500">
+                            OAuth 連線已完成。本階段不會測試或啟用正式
+                            Instagram 發文。
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {key === "instagram" &&
+                      connection.diagnostics?.pageId && (
                       <div className="mt-3 space-y-3 border-t border-stone-200 pt-3 text-xs leading-5 text-stone-600">
                         <div>
                           <p className="font-semibold text-stone-700">
@@ -2356,7 +2549,7 @@ export default function AdminShopSocial() {
                           </div>
                         )}
                       </div>
-                    )}
+                      )}
 
                     {key === "facebook" && (
                       <div className="mt-4 border-t border-stone-200 pt-4">

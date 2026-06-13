@@ -132,6 +132,11 @@ export type FacebookTokenDebugResult = {
 export type InstagramOAuthStartResult = {
   ok: true;
   authorizationUrl: string;
+  diagnostics?: {
+    clientIdLastFour: string;
+    redirectUri: string;
+    scope: string;
+  };
 };
 
 export async function startInstagramOAuth(
@@ -170,6 +175,7 @@ export async function startInstagramOAuth(
   return {
     ok: true,
     authorizationUrl: data.authorizationUrl,
+    diagnostics: data.diagnostics,
   };
 }
 

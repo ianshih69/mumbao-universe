@@ -886,10 +886,10 @@ export default function AdminShopSocial() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const oauthStatus = params.get("instagramOAuth");
+    const oauthStatus = params.get("instagram_oauth");
     if (!oauthStatus) return;
 
-    const oauthCode = params.get("instagramOAuthCode");
+    const oauthCode = params.get("reason");
     if (oauthStatus === "success") {
       setNotice("Instagram 已連線：@mumbao.tw");
     } else {
@@ -902,6 +902,10 @@ export default function AdminShopSocial() {
           "授權帳號不是 @mumbao.tw，請使用正確帳號重新授權。",
         INSTAGRAM_OAUTH_NOT_CONFIGURED:
           "Instagram OAuth 環境變數尚未設定完整。",
+        INSTAGRAM_TOKEN_INVALID:
+          "Instagram Token 無效或已過期，請重新授權。",
+        INSTAGRAM_PERMISSION_DENIED:
+          "Instagram 授權權限不足，請確認 Meta App 權限後重新授權。",
       };
       setNotice(
         messages[oauthCode || ""] ||

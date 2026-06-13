@@ -60,10 +60,9 @@ const instagramRequiredScopes = [
   "instagram_basic",
   "instagram_content_publish",
 ];
-const instagramLoginRequiredScopes = [
-  "instagram_business_basic",
-  "instagram_business_content_publish",
-];
+const instagramOAuthScope =
+  "instagram_business_basic,instagram_business_content_publish";
+const instagramLoginRequiredScopes = instagramOAuthScope.split(",");
 const instagramOAuthStateCookie = "mumbao_instagram_oauth_state";
 const instagramExpectedUsername = "mumbao.tw";
 const instagramOAuthRedirectUri =
@@ -730,7 +729,7 @@ async function handleInstagramOAuthStart(req, res) {
   const configuredRedirectUri = cleanText(
     getServerEnv("INSTAGRAM_REDIRECT_URI")
   );
-  const scope = instagramLoginRequiredScopes.join(",");
+  const scope = instagramOAuthScope;
   const diagnostics = {
     clientIdLastFour: appId ? appId.slice(-4) : "",
     redirectUri: configuredRedirectUri,
@@ -775,6 +774,16 @@ async function handleInstagramOAuthStart(req, res) {
   authorizationUrl.searchParams.set("enable_fb_login", "0");
   if (body?.forceReauth === true) {
     authorizationUrl.searchParams.set("force_reauth", "true");
+  }
+
+  if (authorizationUrl.searchParams.get("scope") !== instagramOAuthScope) {
+    return sendJson(res, 500, {
+      ok: false,
+      errorCode: "INSTAGRAM_OAUTH_SCOPE_INVALID",
+      errorMessage:
+        "Instagram OAuth scope 格式錯誤，必須使用逗號分隔兩個權限。",
+      diagnostics,
+    });
   }
 
   return sendJson(res, 200, {

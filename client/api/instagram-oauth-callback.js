@@ -64,6 +64,13 @@ function redirectResult(res, status, reason = "") {
   res.end();
 }
 
+function logCallbackStage(stage, details = {}) {
+  console.info("[instagram-oauth-callback]", {
+    stage,
+    ...details,
+  });
+}
+
 function normalizeProfile(payload) {
   const profile = Array.isArray(payload?.data) ? payload.data[0] : payload;
   return {
@@ -85,40 +92,35 @@ function normalizeScopes(value) {
     .filter(Boolean);
 }
 
-function safeMetaReason(status, payload) {
-  const code = Number(payload?.error?.code || 0);
-  if (code === 190 || status === 401) return "INSTAGRAM_TOKEN_INVALID";
-  if (code === 10 || code === 200 || status === 403) {
-    return "INSTAGRAM_PERMISSION_DENIED";
-  }
-  return "INSTAGRAM_META_REQUEST_FAILED";
-}
-
 async function fetchInstagramProfile(accessToken) {
   const url = new URL("https://graph.instagram.com/v25.0/me");
   url.searchParams.set("fields", "user_id,username,name,account_type");
   url.searchParams.set("access_token", accessToken);
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(15000),
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    logCallbackStage("instagram_me", { httpStatus: null });
+    return { ok: false, profile: null };
+  }
+
+  logCallbackStage("instagram_me", { httpStatus: response.status });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const error = new Error("Instagram profile request failed.");
-    error.safeReason = safeMetaReason(response.status, payload);
-    throw error;
+    return { ok: false, profile: null };
   }
 
   const profile = normalizeProfile(payload);
   if (!profile.userId || !profile.username) {
-    const error = new Error("Instagram profile is incomplete.");
-    error.safeReason = "INSTAGRAM_PROFILE_INCOMPLETE";
-    throw error;
+    return { ok: false, profile: null };
   }
 
-  return profile;
+  return { ok: true, profile };
 }
 
 async function saveCredential({
@@ -154,7 +156,7 @@ export default async function handler(req, res) {
   clearStateCookie(res);
 
   if (req.method !== "GET") {
-    return redirectResult(res, "failed", "METHOD_NOT_ALLOWED");
+    return redirectResult(res, "failed", "method_not_allowed");
   }
 
   const code = cleanText(firstQueryValue(req.query?.code)).replace(/#_$/, "");
@@ -165,28 +167,36 @@ export default async function handler(req, res) {
   );
   const storedState = cleanText(parseCookies(req)[stateCookieName]);
 
+  logCallbackStage("callback_received", {
+    hasCode: Boolean(code),
+    hasState: Boolean(state),
+    hasStateCookie: Boolean(storedState),
+  });
+
   if (oauthError || oauthErrorDescription) {
     return redirectResult(
       res,
       "failed",
-      "INSTAGRAM_AUTHORIZATION_DENIED"
-    );
-  }
-
-  if (!stateMatches(storedState, state)) {
-    return redirectResult(
-      res,
-      "failed",
-      "INSTAGRAM_OAUTH_STATE_INVALID"
+      "authorization_denied"
     );
   }
 
   if (!code) {
-    return redirectResult(
-      res,
-      "failed",
-      "INSTAGRAM_AUTHORIZATION_CODE_MISSING"
-    );
+    return redirectResult(res, "failed", "missing_code");
+  }
+
+  if (!state) {
+    return redirectResult(res, "failed", "missing_state");
+  }
+
+  if (!storedState) {
+    return redirectResult(res, "failed", "state_cookie_missing");
+  }
+
+  const stateIsValid = stateMatches(storedState, state);
+  logCallbackStage("state_validation", { matched: stateIsValid });
+  if (!stateIsValid) {
+    return redirectResult(res, "failed", "state_mismatch");
   }
 
   const appId = cleanText(getServerEnv("INSTAGRAM_APP_ID"));
@@ -202,19 +212,20 @@ export default async function handler(req, res) {
     return redirectResult(
       res,
       "failed",
-      "INSTAGRAM_OAUTH_NOT_CONFIGURED"
+      "oauth_not_configured"
     );
   }
 
-  try {
-    const shortTokenForm = new URLSearchParams();
-    shortTokenForm.set("client_id", appId);
-    shortTokenForm.set("client_secret", appSecret);
-    shortTokenForm.set("grant_type", "authorization_code");
-    shortTokenForm.set("redirect_uri", redirectUri);
-    shortTokenForm.set("code", code);
+  const shortTokenForm = new URLSearchParams();
+  shortTokenForm.set("client_id", appId);
+  shortTokenForm.set("client_secret", appSecret);
+  shortTokenForm.set("grant_type", "authorization_code");
+  shortTokenForm.set("redirect_uri", redirectUri);
+  shortTokenForm.set("code", code);
 
-    const shortTokenResponse = await fetch(
+  let shortTokenResponse;
+  try {
+    shortTokenResponse = await fetch(
       "https://api.instagram.com/oauth/access_token",
       {
         method: "POST",
@@ -226,89 +237,103 @@ export default async function handler(req, res) {
         signal: AbortSignal.timeout(15000),
       }
     );
-    const shortTokenPayload = await shortTokenResponse
-      .json()
-      .catch(() => null);
-    if (!shortTokenResponse.ok) {
-      return redirectResult(
-        res,
-        "failed",
-        safeMetaReason(shortTokenResponse.status, shortTokenPayload)
-      );
-    }
-
-    const shortTokenData = Array.isArray(shortTokenPayload?.data)
-      ? shortTokenPayload.data[0]
-      : shortTokenPayload;
-    const shortLivedToken = cleanText(shortTokenData?.access_token);
-    if (!shortLivedToken) {
-      return redirectResult(
-        res,
-        "failed",
-        "INSTAGRAM_SHORT_TOKEN_MISSING"
-      );
-    }
-
-    const longTokenUrl = new URL(
-      "https://graph.instagram.com/access_token"
+  } catch {
+    logCallbackStage("short_token_exchange", { httpStatus: null });
+    return redirectResult(
+      res,
+      "failed",
+      "short_token_exchange_failed"
     );
-    longTokenUrl.searchParams.set("grant_type", "ig_exchange_token");
-    longTokenUrl.searchParams.set("client_secret", appSecret);
-    longTokenUrl.searchParams.set("access_token", shortLivedToken);
+  }
 
-    const longTokenResponse = await fetch(longTokenUrl, {
+  logCallbackStage("short_token_exchange", {
+    httpStatus: shortTokenResponse.status,
+  });
+  const shortTokenPayload = await shortTokenResponse
+    .json()
+    .catch(() => null);
+  const shortTokenData = Array.isArray(shortTokenPayload?.data)
+    ? shortTokenPayload.data[0]
+    : shortTokenPayload;
+  const shortLivedToken = cleanText(shortTokenData?.access_token);
+  if (!shortTokenResponse.ok || !shortLivedToken) {
+    return redirectResult(
+      res,
+      "failed",
+      "short_token_exchange_failed"
+    );
+  }
+
+  const longTokenUrl = new URL(
+    "https://graph.instagram.com/access_token"
+  );
+  longTokenUrl.searchParams.set("grant_type", "ig_exchange_token");
+  longTokenUrl.searchParams.set("client_secret", appSecret);
+  longTokenUrl.searchParams.set("access_token", shortLivedToken);
+
+  let longTokenResponse;
+  try {
+    longTokenResponse = await fetch(longTokenUrl, {
       method: "GET",
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(15000),
     });
-    const longTokenPayload = await longTokenResponse
-      .json()
-      .catch(() => null);
-    if (!longTokenResponse.ok) {
-      return redirectResult(
-        res,
-        "failed",
-        safeMetaReason(longTokenResponse.status, longTokenPayload)
-      );
-    }
+  } catch {
+    logCallbackStage("long_token_exchange", { httpStatus: null });
+    return redirectResult(
+      res,
+      "failed",
+      "long_token_exchange_failed"
+    );
+  }
 
-    const longLivedToken = cleanText(longTokenPayload?.access_token);
-    const expiresIn = Number(longTokenPayload?.expires_in || 0);
-    if (!longLivedToken) {
-      return redirectResult(
-        res,
-        "failed",
-        "INSTAGRAM_LONG_TOKEN_MISSING"
-      );
-    }
+  logCallbackStage("long_token_exchange", {
+    httpStatus: longTokenResponse.status,
+  });
+  const longTokenPayload = await longTokenResponse
+    .json()
+    .catch(() => null);
+  const longLivedToken = cleanText(longTokenPayload?.access_token);
+  const expiresIn = Number(longTokenPayload?.expires_in || 0);
+  if (!longTokenResponse.ok || !longLivedToken) {
+    return redirectResult(
+      res,
+      "failed",
+      "long_token_exchange_failed"
+    );
+  }
 
-    const profile = await fetchInstagramProfile(longLivedToken);
-    if (profile.username.toLowerCase() !== expectedUsername) {
-      return redirectResult(
-        res,
-        "failed",
-        "INSTAGRAM_USERNAME_MISMATCH"
-      );
-    }
+  const profileResult = await fetchInstagramProfile(longLivedToken);
+  if (!profileResult.ok || !profileResult.profile) {
+    return redirectResult(res, "failed", "instagram_me_failed");
+  }
 
-    const expiresAt =
-      Number.isFinite(expiresIn) && expiresIn > 0
-        ? new Date(Date.now() + expiresIn * 1000).toISOString()
-        : null;
+  const profile = profileResult.profile;
+  if (profile.username.toLowerCase() !== expectedUsername) {
+    return redirectResult(res, "failed", "username_mismatch");
+  }
 
+  const expiresAt =
+    Number.isFinite(expiresIn) && expiresIn > 0
+      ? new Date(Date.now() + expiresIn * 1000).toISOString()
+      : null;
+
+  try {
     await saveCredential({
       profile,
       accessToken: longLivedToken,
       expiresAt,
       grantedScopes: normalizeScopes(shortTokenData?.permissions),
     });
-
-    return redirectResult(res, "success");
-  } catch (error) {
+    logCallbackStage("credential_save", { succeeded: true });
+  } catch {
+    logCallbackStage("credential_save", { succeeded: false });
     return redirectResult(
       res,
       "failed",
-      cleanText(error?.safeReason) || "INSTAGRAM_OAUTH_FAILED"
+      "credential_save_failed"
     );
   }
+
+  return redirectResult(res, "success");
 }

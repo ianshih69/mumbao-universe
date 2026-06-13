@@ -891,9 +891,31 @@ export default function AdminShopSocial() {
 
     const oauthCode = params.get("reason");
     if (oauthStatus === "success") {
-      setNotice("Instagram 已連線：@mumbao.tw");
+      setNotice("Instagram 授權成功，已連線：@mumbao.tw");
     } else {
       const messages: Record<string, string> = {
+        missing_code:
+          "Instagram 授權回傳缺少授權碼，請重新開始授權。",
+        missing_state:
+          "Instagram 授權回傳缺少安全驗證資訊，請重新開始授權。",
+        state_cookie_missing:
+          "Instagram 授權的 state cookie 遺失，請確認瀏覽器允許 Cookie 後重新授權。",
+        state_mismatch:
+          "Instagram 授權安全驗證不一致，請重新開始授權。",
+        short_token_exchange_failed:
+          "Instagram 短效 Token 交換失敗，請重新授權或檢查 Meta App 設定。",
+        long_token_exchange_failed:
+          "Instagram 長效 Token 交換失敗，請稍後重新授權。",
+        instagram_me_failed:
+          "Instagram 帳號資料讀取失敗，請確認授權權限後重新嘗試。",
+        username_mismatch:
+          "授權帳號不是 @mumbao.tw，請使用正確帳號重新授權。",
+        credential_save_failed:
+          "Instagram 授權成功，但 Supabase 憑證寫入失敗，請檢查 OAuth migration 與 service role 權限。",
+        oauth_not_configured:
+          "Instagram OAuth 環境變數尚未設定完整。",
+        authorization_denied:
+          "Instagram 授權已取消，尚未建立連線。",
         INSTAGRAM_AUTHORIZATION_DENIED:
           "Instagram 授權已取消，尚未建立連線。",
         INSTAGRAM_OAUTH_STATE_INVALID:

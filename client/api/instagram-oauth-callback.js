@@ -71,6 +71,30 @@ function logCallbackStage(stage, details = {}) {
   });
 }
 
+function safeMetaErrorDetails(payload) {
+  const metaError = payload?.error;
+  if (!metaError || typeof metaError !== "object") {
+    return {
+      type: null,
+      code: null,
+      message: null,
+    };
+  }
+
+  const safeMessage = cleanText(metaError.message)
+    .replace(/access_token=[^&\s]+/gi, "access_token=[redacted]")
+    .replace(/client_secret=[^&\s]+/gi, "client_secret=[redacted]")
+    .slice(0, 300);
+
+  return {
+    type: cleanText(metaError.type).slice(0, 100) || null,
+    code: Number.isFinite(Number(metaError.code))
+      ? Number(metaError.code)
+      : null,
+    message: safeMessage || null,
+  };
+}
+
 function normalizeProfile(payload) {
   const profile = Array.isArray(payload?.data) ? payload.data[0] : payload;
   return {
@@ -295,7 +319,13 @@ export default async function handler(req, res) {
     .catch(() => null);
   const longLivedToken = cleanText(longTokenPayload?.access_token);
   const expiresIn = Number(longTokenPayload?.expires_in || 0);
+
   if (!longTokenResponse.ok || !longLivedToken) {
+    logCallbackStage("long_token_exchange_failed", {
+      httpStatus: longTokenResponse.status,
+      responseHasAccessToken: Boolean(longLivedToken),
+      metaError: safeMetaErrorDetails(longTokenPayload),
+    });
     return redirectResult(
       res,
       "failed",

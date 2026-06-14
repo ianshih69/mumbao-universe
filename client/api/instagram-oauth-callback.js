@@ -288,22 +288,28 @@ export default async function handler(req, res) {
     );
   }
 
-  const longTokenUrl = new URL(
-    "https://graph.instagram.com/access_token"
-  );
-  longTokenUrl.searchParams.set("grant_type", "ig_exchange_token");
-  longTokenUrl.searchParams.set("client_secret", appSecret);
-  longTokenUrl.searchParams.set("access_token", shortLivedToken);
+  const longTokenUrl = "https://graph.instagram.com/access_token";
+  const longTokenForm = new URLSearchParams();
+  longTokenForm.set("grant_type", "ig_exchange_token");
+  longTokenForm.set("client_secret", appSecret);
+  longTokenForm.set("access_token", shortLivedToken);
 
   let longTokenResponse;
   try {
     longTokenResponse = await fetch(longTokenUrl, {
-      method: "GET",
-      headers: { Accept: "application/json" },
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: longTokenForm,
       signal: AbortSignal.timeout(15000),
     });
   } catch {
-    logCallbackStage("long_token_exchange", { httpStatus: null });
+    logCallbackStage("long_token_exchange", {
+      httpMethod: "POST",
+      httpStatus: null,
+    });
     return redirectResult(
       res,
       "failed",
@@ -312,6 +318,7 @@ export default async function handler(req, res) {
   }
 
   logCallbackStage("long_token_exchange", {
+    httpMethod: "POST",
     httpStatus: longTokenResponse.status,
   });
   const longTokenPayload = await longTokenResponse
@@ -322,6 +329,7 @@ export default async function handler(req, res) {
 
   if (!longTokenResponse.ok || !longLivedToken) {
     logCallbackStage("long_token_exchange_failed", {
+      httpMethod: "POST",
       httpStatus: longTokenResponse.status,
       responseHasAccessToken: Boolean(longLivedToken),
       metaError: safeMetaErrorDetails(longTokenPayload),

@@ -208,6 +208,8 @@ export default function AdminShopWarehouse() {
   const [selectedLocation, setSelectedLocation] = useState("");
   const [qrCodes, setQrCodes] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<File[]>([]);
+  const [supplyPhotoPreview, setSupplyPhotoPreview] = useState("");
+  const [supplyPhotoFileName, setSupplyPhotoFileName] = useState("");
 
   useEffect(() => {
     const nextToken = getAdminToken();
@@ -273,6 +275,38 @@ export default function AdminShopWarehouse() {
     ).then((entries) => setQrCodes(Object.fromEntries(entries)));
   }, [locations]);
 
+  useEffect(() => {
+    return () => {
+      if (supplyPhotoPreview) URL.revokeObjectURL(supplyPhotoPreview);
+    };
+  }, [supplyPhotoPreview]);
+
+  const clearSupplyPhotoSelection = () => {
+    if (supplyPhotoPreview) URL.revokeObjectURL(supplyPhotoPreview);
+    setSupplyPhotoPreview("");
+    setSupplyPhotoFileName("");
+    setFiles([]);
+  };
+
+  const handleSupplyPhotoChange = (nextFiles: FileList | null) => {
+    const nextFile = nextFiles?.[0];
+    clearSupplyPhotoSelection();
+    if (!nextFile) return;
+    setFiles([nextFile]);
+    setSupplyPhotoFileName(nextFile.name);
+    setSupplyPhotoPreview(URL.createObjectURL(nextFile));
+  };
+
+  const editSupply = (item: SupplyItem) => {
+    clearSupplyPhotoSelection();
+    setSupplyForm(item);
+  };
+
+  const clearSupplyForm = () => {
+    clearSupplyPhotoSelection();
+    setSupplyForm(emptySupply);
+  };
+
   const uploadFiles = async (targetType: UploadTarget, targetId: string) => {
     if (!files.length) return;
     for (let index = 0; index < files.length; index += 1) {
@@ -291,6 +325,7 @@ export default function AdminShopWarehouse() {
   const saveSupply = async () => {
     const result = await saveSupplyItem(token, supplyForm);
     if (result.item?.id) await uploadFiles("supply", result.item.id);
+    clearSupplyPhotoSelection();
     setSupplyForm(emptySupply);
     setNotice("備品已儲存。");
     await loadAll();
@@ -432,14 +467,31 @@ export default function AdminShopWarehouse() {
                           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${status.tone}`}>{status.label}</span>
                         </div>
                         <p className="mt-1 text-sm text-stone-600">{item.brand_spec || "未填品牌／規格"}｜{item.location_code}</p>
-                        <p className="mt-1 text-sm text-stone-500">安全庫存 {item.safety_stock}｜單價 {formatMoney(item.unit_price)}</p>
+                        <p className="mt-1 text-sm font-medium text-stone-700">目前數量：{item.quantity}｜安全庫存：{item.safety_stock}</p>
+                        <p className="mt-1 text-sm text-stone-500">單價 {formatMoney(item.unit_price)}</p>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                        <button className="rounded-full border border-stone-200 bg-white px-3 py-2" onClick={() => void adjustSupplyQuantity(token, item.id, -1).then(loadAll)}>-1</button>
-                        <strong className="min-w-12 text-center text-xl">{item.quantity}</strong>
-                        <button className="rounded-full border border-stone-200 bg-white px-3 py-2" onClick={() => void adjustSupplyQuantity(token, item.id, 1).then(loadAll)}>+1</button>
-                        <button className="rounded-full border border-stone-200 bg-white px-4 py-2 text-sm" onClick={() => setSupplyForm(item)}>編輯</button>
-                        <button className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700" onClick={() => confirm("確定刪除這筆備品與照片嗎？") && void deleteSupplyItem(token, item.id).then(loadAll)}>刪除</button>
+                      <div className="flex flex-col gap-3 md:items-end">
+                        <div className="rounded-2xl border border-stone-200 bg-white/80 p-2">
+                          <p className="mb-2 text-xs font-semibold text-stone-500">數量調整</p>
+                          <div className="flex items-center gap-2">
+                            <button
+                              className="rounded-full border border-stone-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                              disabled={Number(item.quantity) <= 0}
+                              onClick={() => void adjustSupplyQuantity(token, item.id, -1).then(loadAll)}
+                            >
+                              -1
+                            </button>
+                            <strong className="min-w-20 text-center text-sm text-stone-700">目前 {item.quantity}</strong>
+                            <button className="rounded-full border border-stone-200 bg-white px-3 py-2 text-sm" onClick={() => void adjustSupplyQuantity(token, item.id, 1).then(loadAll)}>+1</button>
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-stone-200 bg-white/80 p-2">
+                          <p className="mb-2 text-xs font-semibold text-stone-500">其他操作</p>
+                          <div className="flex flex-wrap gap-2 md:justify-end">
+                            <button className="rounded-full border border-stone-200 bg-white px-4 py-2 text-sm" onClick={() => editSupply(item)}>編輯</button>
+                            <button className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700" onClick={() => confirm("確定刪除這筆備品與照片嗎？") && void deleteSupplyItem(token, item.id).then(loadAll)}>刪除</button>
+                          </div>
+                        </div>
                       </div>
                     </article>
                   );
@@ -479,12 +531,48 @@ export default function AdminShopWarehouse() {
                   <textarea className={fieldClass()} value={supplyForm.note || ""} onChange={(e) => setSupplyForm({ ...supplyForm, note: e.target.value })} />
                 </FormField>
                 <FormField label="主照片">
-                  <input className={fieldClass()} type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFiles(Array.from(e.target.files || []))} />
+                  <div className="space-y-3 rounded-2xl border border-stone-200 bg-[#fffaf5] p-3">
+                    {supplyPhotoPreview ? (
+                      <div className="flex gap-3">
+                        <img src={supplyPhotoPreview} alt="本次新選主照片" className="h-24 w-24 rounded-2xl object-cover" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-stone-800">本次新選照片</p>
+                          <p className="truncate text-xs text-stone-500">{supplyPhotoFileName}</p>
+                          <p className="mt-1 text-xs text-stone-500">儲存後才會上傳並成為備品照片。</p>
+                        </div>
+                      </div>
+                    ) : supplyForm.main_media?.public_url ? (
+                      <div className="flex gap-3">
+                        <img src={supplyForm.main_media.public_url} alt="目前主照片" className="h-24 w-24 rounded-2xl object-cover" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-stone-800">目前主照片</p>
+                          <p className="mt-1 text-xs text-stone-500">更換照片會先顯示新預覽；既有照片不會因為選新檔而立即刪除。</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-stone-300 bg-white/70 p-4 text-sm text-stone-500">
+                        尚未設定主照片。
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label htmlFor="supply-main-photo" className="cursor-pointer rounded-full border border-stone-200 bg-white px-4 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50">
+                        更換照片
+                      </label>
+                      {supplyPhotoPreview ? (
+                        <button type="button" className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700" onClick={clearSupplyPhotoSelection}>
+                          移除本次新選照片
+                        </button>
+                      ) : supplyForm.main_media?.public_url ? (
+                        <p className="text-xs text-stone-500">要刪除既有照片，請使用下方照片列表的刪除按鈕，避免誤刪。</p>
+                      ) : null}
+                    </div>
+                    <input key={supplyPhotoPreview || supplyPhotoFileName || "empty"} id="supply-main-photo" className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => handleSupplyPhotoChange(e.target.files)} />
+                  </div>
                 </FormField>
                 {supplyForm.media?.length ? <MediaList token={token} media={supplyForm.media} onDone={loadAll} /> : null}
                 <div className="flex gap-2">
-                  <button className="rounded-full bg-[#8b6f5b] px-5 py-3 text-sm font-semibold text-white" onClick={() => void saveSupply()}>儲存備品</button>
-                  <button className="rounded-full border border-stone-200 bg-white px-5 py-3 text-sm" onClick={() => setSupplyForm(emptySupply)}>清空</button>
+                  <button className="rounded-full bg-[#8b6f5b] px-5 py-3 text-sm font-semibold text-white" onClick={() => void saveSupply()}>{supplyForm.id ? "儲存修改" : "新增備品"}</button>
+                  <button className="rounded-full border border-stone-200 bg-white px-5 py-3 text-sm" onClick={clearSupplyForm}>{supplyForm.id ? "取消編輯" : "清空"}</button>
                 </div>
               </div>
             </section>

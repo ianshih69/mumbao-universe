@@ -477,19 +477,19 @@ export default function AdminShopWarehouse() {
                             <button
                               className="rounded-full border border-stone-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
                               disabled={Number(item.quantity) <= 0}
-                              onClick={() => void adjustSupplyQuantity(token, item.id, -1).then(loadAll)}
+                              onClick={() => void adjustSupplyQuantity(token, item.id, -1).then(() => loadAll())}
                             >
                               -1
                             </button>
                             <strong className="min-w-20 text-center text-sm text-stone-700">目前 {item.quantity}</strong>
-                            <button className="rounded-full border border-stone-200 bg-white px-3 py-2 text-sm" onClick={() => void adjustSupplyQuantity(token, item.id, 1).then(loadAll)}>+1</button>
+                            <button className="rounded-full border border-stone-200 bg-white px-3 py-2 text-sm" onClick={() => void adjustSupplyQuantity(token, item.id, 1).then(() => loadAll())}>+1</button>
                           </div>
                         </div>
                         <div className="rounded-2xl border border-stone-200 bg-white/80 p-2">
                           <p className="mb-2 text-xs font-semibold text-stone-500">其他操作</p>
                           <div className="flex flex-wrap gap-2 md:justify-end">
                             <button className="rounded-full border border-stone-200 bg-white px-4 py-2 text-sm" onClick={() => editSupply(item)}>編輯</button>
-                            <button className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700" onClick={() => confirm("確定刪除這筆備品與照片嗎？") && void deleteSupplyItem(token, item.id).then(loadAll)}>刪除</button>
+                            <button className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700" onClick={() => confirm("確定刪除這筆備品與照片嗎？") && void deleteSupplyItem(token, item.id).then(() => loadAll())}>刪除</button>
                           </div>
                         </div>
                       </div>
@@ -594,7 +594,7 @@ export default function AdminShopWarehouse() {
                     </div>
                     <div className="flex flex-wrap gap-2 md:justify-end">
                       <button className="rounded-full border border-stone-200 bg-white px-4 py-2 text-sm" onClick={() => setFurnitureForm(asset)}>查看／編輯</button>
-                      <button className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700" onClick={() => confirm("確定刪除這筆資產與照片嗎？") && void deleteFurnitureAsset(token, asset.id).then(loadAll)}>刪除</button>
+                      <button className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700" onClick={() => confirm("確定刪除這筆資產與照片嗎？") && void deleteFurnitureAsset(token, asset.id).then(() => loadAll())}>刪除</button>
                     </div>
                   </article>
                 ))}
@@ -661,7 +661,7 @@ export default function AdminShopWarehouse() {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <button className="rounded-full border border-stone-200 bg-white px-4 py-2 text-sm" onClick={() => setRecordForm({ ...record, captured_at: record.captured_at?.slice(0, 16) })}>查看／編輯</button>
-                        <button className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700" onClick={() => confirm("確定刪除這筆房務存證與照片嗎？") && void deleteHousekeepingRecord(token, record.id).then(loadAll)}>刪除</button>
+                        <button className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700" onClick={() => confirm("確定刪除這筆房務存證與照片嗎？") && void deleteHousekeepingRecord(token, record.id).then(() => loadAll())}>刪除</button>
                       </div>
                     </div>
                     {record.media?.length ? (
@@ -742,8 +742,14 @@ export default function AdminShopWarehouse() {
                               <p className="font-semibold">{supply.name}</p>
                               <p className="text-sm text-stone-500">目前數量 {supply.quantity}</p>
                             </div>
-                            <button className="rounded-full bg-white px-3 py-2" onClick={() => void adjustSupplyQuantity(token, supply.id, -1).then(loadAll)}>-1</button>
-                            <button className="rounded-full bg-white px-3 py-2" onClick={() => void adjustSupplyQuantity(token, supply.id, 1).then(loadAll)}>+1</button>
+                            <button
+                              className="rounded-full bg-white px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+                              disabled={Number(supply.quantity) <= 0}
+                              onClick={() => void adjustSupplyQuantity(token, supply.id, -1).then(() => loadAll())}
+                            >
+                              -1
+                            </button>
+                            <button className="rounded-full bg-white px-3 py-2" onClick={() => void adjustSupplyQuantity(token, supply.id, 1).then(() => loadAll())}>+1</button>
                           </div>
                         )) : <p className="text-sm text-stone-500">此層目前沒有備品。</p>}
                       </div>
@@ -779,7 +785,7 @@ function MediaList({
           </div>
           <button
             className="rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
-            onClick={() => confirm("確定刪除這張照片嗎？") && void deleteWarehouseMedia(token, item.id).then(onDone)}
+            onClick={() => confirm("確定刪除這張照片嗎？") && void deleteWarehouseMedia(token, item.id).then(() => onDone())}
           >
             刪除
           </button>

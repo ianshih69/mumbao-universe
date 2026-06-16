@@ -3829,8 +3829,25 @@ function parseNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function clampNonNegativeInteger(value) {
-  return Math.max(0, Math.trunc(parseNumber(value, 0)));
+function getWarehouseNonNegativeInteger(value, fieldName) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    const error = new Error(`${fieldName} 不可小於 0。`);
+    error.status = 400;
+    throw error;
+  }
+  return Math.trunc(parsed);
+}
+
+function getWarehouseOptionalNonNegativeNumber(value, fieldName) {
+  if (value === "" || value == null) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    const error = new Error(`${fieldName} 不可小於 0。`);
+    error.status = 400;
+    throw error;
+  }
+  return parsed;
 }
 
 function normalizeOptionalText(value) {
@@ -4017,10 +4034,10 @@ function normalizeSupplyPayload(body) {
   return {
     name: cleanText(body?.name),
     brand_spec: normalizeOptionalText(body?.brand_spec),
-    quantity: clampNonNegativeInteger(body?.quantity),
-    safety_stock: clampNonNegativeInteger(body?.safety_stock),
+    quantity: getWarehouseNonNegativeInteger(body?.quantity, "目前數量"),
+    safety_stock: getWarehouseNonNegativeInteger(body?.safety_stock, "安全庫存"),
     location_code: locationCode,
-    unit_price: body?.unit_price === "" || body?.unit_price == null ? null : parseNumber(body?.unit_price, 0),
+    unit_price: getWarehouseOptionalNonNegativeNumber(body?.unit_price, "單價"),
     supplier: normalizeOptionalText(body?.supplier),
     note: normalizeOptionalText(body?.note),
     updated_at: new Date().toISOString(),
@@ -4113,7 +4130,8 @@ async function handleWarehouseSupplyQuantity(req, res) {
   const item = Array.isArray(rows) ? rows[0] : null;
   if (!item) return sendJson(res, 404, { error: "找不到這筆備品。" });
 
-  const quantity = Math.max(0, Number(item.quantity || 0) + delta);
+  const quantity = Number(item.quantity || 0) + delta;
+  if (quantity < 0) return sendJson(res, 400, { error: "目前數量不可小於 0。" });
   const updated = await supabaseRequest(`/shop_supply_items?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify({ quantity, updated_at: new Date().toISOString() }),
@@ -4135,7 +4153,7 @@ function normalizeFurniturePayload(body) {
   return {
     asset_name: cleanText(body?.asset_name),
     asset_number: cleanText(body?.asset_number),
-    original_amount: body?.original_amount === "" || body?.original_amount == null ? null : parseNumber(body?.original_amount, 0),
+    original_amount: getWarehouseOptionalNonNegativeNumber(body?.original_amount, "原始金額"),
     room_area: normalizeOptionalText(body?.room_area),
     brand_model: normalizeOptionalText(body?.brand_model),
     vendor: normalizeOptionalText(body?.vendor),
@@ -4357,10 +4375,18 @@ async function handleWarehouseMedia(req, res) {
     const body = await readBody(req);
     const targetType = cleanText(body?.target_type);
     const targetId = cleanText(body?.target_id);
+    const mediaSize = body?.size == null ? null : Number(body.size);
+    const mediaSortOrder = Math.trunc(parseNumber(body?.sort_order, 0));
     if (!warehouseTargetTypes.has(targetType) || !targetId) {
       return sendJson(res, 400, { error: "缺少照片對應資料。" });
     }
     await assertWarehouseMediaTargetExists(targetType, targetId);
+    if (mediaSize !== null && (!Number.isFinite(mediaSize) || mediaSize < 0)) {
+      return sendJson(res, 400, { error: "圖片大小不可小於 0。" });
+    }
+    if (mediaSortOrder < 0) {
+      return sendJson(res, 400, { error: "圖片排序不可小於 0。" });
+    }
     const created = await supabaseRequest("/shop_warehouse_media", {
       method: "POST",
       body: JSON.stringify({
@@ -4370,8 +4396,8 @@ async function handleWarehouseMedia(req, res) {
         public_url: cleanText(body?.public_url),
         file_name: normalizeOptionalText(body?.file_name),
         content_type: normalizeOptionalText(body?.content_type),
-        size: Number.isFinite(Number(body?.size)) ? Number(body?.size) : null,
-        sort_order: Math.trunc(parseNumber(body?.sort_order, 0)),
+        size: mediaSize,
+        sort_order: mediaSortOrder,
         metadata: body?.metadata || {},
       }),
     });

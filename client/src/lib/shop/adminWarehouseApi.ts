@@ -1,4 +1,4 @@
-const adminAuthExpiredMessage = "登入已過期，請重新登入";
+import { adminAuthExpiredMessage } from "./adminAuth";
 
 async function fetchAdminJson<T>(
   url: string,

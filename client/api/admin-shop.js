@@ -7,6 +7,8 @@ import {
   supabaseRpc,
 } from "../server/shopShared.js";
 import { randomBytes } from "node:crypto";
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const defaultLimit = 30;
 const maxLimit = 50;
@@ -67,6 +69,30 @@ const instagramOAuthStateCookie = "mumbao_instagram_oauth_state";
 const instagramExpectedUsername = "mumbao.tw";
 const instagramOAuthRedirectUri =
   "https://mumbao.tw/api/instagram-oauth-callback";
+const warehouseLocationCodes = [
+  "F1-L1",
+  "F1-L2",
+  "F1-L3",
+  "F1-L4",
+  "F1-L5",
+  "F1-L6",
+  "F1-L7",
+  "F2-L1",
+  "F2-L2",
+  "F2-L3",
+  "F2-L4",
+  "F2-L5",
+  "F2-L6",
+  "F2-L7",
+];
+const warehouseLocationCodeSet = new Set(warehouseLocationCodes);
+const warehouseTargetTypes = new Set(["supply", "furniture", "housekeeping"]);
+const allowedWarehouseFileTypes = new Map([
+  ["image/jpeg", { extension: "jpg", maxSize: 10 * 1024 * 1024 }],
+  ["image/png", { extension: "png", maxSize: 10 * 1024 * 1024 }],
+  ["image/webp", { extension: "webp", maxSize: 10 * 1024 * 1024 }],
+]);
+const warehousePresignedUrlExpiresInSeconds = 10 * 60;
 
 function requireAdmin(req) {
   const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
@@ -3798,6 +3824,579 @@ async function handleManualSale(req, res) {
   }
 }
 
+function parseNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function clampNonNegativeInteger(value) {
+  return Math.max(0, Math.trunc(parseNumber(value, 0)));
+}
+
+function normalizeOptionalText(value) {
+  const text = cleanText(value);
+  return text || null;
+}
+
+function getWarehousePublicBaseUrl(baseUrl, key) {
+  return `${String(baseUrl || "").replace(/\/+$/, "")}/${String(key)
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")}`;
+}
+
+function getWarehouseTaipeiDate() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type) => parts.find((item) => item.type === type)?.value || "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function getWarehouseR2Config() {
+  const bucketName = cleanText(getServerEnv("R2_BUCKET_NAME"));
+  const accessKeyId = cleanText(getServerEnv("R2_ACCESS_KEY_ID"));
+  const secretAccessKey = cleanText(getServerEnv("R2_SECRET_ACCESS_KEY"));
+  const endpoint = cleanText(getServerEnv("R2_ENDPOINT"));
+  const publicBaseUrl = cleanText(getServerEnv("R2_PUBLIC_BASE_URL"));
+
+  if (!bucketName || !accessKeyId || !secretAccessKey || !endpoint || !publicBaseUrl) {
+    const error = new Error("R2 environment variables are not configured.");
+    error.status = 500;
+    throw error;
+  }
+
+  return {
+    bucketName,
+    publicBaseUrl,
+    client: new S3Client({
+      region: "auto",
+      endpoint,
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+      },
+    }),
+  };
+}
+
+function warehouseMediaPrefix(targetType, targetId) {
+  if (targetType === "supply") return `warehouse/supplies/${targetId}`;
+  if (targetType === "furniture") return `warehouse/assets/${targetId}`;
+  return `warehouse/housekeeping/${targetId}`;
+}
+
+async function assertWarehouseMediaTargetExists(targetType, targetId) {
+  const tableByTargetType = {
+    supply: "shop_supply_items",
+    furniture: "shop_furniture_assets",
+    housekeeping: "shop_housekeeping_records",
+  };
+  const table = tableByTargetType[targetType];
+  if (!table || !targetId) {
+    const error = new Error("照片對應資料不正確。");
+    error.status = 400;
+    throw error;
+  }
+
+  const rows = await supabaseRequest(
+    `/${table}?id=eq.${encodeURIComponent(targetId)}&select=id&limit=1`
+  );
+  if (!Array.isArray(rows) || !rows.length) {
+    const error = new Error("找不到照片對應的資料，請先儲存資料後再上傳照片。");
+    error.status = 404;
+    throw error;
+  }
+}
+
+async function loadWarehouseMediaForTargets(targetType, targetIds) {
+  const ids = [...new Set(targetIds.filter(Boolean))];
+  if (!ids.length) return {};
+
+  const rows = await supabaseRequest(
+    `/shop_warehouse_media?target_type=eq.${encodeURIComponent(targetType)}&target_id=in.(${ids.join(",")})&select=*&order=sort_order.asc,created_at.asc`
+  );
+
+  return (Array.isArray(rows) ? rows : []).reduce((acc, media) => {
+    const key = media.target_id;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(media);
+    return acc;
+  }, {});
+}
+
+function attachWarehouseMedia(rows, mediaById) {
+  return rows.map((row) => {
+    const media = mediaById[row.id] || [];
+    return {
+      ...row,
+      media,
+      main_media: media[0] || null,
+    };
+  });
+}
+
+async function loadWarehouseLocations(req, res) {
+  const locations = await supabaseRequest(
+    "/shop_warehouse_locations?select=*&order=sort_order.asc"
+  );
+  return sendJson(res, 200, { locations });
+}
+
+async function loadWarehouseDashboard(req, res) {
+  const supplies = await supabaseRequest(
+    "/shop_supply_items?select=id,quantity,safety_stock"
+  );
+  const items = Array.isArray(supplies) ? supplies : [];
+  const lowStockCount = items.filter(
+    (item) => Number(item.quantity) > 0 && Number(item.quantity) <= Number(item.safety_stock)
+  ).length;
+  const outOfStockCount = items.filter((item) => Number(item.quantity) <= 0).length;
+  return sendJson(res, 200, {
+    lowStockCount,
+    outOfStockCount,
+    supplyCount: items.length,
+  });
+}
+
+function filterWarehouseSupplies(items, { status = "", location = "", q = "" }) {
+  const keyword = q.toLowerCase();
+  return items.filter((item) => {
+    const quantity = Number(item.quantity || 0);
+    const safety = Number(item.safety_stock || 0);
+    const matchesStatus =
+      !status ||
+      status === "all" ||
+      (status === "low" && quantity > 0 && quantity <= safety) ||
+      (status === "out" && quantity <= 0);
+    const matchesLocation = !location || location === "all" || item.location_code === location;
+    const matchesKeyword =
+      !keyword ||
+      [item.name, item.brand_spec, item.supplier, item.note]
+        .some((value) => cleanText(value).toLowerCase().includes(keyword));
+
+    return matchesStatus && matchesLocation && matchesKeyword;
+  });
+}
+
+async function loadWarehouseSupplies(req, res) {
+  const id = cleanText(firstQueryValue(req.query?.id));
+  if (id) {
+    const rows = await supabaseRequest(
+      `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
+    );
+    const item = Array.isArray(rows) ? rows[0] : null;
+    if (!item) return sendJson(res, 404, { error: "找不到這筆備品。" });
+    const mediaById = await loadWarehouseMediaForTargets("supply", [item.id]);
+    return sendJson(res, 200, { item: attachWarehouseMedia([item], mediaById)[0] });
+  }
+
+  const rows = await supabaseRequest(
+    "/shop_supply_items?select=*&order=updated_at.desc&limit=500"
+  );
+  const filtered = filterWarehouseSupplies(Array.isArray(rows) ? rows : [], {
+    status: cleanText(firstQueryValue(req.query?.status)),
+    location: cleanText(firstQueryValue(req.query?.location)),
+    q: cleanText(firstQueryValue(req.query?.q)),
+  });
+  const mediaById = await loadWarehouseMediaForTargets("supply", filtered.map((item) => item.id));
+  return sendJson(res, 200, { items: attachWarehouseMedia(filtered, mediaById) });
+}
+
+function normalizeSupplyPayload(body) {
+  const locationCode = cleanText(body?.location_code);
+  if (!warehouseLocationCodeSet.has(locationCode)) {
+    const error = new Error("存放位置不正確。");
+    error.status = 400;
+    throw error;
+  }
+
+  return {
+    name: cleanText(body?.name),
+    brand_spec: normalizeOptionalText(body?.brand_spec),
+    quantity: clampNonNegativeInteger(body?.quantity),
+    safety_stock: clampNonNegativeInteger(body?.safety_stock),
+    location_code: locationCode,
+    unit_price: body?.unit_price === "" || body?.unit_price == null ? null : parseNumber(body?.unit_price, 0),
+    supplier: normalizeOptionalText(body?.supplier),
+    note: normalizeOptionalText(body?.note),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function deleteWarehouseMediaRows(rows) {
+  if (!rows.length) return;
+  const { bucketName, client } = getWarehouseR2Config();
+  try {
+    await Promise.all(
+      rows.map((media) =>
+        client.send(
+          new DeleteObjectCommand({
+            Bucket: bucketName,
+            Key: media.r2_key,
+          })
+        )
+      )
+    );
+  } catch {
+    const error = new Error("R2 圖片刪除失敗，資料尚未刪除。");
+    error.status = 502;
+    throw error;
+  }
+}
+
+async function deleteWarehouseRecord({ table, targetType, id }) {
+  const mediaRows = await supabaseRequest(
+    `/shop_warehouse_media?target_type=eq.${encodeURIComponent(targetType)}&target_id=eq.${encodeURIComponent(id)}&select=*`
+  );
+  await deleteWarehouseMediaRows(Array.isArray(mediaRows) ? mediaRows : []);
+  await supabaseRequest(
+    `/shop_warehouse_media?target_type=eq.${encodeURIComponent(targetType)}&target_id=eq.${encodeURIComponent(id)}`,
+    { method: "DELETE", headers: { Prefer: "return=minimal" } }
+  );
+  await supabaseRequest(`/${table}?id=eq.${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" },
+  });
+}
+
+async function handleWarehouseSupply(req, res) {
+  if (req.method === "GET") return await loadWarehouseSupplies(req, res);
+
+  if (req.method === "POST") {
+    const body = await readBody(req);
+    const payload = normalizeSupplyPayload(body);
+    if (!payload.name) return sendJson(res, 400, { error: "請輸入品名。" });
+    const created = await supabaseRequest("/shop_supply_items", {
+      method: "POST",
+      body: JSON.stringify({ ...payload, created_at: new Date().toISOString() }),
+    });
+    return sendJson(res, 201, { item: created?.[0] || null });
+  }
+
+  if (req.method === "PATCH") {
+    const body = await readBody(req);
+    const id = cleanText(body?.id);
+    if (!id) return sendJson(res, 400, { error: "缺少備品 ID。" });
+    const payload = normalizeSupplyPayload(body);
+    if (!payload.name) return sendJson(res, 400, { error: "請輸入品名。" });
+    const updated = await supabaseRequest(`/shop_supply_items?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    return sendJson(res, 200, { item: updated?.[0] || null });
+  }
+
+  if (req.method === "DELETE") {
+    const id = cleanText(firstQueryValue(req.query?.id));
+    if (!id) return sendJson(res, 400, { error: "缺少備品 ID。" });
+    await deleteWarehouseRecord({ table: "shop_supply_items", targetType: "supply", id });
+    return sendJson(res, 200, { ok: true });
+  }
+
+  return sendJson(res, 405, { error: "Method not allowed." });
+}
+
+async function handleWarehouseSupplyQuantity(req, res) {
+  if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
+  const body = await readBody(req);
+  const id = cleanText(body?.id);
+  const delta = Math.trunc(parseNumber(body?.delta, 0));
+  if (!id || !delta) return sendJson(res, 400, { error: "缺少調整資料。" });
+
+  const rows = await supabaseRequest(
+    `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
+  );
+  const item = Array.isArray(rows) ? rows[0] : null;
+  if (!item) return sendJson(res, 404, { error: "找不到這筆備品。" });
+
+  const quantity = Math.max(0, Number(item.quantity || 0) + delta);
+  const updated = await supabaseRequest(`/shop_supply_items?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ quantity, updated_at: new Date().toISOString() }),
+  });
+
+  return sendJson(res, 200, { item: updated?.[0] || null });
+}
+
+function filterWarehouseFurniture(items, q = "") {
+  const keyword = q.toLowerCase();
+  if (!keyword) return items;
+  return items.filter((item) =>
+    [item.asset_name, item.asset_number, item.room_area]
+      .some((value) => cleanText(value).toLowerCase().includes(keyword))
+  );
+}
+
+function normalizeFurniturePayload(body) {
+  return {
+    asset_name: cleanText(body?.asset_name),
+    asset_number: cleanText(body?.asset_number),
+    original_amount: body?.original_amount === "" || body?.original_amount == null ? null : parseNumber(body?.original_amount, 0),
+    room_area: normalizeOptionalText(body?.room_area),
+    brand_model: normalizeOptionalText(body?.brand_model),
+    vendor: normalizeOptionalText(body?.vendor),
+    note: normalizeOptionalText(body?.note),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function loadWarehouseFurniture(req, res) {
+  const id = cleanText(firstQueryValue(req.query?.id));
+  if (id) {
+    const rows = await supabaseRequest(
+      `/shop_furniture_assets?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
+    );
+    const asset = Array.isArray(rows) ? rows[0] : null;
+    if (!asset) return sendJson(res, 404, { error: "找不到這筆傢俱資產。" });
+    const mediaById = await loadWarehouseMediaForTargets("furniture", [asset.id]);
+    return sendJson(res, 200, { asset: attachWarehouseMedia([asset], mediaById)[0] });
+  }
+
+  const rows = await supabaseRequest(
+    "/shop_furniture_assets?select=*&order=updated_at.desc&limit=500"
+  );
+  const filtered = filterWarehouseFurniture(
+    Array.isArray(rows) ? rows : [],
+    cleanText(firstQueryValue(req.query?.q))
+  );
+  const mediaById = await loadWarehouseMediaForTargets("furniture", filtered.map((item) => item.id));
+  return sendJson(res, 200, { assets: attachWarehouseMedia(filtered, mediaById) });
+}
+
+async function handleWarehouseFurniture(req, res) {
+  if (req.method === "GET") return await loadWarehouseFurniture(req, res);
+
+  if (req.method === "POST" || req.method === "PATCH") {
+    const body = await readBody(req);
+    const payload = normalizeFurniturePayload(body);
+    if (!payload.asset_name || !payload.asset_number) {
+      return sendJson(res, 400, { error: "請輸入資產名稱與資產編號。" });
+    }
+
+    const duplicate = await supabaseRequest(
+      `/shop_furniture_assets?asset_number=eq.${encodeURIComponent(payload.asset_number)}&select=id&limit=1`
+    );
+    const existingId = Array.isArray(duplicate) ? duplicate[0]?.id : "";
+    if (existingId && (req.method === "POST" || existingId !== cleanText(body?.id))) {
+      return sendJson(res, 409, { error: "資產編號不可重複。" });
+    }
+
+    if (req.method === "POST") {
+      const created = await supabaseRequest("/shop_furniture_assets", {
+        method: "POST",
+        body: JSON.stringify({ ...payload, created_at: new Date().toISOString() }),
+      });
+      return sendJson(res, 201, { asset: created?.[0] || null });
+    }
+
+    const id = cleanText(body?.id);
+    if (!id) return sendJson(res, 400, { error: "缺少資產 ID。" });
+    const updated = await supabaseRequest(`/shop_furniture_assets?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    return sendJson(res, 200, { asset: updated?.[0] || null });
+  }
+
+  if (req.method === "DELETE") {
+    const id = cleanText(firstQueryValue(req.query?.id));
+    if (!id) return sendJson(res, 400, { error: "缺少資產 ID。" });
+    await deleteWarehouseRecord({ table: "shop_furniture_assets", targetType: "furniture", id });
+    return sendJson(res, 200, { ok: true });
+  }
+
+  return sendJson(res, 405, { error: "Method not allowed." });
+}
+
+function normalizeHousekeepingPayload(body) {
+  const recordType = cleanText(body?.record_type);
+  if (!["cleaning_completed", "checkout_issue"].includes(recordType)) {
+    const error = new Error("拍攝類型不正確。");
+    error.status = 400;
+    throw error;
+  }
+
+  return {
+    order_number: normalizeOptionalText(body?.order_number),
+    room_area: cleanText(body?.room_area),
+    record_type: recordType,
+    captured_at: cleanText(body?.captured_at) || new Date().toISOString(),
+    note: normalizeOptionalText(body?.note),
+    related_asset_number: normalizeOptionalText(body?.related_asset_number),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function filterHousekeepingRecords(items, { q = "", type = "", date = "" }) {
+  const keyword = q.toLowerCase();
+  return items.filter((item) => {
+    const matchesKeyword =
+      !keyword ||
+      [item.order_number, item.room_area, item.note, item.related_asset_number]
+        .some((value) => cleanText(value).toLowerCase().includes(keyword));
+    const matchesType = !type || type === "all" || item.record_type === type;
+    const matchesDate = !date || cleanText(item.captured_at).startsWith(date);
+    return matchesKeyword && matchesType && matchesDate;
+  });
+}
+
+async function loadHousekeepingRecords(req, res) {
+  const id = cleanText(firstQueryValue(req.query?.id));
+  if (id) {
+    const rows = await supabaseRequest(
+      `/shop_housekeeping_records?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
+    );
+    const record = Array.isArray(rows) ? rows[0] : null;
+    if (!record) return sendJson(res, 404, { error: "找不到這筆房務存證。" });
+    const mediaById = await loadWarehouseMediaForTargets("housekeeping", [record.id]);
+    return sendJson(res, 200, { record: attachWarehouseMedia([record], mediaById)[0] });
+  }
+
+  const rows = await supabaseRequest(
+    "/shop_housekeeping_records?select=*&order=captured_at.desc&limit=500"
+  );
+  const filtered = filterHousekeepingRecords(Array.isArray(rows) ? rows : [], {
+    q: cleanText(firstQueryValue(req.query?.q)),
+    type: cleanText(firstQueryValue(req.query?.type)),
+    date: cleanText(firstQueryValue(req.query?.date)),
+  });
+  const mediaById = await loadWarehouseMediaForTargets("housekeeping", filtered.map((item) => item.id));
+  return sendJson(res, 200, { records: attachWarehouseMedia(filtered, mediaById) });
+}
+
+async function handleHousekeepingRecord(req, res) {
+  if (req.method === "GET") return await loadHousekeepingRecords(req, res);
+
+  if (req.method === "POST" || req.method === "PATCH") {
+    const body = await readBody(req);
+    const payload = normalizeHousekeepingPayload(body);
+    if (!payload.room_area) return sendJson(res, 400, { error: "請輸入房間／區域。" });
+
+    if (req.method === "POST") {
+      const created = await supabaseRequest("/shop_housekeeping_records", {
+        method: "POST",
+        body: JSON.stringify({ ...payload, created_at: new Date().toISOString() }),
+      });
+      return sendJson(res, 201, { record: created?.[0] || null });
+    }
+
+    const id = cleanText(body?.id);
+    if (!id) return sendJson(res, 400, { error: "缺少房務存證 ID。" });
+    const updated = await supabaseRequest(`/shop_housekeeping_records?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    return sendJson(res, 200, { record: updated?.[0] || null });
+  }
+
+  if (req.method === "DELETE") {
+    const id = cleanText(firstQueryValue(req.query?.id));
+    if (!id) return sendJson(res, 400, { error: "缺少房務存證 ID。" });
+    await deleteWarehouseRecord({ table: "shop_housekeeping_records", targetType: "housekeeping", id });
+    return sendJson(res, 200, { ok: true });
+  }
+
+  return sendJson(res, 405, { error: "Method not allowed." });
+}
+
+async function handleWarehouseMediaUpload(req, res) {
+  if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
+
+  const body = await readBody(req);
+  const targetType = cleanText(body?.targetType);
+  const targetId = cleanText(body?.targetId);
+  const fileName = cleanText(body?.fileName);
+  const contentType = cleanText(body?.contentType).toLowerCase();
+  const size = Number(body?.size);
+  const fileRule = allowedWarehouseFileTypes.get(contentType);
+
+  if (!warehouseTargetTypes.has(targetType) || !targetId) {
+    return sendJson(res, 400, { error: "缺少照片對應資料。" });
+  }
+  await assertWarehouseMediaTargetExists(targetType, targetId);
+  if (!fileName) return sendJson(res, 400, { error: "缺少檔名。" });
+  if (!fileRule) return sendJson(res, 400, { error: "只支援 JPG、PNG 或 WebP 圖片。" });
+  if (!Number.isFinite(size) || size <= 0 || size > fileRule.maxSize) {
+    return sendJson(res, 400, { error: "圖片大小不正確，單張上限 10MB。" });
+  }
+
+  const { bucketName, publicBaseUrl, client } = getWarehouseR2Config();
+  const key = [
+    warehouseMediaPrefix(targetType, targetId),
+    getWarehouseTaipeiDate(),
+    `${Date.now()}-${randomBytes(8).toString("hex")}.${fileRule.extension}`,
+  ].join("/");
+
+  const uploadUrl = await getSignedUrl(
+    client,
+    new PutObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+      ContentType: contentType,
+    }),
+    { expiresIn: warehousePresignedUrlExpiresInSeconds }
+  );
+
+  return sendJson(res, 200, {
+    ok: true,
+    uploadUrl,
+    fileName,
+    contentType,
+    size,
+    key,
+    publicUrl: getWarehousePublicBaseUrl(publicBaseUrl, key),
+  });
+}
+
+async function handleWarehouseMedia(req, res) {
+  if (req.method === "POST") {
+    const body = await readBody(req);
+    const targetType = cleanText(body?.target_type);
+    const targetId = cleanText(body?.target_id);
+    if (!warehouseTargetTypes.has(targetType) || !targetId) {
+      return sendJson(res, 400, { error: "缺少照片對應資料。" });
+    }
+    await assertWarehouseMediaTargetExists(targetType, targetId);
+    const created = await supabaseRequest("/shop_warehouse_media", {
+      method: "POST",
+      body: JSON.stringify({
+        target_type: targetType,
+        target_id: targetId,
+        r2_key: cleanText(body?.r2_key),
+        public_url: cleanText(body?.public_url),
+        file_name: normalizeOptionalText(body?.file_name),
+        content_type: normalizeOptionalText(body?.content_type),
+        size: Number.isFinite(Number(body?.size)) ? Number(body?.size) : null,
+        sort_order: Math.trunc(parseNumber(body?.sort_order, 0)),
+        metadata: body?.metadata || {},
+      }),
+    });
+    return sendJson(res, 201, { media: created?.[0] || null });
+  }
+
+  if (req.method === "DELETE") {
+    const id = cleanText(firstQueryValue(req.query?.id));
+    if (!id) return sendJson(res, 400, { error: "缺少照片 ID。" });
+    const rows = await supabaseRequest(
+      `/shop_warehouse_media?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
+    );
+    const media = Array.isArray(rows) ? rows[0] : null;
+    if (!media) return sendJson(res, 404, { error: "找不到這張照片。" });
+    await deleteWarehouseMediaRows([media]);
+    await supabaseRequest(`/shop_warehouse_media?id=eq.${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" },
+    });
+    return sendJson(res, 200, { ok: true });
+  }
+
+  return sendJson(res, 405, { error: "Method not allowed." });
+}
+
 export default async function handler(req, res) {
   const action = String(firstQueryValue(req.query?.action) || "").trim();
 
@@ -3890,6 +4489,38 @@ export default async function handler(req, res) {
 
     if (action === "manual-sale") {
       return await handleManualSale(req, res);
+    }
+
+    if (req.method === "GET" && action === "warehouse-dashboard") {
+      return await loadWarehouseDashboard(req, res);
+    }
+
+    if (req.method === "GET" && action === "warehouse-locations") {
+      return await loadWarehouseLocations(req, res);
+    }
+
+    if (action === "warehouse-supply") {
+      return await handleWarehouseSupply(req, res);
+    }
+
+    if (action === "warehouse-supply-quantity") {
+      return await handleWarehouseSupplyQuantity(req, res);
+    }
+
+    if (action === "warehouse-furniture-asset") {
+      return await handleWarehouseFurniture(req, res);
+    }
+
+    if (action === "warehouse-housekeeping-record") {
+      return await handleHousekeepingRecord(req, res);
+    }
+
+    if (action === "warehouse-media-upload") {
+      return await handleWarehouseMediaUpload(req, res);
+    }
+
+    if (action === "warehouse-media") {
+      return await handleWarehouseMedia(req, res);
     }
 
     res.setHeader("Allow", "GET, POST, PATCH");

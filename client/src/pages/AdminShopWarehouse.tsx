@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import QRCode from "qrcode";
 import AdminShopNav from "@/components/shop/AdminShopNav";
@@ -92,6 +92,18 @@ function stockStatus(item: Pick<SupplyItem, "quantity" | "safety_stock">) {
 
 function fieldClass() {
   return "w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-800 outline-none transition focus:border-[#9a7a63] focus:ring-2 focus:ring-[#ead8c8]";
+}
+
+function FormField({ label, required, children }: { label: string; required?: boolean; children: ReactNode }) {
+  return (
+    <label className="block space-y-1.5 text-sm font-medium text-stone-700">
+      <span>
+        {label}
+        {required ? <span className="ml-1 text-rose-500">*</span> : null}
+      </span>
+      {children}
+    </label>
+  );
 }
 
 function sectionClass() {
@@ -438,19 +450,37 @@ export default function AdminShopWarehouse() {
             <section className={sectionClass()}>
               <h2 className="text-xl font-semibold">{supplyForm.id ? "編輯備品" : "新增備品"}</h2>
               <div className="mt-4 space-y-3">
-                <input className={fieldClass()} placeholder="品名" value={supplyForm.name || ""} onChange={(e) => setSupplyForm({ ...supplyForm, name: e.target.value })} />
-                <input className={fieldClass()} placeholder="品牌／規格" value={supplyForm.brand_spec || ""} onChange={(e) => setSupplyForm({ ...supplyForm, brand_spec: e.target.value })} />
+                <FormField label="品名" required>
+                  <input className={fieldClass()} value={supplyForm.name || ""} onChange={(e) => setSupplyForm({ ...supplyForm, name: e.target.value })} />
+                </FormField>
+                <FormField label="品牌／規格">
+                  <input className={fieldClass()} value={supplyForm.brand_spec || ""} onChange={(e) => setSupplyForm({ ...supplyForm, brand_spec: e.target.value })} />
+                </FormField>
                 <div className="grid gap-3 md:grid-cols-2">
-                  <input className={fieldClass()} type="number" min={0} placeholder="目前數量" value={supplyForm.quantity ?? 0} onChange={(e) => setSupplyForm({ ...supplyForm, quantity: Number(e.target.value) })} />
-                  <input className={fieldClass()} type="number" min={0} placeholder="安全庫存" value={supplyForm.safety_stock ?? 0} onChange={(e) => setSupplyForm({ ...supplyForm, safety_stock: Number(e.target.value) })} />
+                  <FormField label="目前數量" required>
+                    <input className={fieldClass()} type="number" min={0} value={supplyForm.quantity ?? 0} onChange={(e) => setSupplyForm({ ...supplyForm, quantity: Number(e.target.value) })} />
+                  </FormField>
+                  <FormField label="安全庫存" required>
+                    <input className={fieldClass()} type="number" min={0} value={supplyForm.safety_stock ?? 0} onChange={(e) => setSupplyForm({ ...supplyForm, safety_stock: Number(e.target.value) })} />
+                  </FormField>
                 </div>
-                <select className={fieldClass()} value={supplyForm.location_code || "F1-L1"} onChange={(e) => setSupplyForm({ ...supplyForm, location_code: e.target.value })}>
-                  {locations.map((item) => <option key={item.code} value={item.code}>{item.code}</option>)}
-                </select>
-                <input className={fieldClass()} type="number" min={0} placeholder="單價" value={supplyForm.unit_price ?? 0} onChange={(e) => setSupplyForm({ ...supplyForm, unit_price: Number(e.target.value) })} />
-                <input className={fieldClass()} placeholder="供應商" value={supplyForm.supplier || ""} onChange={(e) => setSupplyForm({ ...supplyForm, supplier: e.target.value })} />
-                <textarea className={fieldClass()} placeholder="備註" value={supplyForm.note || ""} onChange={(e) => setSupplyForm({ ...supplyForm, note: e.target.value })} />
-                <input className={fieldClass()} type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFiles(Array.from(e.target.files || []))} />
+                <FormField label="存放位置" required>
+                  <select className={fieldClass()} value={supplyForm.location_code || "F1-L1"} onChange={(e) => setSupplyForm({ ...supplyForm, location_code: e.target.value })}>
+                    {locations.map((item) => <option key={item.code} value={item.code}>{item.code}</option>)}
+                  </select>
+                </FormField>
+                <FormField label="單價">
+                  <input className={fieldClass()} type="number" min={0} value={supplyForm.unit_price ?? 0} onChange={(e) => setSupplyForm({ ...supplyForm, unit_price: Number(e.target.value) })} />
+                </FormField>
+                <FormField label="供應商">
+                  <input className={fieldClass()} value={supplyForm.supplier || ""} onChange={(e) => setSupplyForm({ ...supplyForm, supplier: e.target.value })} />
+                </FormField>
+                <FormField label="備註">
+                  <textarea className={fieldClass()} value={supplyForm.note || ""} onChange={(e) => setSupplyForm({ ...supplyForm, note: e.target.value })} />
+                </FormField>
+                <FormField label="主照片">
+                  <input className={fieldClass()} type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFiles(Array.from(e.target.files || []))} />
+                </FormField>
                 {supplyForm.media?.length ? <MediaList token={token} media={supplyForm.media} onDone={loadAll} /> : null}
                 <div className="flex gap-2">
                   <button className="rounded-full bg-[#8b6f5b] px-5 py-3 text-sm font-semibold text-white" onClick={() => void saveSupply()}>儲存備品</button>
@@ -485,14 +515,30 @@ export default function AdminShopWarehouse() {
             <section className={sectionClass()}>
               <h2 className="text-xl font-semibold">{furnitureForm.id ? "編輯傢俱資產" : "新增傢俱資產"}</h2>
               <div className="mt-4 space-y-3">
-                <input className={fieldClass()} placeholder="資產名稱" value={furnitureForm.asset_name || ""} onChange={(e) => setFurnitureForm({ ...furnitureForm, asset_name: e.target.value })} />
-                <input className={fieldClass()} placeholder="資產編號" value={furnitureForm.asset_number || ""} onChange={(e) => setFurnitureForm({ ...furnitureForm, asset_number: e.target.value })} />
-                <input className={fieldClass()} type="number" min={0} placeholder="原始金額" value={furnitureForm.original_amount ?? 0} onChange={(e) => setFurnitureForm({ ...furnitureForm, original_amount: Number(e.target.value) })} />
-                <input className={fieldClass()} placeholder="房間／區域" value={furnitureForm.room_area || ""} onChange={(e) => setFurnitureForm({ ...furnitureForm, room_area: e.target.value })} />
-                <input className={fieldClass()} placeholder="品牌型號" value={furnitureForm.brand_model || ""} onChange={(e) => setFurnitureForm({ ...furnitureForm, brand_model: e.target.value })} />
-                <input className={fieldClass()} placeholder="購入廠商" value={furnitureForm.vendor || ""} onChange={(e) => setFurnitureForm({ ...furnitureForm, vendor: e.target.value })} />
-                <textarea className={fieldClass()} placeholder="備註" value={furnitureForm.note || ""} onChange={(e) => setFurnitureForm({ ...furnitureForm, note: e.target.value })} />
-                <input className={fieldClass()} type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFiles(Array.from(e.target.files || []))} />
+                <FormField label="資產名稱" required>
+                  <input className={fieldClass()} value={furnitureForm.asset_name || ""} onChange={(e) => setFurnitureForm({ ...furnitureForm, asset_name: e.target.value })} />
+                </FormField>
+                <FormField label="資產編號" required>
+                  <input className={fieldClass()} value={furnitureForm.asset_number || ""} onChange={(e) => setFurnitureForm({ ...furnitureForm, asset_number: e.target.value })} />
+                </FormField>
+                <FormField label="原始金額">
+                  <input className={fieldClass()} type="number" min={0} value={furnitureForm.original_amount ?? 0} onChange={(e) => setFurnitureForm({ ...furnitureForm, original_amount: Number(e.target.value) })} />
+                </FormField>
+                <FormField label="房間／區域">
+                  <input className={fieldClass()} value={furnitureForm.room_area || ""} onChange={(e) => setFurnitureForm({ ...furnitureForm, room_area: e.target.value })} />
+                </FormField>
+                <FormField label="品牌型號">
+                  <input className={fieldClass()} value={furnitureForm.brand_model || ""} onChange={(e) => setFurnitureForm({ ...furnitureForm, brand_model: e.target.value })} />
+                </FormField>
+                <FormField label="購入廠商">
+                  <input className={fieldClass()} value={furnitureForm.vendor || ""} onChange={(e) => setFurnitureForm({ ...furnitureForm, vendor: e.target.value })} />
+                </FormField>
+                <FormField label="備註">
+                  <textarea className={fieldClass()} value={furnitureForm.note || ""} onChange={(e) => setFurnitureForm({ ...furnitureForm, note: e.target.value })} />
+                </FormField>
+                <FormField label="照片">
+                  <input className={fieldClass()} type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFiles(Array.from(e.target.files || []))} />
+                </FormField>
                 {furnitureForm.media?.length ? <MediaList token={token} media={furnitureForm.media} onDone={loadAll} /> : null}
                 <div className="flex gap-2">
                   <button className="rounded-full bg-[#8b6f5b] px-5 py-3 text-sm font-semibold text-white" onClick={() => void saveFurniture()}>儲存資產</button>
@@ -542,19 +588,33 @@ export default function AdminShopWarehouse() {
             <section className={sectionClass()}>
               <h2 className="text-xl font-semibold">{recordForm.id ? "編輯房務存證" : "新增房務存證"}</h2>
               <div className="mt-4 space-y-3">
-                <input className={fieldClass()} placeholder="訂單編號" value={recordForm.order_number || ""} onChange={(e) => setRecordForm({ ...recordForm, order_number: e.target.value })} />
-                <input className={fieldClass()} placeholder="房間／區域" value={recordForm.room_area || ""} onChange={(e) => setRecordForm({ ...recordForm, room_area: e.target.value })} />
-                <select className={fieldClass()} value={recordForm.record_type || "cleaning_completed"} onChange={(e) => setRecordForm({ ...recordForm, record_type: e.target.value as HousekeepingRecord["record_type"] })}>
-                  <option value="cleaning_completed">打掃完成</option>
-                  <option value="checkout_issue">退房異常</option>
-                </select>
-                <input className={fieldClass()} type="datetime-local" value={String(recordForm.captured_at || "").slice(0, 16)} onChange={(e) => setRecordForm({ ...recordForm, captured_at: e.target.value })} />
-                <select className={fieldClass()} value={recordForm.related_asset_number || ""} onChange={(e) => setRecordForm({ ...recordForm, related_asset_number: e.target.value })}>
-                  <option value="">不關聯資產</option>
-                  {furniture.map((asset) => <option key={asset.id} value={asset.asset_number}>{asset.asset_number}｜{asset.asset_name}</option>)}
-                </select>
-                <textarea className={fieldClass()} placeholder="備註" value={recordForm.note || ""} onChange={(e) => setRecordForm({ ...recordForm, note: e.target.value })} />
-                <input className={fieldClass()} multiple type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFiles(Array.from(e.target.files || []))} />
+                <FormField label="訂單編號">
+                  <input className={fieldClass()} value={recordForm.order_number || ""} onChange={(e) => setRecordForm({ ...recordForm, order_number: e.target.value })} />
+                </FormField>
+                <FormField label="房間／區域" required>
+                  <input className={fieldClass()} value={recordForm.room_area || ""} onChange={(e) => setRecordForm({ ...recordForm, room_area: e.target.value })} />
+                </FormField>
+                <FormField label="拍攝類型" required>
+                  <select className={fieldClass()} value={recordForm.record_type || "cleaning_completed"} onChange={(e) => setRecordForm({ ...recordForm, record_type: e.target.value as HousekeepingRecord["record_type"] })}>
+                    <option value="cleaning_completed">打掃完成</option>
+                    <option value="checkout_issue">退房異常</option>
+                  </select>
+                </FormField>
+                <FormField label="拍攝時間" required>
+                  <input className={fieldClass()} type="datetime-local" value={String(recordForm.captured_at || "").slice(0, 16)} onChange={(e) => setRecordForm({ ...recordForm, captured_at: e.target.value })} />
+                </FormField>
+                <FormField label="關聯資產編號">
+                  <select className={fieldClass()} value={recordForm.related_asset_number || ""} onChange={(e) => setRecordForm({ ...recordForm, related_asset_number: e.target.value })}>
+                    <option value="">不關聯資產</option>
+                    {furniture.map((asset) => <option key={asset.id} value={asset.asset_number}>{asset.asset_number}｜{asset.asset_name}</option>)}
+                  </select>
+                </FormField>
+                <FormField label="備註">
+                  <textarea className={fieldClass()} value={recordForm.note || ""} onChange={(e) => setRecordForm({ ...recordForm, note: e.target.value })} />
+                </FormField>
+                <FormField label="照片">
+                  <input className={fieldClass()} multiple type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFiles(Array.from(e.target.files || []))} />
+                </FormField>
                 {recordForm.media?.length ? <MediaList token={token} media={recordForm.media} onDone={loadAll} /> : null}
                 <div className="flex gap-2">
                   <button className="rounded-full bg-[#8b6f5b] px-5 py-3 text-sm font-semibold text-white" onClick={() => void saveRecord()}>儲存存證</button>

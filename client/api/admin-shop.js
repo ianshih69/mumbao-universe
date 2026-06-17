@@ -1,6 +1,7 @@
 import { withHandlerSafety } from "../server/adminShop/withHandlerSafety.js";
 
 const routeLoaders = {
+  test: () => import("../server/adminShop/test.js"),
   "admin-legacy-login": () => import("../server/adminShop/legacyLogin.js"),
   "warehouse-supply-quantity": () =>
     import("../server/adminShop/warehouseSupplyQuantity.js"),
@@ -23,7 +24,16 @@ function loadRoute(action) {
 
 async function dispatchAdminShop(req, res) {
   const action = getAction(req);
-  const routeModule = await loadRoute(action)();
+  console.log("[admin-shop] action =", action);
+
+  let routeModule;
+  try {
+    routeModule = await loadRoute(action)();
+  } catch (err) {
+    console.error("IMPORT CRASH:", err);
+    throw err;
+  }
+
   const routeHandler = routeModule.default;
 
   if (typeof routeHandler !== "function") {

@@ -2,35 +2,6 @@
   "devCommand": "npx vite --host 0.0.0.0 --configLoader runner",
   "buildCommand": "npx vite build --configLoader runner",
   "outputDirectory": "dist",
-  "functions": {
-    "api/ai-chat-message.js": {
-      "includeFiles": "api/knowledge/guesthouse-rules.md"
-    },
-    "api/shop.js": {
-      "includeFiles": [
-        "api/package.json",
-        "server/**"
-      ]
-    },
-    "api/admin-shop.js": {
-      "includeFiles": [
-        "api/package.json",
-        "server/**"
-      ]
-    },
-    "api/social-upload.js": {
-      "includeFiles": [
-        "api/package.json",
-        "server/**"
-      ]
-    },
-    "api/instagram-oauth-callback.js": {
-      "includeFiles": [
-        "api/package.json",
-        "server/**"
-      ]
-    }
-  },
   "rewrites": [
     {
       "source": "/((?!api(?:/|$)).*)",

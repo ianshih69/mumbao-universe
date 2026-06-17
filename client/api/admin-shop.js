@@ -5142,26 +5142,15 @@ function filterHousekeepingRecords(items, { q = "", type = "", date = "" }) {
   });
 }
 
-async function loadOwnHousekeepingTargetIds(context) {
-  if (!context?.actorAuthUserId) return new Set();
-  const rows = await supabaseRequest(
-    `/admin_activity_logs?actor_auth_user_id=eq.${encodeURIComponent(
-      context.actorAuthUserId
-    )}&module=eq.warehouse&action=eq.create&target_type=eq.housekeeping&select=target_id&limit=1000`
-  );
-  return new Set(
-    (Array.isArray(rows) ? rows : [])
-      .map((row) => cleanText(row.target_id))
-      .filter(Boolean)
-  );
-}
-
 async function filterHousekeepingRecordsForContext(records, context) {
   if (!context) return records;
   if (hasAdminPermission(context, "warehouse.housekeeping.view_all")) return records;
   if (!hasAdminPermission(context, "warehouse.housekeeping.view_own")) return [];
-  const ownIds = await loadOwnHousekeepingTargetIds(context);
-  return records.filter((record) => ownIds.has(record.id));
+  const actorAuthUserId = cleanText(context.actorAuthUserId);
+  if (!actorAuthUserId) return [];
+  return records.filter(
+    (record) => cleanText(record.created_by_auth_user_id) === actorAuthUserId
+  );
 }
 
 async function loadHousekeepingRecords(req, res, context = null) {
@@ -5178,9 +5167,17 @@ async function loadHousekeepingRecords(req, res, context = null) {
     return sendJson(res, 200, { record: attachWarehouseMedia([record], mediaById)[0] });
   }
 
-  const rows = await supabaseRequest(
-    "/shop_housekeeping_records?select=*&order=captured_at.desc&limit=500"
-  );
+  let recordsUrl = "/shop_housekeeping_records?select=*&order=captured_at.desc&limit=500";
+  if (
+    context &&
+    !hasAdminPermission(context, "warehouse.housekeeping.view_all") &&
+    hasAdminPermission(context, "warehouse.housekeeping.view_own")
+  ) {
+    const actorAuthUserId = cleanText(context.actorAuthUserId);
+    if (!actorAuthUserId) return sendJson(res, 403, { error: "Permission denied." });
+    recordsUrl += `&created_by_auth_user_id=eq.${encodeURIComponent(actorAuthUserId)}`;
+  }
+  const rows = await supabaseRequest(recordsUrl);
   const filtered = filterHousekeepingRecords(Array.isArray(rows) ? rows : [], {
     q: cleanText(firstQueryValue(req.query?.q)),
     type: cleanText(firstQueryValue(req.query?.type)),
@@ -5202,7 +5199,11 @@ async function handleHousekeepingRecord(req, res, context) {
     if (req.method === "POST") {
       const created = await supabaseRequest("/shop_housekeeping_records", {
         method: "POST",
-        body: JSON.stringify({ ...payload, created_at: new Date().toISOString() }),
+        body: JSON.stringify({
+          ...payload,
+          created_by_auth_user_id: context?.actorAuthUserId || null,
+          created_at: new Date().toISOString(),
+        }),
       });
       await writeAdminActivityLog({
         req,
@@ -5223,6 +5224,9 @@ async function handleHousekeepingRecord(req, res, context) {
       `/shop_housekeeping_records?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
+    if (!before) return sendJson(res, 404, { error: "Housekeeping record not found." });
+    const allowedRecords = await filterHousekeepingRecordsForContext([before], context);
+    if (!allowedRecords.length) return sendJson(res, 403, { error: "Permission denied." });
     const updated = await supabaseRequest(`/shop_housekeeping_records?id=eq.${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(payload),

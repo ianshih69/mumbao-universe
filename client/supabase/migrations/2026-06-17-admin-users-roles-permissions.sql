@@ -117,6 +117,29 @@ grant select, insert, update, delete on table public.admin_role_permissions to s
 grant select, insert, update, delete on table public.admin_profiles to service_role;
 grant select, insert, update, delete on table public.admin_activity_logs to service_role;
 
+alter table public.shop_housekeeping_records
+  add column if not exists created_by_auth_user_id uuid;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'shop_housekeeping_records_created_by_auth_user_id_fkey'
+  ) then
+    alter table public.shop_housekeeping_records
+      add constraint shop_housekeeping_records_created_by_auth_user_id_fkey
+      foreign key (created_by_auth_user_id)
+      references auth.users(id)
+      on update cascade
+      on delete set null;
+  end if;
+end;
+$$;
+
+create index if not exists shop_housekeeping_records_created_by_auth_user_id_idx
+  on public.shop_housekeeping_records (created_by_auth_user_id);
+
 insert into public.admin_roles (code, name, description, is_system)
 values
   ('super_admin', 'Super Admin', 'Full system access, including users, roles, permissions, and audit logs.', true),

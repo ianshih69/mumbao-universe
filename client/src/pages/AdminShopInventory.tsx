@@ -37,6 +37,7 @@ import {
   isAdminAuthError,
   setAdminToken as setStoredAdminToken,
 } from "@/lib/shop/adminAuth";
+import { loginLegacyAdminPassword } from "@/lib/shop/adminIdentityApi";
 import { cn } from "@/lib/utils";
 
 const productListLimit = 50;
@@ -350,18 +351,26 @@ export default function AdminShopInventory() {
     loadMovements({ nextPage: 0, variantId: selectedVariantId });
   }, [loadMovements, selectedVariantId, token]);
 
-  const handleLogin = (event: FormEvent) => {
+  const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
-    const nextToken = password.trim();
+    const legacyPassword = password.trim();
 
-    if (!nextToken) {
-      setLoginError("請輸入 ADMIN_PASSWORD");
+    if (!legacyPassword) {
+      setLoginError("??? ADMIN_PASSWORD");
       return;
     }
 
-    saveAdminToken(nextToken);
-    setToken(nextToken);
-    setLoginError("");
+    try {
+      const session = await loginLegacyAdminPassword(legacyPassword);
+      saveAdminToken(session.accessToken);
+      setToken(session.accessToken);
+      setPassword("");
+      setLoginError("");
+    } catch (error) {
+      clearAdminToken();
+      setToken("");
+      setLoginError(error instanceof Error ? error.message : adminAuthExpiredMessage);
+    }
   };
 
   const logout = () => {

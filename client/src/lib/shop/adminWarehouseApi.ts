@@ -1,14 +1,16 @@
 import { adminAuthExpiredMessage } from "./adminAuth";
+import { ensureFreshAdminSession } from "./adminIdentityApi";
 
 async function fetchAdminJson<T>(
   url: string,
   token: string,
   options: RequestInit = {}
 ) {
+  const activeToken = await ensureFreshAdminSession(token);
   const response = await fetch(url, {
     ...options,
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${activeToken}`,
       "Content-Type": "application/json",
       ...options.headers,
     },

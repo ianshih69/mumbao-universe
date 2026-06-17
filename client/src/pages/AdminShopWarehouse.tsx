@@ -11,7 +11,7 @@ import {
   setAdminSession,
   type AdminAuthStatus,
 } from "@/lib/shop/adminAuth";
-import { fetchAdminSession } from "@/lib/shop/adminIdentityApi";
+import { fetchAdminSession, loginLegacyAdminPassword } from "@/lib/shop/adminIdentityApi";
 import {
   adjustSupplyQuantity,
   deleteFurnitureAsset,
@@ -155,30 +155,27 @@ function MediaPreview({ media }: { media?: WarehouseMedia | null }) {
 
 function LoginCard({ onLogin }: { onLogin: (token: string) => void }) {
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
 
   return (
     <main className="min-h-screen bg-[#f7f1e9] px-4 py-12">
       <div className="mx-auto max-w-md rounded-[28px] border border-stone-200 bg-white p-8 shadow-sm">
         <p className="text-xs uppercase tracking-[0.28em] text-[#b08d73]">Warehouse Admin</p>
         <h1 className="mt-3 text-2xl font-semibold text-stone-900">倉儲與資產管理</h1>
-        <p className="mt-2 text-sm text-stone-600">請輸入商城後台密碼後繼續。</p>
+        <p className="mt-2 text-sm text-stone-600">請登入後台後再管理備品、傢俱與房務存證。</p>
         <form
           className="mt-6 space-y-4"
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault();
             if (!password.trim()) return;
-            setAdminSession({
-              accessToken: password.trim(),
-              authMode: "legacy",
-              user: {
-                display_name: "舊版共用密碼",
-                role_code: "legacy_admin",
-                role_name: "舊版共用密碼",
-                permissions: ["*"],
-                is_active: true,
-              },
-            });
-            onLogin(password.trim());
+            setError("");
+            try {
+              const session = await loginLegacyAdminPassword(password.trim());
+              setPassword("");
+              onLogin(session.accessToken);
+            } catch (loginError) {
+              setError(loginError instanceof Error ? loginError.message : "登入失敗，請重新確認。");
+            }
           }}
         >
           <input
@@ -186,10 +183,11 @@ function LoginCard({ onLogin }: { onLogin: (token: string) => void }) {
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="後台密碼"
+            placeholder="請輸入後台密碼"
           />
+          {error ? <p className="text-sm text-rose-600">{error}</p> : null}
           <button className="w-full rounded-full bg-[#8b6f5b] px-5 py-3 text-sm font-semibold text-white">
-            進入後台
+            登入
           </button>
           <a
             className="block text-center text-sm font-medium text-[#8b6f5b] underline"

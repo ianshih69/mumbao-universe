@@ -19,6 +19,7 @@ import {
   isAdminAuthError,
   setAdminToken,
 } from "@/lib/shop/adminAuth";
+import { loginLegacyAdminPassword } from "@/lib/shop/adminIdentityApi";
 import {
   type AdminDashboardRecentMovement,
   type AdminDashboardRecentOrder,
@@ -285,16 +286,18 @@ export default function AdminShopHome() {
 
   const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
-    const nextToken = password.trim();
+    const legacyPassword = password.trim();
 
-    if (!nextToken) {
-      setLoginError("請輸入 ADMIN_PASSWORD");
+    if (!legacyPassword) {
+      setLoginError("??? ADMIN_PASSWORD");
       return;
     }
 
     setIsChecking(true);
     setAuthStatus("checking");
     try {
+      const session = await loginLegacyAdminPassword(legacyPassword);
+      const nextToken = session.accessToken;
       const nextDashboard = await fetchAdminShopDashboard(nextToken);
       setAdminToken(nextToken);
       setTokenState(nextToken);

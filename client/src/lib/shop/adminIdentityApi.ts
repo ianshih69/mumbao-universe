@@ -1,5 +1,10 @@
 import {
   adminAuthExpiredMessage,
+  clearAdminToken,
+  getAdminIdentity,
+  getAdminRefreshToken,
+  getAdminToken,
+  getAdminTokenExpiresAt,
   setAdminSession,
   type AdminIdentity,
 } from "./adminAuth";
@@ -61,14 +66,80 @@ export async function loginAdminAccount(email: string, password: string) {
     body: JSON.stringify({ email, password }),
   });
   const data = await parseJson(response);
-  if (!response.ok) throw new Error(data.error || "登入失敗。");
+  if (!response.ok) throw new Error(data.error || "Admin login failed.");
   setAdminSession({
     accessToken: data.accessToken,
     refreshToken: data.refreshToken,
+    expiresAt: data.expiresAt,
+    user: data.user,
+    authMode: "account",
+  });
+  return data as {
+    accessToken: string;
+    refreshToken?: string;
+    expiresAt?: string | null;
+    user: AdminIdentity;
+  };
+}
+
+export async function loginLegacyAdminPassword(legacyAdminPassword: string) {
+  const response = await fetch("/api/admin-shop?action=admin-legacy-login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ legacyAdminPassword }),
+  });
+  const data = await parseJson(response);
+  if (!response.ok) throw new Error(data.error || "Legacy admin login failed.");
+  setAdminSession({
+    accessToken: data.accessToken,
+    expiresAt: data.expiresAt,
+    user: data.user,
+    authMode: "legacy",
+  });
+  return data as { accessToken: string; expiresAt?: string; user: AdminIdentity };
+}
+
+export async function refreshAdminSession() {
+  const refreshToken = getAdminRefreshToken();
+  if (!refreshToken) throw new Error(adminAuthExpiredMessage);
+
+  const response = await fetch("/api/admin-shop?action=admin-refresh", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshToken }),
+  });
+  const data = await parseJson(response);
+  if (!response.ok) {
+    clearAdminToken();
+    throw new Error(adminAuthExpiredMessage);
+  }
+
+  setAdminSession({
+    accessToken: data.accessToken,
+    refreshToken: data.refreshToken,
+    expiresAt: data.expiresAt,
     user: data.user,
     authMode: "account",
   });
   return data as { accessToken: string; refreshToken?: string; user: AdminIdentity };
+}
+
+export async function ensureFreshAdminSession(currentToken: string) {
+  const identity = getAdminIdentity();
+  const storedToken = getAdminToken() || currentToken;
+  if (!storedToken || identity?.authMode === "legacy") return storedToken;
+
+  const expiresAt = getAdminTokenExpiresAt();
+  if (!expiresAt) return storedToken;
+
+  const expiresAtMs = new Date(expiresAt).getTime();
+  if (!Number.isFinite(expiresAtMs)) return storedToken;
+
+  const refreshWindowMs = 5 * 60 * 1000;
+  if (expiresAtMs - Date.now() > refreshWindowMs) return storedToken;
+
+  const refreshed = await refreshAdminSession();
+  return refreshed.accessToken;
 }
 
 export async function fetchAdminSession(token: string) {
@@ -90,6 +161,7 @@ export async function fetchAdminSession(token: string) {
 
 export async function bootstrapSuperAdmin(payload: {
   legacyAdminPassword: string;
+  bootstrapSecret: string;
   displayName: string;
   email: string;
   password: string;
@@ -100,7 +172,7 @@ export async function bootstrapSuperAdmin(payload: {
     body: JSON.stringify(payload),
   });
   const data = await parseJson(response);
-  if (!response.ok) throw new Error(data.error || "建立 super_admin 失敗。");
+  if (!response.ok) throw new Error(data.error || "Bootstrap super admin failed.");
   return data;
 }
 

@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+﻿import { Link } from "wouter";
 import {
   Boxes,
   ClipboardList,
@@ -40,9 +40,9 @@ const navItems: Array<{
   { key: "orders", label: "訂單", href: "/admin/shop/orders", icon: ClipboardList, permission: "orders.view" },
   { key: "inventory", label: "庫存", href: "/admin/shop/inventory", icon: PackageCheck, permission: "inventory.view" },
   { key: "scan", label: "入庫", href: "/admin/shop/scan", icon: ScanLine, permission: "receiving.view" },
-  { key: "pos", label: "現場銷售 POS", href: "/admin/shop/pos", icon: ShoppingBag, permission: "pos.view" },
+  { key: "pos", label: "POS", href: "/admin/shop/pos", icon: ShoppingBag, permission: "pos.view" },
   { key: "social", label: "自動發文", href: "/admin/shop/social", icon: Megaphone, permission: "social.view" },
-  { key: "warehouse", label: "倉儲與資產", href: "/admin/shop/warehouse", icon: Warehouse, permission: "warehouse.view" },
+  { key: "warehouse", label: "倉儲與資產", href: "/admin/shop/warehouse", icon: Warehouse, permission: "warehouse.supplies.view" },
   { key: "users", label: "使用者", href: "/admin/shop/users", icon: UserCog, permission: "users.view" },
   { key: "audit", label: "操作紀錄", href: "/admin/shop/audit-logs", icon: ShieldCheck, permission: "audit_logs.view" },
 ];

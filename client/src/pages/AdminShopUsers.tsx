@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import AdminShopNav from "@/components/shop/AdminShopNav";
 import {
   adminAuthExpiredMessage,
@@ -55,6 +55,7 @@ export default function AdminShopUsers() {
   });
   const [bootstrapForm, setBootstrapForm] = useState({
     legacyAdminPassword: "",
+    bootstrapSecret: "",
     displayName: "",
     email: "",
     password: "",
@@ -127,8 +128,8 @@ export default function AdminShopUsers() {
     setNotice("");
     try {
       await bootstrapSuperAdmin(bootstrapForm);
-      setBootstrapForm({ legacyAdminPassword: "", displayName: "", email: "", password: "" });
-      setNotice("第一位 super_admin 已建立，請改用個人帳號登入。");
+      setBootstrapForm({ legacyAdminPassword: "", bootstrapSecret: "", displayName: "", email: "", password: "" });
+      setNotice("第一位 super_admin 已建立，請使用個人帳號登入。");
       await load();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "建立 super_admin 失敗。");
@@ -155,7 +156,7 @@ export default function AdminShopUsers() {
             <p className="text-xs uppercase tracking-[0.28em] text-[#b08d73]">ADMIN USERS</p>
             <h1 className="mt-2 text-3xl font-semibold text-stone-900">後台使用者</h1>
             <p className="mt-2 text-sm text-stone-600">
-              目前登入：{identity?.display_name || "後台使用者"}／{identity?.role_name || identity?.role_code || "未設定角色"}
+              目前登入：{identity?.display_name || "後台使用者"}，角色：{identity?.role_name || identity?.role_code || "管理員"}
             </p>
           </div>
           <button
@@ -180,23 +181,24 @@ export default function AdminShopUsers() {
               </select>
               <label className="flex items-center gap-2 text-sm text-stone-700">
                 <input type="checkbox" checked={form.is_active} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} />
-                帳號啟用
+                啟用帳號
               </label>
               <button className="w-full rounded-full bg-[#8b6f5b] px-5 py-3 text-sm font-semibold text-white">新增使用者</button>
             </form>
           </section>
 
           <section className="rounded-[24px] border border-amber-200 bg-amber-50/70 p-5 shadow-sm">
-            <h2 className="text-lg font-semibold text-stone-900">第一位 super_admin bootstrap</h2>
+            <h2 className="text-lg font-semibold text-stone-900">建立第一位 super_admin</h2>
             <p className="mt-2 text-sm leading-6 text-stone-600">
-              只在尚無任何 super_admin 時可使用。需輸入現有 ADMIN_PASSWORD 驗證，不會保存初始密碼。
+              僅在系統尚無任何後台帳號時可使用。需要同時輸入舊版 ADMIN_PASSWORD 與 ADMIN_BOOTSTRAP_SECRET。
             </p>
             <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={handleBootstrap}>
-              <input className={inputClass()} placeholder="現有 ADMIN_PASSWORD" type="password" value={bootstrapForm.legacyAdminPassword} onChange={(event) => setBootstrapForm({ ...bootstrapForm, legacyAdminPassword: event.target.value })} />
+              <input className={inputClass()} placeholder="舊版 ADMIN_PASSWORD" type="password" value={bootstrapForm.legacyAdminPassword} onChange={(event) => setBootstrapForm({ ...bootstrapForm, legacyAdminPassword: event.target.value })} />
+              <input className={inputClass()} placeholder="ADMIN_BOOTSTRAP_SECRET" type="password" value={bootstrapForm.bootstrapSecret} onChange={(event) => setBootstrapForm({ ...bootstrapForm, bootstrapSecret: event.target.value })} />
               <input className={inputClass()} placeholder="姓名" value={bootstrapForm.displayName} onChange={(event) => setBootstrapForm({ ...bootstrapForm, displayName: event.target.value })} />
               <input className={inputClass()} placeholder="Email" type="email" value={bootstrapForm.email} onChange={(event) => setBootstrapForm({ ...bootstrapForm, email: event.target.value })} />
               <input className={inputClass()} placeholder="初始密碼" type="password" value={bootstrapForm.password} onChange={(event) => setBootstrapForm({ ...bootstrapForm, password: event.target.value })} />
-              <button className="rounded-full border border-[#8b6f5b] bg-white px-5 py-3 text-sm font-semibold text-[#8b6f5b] md:col-span-2">建立第一位 super_admin</button>
+              <button className="rounded-full border border-[#8b6f5b] bg-white px-5 py-3 text-sm font-semibold text-[#8b6f5b] md:col-span-2">建立 super_admin</button>
             </form>
           </section>
         </div>
@@ -223,10 +225,10 @@ export default function AdminShopUsers() {
                     const displayName = window.prompt("請輸入新的姓名", user.display_name);
                     if (displayName) void patchUser(user.id, { display_name: displayName });
                   }}>
-                    改姓名
+                    編輯姓名
                   </button>
                   <button className="rounded-full border border-stone-200 bg-white px-3 py-2 text-sm" onClick={() => {
-                    const password = window.prompt("請輸入新密碼，不會寫入自建資料表");
+                    const password = window.prompt("請輸入新的臨時密碼");
                     if (password) void patchUser(user.id, { password });
                   }}>
                     重設密碼
@@ -237,7 +239,7 @@ export default function AdminShopUsers() {
                 </div>
               </div>
             ))}
-            {!users.length && !isLoading ? <p className="text-sm text-stone-500">尚未建立後台使用者。</p> : null}
+            {!users.length && !isLoading ? <p className="text-sm text-stone-500">目前尚未建立後台使用者。</p> : null}
           </div>
         </section>
       </div>

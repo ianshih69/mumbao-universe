@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { loginAdminAccount } from "@/lib/shop/adminIdentityApi";
-import { setAdminSession } from "@/lib/shop/adminAuth";
+import { loginAdminAccount, loginLegacyAdminPassword } from "@/lib/shop/adminIdentityApi";
 
 function inputClass() {
   return "w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-800 outline-none transition focus:border-[#9a7a63] focus:ring-2 focus:ring-[#ead8c8]";
@@ -31,25 +30,22 @@ export default function AdminShopLogin() {
     }
   }
 
-  function handleLegacyLogin(event: React.FormEvent) {
+  async function handleLegacyLogin(event: React.FormEvent) {
     event.preventDefault();
     if (!legacyPassword.trim()) {
-      setMessage("請輸入舊版共用密碼。");
+      setMessage("??????????");
       return;
     }
-    setAdminSession({
-      accessToken: legacyPassword.trim(),
-      authMode: "legacy",
-      user: {
-        authMode: "legacy",
-        display_name: "舊版共用密碼",
-        role_code: "legacy_admin",
-        role_name: "舊版共用密碼",
-        permissions: ["*"],
-        is_active: true,
-      },
-    });
-    setLocation(redirectTo);
+    setIsSubmitting(true);
+    try {
+      await loginLegacyAdminPassword(legacyPassword.trim());
+      setLegacyPassword("");
+      setLocation(redirectTo);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "?????????");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (

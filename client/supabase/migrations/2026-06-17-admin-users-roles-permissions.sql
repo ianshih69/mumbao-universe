@@ -1,3 +1,5 @@
+create extension if not exists pgcrypto;
+
 create table if not exists public.admin_roles (
   code text primary key,
   name text not null,
@@ -34,6 +36,9 @@ create table if not exists public.admin_profiles (
   last_login_at timestamptz,
   constraint admin_profiles_email_lower_check check (email = lower(email))
 );
+
+create unique index if not exists admin_profiles_email_unique_idx
+  on public.admin_profiles (email);
 
 create table if not exists public.admin_activity_logs (
   id uuid primary key default gen_random_uuid(),
@@ -105,6 +110,7 @@ revoke all on table public.admin_role_permissions from public, anon, authenticat
 revoke all on table public.admin_profiles from public, anon, authenticated;
 revoke all on table public.admin_activity_logs from public, anon, authenticated;
 
+grant usage on schema public to service_role;
 grant select, insert, update, delete on table public.admin_roles to service_role;
 grant select, insert, update, delete on table public.admin_permissions to service_role;
 grant select, insert, update, delete on table public.admin_role_permissions to service_role;
@@ -113,58 +119,68 @@ grant select, insert, update, delete on table public.admin_activity_logs to serv
 
 insert into public.admin_roles (code, name, description, is_system)
 values
-  ('super_admin', '超級管理員', '擁有全部後台功能與使用者權限管理能力。', true),
-  ('admin', '一般管理員', '可管理商城、倉儲、POS 與社群日常營運。', true),
-  ('housekeeper', '管家', '可查看訂單、調整備品、管理房務存證與倉庫位置。', true),
-  ('cleaner', '清潔人員', '可查看倉庫位置、調整備品數量並新增房務照片。', true)
+  ('super_admin', 'Super Admin', 'Full system access, including users, roles, permissions, and audit logs.', true),
+  ('admin', 'Admin', 'General admin access for shop, warehouse, POS, social publishing, and audit logs.', true),
+  ('housekeeper', 'Housekeeper', 'Operations access for orders, supplies, furniture, housekeeping, and warehouse locations.', true),
+  ('cleaner', 'Cleaner', 'Limited access for supplies, warehouse locations, and own housekeeping records.', true)
 on conflict (code) do update
 set
   name = excluded.name,
   description = excluded.description,
-  is_system = excluded.is_system;
+  is_system = excluded.is_system,
+  updated_at = now();
 
 insert into public.admin_permissions (code, module, action, description)
 values
-  ('dashboard.view', 'dashboard', 'view', '查看後台總覽'),
-  ('products.view', 'products', 'view', '查看商品'),
-  ('products.create', 'products', 'create', '新增商品'),
-  ('products.update', 'products', 'update', '編輯商品'),
-  ('products.delete', 'products', 'delete', '刪除或封存商品'),
-  ('orders.view', 'orders', 'view', '查看訂單'),
-  ('orders.update', 'orders', 'update', '更新訂單'),
-  ('inventory.view', 'inventory', 'view', '查看庫存'),
-  ('inventory.update', 'inventory', 'update', '調整庫存'),
-  ('receiving.view', 'receiving', 'view', '查看入庫'),
-  ('receiving.create', 'receiving', 'create', '新增入庫'),
-  ('receiving.update', 'receiving', 'update', '更新入庫'),
-  ('pos.view', 'pos', 'view', '查看 POS'),
-  ('pos.create', 'pos', 'create', '建立 POS 銷售'),
-  ('social.view', 'social', 'view', '查看社群發文'),
-  ('social.publish', 'social', 'publish', '發布社群貼文'),
-  ('social.manage_connection', 'social', 'manage_connection', '管理社群連線'),
-  ('warehouse.view', 'warehouse', 'view', '查看倉儲與資產'),
-  ('warehouse.supply.create', 'warehouse', 'supply.create', '新增備品'),
-  ('warehouse.supply.update', 'warehouse', 'supply.update', '編輯備品'),
-  ('warehouse.supply.delete', 'warehouse', 'supply.delete', '刪除備品'),
-  ('warehouse.supply.adjust_quantity', 'warehouse', 'supply.adjust_quantity', '調整備品數量'),
-  ('warehouse.furniture.create', 'warehouse', 'furniture.create', '新增傢俱資產'),
-  ('warehouse.furniture.update', 'warehouse', 'furniture.update', '編輯傢俱資產'),
-  ('warehouse.furniture.delete', 'warehouse', 'furniture.delete', '刪除傢俱資產'),
-  ('warehouse.housekeeping.create', 'warehouse', 'housekeeping.create', '新增房務存證'),
-  ('warehouse.housekeeping.update', 'warehouse', 'housekeeping.update', '編輯房務存證'),
-  ('warehouse.housekeeping.delete', 'warehouse', 'housekeeping.delete', '刪除房務存證'),
-  ('warehouse.locations.view', 'warehouse', 'locations.view', '查看倉庫位置'),
-  ('users.view', 'users', 'view', '查看後台使用者'),
-  ('users.create', 'users', 'create', '新增後台使用者'),
-  ('users.update', 'users', 'update', '編輯後台使用者'),
-  ('users.disable', 'users', 'disable', '啟用或停用後台使用者'),
-  ('users.manage_roles', 'users', 'manage_roles', '管理角色與權限'),
-  ('audit_logs.view', 'audit_logs', 'view', '查看操作紀錄')
+  ('dashboard.view', 'dashboard', 'view', 'View admin dashboard'),
+  ('products.view', 'products', 'view', 'View products'),
+  ('products.create', 'products', 'create', 'Create products'),
+  ('products.update', 'products', 'update', 'Update products'),
+  ('products.delete', 'products', 'delete', 'Delete or archive products'),
+  ('orders.view', 'orders', 'view', 'View orders'),
+  ('orders.update', 'orders', 'update', 'Update orders'),
+  ('inventory.view', 'inventory', 'view', 'View shop inventory'),
+  ('inventory.update', 'inventory', 'update', 'Update shop inventory'),
+  ('receiving.view', 'receiving', 'view', 'View receiving scan'),
+  ('receiving.create', 'receiving', 'create', 'Create receiving records'),
+  ('receiving.update', 'receiving', 'update', 'Update receiving records'),
+  ('pos.view', 'pos', 'view', 'View POS'),
+  ('pos.create', 'pos', 'create', 'Create POS sale'),
+  ('social.view', 'social', 'view', 'View social publishing'),
+  ('social.publish', 'social', 'publish', 'Publish social posts'),
+  ('social.manage_connection', 'social', 'manage_connection', 'Manage social platform connections'),
+  ('warehouse.supplies.view', 'warehouse', 'supplies.view', 'View supplies'),
+  ('warehouse.furniture.view', 'warehouse', 'furniture.view', 'View furniture assets'),
+  ('warehouse.housekeeping.view_all', 'warehouse', 'housekeeping.view_all', 'View all housekeeping records'),
+  ('warehouse.housekeeping.view_own', 'warehouse', 'housekeeping.view_own', 'View own housekeeping records'),
+  ('warehouse.supply.create', 'warehouse', 'supply.create', 'Create supplies'),
+  ('warehouse.supply.update', 'warehouse', 'supply.update', 'Update supplies'),
+  ('warehouse.supply.delete', 'warehouse', 'supply.delete', 'Delete supplies'),
+  ('warehouse.supply.adjust_quantity', 'warehouse', 'supply.adjust_quantity', 'Adjust supply quantity'),
+  ('warehouse.furniture.create', 'warehouse', 'furniture.create', 'Create furniture assets'),
+  ('warehouse.furniture.update', 'warehouse', 'furniture.update', 'Update furniture assets'),
+  ('warehouse.furniture.delete', 'warehouse', 'furniture.delete', 'Delete furniture assets'),
+  ('warehouse.housekeeping.create', 'warehouse', 'housekeeping.create', 'Create housekeeping records'),
+  ('warehouse.housekeeping.update', 'warehouse', 'housekeeping.update', 'Update housekeeping records'),
+  ('warehouse.housekeeping.delete', 'warehouse', 'housekeeping.delete', 'Delete housekeeping records'),
+  ('warehouse.locations.view', 'warehouse', 'locations.view', 'View warehouse locations'),
+  ('users.view', 'users', 'view', 'View admin users'),
+  ('users.create', 'users', 'create', 'Create admin users'),
+  ('users.update', 'users', 'update', 'Update admin users'),
+  ('users.disable', 'users', 'disable', 'Disable admin users'),
+  ('users.manage_roles', 'users', 'manage_roles', 'Manage admin roles'),
+  ('audit_logs.view', 'audit_logs', 'view', 'View audit logs')
 on conflict (code) do update
 set
   module = excluded.module,
   action = excluded.action,
   description = excluded.description;
+
+delete from public.admin_role_permissions
+where permission_code = 'warehouse.view';
+
+delete from public.admin_permissions
+where code = 'warehouse.view';
 
 insert into public.admin_role_permissions (role_code, permission_code)
 select 'super_admin', code from public.admin_permissions
@@ -189,7 +205,9 @@ values
   ('admin', 'social.view'),
   ('admin', 'social.publish'),
   ('admin', 'social.manage_connection'),
-  ('admin', 'warehouse.view'),
+  ('admin', 'warehouse.supplies.view'),
+  ('admin', 'warehouse.furniture.view'),
+  ('admin', 'warehouse.housekeeping.view_all'),
   ('admin', 'warehouse.supply.create'),
   ('admin', 'warehouse.supply.update'),
   ('admin', 'warehouse.supply.delete'),
@@ -203,14 +221,17 @@ values
   ('admin', 'warehouse.locations.view'),
   ('admin', 'audit_logs.view'),
   ('housekeeper', 'orders.view'),
-  ('housekeeper', 'warehouse.view'),
+  ('housekeeper', 'warehouse.supplies.view'),
+  ('housekeeper', 'warehouse.furniture.view'),
+  ('housekeeper', 'warehouse.housekeeping.view_all'),
   ('housekeeper', 'warehouse.supply.update'),
   ('housekeeper', 'warehouse.supply.adjust_quantity'),
   ('housekeeper', 'warehouse.furniture.update'),
   ('housekeeper', 'warehouse.housekeeping.create'),
   ('housekeeper', 'warehouse.housekeeping.update'),
   ('housekeeper', 'warehouse.locations.view'),
-  ('cleaner', 'warehouse.view'),
+  ('cleaner', 'warehouse.supplies.view'),
+  ('cleaner', 'warehouse.housekeeping.view_own'),
   ('cleaner', 'warehouse.supply.adjust_quantity'),
   ('cleaner', 'warehouse.housekeeping.create'),
   ('cleaner', 'warehouse.locations.view')

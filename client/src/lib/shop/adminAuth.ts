@@ -3,22 +3,17 @@ export type AdminAuthStatus = "checking" | "loggedIn" | "loggedOut";
 export const adminShopTokenKey = "adminShopToken";
 export const adminShopRefreshTokenKey = "adminShopRefreshToken";
 export const adminShopIdentityKey = "adminShopIdentity";
+export const adminShopTokenExpiresAtKey = "adminShopTokenExpiresAt";
 const legacyAdminShopTokenKey = "mumbao-admin-shop-order-token";
 
 export const adminAuthExpiredMessage = "登入已過期，請重新登入";
 
 export function getAdminToken() {
   try {
-    const token =
-      sessionStorage.getItem(adminShopTokenKey) ||
-      sessionStorage.getItem(legacyAdminShopTokenKey) ||
-      "";
-
-    if (token && !sessionStorage.getItem(adminShopTokenKey)) {
-      sessionStorage.setItem(adminShopTokenKey, token);
+    if (sessionStorage.getItem(legacyAdminShopTokenKey)) {
+      sessionStorage.removeItem(legacyAdminShopTokenKey);
     }
-
-    return token;
+    return sessionStorage.getItem(adminShopTokenKey) || "";
   } catch {
     return "";
   }
@@ -51,19 +46,35 @@ export function getAdminRefreshToken() {
   }
 }
 
+export function getAdminTokenExpiresAt() {
+  try {
+    return sessionStorage.getItem(adminShopTokenExpiresAtKey) || "";
+  } catch {
+    return "";
+  }
+}
+
 export function setAdminSession({
   accessToken,
   refreshToken,
   user,
   authMode = "account",
+  expiresAt,
 }: {
   accessToken: string;
   refreshToken?: string;
+  expiresAt?: string | null;
   user?: Partial<AdminIdentity> | null;
   authMode?: "account" | "legacy";
 }) {
   setAdminToken(accessToken);
   if (refreshToken) sessionStorage.setItem(adminShopRefreshTokenKey, refreshToken);
+  if (expiresAt) {
+    sessionStorage.setItem(adminShopTokenExpiresAtKey, expiresAt);
+  } else if (authMode === "legacy") {
+    sessionStorage.removeItem(adminShopRefreshTokenKey);
+    sessionStorage.removeItem(adminShopTokenExpiresAtKey);
+  }
   if (user) {
     sessionStorage.setItem(
       adminShopIdentityKey,
@@ -102,6 +113,7 @@ export function hasAdminPermission(permission: string) {
 export function clearAdminToken() {
   sessionStorage.removeItem(adminShopTokenKey);
   sessionStorage.removeItem(adminShopRefreshTokenKey);
+  sessionStorage.removeItem(adminShopTokenExpiresAtKey);
   sessionStorage.removeItem(adminShopIdentityKey);
   sessionStorage.removeItem(legacyAdminShopTokenKey);
 }

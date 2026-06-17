@@ -38,6 +38,7 @@ import {
 } from "@/lib/shop/adminPosApi";
 import { formatPrice, getVariantLabel } from "@/lib/shop/format";
 import { PAYMENT_METHOD_LABELS } from "@/lib/shop/labels";
+import { loginLegacyAdminPassword } from "@/lib/shop/adminIdentityApi";
 import { cn } from "@/lib/utils";
 
 type PosCartItem = {
@@ -334,18 +335,26 @@ export default function AdminShopPos() {
     }
   };
 
-  const handleLogin = (event: FormEvent) => {
+  const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
-    const nextToken = password.trim();
+    const legacyPassword = password.trim();
 
-    if (!nextToken) {
-      setLoginError("請輸入 ADMIN_PASSWORD");
+    if (!legacyPassword) {
+      setLoginError("??? ADMIN_PASSWORD");
       return;
     }
 
-    saveAdminToken(nextToken);
-    setToken(nextToken);
-    setLoginError("");
+    try {
+      const session = await loginLegacyAdminPassword(legacyPassword);
+      saveAdminToken(session.accessToken);
+      setToken(session.accessToken);
+      setPassword("");
+      setLoginError("");
+    } catch (error) {
+      clearAdminToken();
+      setToken("");
+      setLoginError(error instanceof Error ? error.message : adminAuthExpiredMessage);
+    }
   };
 
   const logout = () => {

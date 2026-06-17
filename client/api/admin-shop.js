@@ -6,7 +6,7 @@ import {
   supabaseRequest,
   supabaseRpc,
 } from "../server/shopShared.js";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -93,6 +93,10 @@ const allowedWarehouseFileTypes = new Map([
   ["image/webp", { extension: "webp", maxSize: 10 * 1024 * 1024 }],
 ]);
 const warehousePresignedUrlExpiresInSeconds = 10 * 60;
+const legacySessionTtlMs = 60 * 60 * 1000;
+const bootstrapRateLimitWindowMs = 15 * 60 * 1000;
+const bootstrapRateLimitMaxAttempts = 5;
+const bootstrapAttempts = new Map();
 
 function requireAdmin(req) {
   const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
@@ -129,6 +133,75 @@ function getBearerToken(req) {
   return authHeader.startsWith("Bearer ")
     ? authHeader.slice("Bearer ".length).trim()
     : "";
+}
+
+function base64UrlEncode(value) {
+  return Buffer.from(value).toString("base64url");
+}
+
+function base64UrlJson(value) {
+  return base64UrlEncode(JSON.stringify(value));
+}
+
+function getLegacySessionSecret() {
+  const secret = String(getServerEnv("ADMIN_LEGACY_SESSION_SECRET") || "").trim();
+  if (!secret) throw createHttpError(500, "Legacy admin session is not configured.");
+  return secret;
+}
+
+function signLegacyPayload(payloadSegment) {
+  return createHmac("sha256", getLegacySessionSecret())
+    .update(payloadSegment)
+    .digest("base64url");
+}
+
+function createLegacySessionToken() {
+  const issuedAt = Date.now();
+  const payload = {
+    authMode: "legacy",
+    issuedAt,
+    expiresAt: issuedAt + legacySessionTtlMs,
+    nonce: randomBytes(16).toString("hex"),
+  };
+  const payloadSegment = base64UrlJson(payload);
+  return `${payloadSegment}.${signLegacyPayload(payloadSegment)}`;
+}
+
+function verifyLegacySessionToken(token) {
+  if (!token || !token.includes(".")) return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [payloadSegment, signature] = parts;
+  if (!payloadSegment || !signature) return null;
+
+  let expected;
+  try {
+    expected = signLegacyPayload(payloadSegment);
+  } catch {
+    return null;
+  }
+  const expectedBuffer = Buffer.from(expected);
+  const signatureBuffer = Buffer.from(signature);
+  if (
+    expectedBuffer.length !== signatureBuffer.length ||
+    !timingSafeEqual(expectedBuffer, signatureBuffer)
+  ) {
+    return null;
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(payloadSegment, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+
+  if (payload?.authMode !== "legacy") return null;
+  if (!Number.isFinite(Number(payload.expiresAt)) || Number(payload.expiresAt) <= Date.now()) {
+    return null;
+  }
+
+  return payload;
 }
 
 function getSupabaseBaseUrl() {
@@ -174,12 +247,13 @@ async function supabaseAuthRequest(pathname, options = {}) {
 
 function getRoleName(roleCode) {
   const names = {
-    super_admin: "超級管理員",
-    admin: "一般管理員",
-    housekeeper: "管家",
-    cleaner: "清潔人員",
+    super_admin: "Super Admin",
+    admin: "Admin",
+    housekeeper: "Housekeeper",
+    cleaner: "Cleaner",
+    legacy_admin: "Legacy Shared Password",
   };
-  return names[roleCode] || roleCode || "未設定角色";
+  return names[roleCode] || roleCode || "Admin";
 }
 
 function normalizeAdminProfile(profile, permissions = []) {
@@ -216,19 +290,17 @@ async function loadAdminPermissions(roleCode) {
 }
 
 function getLegacyAdminContext(req) {
-  const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
   const bearerToken = getBearerToken(req);
-  const providedPassword =
-    bearerToken || String(req.headers?.["x-admin-password"] || "").trim();
+  const legacyPayload = verifyLegacySessionToken(bearerToken);
 
-  if (adminPassword && providedPassword === adminPassword) {
+  if (legacyPayload) {
     return {
       authMode: "legacy",
       actorAuthUserId: null,
-      actorName: "舊版共用密碼",
+      actorName: "Legacy Shared Password",
       actorEmail: "",
       roleCode: "legacy_admin",
-      roleName: "舊版共用密碼",
+      roleName: "Legacy Shared Password",
       permissions: legacyAdminPermissions,
       profile: null,
     };
@@ -284,45 +356,91 @@ async function requireAuthenticatedAdmin(req) {
 
 async function requirePermission(req, permissionCode) {
   const context = await requireAuthenticatedAdmin(req);
-  if (
-    context.permissions.includes("*") ||
-    context.roleCode === "super_admin" ||
-    context.permissions.includes(permissionCode)
-  ) {
-    return context;
-  }
-
+  if (hasAdminPermission(context, permissionCode)) return context;
   throw createHttpError(403, "Permission denied.");
 }
 
-function filterSensitiveAuditData(value) {
+function hasAdminPermission(context, permissionCode) {
+  if (!context || !permissionCode) return false;
+  return (
+    context.permissions.includes("*") ||
+    context.roleCode === "super_admin" ||
+    context.permissions.includes(permissionCode)
+  );
+}
+
+async function requireAnyPermission(req, permissionCodes) {
+  const context = await requireAuthenticatedAdmin(req);
+  if (
+    permissionCodes.some((permissionCode) =>
+      hasAdminPermission(context, permissionCode)
+    )
+  ) {
+    return context;
+  }
+  throw createHttpError(403, "Permission denied.");
+}
+
+const auditFieldAllowLists = {
+  supply: [
+    "id",
+    "name",
+    "brand_spec",
+    "quantity",
+    "safety_stock",
+    "location_code",
+    "unit_price",
+    "supplier",
+    "note",
+  ],
+  furniture: [
+    "id",
+    "asset_name",
+    "asset_number",
+    "original_amount",
+    "room_area",
+    "brand_model",
+    "vendor",
+    "note",
+  ],
+  housekeeping: [
+    "id",
+    "order_number",
+    "room_area",
+    "record_type",
+    "captured_at",
+    "related_asset_number",
+    "note",
+  ],
+  admin_profile: [
+    "id",
+    "auth_user_id",
+    "display_name",
+    "email",
+    "role_code",
+    "is_active",
+  ],
+  media: [
+    "id",
+    "target_type",
+    "target_id",
+    "file_name",
+    "content_type",
+    "size",
+    "sort_order",
+  ],
+};
+
+function filterSensitiveAuditData(value, targetType) {
   if (!value || typeof value !== "object") return value ?? null;
-  const sensitiveKeys = new Set([
-    "password",
-    "access_token",
-    "refresh_token",
-    "token",
-    "secret",
-    "service_role",
-    "service_role_key",
-    "r2_secret",
-    "facebook_page_access_token",
-    "instagram_user_access_token",
-    "threads_access_token",
-  ]);
+  if (Array.isArray(value)) {
+    return value.map((item) => filterSensitiveAuditData(item, targetType));
+  }
 
-  if (Array.isArray(value)) return value.map((item) => filterSensitiveAuditData(item));
-
+  const allowedFields = auditFieldAllowLists[targetType] || [];
   const next = {};
-  for (const [key, entry] of Object.entries(value)) {
-    const lowerKey = key.toLowerCase();
-    if ([...sensitiveKeys].some((sensitiveKey) => lowerKey.includes(sensitiveKey))) {
-      next[key] = "[redacted]";
-    } else if (entry && typeof entry === "object") {
-      next[key] = filterSensitiveAuditData(entry);
-    } else {
-      next[key] = entry;
-    }
+  for (const key of allowedFields) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) next[key] = value[key];
   }
   return next;
 }
@@ -350,8 +468,8 @@ async function writeAdminActivityLog({
         target_type: targetType || null,
         target_id: targetId ? String(targetId) : null,
         description: description || null,
-        before_data: filterSensitiveAuditData(beforeData),
-        after_data: filterSensitiveAuditData(afterData),
+        before_data: filterSensitiveAuditData(beforeData, targetType),
+        after_data: filterSensitiveAuditData(afterData, targetType),
         request_id: String(req.headers?.["x-vercel-id"] || req.headers?.["x-request-id"] || "") || null,
         ip_address: String(req.headers?.["x-forwarded-for"] || "").split(",")[0].trim() || null,
         user_agent: String(req.headers?.["user-agent"] || "") || null,
@@ -360,6 +478,32 @@ async function writeAdminActivityLog({
   } catch (error) {
     console.warn("admin activity log failed:", error?.message || "unknown");
   }
+}
+
+function getRequestIp(req) {
+  return (
+    String(req.headers?.["x-forwarded-for"] || "").split(",")[0].trim() ||
+    String(req.socket?.remoteAddress || "").trim() ||
+    "unknown"
+  );
+}
+
+function assertBootstrapRateLimit(req) {
+  const key = getRequestIp(req);
+  const now = Date.now();
+  const current = bootstrapAttempts.get(key) || { count: 0, resetAt: now + bootstrapRateLimitWindowMs };
+  const next =
+    current.resetAt <= now
+      ? { count: 1, resetAt: now + bootstrapRateLimitWindowMs }
+      : { count: current.count + 1, resetAt: current.resetAt };
+  bootstrapAttempts.set(key, next);
+  if (next.count > bootstrapRateLimitMaxAttempts) {
+    throw createHttpError(429, "Bootstrap is temporarily unavailable.");
+  }
+}
+
+function resetBootstrapRateLimit(req) {
+  bootstrapAttempts.delete(getRequestIp(req));
 }
 
 function isSecureRequest(req) {
@@ -433,7 +577,7 @@ function getSafeMetaError(status, metaError) {
       code: code ? `META_${code}` : "META_HTTP_401",
       reason:
         safeMessage ||
-        "存取權杖無效或已過期，請更新 Page Access Token。",
+        "摮?甈??⊥??歇??嚗??湔 Page Access Token??,
       details,
     };
   }
@@ -443,7 +587,7 @@ function getSafeMetaError(status, metaError) {
       code: code ? `META_${code}` : "META_HTTP_403",
       reason:
         safeMessage ||
-        "Meta 權限不足，請確認 Page 權限與 App 權限設定。",
+        "Meta 甈?銝雲嚗?蝣箄? Page 甈???App 甈?閮剖???,
       details,
     };
   }
@@ -453,7 +597,7 @@ function getSafeMetaError(status, metaError) {
       code: "META_100",
       reason:
         safeMessage ||
-        "Meta 無法解析 Page ID 或查詢參數，請確認 FACEBOOK_PAGE_ID。",
+        "Meta ?⊥?閫?? Page ID ?閰Ｗ??賂?隢Ⅱ隤?FACEBOOK_PAGE_ID??,
       details,
     };
   }
@@ -463,7 +607,7 @@ function getSafeMetaError(status, metaError) {
       code: code ? `META_${code}` : "META_HTTP_404",
       reason:
         safeMessage ||
-        "找不到指定的 Meta 帳號，請確認帳號 ID 是否正確。",
+        "?曆??唳?摰? Meta 撣唾?嚗?蝣箄?撣唾? ID ?臬甇?Ⅱ??,
       details,
     };
   }
@@ -471,7 +615,7 @@ function getSafeMetaError(status, metaError) {
   if (status === 429) {
     return {
       code: code ? `META_${code}` : "META_HTTP_429",
-      reason: safeMessage || "Meta API 請求過於頻繁，請稍後再試。",
+      reason: safeMessage || "Meta API 隢???餌?嚗?蝔??岫??,
       details,
     };
   }
@@ -480,7 +624,7 @@ function getSafeMetaError(status, metaError) {
     code: code ? `META_${code}` : `META_HTTP_${status || 500}`,
     reason:
       safeMessage ||
-      "Meta API 拒絕此項查詢，請確認帳號 ID、Page Access Token 與權限設定。",
+      "Meta API ??甇日??亥岷嚗?蝣箄?撣唾? ID?age Access Token ???身摰?,
     details,
   };
 }
@@ -511,7 +655,7 @@ async function fetchMetaProfile({
     return createMetaStatus(
       "error",
       null,
-      "目前無法連線 Meta API，請稍後再試。",
+      "?桀??⊥???? Meta API嚗?蝔??岫??,
       "META_NETWORK_ERROR"
     );
   }
@@ -533,7 +677,7 @@ async function fetchMetaProfile({
   const accountName = cleanText(payload?.name || payload?.username);
   return createMetaStatus(
     "connected",
-    accountName || "帳號已連線",
+    accountName || "撣唾?撌脤??",
     null
   );
 }
@@ -556,7 +700,7 @@ async function checkFacebookConnection() {
       ...createMetaStatus(
         "not_configured",
         null,
-        "FACEBOOK_PAGE_ID 未設定或空白。",
+        "FACEBOOK_PAGE_ID ?芾身摰?蝛箇??,
         "META_NOT_CONFIGURED"
       ),
       diagnostics,
@@ -568,7 +712,7 @@ async function checkFacebookConnection() {
       ...createMetaStatus(
         "not_configured",
         null,
-        "FACEBOOK_PAGE_ACCESS_TOKEN 未設定或空白。",
+        "FACEBOOK_PAGE_ACCESS_TOKEN ?芾身摰?蝛箇??,
         "META_NOT_CONFIGURED"
       ),
       diagnostics,
@@ -600,7 +744,7 @@ async function inspectFacebookTokenScopes() {
     return {
       available: false,
       scopes: [],
-      error: "無法檢查 Token scopes，請確認 Meta App 與 Page Token 環境變數。",
+      error: "?⊥?瑼Ｘ Token scopes嚗?蝣箄? Meta App ??Page Token ?啣?霈??,
     };
   }
 
@@ -619,7 +763,7 @@ async function inspectFacebookTokenScopes() {
     return {
       available: false,
       scopes: [],
-      error: "目前無法檢查 Meta Token scopes，請稍後再試。",
+      error: "?桀??⊥?瑼Ｘ Meta Token scopes嚗?蝔??岫??,
     };
   }
 
@@ -679,9 +823,9 @@ async function checkInstagramConnectionWithFacebookLoginLegacy(tokenInspection) 
     );
   } catch (error) {
     const missingScopeMessage = missingScopes.includes("instagram_basic")
-      ? "目前 token 缺少 instagram_basic，請重新授權 Meta App。"
+      ? "?桀? token 蝻箏? instagram_basic嚗???? Meta App??
       : missingScopes.includes("instagram_content_publish")
-        ? "目前 token 缺少 instagram_content_publish，無法發布 Instagram 貼文，請重新授權 Meta App。"
+        ? "?桀? token 蝻箏? instagram_content_publish嚗瘜撣?Instagram 鞎潭?嚗???? Meta App??
         : null;
 
     return {
@@ -690,7 +834,7 @@ async function checkInstagramConnectionWithFacebookLoginLegacy(tokenInspection) 
         null,
         missingScopeMessage ||
           error.message ||
-          "無法取得 Instagram 商業帳號。",
+          "?⊥??? Instagram ?平撣唾???,
         missingScopeMessage
           ? "INSTAGRAM_REQUIRED_SCOPE_MISSING"
           : error.code || "INSTAGRAM_ACCOUNT_LOOKUP_FAILED",
@@ -713,7 +857,7 @@ async function checkInstagramConnectionWithFacebookLoginLegacy(tokenInspection) 
       "connected",
       profile.status === "connected"
         ? profile.accountName
-        : `Instagram 帳號 ${pageLink.accountId}`,
+        : `Instagram 撣唾? ${pageLink.accountId}`,
       profile.status === "error" ? profile.error : null,
       profile.status === "error" ? profile.errorCode : null,
       profile.status === "error" ? profile.metaError : null
@@ -823,7 +967,7 @@ async function fetchInstagramProfile(accessToken) {
     });
   } catch {
     const error = new Error(
-      "無法連線 Instagram API，請稍後再試。"
+      "?⊥???? Instagram API嚗?蝔??岫??
     );
     error.code = "INSTAGRAM_NETWORK_ERROR";
     error.status = 502;
@@ -842,7 +986,7 @@ async function fetchInstagramProfile(accessToken) {
 
   const profile = normalizeInstagramProfile(payload);
   if (!profile.userId || !profile.username) {
-    const error = new Error("Instagram API 未回傳完整帳號資料。");
+    const error = new Error("Instagram API ?芸??喳??游董????);
     error.code = "INSTAGRAM_PROFILE_INCOMPLETE";
     error.status = 502;
     throw error;
@@ -858,7 +1002,7 @@ async function checkInstagramConnection() {
       ...createMetaStatus(
         "not_configured",
         null,
-        "Instagram 尚未授權，請使用 @mumbao.tw 登入並授權。",
+        "Instagram 撠??嚗?雿輻 @mumbao.tw ?餃銝行?甈?,
         "INSTAGRAM_NOT_AUTHORIZED"
       ),
       diagnostics: {
@@ -887,7 +1031,7 @@ async function checkInstagramConnection() {
         ...createMetaStatus(
           "error",
           `@${profile.username}`,
-          "目前授權的 Instagram 帳號不是 @mumbao.tw，請重新授權正確帳號。",
+          "?桀?????Instagram 撣唾?銝 @mumbao.tw嚗????甇?Ⅱ撣唾???,
           "INSTAGRAM_USERNAME_MISMATCH"
         ),
         diagnostics: {
@@ -934,7 +1078,7 @@ async function checkInstagramConnection() {
       ...createMetaStatus(
         "error",
         null,
-        error.message || "Instagram 連線檢查失敗。",
+        error.message || "Instagram ???瑼Ｘ憭望???,
         error.code || "INSTAGRAM_CONNECTION_FAILED",
         error.metaError || null
       ),
@@ -1013,7 +1157,7 @@ async function handleInstagramOAuthStart(req, res) {
       ok: false,
       errorCode: "INSTAGRAM_APP_ID_INVALID",
       errorMessage:
-        "INSTAGRAM_APP_ID 未設定或格式錯誤，請確認沒有前後空格、引號，且使用 Instagram App ID。",
+        "INSTAGRAM_APP_ID ?芾身摰??澆??航炊嚗?蝣箄?瘝???蝛箸????銝蝙??Instagram App ID??,
       diagnostics,
     });
   }
@@ -1023,7 +1167,7 @@ async function handleInstagramOAuthStart(req, res) {
       ok: false,
       errorCode: "INSTAGRAM_REDIRECT_URI_MISMATCH",
       errorMessage:
-        "INSTAGRAM_REDIRECT_URI 必須逐字設定為 https://mumbao.tw/api/instagram-oauth-callback。",
+        "INSTAGRAM_REDIRECT_URI 敹???閮剖???https://mumbao.tw/api/instagram-oauth-callback??,
       diagnostics,
     });
   }
@@ -1053,7 +1197,7 @@ async function handleInstagramOAuthStart(req, res) {
       ok: false,
       errorCode: "INSTAGRAM_OAUTH_SCOPE_INVALID",
       errorMessage:
-        "Instagram OAuth scope 格式錯誤，必須使用逗號分隔兩個權限。",
+        "Instagram OAuth scope ?澆??航炊嚗??蝙?券????拙???,
       diagnostics,
     });
   }
@@ -1094,7 +1238,7 @@ async function handleDebugFacebookToken(req, res) {
     return sendJson(res, 500, {
       ok: false,
       errorCode: "META_APP_ID_NOT_CONFIGURED",
-      errorMessage: "META_APP_ID 未設定或空白。",
+      errorMessage: "META_APP_ID ?芾身摰?蝛箇??,
       metaError: null,
     });
   }
@@ -1103,7 +1247,7 @@ async function handleDebugFacebookToken(req, res) {
     return sendJson(res, 500, {
       ok: false,
       errorCode: "META_APP_SECRET_NOT_CONFIGURED",
-      errorMessage: "META_APP_SECRET 未設定或空白。",
+      errorMessage: "META_APP_SECRET ?芾身摰?蝛箇??,
       metaError: null,
     });
   }
@@ -1112,7 +1256,7 @@ async function handleDebugFacebookToken(req, res) {
     return sendJson(res, 500, {
       ok: false,
       errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
-      errorMessage: "FACEBOOK_PAGE_ACCESS_TOKEN 未設定或空白。",
+      errorMessage: "FACEBOOK_PAGE_ACCESS_TOKEN ?芾身摰?蝛箇??,
       metaError: null,
     });
   }
@@ -1134,7 +1278,7 @@ async function handleDebugFacebookToken(req, res) {
     return sendJson(res, 502, {
       ok: false,
       errorCode: "META_TOKEN_DEBUG_NETWORK_ERROR",
-      errorMessage: "目前無法連線 Meta Token Debug API，請稍後再試。",
+      errorMessage: "?桀??⊥???? Meta Token Debug API嚗?蝔??岫??,
       metaError: null,
     });
   }
@@ -1180,7 +1324,7 @@ async function handleDebugFacebookToken(req, res) {
     errorCode: isValid ? null : "FACEBOOK_TOKEN_INVALID",
     errorMessage: isValid
       ? null
-      : "Meta 判定目前的 FACEBOOK_PAGE_ACCESS_TOKEN 無效，請重新產生並更新 Vercel。",
+      : "Meta ?文??桀???FACEBOOK_PAGE_ACCESS_TOKEN ?⊥?嚗???Ｙ?銝行??Vercel??,
   });
 }
 
@@ -1343,7 +1487,7 @@ async function handlePublishFacebookPost(req, res) {
   if (!pageId) {
     return sendJson(res, 500, {
       errorCode: "FACEBOOK_PAGE_ID_NOT_CONFIGURED",
-      errorMessage: "FACEBOOK_PAGE_ID 未設定或空白。",
+      errorMessage: "FACEBOOK_PAGE_ID ?芾身摰?蝛箇??,
       metaError: null,
     });
   }
@@ -1351,7 +1495,7 @@ async function handlePublishFacebookPost(req, res) {
   if (!accessToken) {
     return sendJson(res, 500, {
       errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
-      errorMessage: "FACEBOOK_PAGE_ACCESS_TOKEN 未設定或空白。",
+      errorMessage: "FACEBOOK_PAGE_ACCESS_TOKEN ?芾身摰?蝛箇??,
       metaError: null,
     });
   }
@@ -1366,7 +1510,7 @@ async function handlePublishFacebookPost(req, res) {
   if (!message) {
     return sendJson(res, 400, {
       errorCode: "FACEBOOK_MESSAGE_REQUIRED",
-      errorMessage: "發文內容與 Hashtag 不可同時為空。",
+      errorMessage: "?潭??批捆??Hashtag 銝???箇征??,
       metaError: null,
     });
   }
@@ -1392,7 +1536,7 @@ async function handlePublishFacebookPost(req, res) {
   } catch {
     return sendJson(res, 502, {
       errorCode: "META_NETWORK_ERROR",
-      errorMessage: "目前無法連線 Facebook Graph API，請稍後再試。",
+      errorMessage: "?桀??⊥???? Facebook Graph API嚗?蝔??岫??,
       metaError: null,
     });
   }
@@ -1480,7 +1624,7 @@ async function fetchInstagramPageLink(pageId, accessToken) {
     }
 
     const error = new Error(
-      "INSTAGRAM_BUSINESS_ACCOUNT_ID 與 FACEBOOK_PAGE_ID 均未設定。"
+      "INSTAGRAM_BUSINESS_ACCOUNT_ID ??FACEBOOK_PAGE_ID ?閮剖???
     );
     error.code = "INSTAGRAM_ACCOUNT_NOT_CONFIGURED";
     error.status = 500;
@@ -1503,7 +1647,7 @@ async function fetchInstagramPageLink(pageId, accessToken) {
       signal: AbortSignal.timeout(10000),
     });
   } catch {
-    const error = new Error("目前無法查詢 Instagram 商業帳號，請稍後再試。");
+    const error = new Error("?桀??⊥??亥岷 Instagram ?平撣唾?嚗?蝔??岫??);
     error.code = "META_NETWORK_ERROR";
     error.status = 502;
     throw error;
@@ -1522,7 +1666,7 @@ async function fetchInstagramPageLink(pageId, accessToken) {
 
   if (!accountId) {
     const error = new Error(
-      "Facebook 粉專尚未連結 Instagram 專業帳號。"
+      "Facebook 蝎?撠??? Instagram 撠平撣唾???
     );
     error.code = "INSTAGRAM_ACCOUNT_NOT_LINKED";
     error.status = 502;
@@ -1552,7 +1696,7 @@ function findInstagramImage(task, requestedImageUrl, requestedR2Key) {
   if (!image) {
     return {
       errorCode: "INSTAGRAM_IMAGE_REQUIRED",
-      errorMessage: "Instagram 發文需要上傳 1 張圖片",
+      errorMessage: "Instagram ?潭??閬???1 撘萄???,
     };
   }
 
@@ -1564,14 +1708,14 @@ function findInstagramImage(task, requestedImageUrl, requestedR2Key) {
     return {
       errorCode: "INSTAGRAM_VIDEO_NOT_SUPPORTED",
       errorMessage:
-        "Instagram 第一版目前只支援單張圖片貼文，暫不支援影片",
+        "Instagram 蝚砌????舀?桀撐??鞎潭?嚗銝?游蔣??,
     };
   }
 
   if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
     return {
       errorCode: "INSTAGRAM_IMAGE_TYPE_NOT_SUPPORTED",
-      errorMessage: "Instagram 第一版僅支援 JPG、PNG 或 WebP 圖片。",
+      errorMessage: "Instagram 蝚砌????舀 JPG?NG ??WebP ????,
     };
   }
 
@@ -1579,21 +1723,21 @@ function findInstagramImage(task, requestedImageUrl, requestedR2Key) {
     return {
       errorCode: "INSTAGRAM_PUBLIC_IMAGE_REQUIRED",
       errorMessage:
-        "請先上傳圖片，取得公開圖片網址後才能發佈到 Instagram",
+        "隢?銝??嚗?敺???雯?敺??賜雿 Instagram",
     };
   }
 
   if (requestedUrl && requestedUrl !== publicUrl) {
     return {
       errorCode: "INSTAGRAM_IMAGE_MISMATCH",
-      errorMessage: "發文圖片與任務中的第一張已上傳圖片不一致，請重新整理後再試。",
+      errorMessage: "?潭????遙?葉?洵銝撘萄歇銝??銝??湛?隢??唳???岫??,
     };
   }
 
   if (requestedKey && key && requestedKey !== key) {
     return {
       errorCode: "INSTAGRAM_R2_KEY_MISMATCH",
-      errorMessage: "發文圖片識別資料不一致，請重新整理後再試。",
+      errorMessage: "?潭???霅鞈?銝??湛?隢??唳???岫??,
     };
   }
 
@@ -1650,7 +1794,7 @@ async function handlePublishInstagramPost(req, res) {
   if (!pageId) {
     return sendJson(res, 500, {
       errorCode: "FACEBOOK_PAGE_ID_NOT_CONFIGURED",
-      errorMessage: "FACEBOOK_PAGE_ID 未設定或空白。",
+      errorMessage: "FACEBOOK_PAGE_ID ?芾身摰?蝛箇??,
       metaError: null,
     });
   }
@@ -1658,7 +1802,7 @@ async function handlePublishInstagramPost(req, res) {
   if (!accessToken) {
     return sendJson(res, 500, {
       errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
-      errorMessage: "Facebook Page Access Token 未設定或無效。",
+      errorMessage: "Facebook Page Access Token ?芾身摰??⊥???,
       metaError: null,
     });
   }
@@ -1668,7 +1812,7 @@ async function handlePublishInstagramPost(req, res) {
   if (!taskId) {
     return sendJson(res, 400, {
       errorCode: "SOCIAL_TASK_ID_REQUIRED",
-      errorMessage: "找不到要發布的發文任務。",
+      errorMessage: "?曆??啗??澆???遙??,
       metaError: null,
     });
   }
@@ -1677,7 +1821,7 @@ async function handlePublishInstagramPost(req, res) {
   if (!storedTask) {
     return sendJson(res, 404, {
       errorCode: "SOCIAL_TASK_NOT_FOUND",
-      errorMessage: "找不到這筆發文任務。",
+      errorMessage: "?曆??圈??潭?隞餃???,
       metaError: null,
     });
   }
@@ -1700,7 +1844,7 @@ async function handlePublishInstagramPost(req, res) {
   if (!caption) {
     const errorDetails = {
       errorCode: "INSTAGRAM_CAPTION_REQUIRED",
-      errorMessage: "請先輸入發文標題或內容。",
+      errorMessage: "隢?頛詨?潭?璅??摰嫘?,
       metaError: null,
     };
     await markInstagramPublishFailed(taskId, storedTask, errorDetails);
@@ -1717,7 +1861,7 @@ async function handlePublishInstagramPost(req, res) {
     const errorDetails = {
       errorCode: error.code || "INSTAGRAM_ACCOUNT_LOOKUP_FAILED",
       errorMessage:
-        error.message || "無法取得 Instagram 商業帳號，請稍後再試。",
+        error.message || "?⊥??? Instagram ?平撣唾?嚗?蝔??岫??,
       metaError: error.metaError
         ? {
             code: error.metaError.code,
@@ -1754,7 +1898,7 @@ async function handlePublishInstagramPost(req, res) {
   } catch {
     const errorDetails = {
       errorCode: "META_NETWORK_ERROR",
-      errorMessage: "目前無法建立 Instagram 圖片貼文，請稍後再試。",
+      errorMessage: "?桀??⊥?撱箇? Instagram ??鞎潭?嚗?蝔??岫??,
       metaError: null,
     };
     await markInstagramPublishFailed(taskId, storedTask, errorDetails);
@@ -1804,7 +1948,7 @@ async function handlePublishInstagramPost(req, res) {
   } catch {
     const errorDetails = {
       errorCode: "META_NETWORK_ERROR",
-      errorMessage: "Instagram 圖片已建立，但目前無法發布，請稍後再試。",
+      errorMessage: "Instagram ??撌脣遣蝡?雿?瘜撣?隢?敺?閰艾?,
       metaError: null,
     };
     await markInstagramPublishFailed(taskId, storedTask, errorDetails);
@@ -1942,7 +2086,7 @@ async function handlePublishThreadsPost(req, res) {
   if (!userId || !accessToken) {
     return sendJson(res, 500, {
       errorCode: "THREADS_NOT_CONFIGURED",
-      errorMessage: "Threads 尚未設定 access token 或 user id",
+      errorMessage: "Threads 撠閮剖? access token ??user id",
       metaError: null,
     });
   }
@@ -1952,7 +2096,7 @@ async function handlePublishThreadsPost(req, res) {
   if (!taskId) {
     return sendJson(res, 400, {
       errorCode: "SOCIAL_TASK_ID_REQUIRED",
-      errorMessage: "找不到要發布的發文任務。",
+      errorMessage: "?曆??啗??澆???遙??,
       metaError: null,
     });
   }
@@ -1961,7 +2105,7 @@ async function handlePublishThreadsPost(req, res) {
   if (!storedTask) {
     return sendJson(res, 404, {
       errorCode: "SOCIAL_TASK_NOT_FOUND",
-      errorMessage: "找不到這筆發文任務。",
+      errorMessage: "?曆??圈??潭?隞餃???,
       metaError: null,
     });
   }
@@ -1969,7 +2113,7 @@ async function handlePublishThreadsPost(req, res) {
   if (storedTask.mode === "scheduled") {
     const errorDetails = {
       errorCode: "THREADS_SCHEDULE_NOT_SUPPORTED",
-      errorMessage: "Threads 第一版暫不支援排程發文。",
+      errorMessage: "Threads 蝚砌??銝?湔?蝔??,
       metaError: null,
     };
     await markThreadsPublishFailed(taskId, storedTask, errorDetails);
@@ -1984,7 +2128,7 @@ async function handlePublishThreadsPost(req, res) {
   if (!text) {
     const errorDetails = {
       errorCode: "THREADS_TEXT_REQUIRED",
-      errorMessage: "請先輸入 Threads 發文內容",
+      errorMessage: "隢?頛詨 Threads ?潭??批捆",
       metaError: null,
     };
     await markThreadsPublishFailed(taskId, storedTask, errorDetails);
@@ -1994,7 +2138,7 @@ async function handlePublishThreadsPost(req, res) {
   if (Array.from(text).length > 500) {
     const errorDetails = {
       errorCode: "THREADS_TEXT_TOO_LONG",
-      errorMessage: "Threads 發文內容不可超過 500 字",
+      errorMessage: "Threads ?潭??批捆銝頞? 500 摮?,
       metaError: null,
     };
     await markThreadsPublishFailed(taskId, storedTask, errorDetails);
@@ -2023,7 +2167,7 @@ async function handlePublishThreadsPost(req, res) {
   } catch {
     const errorDetails = {
       errorCode: "THREADS_NETWORK_ERROR",
-      errorMessage: "目前無法建立 Threads 貼文，請稍後再試。",
+      errorMessage: "?桀??⊥?撱箇? Threads 鞎潭?嚗?蝔??岫??,
       metaError: null,
     };
     await markThreadsPublishFailed(taskId, storedTask, errorDetails);
@@ -2073,7 +2217,7 @@ async function handlePublishThreadsPost(req, res) {
   } catch {
     const errorDetails = {
       errorCode: "THREADS_NETWORK_ERROR",
-      errorMessage: "Threads 貼文已建立，但目前無法發布，請稍後再試。",
+      errorMessage: "Threads 鞎潭?撌脣遣蝡?雿?瘜撣?隢?敺?閰艾?,
       metaError: null,
     };
     await markThreadsPublishFailed(taskId, storedTask, errorDetails);
@@ -2174,7 +2318,7 @@ async function handleDeleteFacebookPost(req, res) {
     return sendJson(res, 500, {
       errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
       errorMessage:
-        "Facebook Token 無效，請更新 Page Access Token 後再試。",
+        "Facebook Token ?⊥?嚗??湔 Page Access Token 敺?閰艾?,
       metaError: null,
     });
   }
@@ -2185,7 +2329,7 @@ async function handleDeleteFacebookPost(req, res) {
   if (!taskId) {
     return sendJson(res, 400, {
       errorCode: "SOCIAL_TASK_NOT_FOUND",
-      errorMessage: "找不到這筆發文任務。",
+      errorMessage: "?曆??圈??潭?隞餃???,
       metaError: null,
     });
   }
@@ -2194,7 +2338,7 @@ async function handleDeleteFacebookPost(req, res) {
   if (!task) {
     return sendJson(res, 404, {
       errorCode: "SOCIAL_TASK_NOT_FOUND",
-      errorMessage: "找不到這筆發文任務。",
+      errorMessage: "?曆??圈??潭?隞餃???,
       metaError: null,
     });
   }
@@ -2203,7 +2347,7 @@ async function handleDeleteFacebookPost(req, res) {
   if (!facebookPostId) {
     return sendJson(res, 400, {
       errorCode: "FACEBOOK_POST_ID_REQUIRED",
-      errorMessage: "這筆任務沒有 Facebook 貼文 ID，無法刪除。",
+      errorMessage: "??隞餃?瘝? Facebook 鞎潭? ID嚗瘜?扎?,
       metaError: null,
     });
   }
@@ -2211,7 +2355,7 @@ async function handleDeleteFacebookPost(req, res) {
   if (task.status !== "published") {
     return sendJson(res, 409, {
       errorCode: "FACEBOOK_POST_NOT_PUBLISHED",
-      errorMessage: "只有已發布的 Facebook 貼文可以刪除。",
+      errorMessage: "?芣?撌脩撣? Facebook 鞎潭??臭誑?芷??,
       metaError: null,
     });
   }
@@ -2236,7 +2380,7 @@ async function handleDeleteFacebookPost(req, res) {
   } catch {
     return sendJson(res, 502, {
       errorCode: "META_NETWORK_ERROR",
-      errorMessage: "Facebook 貼文刪除失敗，請稍後再試。",
+      errorMessage: "Facebook 鞎潭??芷憭望?嚗?蝔??岫??,
       metaError: null,
     });
   }
@@ -2260,8 +2404,8 @@ async function handleDeleteFacebookPost(req, res) {
     return sendJson(res, 502, {
       errorCode: safeError.code,
       errorMessage: tokenInvalid
-        ? "Facebook Token 無效，請更新 Page Access Token 後再試。"
-        : "Facebook 貼文刪除失敗，請稍後再試。",
+        ? "Facebook Token ?⊥?嚗??湔 Page Access Token 敺?閰艾?
+        : "Facebook 鞎潭??芷憭望?嚗?蝔??岫??,
       metaError: {
         code: safeError.details.code,
         type: safeError.details.type,
@@ -2310,7 +2454,7 @@ async function handleSyncFacebookPost(req, res) {
     return sendJson(res, 500, {
       errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
       errorMessage:
-        "Facebook Token 無效，請更新 Page Access Token 後再試。",
+        "Facebook Token ?⊥?嚗??湔 Page Access Token 敺?閰艾?,
       metaError: null,
     });
   }
@@ -2320,7 +2464,7 @@ async function handleSyncFacebookPost(req, res) {
   if (!taskId) {
     return sendJson(res, 400, {
       errorCode: "SOCIAL_TASK_NOT_FOUND",
-      errorMessage: "找不到這筆發文任務。",
+      errorMessage: "?曆??圈??潭?隞餃???,
       metaError: null,
     });
   }
@@ -2329,7 +2473,7 @@ async function handleSyncFacebookPost(req, res) {
   if (!task) {
     return sendJson(res, 404, {
       errorCode: "SOCIAL_TASK_NOT_FOUND",
-      errorMessage: "找不到這筆發文任務。",
+      errorMessage: "?曆??圈??潭?隞餃???,
       metaError: null,
     });
   }
@@ -2337,7 +2481,7 @@ async function handleSyncFacebookPost(req, res) {
   if (task.status !== "published") {
     return sendJson(res, 409, {
       errorCode: "FACEBOOK_POST_NOT_PUBLISHED",
-      errorMessage: "只有已發布的 Facebook 貼文可以同步狀態。",
+      errorMessage: "?芣?撌脩撣? Facebook 鞎潭??臭誑?郊???,
       metaError: null,
     });
   }
@@ -2346,7 +2490,7 @@ async function handleSyncFacebookPost(req, res) {
   if (!facebookPostId) {
     return sendJson(res, 400, {
       errorCode: "FACEBOOK_POST_ID_REQUIRED",
-      errorMessage: "這筆任務沒有 Facebook 貼文 ID，無法同步。",
+      errorMessage: "??隞餃?瘝? Facebook 鞎潭? ID嚗瘜?甇乓?,
       metaError: null,
     });
   }
@@ -2372,7 +2516,7 @@ async function handleSyncFacebookPost(req, res) {
   } catch {
     return sendJson(res, 502, {
       errorCode: "META_NETWORK_ERROR",
-      errorMessage: "Facebook 狀態同步失敗，請稍後再試。",
+      errorMessage: "Facebook ???甇亙仃??隢?敺?閰艾?,
       metaError: null,
     });
   }
@@ -2446,8 +2590,8 @@ async function handleSyncFacebookPost(req, res) {
     errorCode: safeError.code,
     errorMessage:
       safeError.details.code === 190
-        ? "Facebook Token 無效，請更新 Page Access Token 後再試。"
-        : "Facebook 狀態同步失敗，請稍後再試。",
+        ? "Facebook Token ?⊥?嚗??湔 Page Access Token 敺?閰艾?
+        : "Facebook ???甇亙仃??隢?敺?閰艾?,
     metaError: {
       code: safeError.details.code,
       type: safeError.details.type,
@@ -2500,7 +2644,7 @@ async function handleExchangeMetaToken(req, res) {
     return sendJson(res, 500, {
       ok: false,
       errorCode: "META_APP_ID_NOT_CONFIGURED",
-      errorMessage: "META_APP_ID 未設定或空白。",
+      errorMessage: "META_APP_ID ?芾身摰?蝛箇??,
       metaError: null,
     });
   }
@@ -2509,7 +2653,7 @@ async function handleExchangeMetaToken(req, res) {
     return sendJson(res, 500, {
       ok: false,
       errorCode: "META_APP_SECRET_NOT_CONFIGURED",
-      errorMessage: "META_APP_SECRET 未設定或空白。",
+      errorMessage: "META_APP_SECRET ?芾身摰?蝛箇??,
       metaError: null,
     });
   }
@@ -2518,7 +2662,7 @@ async function handleExchangeMetaToken(req, res) {
     return sendJson(res, 500, {
       ok: false,
       errorCode: "FACEBOOK_PAGE_ID_NOT_CONFIGURED",
-      errorMessage: "FACEBOOK_PAGE_ID 未設定或空白。",
+      errorMessage: "FACEBOOK_PAGE_ID ?芾身摰?蝛箇??,
       metaError: null,
     });
   }
@@ -2530,7 +2674,7 @@ async function handleExchangeMetaToken(req, res) {
     return sendJson(res, 400, {
       ok: false,
       errorCode: "SHORT_LIVED_USER_TOKEN_REQUIRED",
-      errorMessage: "請貼上 Graph API Explorer 產生的短效 User Token。",
+      errorMessage: "隢票銝?Graph API Explorer ?Ｙ????User Token??,
       metaError: null,
     });
   }
@@ -2557,7 +2701,7 @@ async function handleExchangeMetaToken(req, res) {
     const safeError = createMetaActionError(
       502,
       "META_TOKEN_EXCHANGE_NETWORK_ERROR",
-      "目前無法連線 Meta Token Exchange API，請稍後再試。"
+      "?桀??⊥???? Meta Token Exchange API嚗?蝔??岫??
     );
     return sendJson(res, safeError.status, safeError.body);
   }
@@ -2600,7 +2744,7 @@ async function handleExchangeMetaToken(req, res) {
     const safeError = createMetaActionError(
       502,
       "META_PAGE_LIST_NETWORK_ERROR",
-      "已交換 User Token，但目前無法讀取 Facebook 粉絲專頁清單。"
+      "撌脖漱??User Token嚗??桀??⊥?霈??Facebook 蝎結撠?皜??
     );
     return sendJson(res, safeError.status, safeError.body);
   }
@@ -2634,7 +2778,7 @@ async function handleExchangeMetaToken(req, res) {
       ok: false,
       errorCode: "FACEBOOK_PAGE_NOT_FOUND",
       errorMessage:
-        "此 User Token 可管理的粉絲專頁中找不到 FACEBOOK_PAGE_ID，請確認帳號權限與粉絲專頁 ID。",
+        "甇?User Token ?舐恣??蝎結撠?銝剜銝 FACEBOOK_PAGE_ID嚗?蝣箄?撣唾?甈???蝯脣???ID??,
       metaError: null,
     });
   }
@@ -2645,7 +2789,7 @@ async function handleExchangeMetaToken(req, res) {
       ok: false,
       errorCode: "FACEBOOK_PAGE_TOKEN_MISSING",
       errorMessage:
-        "已找到粉絲專頁，但 Meta 未回傳 Page Access Token，請確認 User Token 權限。",
+        "撌脫?啁?蝯脣???雿?Meta ?芸???Page Access Token嚗?蝣箄? User Token 甈???,
       metaError: null,
     });
   }
@@ -2658,7 +2802,7 @@ async function handleExchangeMetaToken(req, res) {
   return sendJson(res, 200, {
     ok: true,
     pageId: cleanText(page.id),
-    pageName: cleanText(page.name) || "Facebook 粉絲專頁",
+    pageName: cleanText(page.name) || "Facebook 蝎結撠?",
     hasPageAccessToken: true,
     pageAccessTokenPrefix: pageAccessToken.slice(0, 6),
     pageAccessTokenLength: pageAccessToken.length,
@@ -2690,7 +2834,7 @@ async function handleAdminLogin(req, res) {
   const password = String(body?.password || "");
 
   if (!email || !password) {
-    return sendJson(res, 400, { error: "請輸入 Email 與密碼。" });
+    return sendJson(res, 400, { error: "隢撓??Email ??蝣潦? });
   }
 
   let authPayload;
@@ -2700,7 +2844,7 @@ async function handleAdminLogin(req, res) {
       body: JSON.stringify({ email, password }),
     });
   } catch {
-    return sendJson(res, 401, { error: "登入失敗，請確認 Email 或密碼。" });
+    return sendJson(res, 401, { error: "?餃憭望?嚗?蝣箄? Email ??蝣潦? });
   }
 
   const authUser = authPayload?.user;
@@ -2712,7 +2856,7 @@ async function handleAdminLogin(req, res) {
   const profile = Array.isArray(profiles) ? profiles[0] : null;
 
   if (!profile || !profile.is_active) {
-    return sendJson(res, 403, { error: "此後台帳號未啟用或沒有後台權限。" });
+    return sendJson(res, 403, { error: "甇文??啣董???????唳??? });
   }
 
   const permissions = await loadAdminPermissions(profile.role_code);
@@ -2732,10 +2876,35 @@ async function handleAdminLogin(req, res) {
     module: "auth",
     targetType: "admin_profile",
     targetId: profile.id,
-    description: "後台使用者登入",
+    description: "敺雿輻???,
   });
 
   return sendJson(res, 200, normalizeAdminSessionPayload(authPayload, profile, permissions));
+}
+
+async function handleAdminLegacyLogin(req, res) {
+  if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
+  const body = await readBody(req);
+  const legacyPassword = String(body?.legacyAdminPassword || body?.password || "");
+  const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
+
+  if (!adminPassword || legacyPassword !== adminPassword) {
+    return sendJson(res, 401, { error: "?餃憭望?嚗??蝣箄?敺撖Ⅳ?? });
+  }
+
+  return sendJson(res, 200, {
+    accessToken: createLegacySessionToken(),
+    expiresAt: new Date(Date.now() + legacySessionTtlMs).toISOString(),
+    authMode: "legacy",
+    user: {
+      display_name: "???梁撖Ⅳ",
+      email: "",
+      role_code: "legacy_admin",
+      role_name: "???梁撖Ⅳ",
+      permissions: legacyAdminPermissions,
+      is_active: true,
+    },
+  });
 }
 
 async function handleAdminRefresh(req, res) {
@@ -2751,7 +2920,7 @@ async function handleAdminRefresh(req, res) {
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
   } catch {
-    return sendJson(res, 401, { error: "登入已過期，請重新登入。" });
+    return sendJson(res, 401, { error: "?餃撌脤???隢??啁?乓? });
   }
 
   const authUser = authPayload?.user;
@@ -2762,7 +2931,7 @@ async function handleAdminRefresh(req, res) {
     : [];
   const profile = Array.isArray(profiles) ? profiles[0] : null;
   if (!profile || !profile.is_active) {
-    return sendJson(res, 403, { error: "此後台帳號未啟用或沒有後台權限。" });
+    return sendJson(res, 403, { error: "甇文??啣董???????唳??? });
   }
   const permissions = await loadAdminPermissions(profile.role_code);
   return sendJson(res, 200, normalizeAdminSessionPayload(authPayload, profile, permissions));
@@ -2775,10 +2944,10 @@ async function handleAdminSession(req, res, context) {
     user:
       context.authMode === "legacy"
         ? {
-          display_name: "舊版共用密碼",
+          display_name: "???梁撖Ⅳ",
           email: "",
           role_code: "legacy_admin",
-          role_name: "舊版共用密碼",
+          role_name: "???梁撖Ⅳ",
           permissions: legacyAdminPermissions,
           is_active: true,
         }
@@ -2799,42 +2968,76 @@ async function createSupabaseAdminUser({ email, password, displayName }) {
   });
 }
 
+async function deleteSupabaseAdminUser(authUserId) {
+  if (!authUserId) return;
+  await supabaseAuthRequest(`/auth/v1/admin/users/${encodeURIComponent(authUserId)}`, {
+    method: "DELETE",
+  });
+}
+
 async function handleAdminBootstrapSuper(req, res) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
+  assertBootstrapRateLimit(req);
   const body = await readBody(req);
   const legacyPassword = String(body?.legacyAdminPassword || "");
+  const bootstrapSecret = String(body?.bootstrapSecret || "");
   const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
-  if (!adminPassword || legacyPassword !== adminPassword) {
-    return sendJson(res, 401, { error: "Unauthorized." });
-  }
+  const expectedBootstrapSecret = String(getServerEnv("ADMIN_BOOTSTRAP_SECRET") || "").trim();
 
-  const existing = await supabaseRequest(
-    "/admin_profiles?role_code=eq.super_admin&select=id&limit=1"
-  );
-  if (Array.isArray(existing) && existing.length > 0) {
-    return sendJson(res, 409, { error: "第一位 super_admin 已存在，bootstrap 已停用。" });
+  const existingProfiles = await supabaseRequest("/admin_profiles?select=id&limit=1");
+  const bootstrapUnavailable = Array.isArray(existingProfiles) && existingProfiles.length > 0;
+  const bootstrapAuthFailed =
+    !adminPassword ||
+    !expectedBootstrapSecret ||
+    legacyPassword !== adminPassword ||
+    bootstrapSecret !== expectedBootstrapSecret;
+
+  if (bootstrapAuthFailed || bootstrapUnavailable) {
+    return sendJson(res, 401, { error: "Bootstrap verification failed or is disabled." });
   }
 
   const displayName = cleanText(body?.displayName);
   const email = cleanText(body?.email).toLowerCase();
   const password = String(body?.password || "");
   if (!displayName || !email || !password) {
-    return sendJson(res, 400, { error: "請輸入姓名、Email 與初始密碼。" });
+    return sendJson(res, 400, { error: "Display name, email, and password are required." });
   }
 
   const authUser = await createSupabaseAdminUser({ email, password, displayName });
   const authUserId = authUser?.id || authUser?.user?.id;
-  if (!authUserId) return sendJson(res, 500, { error: "Supabase Auth 使用者建立失敗。" });
+  if (!authUserId) return sendJson(res, 500, { error: "Supabase Auth user creation failed." });
 
-  const profileRows = await supabaseRequest("/admin_profiles", {
-    method: "POST",
-    body: JSON.stringify({
-      auth_user_id: authUserId,
-      display_name: displayName,
-      email,
-      role_code: "super_admin",
-      is_active: true,
-    }),
+  let profileRows;
+  try {
+    profileRows = await supabaseRequest("/admin_profiles", {
+      method: "POST",
+      body: JSON.stringify({
+        auth_user_id: authUserId,
+        display_name: displayName,
+        email,
+        role_code: "super_admin",
+        is_active: true,
+      }),
+    });
+  } catch {
+    await deleteSupabaseAdminUser(authUserId).catch(() => undefined);
+    throw createHttpError(500, "Bootstrap verification failed or is disabled.");
+  }
+
+  resetBootstrapRateLimit(req);
+  await writeAdminActivityLog({
+    req,
+    context: {
+      actorAuthUserId: authUserId,
+      actorName: displayName,
+      actorEmail: email,
+    },
+    action: "bootstrap_super_admin",
+    module: "users",
+    targetType: "admin_profile",
+    targetId: profileRows?.[0]?.id,
+    description: "Created first super_admin",
+    afterData: profileRows?.[0],
   });
 
   return sendJson(res, 201, {
@@ -2860,7 +3063,7 @@ async function assertCanMutateAdminUser(context, targetProfile, nextRoleCode = t
   if (context.authMode === "legacy") return;
   if (context.roleCode !== "super_admin") {
     if (targetProfile?.role_code === "super_admin" || nextRoleCode === "super_admin") {
-      throw createHttpError(403, "一般管理員不可修改 super_admin。");
+      throw createHttpError(403, "Only super_admin can manage super_admin users.");
     }
   }
 }
@@ -2877,7 +3080,7 @@ async function assertNotLastSuperAdmin(profile, nextValues = {}) {
   );
   const activeSuperCount = Array.isArray(rows) ? rows.length : 0;
   if (activeSuperCount <= 1) {
-    throw createHttpError(409, "不可停用或降級最後一位 super_admin。");
+    throw createHttpError(409, "At least one active super_admin must remain.");
   }
 }
 
@@ -2894,25 +3097,32 @@ async function handleAdminUsers(req, res, context) {
     const isActive = body?.is_active !== false;
 
     if (!displayName || !email || !password) {
-      return sendJson(res, 400, { error: "請輸入姓名、Email 與初始密碼。" });
+      return sendJson(res, 400, { error: "Display name, email, and password are required." });
     }
     await assertCanMutateAdminUser(context, null, roleCode);
 
     const authUser = await createSupabaseAdminUser({ email, password, displayName });
     const authUserId = authUser?.id || authUser?.user?.id;
-    if (!authUserId) return sendJson(res, 500, { error: "Supabase Auth 使用者建立失敗。" });
+    if (!authUserId) return sendJson(res, 500, { error: "Supabase Auth user creation failed." });
 
-    const rows = await supabaseRequest("/admin_profiles", {
-      method: "POST",
-      body: JSON.stringify({
-        auth_user_id: authUserId,
-        display_name: displayName,
-        email,
-        role_code: roleCode,
-        is_active: isActive,
-        created_by: context.actorAuthUserId,
-      }),
-    });
+    let rows;
+    try {
+      rows = await supabaseRequest("/admin_profiles", {
+        method: "POST",
+        body: JSON.stringify({
+          auth_user_id: authUserId,
+          display_name: displayName,
+          email,
+          role_code: roleCode,
+          is_active: isActive,
+          created_by: context.actorAuthUserId,
+        }),
+      });
+    } catch {
+      await deleteSupabaseAdminUser(authUserId).catch(() => undefined);
+      throw createHttpError(500, "User creation failed; incomplete auth account was cleaned up.");
+    }
+
     const profile = rows?.[0] || null;
     await writeAdminActivityLog({
       req,
@@ -2921,7 +3131,7 @@ async function handleAdminUsers(req, res, context) {
       module: "users",
       targetType: "admin_profile",
       targetId: profile?.id,
-      description: `新增後台使用者 ${displayName}`,
+      description: "Created admin user " + displayName,
       afterData: profile,
     });
     return sendJson(res, 201, { user: normalizeAdminProfile(profile, []) });
@@ -2931,12 +3141,12 @@ async function handleAdminUsers(req, res, context) {
     await requirePermission(req, "users.update");
     const body = await readBody(req);
     const id = cleanText(firstQueryValue(req.query?.id) || body?.id);
-    if (!id) return sendJson(res, 400, { error: "缺少使用者 ID。" });
+    if (!id) return sendJson(res, 400, { error: "蝻箏?雿輻??ID?? });
     const rows = await supabaseRequest(
       `/admin_profiles?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const before = Array.isArray(rows) ? rows[0] : null;
-    if (!before) return sendJson(res, 404, { error: "找不到使用者。" });
+    if (!before) return sendJson(res, 404, { error: "?曆??唬蝙?刻? });
 
     const next = {};
     if (body?.display_name !== undefined || body?.displayName !== undefined) {
@@ -2974,7 +3184,7 @@ async function handleAdminUsers(req, res, context) {
       module: "users",
       targetType: "admin_profile",
       targetId: id,
-      description: `更新後台使用者 ${updated.display_name}`,
+      description: `?湔敺雿輻??${updated.display_name}`,
       beforeData: before,
       afterData: updated,
     });
@@ -3105,7 +3315,7 @@ function normalizeOrderSummary(order) {
 function buildOrderItemsSummary(items = []) {
   if (!items.length) {
     return {
-      items_summary: "尚無商品明細",
+      items_summary: "撠???敦",
       item_count: 0,
     };
   }
@@ -3113,13 +3323,13 @@ function buildOrderItemsSummary(items = []) {
   if (items.length === 1) {
     const item = items[0];
     return {
-      items_summary: `${item.product_name || "未命名商品"} ×${Number(item.quantity || 0)}`,
+      items_summary: `${item.product_name || "?芸????} ?${Number(item.quantity || 0)}`,
       item_count: 1,
     };
   }
 
   return {
-    items_summary: `共 ${items.length} 項商品`,
+    items_summary: `??${items.length} ???,
     item_count: items.length,
   };
 }
@@ -4209,7 +4419,7 @@ async function lookupInventoryBySku(req, res) {
 
   if (variants.length > 1) {
     return sendJson(res, 409, {
-      error: "商品編號重複，請先修正商品資料。",
+      error: "??蝺刻???嚗??耨甇??????,
     });
   }
 
@@ -4389,7 +4599,7 @@ async function handleManualSale(req, res) {
     const order = await supabaseRpc("create_manual_sale_order", {
       sale_payload: {
         payment_method: paymentMethod,
-        note: nullableText(body?.note) || "現場銷售",
+        note: nullableText(body?.note) || "?曉?瑕",
         items,
       },
     });
@@ -4413,7 +4623,7 @@ function parseNumber(value, fallback = 0) {
 function getWarehouseNonNegativeInteger(value, fieldName) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
-    const error = new Error(`${fieldName} 不可小於 0。`);
+    const error = new Error(`${fieldName} 銝撠 0?);
     error.status = 400;
     throw error;
   }
@@ -4424,7 +4634,7 @@ function getWarehouseOptionalNonNegativeNumber(value, fieldName) {
   if (value === "" || value == null) return null;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
-    const error = new Error(`${fieldName} 不可小於 0。`);
+    const error = new Error(`${fieldName} 銝撠 0?);
     error.status = 400;
     throw error;
   }
@@ -4495,7 +4705,7 @@ async function assertWarehouseMediaTargetExists(targetType, targetId) {
   };
   const table = tableByTargetType[targetType];
   if (!table || !targetId) {
-    const error = new Error("照片對應資料不正確。");
+    const error = new Error("?抒?撠?鞈?銝迤蝣箝?);
     error.status = 400;
     throw error;
   }
@@ -4504,7 +4714,7 @@ async function assertWarehouseMediaTargetExists(targetType, targetId) {
     `/${table}?id=eq.${encodeURIComponent(targetId)}&select=id&limit=1`
   );
   if (!Array.isArray(rows) || !rows.length) {
-    const error = new Error("找不到照片對應的資料，請先儲存資料後再上傳照片。");
+    const error = new Error("?曆??啁????鞈?嚗??摮??????喟??);
     error.status = 404;
     throw error;
   }
@@ -4587,7 +4797,7 @@ async function loadWarehouseSupplies(req, res) {
       `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const item = Array.isArray(rows) ? rows[0] : null;
-    if (!item) return sendJson(res, 404, { error: "找不到這筆備品。" });
+    if (!item) return sendJson(res, 404, { error: "?曆??圈????? });
     const mediaById = await loadWarehouseMediaForTargets("supply", [item.id]);
     return sendJson(res, 200, { item: attachWarehouseMedia([item], mediaById)[0] });
   }
@@ -4607,7 +4817,7 @@ async function loadWarehouseSupplies(req, res) {
 function normalizeSupplyPayload(body) {
   const locationCode = cleanText(body?.location_code);
   if (!warehouseLocationCodeSet.has(locationCode)) {
-    const error = new Error("存放位置不正確。");
+    const error = new Error("摮雿蔭銝迤蝣箝?);
     error.status = 400;
     throw error;
   }
@@ -4615,10 +4825,10 @@ function normalizeSupplyPayload(body) {
   return {
     name: cleanText(body?.name),
     brand_spec: normalizeOptionalText(body?.brand_spec),
-    quantity: getWarehouseNonNegativeInteger(body?.quantity, "目前數量"),
-    safety_stock: getWarehouseNonNegativeInteger(body?.safety_stock, "安全庫存"),
+    quantity: getWarehouseNonNegativeInteger(body?.quantity, "?桀??賊?"),
+    safety_stock: getWarehouseNonNegativeInteger(body?.safety_stock, "摰摨怠?"),
     location_code: locationCode,
-    unit_price: getWarehouseOptionalNonNegativeNumber(body?.unit_price, "單價"),
+    unit_price: getWarehouseOptionalNonNegativeNumber(body?.unit_price, "?桀"),
     supplier: normalizeOptionalText(body?.supplier),
     note: normalizeOptionalText(body?.note),
     updated_at: new Date().toISOString(),
@@ -4640,7 +4850,7 @@ async function deleteWarehouseMediaRows(rows) {
       )
     );
   } catch {
-    const error = new Error("R2 圖片刪除失敗，資料尚未刪除。");
+    const error = new Error("R2 ???芷憭望?嚗????芸?扎?);
     error.status = 502;
     throw error;
   }
@@ -4667,7 +4877,7 @@ async function handleWarehouseSupply(req, res, context) {
   if (req.method === "POST") {
     const body = await readBody(req);
     const payload = normalizeSupplyPayload(body);
-    if (!payload.name) return sendJson(res, 400, { error: "請輸入品名。" });
+    if (!payload.name) return sendJson(res, 400, { error: "隢撓?亙??? });
     const created = await supabaseRequest("/shop_supply_items", {
       method: "POST",
       body: JSON.stringify({ ...payload, created_at: new Date().toISOString() }),
@@ -4679,7 +4889,7 @@ async function handleWarehouseSupply(req, res, context) {
       module: "warehouse",
       targetType: "supply",
       targetId: created?.[0]?.id,
-      description: `新增備品 ${payload.name}`,
+      description: `?啣??? ${payload.name}`,
       afterData: created?.[0],
     });
     return sendJson(res, 201, { item: created?.[0] || null });
@@ -4688,13 +4898,13 @@ async function handleWarehouseSupply(req, res, context) {
   if (req.method === "PATCH") {
     const body = await readBody(req);
     const id = cleanText(body?.id);
-    if (!id) return sendJson(res, 400, { error: "缺少備品 ID。" });
+    if (!id) return sendJson(res, 400, { error: "蝻箏??? ID?? });
     const beforeRows = await supabaseRequest(
       `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
     const payload = normalizeSupplyPayload(body);
-    if (!payload.name) return sendJson(res, 400, { error: "請輸入品名。" });
+    if (!payload.name) return sendJson(res, 400, { error: "隢撓?亙??? });
     const updated = await supabaseRequest(`/shop_supply_items?id=eq.${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
@@ -4706,7 +4916,7 @@ async function handleWarehouseSupply(req, res, context) {
       module: "warehouse",
       targetType: "supply",
       targetId: id,
-      description: `更新備品 ${payload.name}`,
+      description: `?湔?? ${payload.name}`,
       beforeData: before,
       afterData: updated?.[0],
     });
@@ -4715,7 +4925,7 @@ async function handleWarehouseSupply(req, res, context) {
 
   if (req.method === "DELETE") {
     const id = cleanText(firstQueryValue(req.query?.id));
-    if (!id) return sendJson(res, 400, { error: "缺少備品 ID。" });
+    if (!id) return sendJson(res, 400, { error: "蝻箏??? ID?? });
     const beforeRows = await supabaseRequest(
       `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
@@ -4728,7 +4938,7 @@ async function handleWarehouseSupply(req, res, context) {
       module: "warehouse",
       targetType: "supply",
       targetId: id,
-      description: `刪除備品 ${before?.name || id}`,
+      description: `?芷?? ${before?.name || id}`,
       beforeData: before,
     });
     return sendJson(res, 200, { ok: true });
@@ -4742,16 +4952,16 @@ async function handleWarehouseSupplyQuantity(req, res, context) {
   const body = await readBody(req);
   const id = cleanText(body?.id);
   const delta = Math.trunc(parseNumber(body?.delta, 0));
-  if (!id || !delta) return sendJson(res, 400, { error: "缺少調整資料。" });
+  if (!id || !delta) return sendJson(res, 400, { error: "蝻箏?隤踵鞈??? });
 
   const rows = await supabaseRequest(
     `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
   );
   const item = Array.isArray(rows) ? rows[0] : null;
-  if (!item) return sendJson(res, 404, { error: "找不到這筆備品。" });
+  if (!item) return sendJson(res, 404, { error: "?曆??圈????? });
 
   const quantity = Number(item.quantity || 0) + delta;
-  if (quantity < 0) return sendJson(res, 400, { error: "目前數量不可小於 0。" });
+  if (quantity < 0) return sendJson(res, 400, { error: "?桀??賊?銝撠 0?? });
   const updated = await supabaseRequest(`/shop_supply_items?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify({ quantity, updated_at: new Date().toISOString() }),
@@ -4763,7 +4973,7 @@ async function handleWarehouseSupplyQuantity(req, res, context) {
     module: "warehouse",
     targetType: "supply",
     targetId: id,
-    description: `調整備品數量 ${item.name || id}: ${item.quantity} -> ${quantity}`,
+    description: `隤踵???賊? ${item.name || id}: ${item.quantity} -> ${quantity}`,
     beforeData: item,
     afterData: updated?.[0],
   });
@@ -4784,7 +4994,7 @@ function normalizeFurniturePayload(body) {
   return {
     asset_name: cleanText(body?.asset_name),
     asset_number: cleanText(body?.asset_number),
-    original_amount: getWarehouseOptionalNonNegativeNumber(body?.original_amount, "原始金額"),
+    original_amount: getWarehouseOptionalNonNegativeNumber(body?.original_amount, "????"),
     room_area: normalizeOptionalText(body?.room_area),
     brand_model: normalizeOptionalText(body?.brand_model),
     vendor: normalizeOptionalText(body?.vendor),
@@ -4800,7 +5010,7 @@ async function loadWarehouseFurniture(req, res) {
       `/shop_furniture_assets?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const asset = Array.isArray(rows) ? rows[0] : null;
-    if (!asset) return sendJson(res, 404, { error: "找不到這筆傢俱資產。" });
+    if (!asset) return sendJson(res, 404, { error: "?曆??圈??Ｖ膨鞈?? });
     const mediaById = await loadWarehouseMediaForTargets("furniture", [asset.id]);
     return sendJson(res, 200, { asset: attachWarehouseMedia([asset], mediaById)[0] });
   }
@@ -4823,7 +5033,7 @@ async function handleWarehouseFurniture(req, res, context) {
     const body = await readBody(req);
     const payload = normalizeFurniturePayload(body);
     if (!payload.asset_name || !payload.asset_number) {
-      return sendJson(res, 400, { error: "請輸入資產名稱與資產編號。" });
+      return sendJson(res, 400, { error: "隢撓?亥??Ｗ?蝔梯?鞈蝺刻??? });
     }
 
     const duplicate = await supabaseRequest(
@@ -4831,7 +5041,7 @@ async function handleWarehouseFurniture(req, res, context) {
     );
     const existingId = Array.isArray(duplicate) ? duplicate[0]?.id : "";
     if (existingId && (req.method === "POST" || existingId !== cleanText(body?.id))) {
-      return sendJson(res, 409, { error: "資產編號不可重複。" });
+      return sendJson(res, 409, { error: "鞈蝺刻?銝???? });
     }
 
     if (req.method === "POST") {
@@ -4846,14 +5056,14 @@ async function handleWarehouseFurniture(req, res, context) {
         module: "warehouse",
         targetType: "furniture",
         targetId: created?.[0]?.id,
-        description: `新增傢俱資產 ${payload.asset_name}`,
+        description: `?啣??Ｖ膨鞈 ${payload.asset_name}`,
         afterData: created?.[0],
       });
       return sendJson(res, 201, { asset: created?.[0] || null });
     }
 
     const id = cleanText(body?.id);
-    if (!id) return sendJson(res, 400, { error: "缺少資產 ID。" });
+    if (!id) return sendJson(res, 400, { error: "蝻箏?鞈 ID?? });
     const beforeRows = await supabaseRequest(
       `/shop_furniture_assets?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
@@ -4869,7 +5079,7 @@ async function handleWarehouseFurniture(req, res, context) {
       module: "warehouse",
       targetType: "furniture",
       targetId: id,
-      description: `更新傢俱資產 ${payload.asset_name}`,
+      description: `?湔?Ｖ膨鞈 ${payload.asset_name}`,
       beforeData: before,
       afterData: updated?.[0],
     });
@@ -4878,7 +5088,7 @@ async function handleWarehouseFurniture(req, res, context) {
 
   if (req.method === "DELETE") {
     const id = cleanText(firstQueryValue(req.query?.id));
-    if (!id) return sendJson(res, 400, { error: "缺少資產 ID。" });
+    if (!id) return sendJson(res, 400, { error: "蝻箏?鞈 ID?? });
     const beforeRows = await supabaseRequest(
       `/shop_furniture_assets?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
@@ -4891,7 +5101,7 @@ async function handleWarehouseFurniture(req, res, context) {
       module: "warehouse",
       targetType: "furniture",
       targetId: id,
-      description: `刪除傢俱資產 ${before?.asset_name || id}`,
+      description: `?芷?Ｖ膨鞈 ${before?.asset_name || id}`,
       beforeData: before,
     });
     return sendJson(res, 200, { ok: true });
@@ -4903,7 +5113,7 @@ async function handleWarehouseFurniture(req, res, context) {
 function normalizeHousekeepingPayload(body) {
   const recordType = cleanText(body?.record_type);
   if (!["cleaning_completed", "checkout_issue"].includes(recordType)) {
-    const error = new Error("拍攝類型不正確。");
+    const error = new Error("??憿?銝迤蝣箝?);
     error.status = 400;
     throw error;
   }
@@ -4932,14 +5142,38 @@ function filterHousekeepingRecords(items, { q = "", type = "", date = "" }) {
   });
 }
 
-async function loadHousekeepingRecords(req, res) {
+async function loadOwnHousekeepingTargetIds(context) {
+  if (!context?.actorAuthUserId) return new Set();
+  const rows = await supabaseRequest(
+    `/admin_activity_logs?actor_auth_user_id=eq.${encodeURIComponent(
+      context.actorAuthUserId
+    )}&module=eq.warehouse&action=eq.create&target_type=eq.housekeeping&select=target_id&limit=1000`
+  );
+  return new Set(
+    (Array.isArray(rows) ? rows : [])
+      .map((row) => cleanText(row.target_id))
+      .filter(Boolean)
+  );
+}
+
+async function filterHousekeepingRecordsForContext(records, context) {
+  if (!context) return records;
+  if (hasAdminPermission(context, "warehouse.housekeeping.view_all")) return records;
+  if (!hasAdminPermission(context, "warehouse.housekeeping.view_own")) return [];
+  const ownIds = await loadOwnHousekeepingTargetIds(context);
+  return records.filter((record) => ownIds.has(record.id));
+}
+
+async function loadHousekeepingRecords(req, res, context = null) {
   const id = cleanText(firstQueryValue(req.query?.id));
   if (id) {
     const rows = await supabaseRequest(
       `/shop_housekeeping_records?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const record = Array.isArray(rows) ? rows[0] : null;
-    if (!record) return sendJson(res, 404, { error: "找不到這筆房務存證。" });
+    if (!record) return sendJson(res, 404, { error: "??????????" });
+    const allowedRecords = await filterHousekeepingRecordsForContext([record], context);
+    if (!allowedRecords.length) return sendJson(res, 403, { error: "Permission denied." });
     const mediaById = await loadWarehouseMediaForTargets("housekeeping", [record.id]);
     return sendJson(res, 200, { record: attachWarehouseMedia([record], mediaById)[0] });
   }
@@ -4952,17 +5186,18 @@ async function loadHousekeepingRecords(req, res) {
     type: cleanText(firstQueryValue(req.query?.type)),
     date: cleanText(firstQueryValue(req.query?.date)),
   });
-  const mediaById = await loadWarehouseMediaForTargets("housekeeping", filtered.map((item) => item.id));
-  return sendJson(res, 200, { records: attachWarehouseMedia(filtered, mediaById) });
+  const scoped = await filterHousekeepingRecordsForContext(filtered, context);
+  const mediaById = await loadWarehouseMediaForTargets("housekeeping", scoped.map((item) => item.id));
+  return sendJson(res, 200, { records: attachWarehouseMedia(scoped, mediaById) });
 }
 
 async function handleHousekeepingRecord(req, res, context) {
-  if (req.method === "GET") return await loadHousekeepingRecords(req, res);
+  if (req.method === "GET") return await loadHousekeepingRecords(req, res, context);
 
   if (req.method === "POST" || req.method === "PATCH") {
     const body = await readBody(req);
     const payload = normalizeHousekeepingPayload(body);
-    if (!payload.room_area) return sendJson(res, 400, { error: "請輸入房間／區域。" });
+    if (!payload.room_area) return sendJson(res, 400, { error: "隢撓?交????? });
 
     if (req.method === "POST") {
       const created = await supabaseRequest("/shop_housekeeping_records", {
@@ -4976,14 +5211,14 @@ async function handleHousekeepingRecord(req, res, context) {
         module: "warehouse",
         targetType: "housekeeping",
         targetId: created?.[0]?.id,
-        description: `新增房務存證 ${payload.room_area}`,
+        description: `?啣??踹?摮? ${payload.room_area}`,
         afterData: created?.[0],
       });
       return sendJson(res, 201, { record: created?.[0] || null });
     }
 
     const id = cleanText(body?.id);
-    if (!id) return sendJson(res, 400, { error: "缺少房務存證 ID。" });
+    if (!id) return sendJson(res, 400, { error: "蝻箏??踹?摮? ID?? });
     const beforeRows = await supabaseRequest(
       `/shop_housekeeping_records?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
@@ -4999,7 +5234,7 @@ async function handleHousekeepingRecord(req, res, context) {
       module: "warehouse",
       targetType: "housekeeping",
       targetId: id,
-      description: `更新房務存證 ${payload.room_area}`,
+      description: `?湔?踹?摮? ${payload.room_area}`,
       beforeData: before,
       afterData: updated?.[0],
     });
@@ -5008,7 +5243,7 @@ async function handleHousekeepingRecord(req, res, context) {
 
   if (req.method === "DELETE") {
     const id = cleanText(firstQueryValue(req.query?.id));
-    if (!id) return sendJson(res, 400, { error: "缺少房務存證 ID。" });
+    if (!id) return sendJson(res, 400, { error: "蝻箏??踹?摮? ID?? });
     const beforeRows = await supabaseRequest(
       `/shop_housekeeping_records?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
@@ -5021,7 +5256,7 @@ async function handleHousekeepingRecord(req, res, context) {
       module: "warehouse",
       targetType: "housekeeping",
       targetId: id,
-      description: `刪除房務存證 ${before?.room_area || id}`,
+      description: `?芷?踹?摮? ${before?.room_area || id}`,
       beforeData: before,
     });
     return sendJson(res, 200, { ok: true });
@@ -5030,7 +5265,24 @@ async function handleHousekeepingRecord(req, res, context) {
   return sendJson(res, 405, { error: "Method not allowed." });
 }
 
-async function handleWarehouseMediaUpload(req, res) {
+function assertWarehouseMediaPermission(context, targetType, operation) {
+  const writePermissions = {
+    supply: ["warehouse.supply.create", "warehouse.supply.update"],
+    furniture: ["warehouse.furniture.create", "warehouse.furniture.update"],
+    housekeeping: ["warehouse.housekeeping.create", "warehouse.housekeeping.update"],
+  };
+  const deletePermissions = {
+    supply: ["warehouse.supply.delete", "warehouse.supply.update"],
+    furniture: ["warehouse.furniture.delete", "warehouse.furniture.update"],
+    housekeeping: ["warehouse.housekeeping.delete", "warehouse.housekeeping.update"],
+  };
+  const permissions = operation === "delete" ? deletePermissions[targetType] : writePermissions[targetType];
+  if (!permissions?.some((permission) => hasAdminPermission(context, permission))) {
+    throw createHttpError(403, "Permission denied.");
+  }
+}
+
+async function handleWarehouseMediaUpload(req, res, context) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
 
   const body = await readBody(req);
@@ -5042,13 +5294,14 @@ async function handleWarehouseMediaUpload(req, res) {
   const fileRule = allowedWarehouseFileTypes.get(contentType);
 
   if (!warehouseTargetTypes.has(targetType) || !targetId) {
-    return sendJson(res, 400, { error: "缺少照片對應資料。" });
+    return sendJson(res, 400, { error: "蝻箏??抒?撠?鞈??? });
   }
+  assertWarehouseMediaPermission(context, targetType, "write");
   await assertWarehouseMediaTargetExists(targetType, targetId);
-  if (!fileName) return sendJson(res, 400, { error: "缺少檔名。" });
-  if (!fileRule) return sendJson(res, 400, { error: "只支援 JPG、PNG 或 WebP 圖片。" });
+  if (!fileName) return sendJson(res, 400, { error: "蝻箏?瑼??? });
+  if (!fileRule) return sendJson(res, 400, { error: "?芣??JPG?NG ??WebP ???? });
   if (!Number.isFinite(size) || size <= 0 || size > fileRule.maxSize) {
-    return sendJson(res, 400, { error: "圖片大小不正確，單張上限 10MB。" });
+    return sendJson(res, 400, { error: "??憭批?銝迤蝣綽??桀撐銝? 10MB?? });
   }
 
   const { bucketName, publicBaseUrl, client } = getWarehouseR2Config();
@@ -5087,14 +5340,15 @@ async function handleWarehouseMedia(req, res, context) {
     const mediaSize = body?.size == null ? null : Number(body.size);
     const mediaSortOrder = Math.trunc(parseNumber(body?.sort_order, 0));
     if (!warehouseTargetTypes.has(targetType) || !targetId) {
-      return sendJson(res, 400, { error: "缺少照片對應資料。" });
+      return sendJson(res, 400, { error: "蝻箏??抒?撠?鞈??? });
     }
+    assertWarehouseMediaPermission(context, targetType, "write");
     await assertWarehouseMediaTargetExists(targetType, targetId);
     if (mediaSize !== null && (!Number.isFinite(mediaSize) || mediaSize < 0)) {
-      return sendJson(res, 400, { error: "圖片大小不可小於 0。" });
+      return sendJson(res, 400, { error: "??憭批?銝撠 0?? });
     }
     if (mediaSortOrder < 0) {
-      return sendJson(res, 400, { error: "圖片排序不可小於 0。" });
+      return sendJson(res, 400, { error: "????銝撠 0?? });
     }
     const created = await supabaseRequest("/shop_warehouse_media", {
       method: "POST",
@@ -5117,7 +5371,7 @@ async function handleWarehouseMedia(req, res, context) {
       module: "warehouse",
       targetType: "media",
       targetId: created?.[0]?.id,
-      description: `新增倉儲圖片 ${targetType}`,
+      description: `?啣???? ${targetType}`,
       afterData: created?.[0],
     });
     return sendJson(res, 201, { media: created?.[0] || null });
@@ -5125,12 +5379,13 @@ async function handleWarehouseMedia(req, res, context) {
 
   if (req.method === "DELETE") {
     const id = cleanText(firstQueryValue(req.query?.id));
-    if (!id) return sendJson(res, 400, { error: "缺少照片 ID。" });
+    if (!id) return sendJson(res, 400, { error: "蝻箏??抒? ID?? });
     const rows = await supabaseRequest(
       `/shop_warehouse_media?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const media = Array.isArray(rows) ? rows[0] : null;
-    if (!media) return sendJson(res, 404, { error: "找不到這張照片。" });
+    if (!media) return sendJson(res, 404, { error: "?曆??圈撐?抒??? });
+    assertWarehouseMediaPermission(context, cleanText(media.target_type), "delete");
     await deleteWarehouseMediaRows([media]);
     await supabaseRequest(`/shop_warehouse_media?id=eq.${encodeURIComponent(id)}`, {
       method: "DELETE",
@@ -5143,7 +5398,7 @@ async function handleWarehouseMedia(req, res, context) {
       module: "warehouse",
       targetType: "media",
       targetId: id,
-      description: "刪除倉儲圖片",
+      description: "?芷???",
       beforeData: media,
     });
     return sendJson(res, 200, { ok: true });
@@ -5158,6 +5413,10 @@ export default async function handler(req, res) {
   try {
     if (action === "admin-login") {
       return await handleAdminLogin(req, res);
+    }
+
+    if (action === "admin-legacy-login") {
+      return await handleAdminLegacyLogin(req, res);
     }
 
     if (action === "admin-refresh") {
@@ -5271,7 +5530,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "GET" && action === "warehouse-dashboard") {
-      await requirePermission(req, "warehouse.view");
+      await requirePermission(req, "warehouse.supplies.view");
       return await loadWarehouseDashboard(req, res);
     }
 
@@ -5281,7 +5540,7 @@ export default async function handler(req, res) {
     }
 
     if (action === "warehouse-supply") {
-      if (req.method === "GET") await requirePermission(req, "warehouse.view");
+      if (req.method === "GET") await requirePermission(req, "warehouse.supplies.view");
       if (req.method === "POST") await requirePermission(req, "warehouse.supply.create");
       if (req.method === "PATCH") await requirePermission(req, "warehouse.supply.update");
       if (req.method === "DELETE") await requirePermission(req, "warehouse.supply.delete");
@@ -5294,7 +5553,7 @@ export default async function handler(req, res) {
     }
 
     if (action === "warehouse-furniture-asset") {
-      if (req.method === "GET") await requirePermission(req, "warehouse.view");
+      if (req.method === "GET") await requirePermission(req, "warehouse.furniture.view");
       if (req.method === "POST") await requirePermission(req, "warehouse.furniture.create");
       if (req.method === "PATCH") await requirePermission(req, "warehouse.furniture.update");
       if (req.method === "DELETE") await requirePermission(req, "warehouse.furniture.delete");
@@ -5302,7 +5561,12 @@ export default async function handler(req, res) {
     }
 
     if (action === "warehouse-housekeeping-record") {
-      if (req.method === "GET") await requirePermission(req, "warehouse.view");
+      if (req.method === "GET") {
+        await requireAnyPermission(req, [
+          "warehouse.housekeeping.view_all",
+          "warehouse.housekeeping.view_own",
+        ]);
+      }
       if (req.method === "POST") await requirePermission(req, "warehouse.housekeeping.create");
       if (req.method === "PATCH") await requirePermission(req, "warehouse.housekeeping.update");
       if (req.method === "DELETE") await requirePermission(req, "warehouse.housekeeping.delete");
@@ -5310,13 +5574,10 @@ export default async function handler(req, res) {
     }
 
     if (action === "warehouse-media-upload") {
-      await requirePermission(req, "warehouse.view");
-      return await handleWarehouseMediaUpload(req, res);
+      return await handleWarehouseMediaUpload(req, res, adminContext);
     }
 
     if (action === "warehouse-media") {
-      if (req.method === "POST") await requirePermission(req, "warehouse.view");
-      if (req.method === "DELETE") await requirePermission(req, "warehouse.view");
       return await handleWarehouseMedia(req, res, adminContext);
     }
 

@@ -1,51 +1,50 @@
-import legacyLogin from "../server/adminShop/legacyLogin.js";
-import warehouseSupplyQuantity from "../server/adminShop/warehouseSupplyQuantity.js";
-import warehouseMedia from "../server/adminShop/warehouseMedia.js";
-import usersRoles from "../server/adminShop/usersRoles.js";
-import test from "../server/adminShop/test.js";
-import fallback from "../server/adminShop/fallback.js";
+const loadFallback = () => import("../server/adminShop/fallback.js");
+const loadWarehouseMedia = () => import("../server/adminShop/warehouseMedia.js");
+const loadUsersRoles = () => import("../server/adminShop/usersRoles.js");
 
 const ROUTES = {
-  test,
-  "admin-login": fallback,
-  "admin-legacy-login": legacyLogin,
-  "admin-refresh": fallback,
-  "admin-bootstrap-super": fallback,
-  "admin-session": fallback,
-  "admin-users": usersRoles,
-  "admin-roles": usersRoles,
-  "admin-audit-logs": fallback,
-  "instagram-oauth-start": fallback,
-  "meta-status": fallback,
-  "debug-facebook-token": fallback,
-  "publish-facebook-post": fallback,
-  "publish-instagram-post": fallback,
-  "publish-threads-post": fallback,
-  "social-posts-sync": fallback,
-  "social-posts": fallback,
-  "sync-facebook-post": fallback,
-  "delete-facebook-post": fallback,
-  "exchange-meta-token": fallback,
-  dashboard: fallback,
-  orders: fallback,
-  "order-items-export": fallback,
-  order: fallback,
-  products: fallback,
-  product: fallback,
-  "inventory-movements": fallback,
-  "inventory-lookup": fallback,
-  "inventory-search": fallback,
-  "inventory-adjust": fallback,
-  "manual-sale": fallback,
-  "warehouse-dashboard": fallback,
-  "warehouse-locations": fallback,
-  "warehouse-supply": fallback,
-  "warehouse-supply-quantity": warehouseSupplyQuantity,
-  "warehouse-furniture-asset": fallback,
-  "warehouse-housekeeping-record": fallback,
-  "warehouse-media-upload": warehouseMedia,
-  "warehouse-media": warehouseMedia,
-  "warehouse-media-delete": warehouseMedia,
+  test: () => import("../server/adminShop/test.js"),
+  "admin-login": loadFallback,
+  "admin-legacy-login": () => import("../server/adminShop/legacyLogin.js"),
+  "admin-refresh": loadFallback,
+  "admin-bootstrap-super": loadFallback,
+  "admin-session": loadFallback,
+  "admin-users": loadUsersRoles,
+  "admin-roles": loadUsersRoles,
+  "admin-audit-logs": loadFallback,
+  "instagram-oauth-start": loadFallback,
+  "meta-status": loadFallback,
+  "debug-facebook-token": loadFallback,
+  "publish-facebook-post": loadFallback,
+  "publish-instagram-post": loadFallback,
+  "publish-threads-post": loadFallback,
+  "social-posts-sync": loadFallback,
+  "social-posts": loadFallback,
+  "sync-facebook-post": loadFallback,
+  "delete-facebook-post": loadFallback,
+  "exchange-meta-token": loadFallback,
+  dashboard: loadFallback,
+  orders: loadFallback,
+  "order-items-export": loadFallback,
+  order: loadFallback,
+  products: loadFallback,
+  product: loadFallback,
+  "inventory-movements": loadFallback,
+  "inventory-lookup": loadFallback,
+  "inventory-search": loadFallback,
+  "inventory-adjust": loadFallback,
+  "manual-sale": loadFallback,
+  "warehouse-dashboard": loadFallback,
+  "warehouse-locations": loadFallback,
+  "warehouse-supply": loadFallback,
+  "warehouse-supply-quantity": () =>
+    import("../server/adminShop/warehouseSupplyQuantity.js"),
+  "warehouse-furniture-asset": loadFallback,
+  "warehouse-housekeeping-record": loadFallback,
+  "warehouse-media-upload": loadWarehouseMedia,
+  "warehouse-media": loadWarehouseMedia,
+  "warehouse-media-delete": loadWarehouseMedia,
+  fallback: loadFallback,
 };
 
 function firstQueryValue(value) {
@@ -64,12 +63,13 @@ function sendJson(res, status, body) {
 
 export default async function handler(req, res) {
   const action = String(firstQueryValue(req.query?.action) || "").trim();
+
   console.log("[admin-shop] action =", action);
 
   try {
-    const routeHandler = ROUTES[action];
+    const loader = ROUTES[action];
 
-    if (!routeHandler) {
+    if (!loader) {
       return sendJson(res, 404, {
         ok: false,
         error: "unknown action",
@@ -77,14 +77,16 @@ export default async function handler(req, res) {
       });
     }
 
-    if (typeof routeHandler !== "function") {
+    const mod = await loader();
+
+    if (!mod?.default) {
       return sendJson(res, 500, {
         ok: false,
-        error: "invalid handler",
+        error: "invalid handler export",
       });
     }
 
-    return await routeHandler(req, res);
+    return await mod.default(req, res);
   } catch (err) {
     console.error("[admin-shop crash]", {
       action,
@@ -96,6 +98,7 @@ export default async function handler(req, res) {
       ok: false,
       error: "internal_error",
       action,
+      message: err?.message,
     });
   }
 }

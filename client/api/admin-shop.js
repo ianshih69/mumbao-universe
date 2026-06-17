@@ -577,7 +577,7 @@ function getSafeMetaError(status, metaError) {
       code: code ? `META_${code}` : "META_HTTP_401",
       reason:
         safeMessage ||
-        "摮?甈??⊥??歇??嚗??湔 Page Access Token??,
+        "Request failed.",
       details,
     };
   }
@@ -587,7 +587,7 @@ function getSafeMetaError(status, metaError) {
       code: code ? `META_${code}` : "META_HTTP_403",
       reason:
         safeMessage ||
-        "Meta 甈?銝雲嚗?蝣箄? Page 甈???App 甈?閮剖???,
+        "Request failed.",
       details,
     };
   }
@@ -597,7 +597,7 @@ function getSafeMetaError(status, metaError) {
       code: "META_100",
       reason:
         safeMessage ||
-        "Meta ?⊥?閫?? Page ID ?閰Ｗ??賂?隢Ⅱ隤?FACEBOOK_PAGE_ID??,
+        "Request failed.",
       details,
     };
   }
@@ -607,7 +607,7 @@ function getSafeMetaError(status, metaError) {
       code: code ? `META_${code}` : "META_HTTP_404",
       reason:
         safeMessage ||
-        "?曆??唳?摰? Meta 撣唾?嚗?蝣箄?撣唾? ID ?臬甇?Ⅱ??,
+        "Request failed.",
       details,
     };
   }
@@ -615,7 +615,7 @@ function getSafeMetaError(status, metaError) {
   if (status === 429) {
     return {
       code: code ? `META_${code}` : "META_HTTP_429",
-      reason: safeMessage || "Meta API 隢???餌?嚗?蝔??岫??,
+      reason: safeMessage || "Request failed.",
       details,
     };
   }
@@ -624,7 +624,7 @@ function getSafeMetaError(status, metaError) {
     code: code ? `META_${code}` : `META_HTTP_${status || 500}`,
     reason:
       safeMessage ||
-      "Meta API ??甇日??亥岷嚗?蝣箄?撣唾? ID?age Access Token ???身摰?,
+      "Request failed.",
     details,
   };
 }
@@ -655,7 +655,7 @@ async function fetchMetaProfile({
     return createMetaStatus(
       "error",
       null,
-      "?桀??⊥???? Meta API嚗?蝔??岫??,
+      "Request failed.",
       "META_NETWORK_ERROR"
     );
   }
@@ -700,7 +700,7 @@ async function checkFacebookConnection() {
       ...createMetaStatus(
         "not_configured",
         null,
-        "FACEBOOK_PAGE_ID ?芾身摰?蝛箇??,
+        "Request failed.",
         "META_NOT_CONFIGURED"
       ),
       diagnostics,
@@ -712,7 +712,7 @@ async function checkFacebookConnection() {
       ...createMetaStatus(
         "not_configured",
         null,
-        "FACEBOOK_PAGE_ACCESS_TOKEN ?芾身摰?蝛箇??,
+        "Request failed.",
         "META_NOT_CONFIGURED"
       ),
       diagnostics,
@@ -744,7 +744,7 @@ async function inspectFacebookTokenScopes() {
     return {
       available: false,
       scopes: [],
-      error: "?⊥?瑼Ｘ Token scopes嚗?蝣箄? Meta App ??Page Token ?啣?霈??,
+      error: "Request failed.",
     };
   }
 
@@ -763,7 +763,7 @@ async function inspectFacebookTokenScopes() {
     return {
       available: false,
       scopes: [],
-      error: "?桀??⊥?瑼Ｘ Meta Token scopes嚗?蝔??岫??,
+      error: "Request failed.",
     };
   }
 
@@ -823,9 +823,9 @@ async function checkInstagramConnectionWithFacebookLoginLegacy(tokenInspection) 
     );
   } catch (error) {
     const missingScopeMessage = missingScopes.includes("instagram_basic")
-      ? "?桀? token 蝻箏? instagram_basic嚗???? Meta App??
+      ? "Request failed."
       : missingScopes.includes("instagram_content_publish")
-        ? "?桀? token 蝻箏? instagram_content_publish嚗瘜撣?Instagram 鞎潭?嚗???? Meta App??
+        ? "Request failed."
         : null;
 
     return {
@@ -834,7 +834,7 @@ async function checkInstagramConnectionWithFacebookLoginLegacy(tokenInspection) 
         null,
         missingScopeMessage ||
           error.message ||
-          "?⊥??? Instagram ?平撣唾???,
+          "Request failed.",
         missingScopeMessage
           ? "INSTAGRAM_REQUIRED_SCOPE_MISSING"
           : error.code || "INSTAGRAM_ACCOUNT_LOOKUP_FAILED",
@@ -967,7 +967,7 @@ async function fetchInstagramProfile(accessToken) {
     });
   } catch {
     const error = new Error(
-      "?⊥???? Instagram API嚗?蝔??岫??
+      "Request failed.",
     );
     error.code = "INSTAGRAM_NETWORK_ERROR";
     error.status = 502;
@@ -986,7 +986,7 @@ async function fetchInstagramProfile(accessToken) {
 
   const profile = normalizeInstagramProfile(payload);
   if (!profile.userId || !profile.username) {
-    const error = new Error("Instagram API ?芸??喳??游董????);
+    const error = new Error("Request failed.");
     error.code = "INSTAGRAM_PROFILE_INCOMPLETE";
     error.status = 502;
     throw error;
@@ -1002,7 +1002,7 @@ async function checkInstagramConnection() {
       ...createMetaStatus(
         "not_configured",
         null,
-        "Instagram 撠??嚗?雿輻 @mumbao.tw ?餃銝行?甈?,
+        "Request failed.",
         "INSTAGRAM_NOT_AUTHORIZED"
       ),
       diagnostics: {
@@ -1031,7 +1031,7 @@ async function checkInstagramConnection() {
         ...createMetaStatus(
           "error",
           `@${profile.username}`,
-          "?桀?????Instagram 撣唾?銝 @mumbao.tw嚗????甇?Ⅱ撣唾???,
+          "Request failed.",
           "INSTAGRAM_USERNAME_MISMATCH"
         ),
         diagnostics: {
@@ -1078,7 +1078,7 @@ async function checkInstagramConnection() {
       ...createMetaStatus(
         "error",
         null,
-        error.message || "Instagram ???瑼Ｘ憭望???,
+        error.message || "Request failed.",
         error.code || "INSTAGRAM_CONNECTION_FAILED",
         error.metaError || null
       ),
@@ -1157,7 +1157,7 @@ async function handleInstagramOAuthStart(req, res) {
       ok: false,
       errorCode: "INSTAGRAM_APP_ID_INVALID",
       errorMessage:
-        "INSTAGRAM_APP_ID ?芾身摰??澆??航炊嚗?蝣箄?瘝???蝛箸????銝蝙??Instagram App ID??,
+        "Request failed.",
       diagnostics,
     });
   }
@@ -1167,7 +1167,7 @@ async function handleInstagramOAuthStart(req, res) {
       ok: false,
       errorCode: "INSTAGRAM_REDIRECT_URI_MISMATCH",
       errorMessage:
-        "INSTAGRAM_REDIRECT_URI 敹???閮剖???https://mumbao.tw/api/instagram-oauth-callback??,
+        "Request failed.",
       diagnostics,
     });
   }
@@ -1197,7 +1197,7 @@ async function handleInstagramOAuthStart(req, res) {
       ok: false,
       errorCode: "INSTAGRAM_OAUTH_SCOPE_INVALID",
       errorMessage:
-        "Instagram OAuth scope ?澆??航炊嚗??蝙?券????拙???,
+        "Request failed.",
       diagnostics,
     });
   }
@@ -1238,7 +1238,7 @@ async function handleDebugFacebookToken(req, res) {
     return sendJson(res, 500, {
       ok: false,
       errorCode: "META_APP_ID_NOT_CONFIGURED",
-      errorMessage: "META_APP_ID ?芾身摰?蝛箇??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -1247,7 +1247,7 @@ async function handleDebugFacebookToken(req, res) {
     return sendJson(res, 500, {
       ok: false,
       errorCode: "META_APP_SECRET_NOT_CONFIGURED",
-      errorMessage: "META_APP_SECRET ?芾身摰?蝛箇??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -1256,7 +1256,7 @@ async function handleDebugFacebookToken(req, res) {
     return sendJson(res, 500, {
       ok: false,
       errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
-      errorMessage: "FACEBOOK_PAGE_ACCESS_TOKEN ?芾身摰?蝛箇??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -1278,7 +1278,7 @@ async function handleDebugFacebookToken(req, res) {
     return sendJson(res, 502, {
       ok: false,
       errorCode: "META_TOKEN_DEBUG_NETWORK_ERROR",
-      errorMessage: "?桀??⊥???? Meta Token Debug API嚗?蝔??岫??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -1324,7 +1324,7 @@ async function handleDebugFacebookToken(req, res) {
     errorCode: isValid ? null : "FACEBOOK_TOKEN_INVALID",
     errorMessage: isValid
       ? null
-      : "Meta ?文??桀???FACEBOOK_PAGE_ACCESS_TOKEN ?⊥?嚗???Ｙ?銝行??Vercel??,
+      : "Request failed.",
   });
 }
 
@@ -1487,7 +1487,7 @@ async function handlePublishFacebookPost(req, res) {
   if (!pageId) {
     return sendJson(res, 500, {
       errorCode: "FACEBOOK_PAGE_ID_NOT_CONFIGURED",
-      errorMessage: "FACEBOOK_PAGE_ID ?芾身摰?蝛箇??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -1495,7 +1495,7 @@ async function handlePublishFacebookPost(req, res) {
   if (!accessToken) {
     return sendJson(res, 500, {
       errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
-      errorMessage: "FACEBOOK_PAGE_ACCESS_TOKEN ?芾身摰?蝛箇??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -1510,7 +1510,7 @@ async function handlePublishFacebookPost(req, res) {
   if (!message) {
     return sendJson(res, 400, {
       errorCode: "FACEBOOK_MESSAGE_REQUIRED",
-      errorMessage: "?潭??批捆??Hashtag 銝???箇征??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -1536,7 +1536,7 @@ async function handlePublishFacebookPost(req, res) {
   } catch {
     return sendJson(res, 502, {
       errorCode: "META_NETWORK_ERROR",
-      errorMessage: "?桀??⊥???? Facebook Graph API嚗?蝔??岫??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -1624,7 +1624,7 @@ async function fetchInstagramPageLink(pageId, accessToken) {
     }
 
     const error = new Error(
-      "INSTAGRAM_BUSINESS_ACCOUNT_ID ??FACEBOOK_PAGE_ID ?閮剖???
+      "Request failed.",
     );
     error.code = "INSTAGRAM_ACCOUNT_NOT_CONFIGURED";
     error.status = 500;
@@ -1647,7 +1647,7 @@ async function fetchInstagramPageLink(pageId, accessToken) {
       signal: AbortSignal.timeout(10000),
     });
   } catch {
-    const error = new Error("?桀??⊥??亥岷 Instagram ?平撣唾?嚗?蝔??岫??);
+    const error = new Error("Request failed.");
     error.code = "META_NETWORK_ERROR";
     error.status = 502;
     throw error;
@@ -1666,7 +1666,7 @@ async function fetchInstagramPageLink(pageId, accessToken) {
 
   if (!accountId) {
     const error = new Error(
-      "Facebook 蝎?撠??? Instagram 撠平撣唾???
+      "Request failed.",
     );
     error.code = "INSTAGRAM_ACCOUNT_NOT_LINKED";
     error.status = 502;
@@ -1696,7 +1696,7 @@ function findInstagramImage(task, requestedImageUrl, requestedR2Key) {
   if (!image) {
     return {
       errorCode: "INSTAGRAM_IMAGE_REQUIRED",
-      errorMessage: "Instagram ?潭??閬???1 撘萄???,
+      errorMessage: "Request failed.",
     };
   }
 
@@ -1708,14 +1708,14 @@ function findInstagramImage(task, requestedImageUrl, requestedR2Key) {
     return {
       errorCode: "INSTAGRAM_VIDEO_NOT_SUPPORTED",
       errorMessage:
-        "Instagram 蝚砌????舀?桀撐??鞎潭?嚗銝?游蔣??,
+        "Request failed.",
     };
   }
 
   if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
     return {
       errorCode: "INSTAGRAM_IMAGE_TYPE_NOT_SUPPORTED",
-      errorMessage: "Instagram 蝚砌????舀 JPG?NG ??WebP ????,
+      errorMessage: "Request failed.",
     };
   }
 
@@ -1730,14 +1730,14 @@ function findInstagramImage(task, requestedImageUrl, requestedR2Key) {
   if (requestedUrl && requestedUrl !== publicUrl) {
     return {
       errorCode: "INSTAGRAM_IMAGE_MISMATCH",
-      errorMessage: "?潭????遙?葉?洵銝撘萄歇銝??銝??湛?隢??唳???岫??,
+      errorMessage: "Request failed.",
     };
   }
 
   if (requestedKey && key && requestedKey !== key) {
     return {
       errorCode: "INSTAGRAM_R2_KEY_MISMATCH",
-      errorMessage: "?潭???霅鞈?銝??湛?隢??唳???岫??,
+      errorMessage: "Request failed.",
     };
   }
 
@@ -1794,7 +1794,7 @@ async function handlePublishInstagramPost(req, res) {
   if (!pageId) {
     return sendJson(res, 500, {
       errorCode: "FACEBOOK_PAGE_ID_NOT_CONFIGURED",
-      errorMessage: "FACEBOOK_PAGE_ID ?芾身摰?蝛箇??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -1802,7 +1802,7 @@ async function handlePublishInstagramPost(req, res) {
   if (!accessToken) {
     return sendJson(res, 500, {
       errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
-      errorMessage: "Facebook Page Access Token ?芾身摰??⊥???,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -1812,7 +1812,7 @@ async function handlePublishInstagramPost(req, res) {
   if (!taskId) {
     return sendJson(res, 400, {
       errorCode: "SOCIAL_TASK_ID_REQUIRED",
-      errorMessage: "?曆??啗??澆???遙??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -1821,7 +1821,7 @@ async function handlePublishInstagramPost(req, res) {
   if (!storedTask) {
     return sendJson(res, 404, {
       errorCode: "SOCIAL_TASK_NOT_FOUND",
-      errorMessage: "?曆??圈??潭?隞餃???,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -1844,7 +1844,7 @@ async function handlePublishInstagramPost(req, res) {
   if (!caption) {
     const errorDetails = {
       errorCode: "INSTAGRAM_CAPTION_REQUIRED",
-      errorMessage: "隢?頛詨?潭?璅??摰嫘?,
+      errorMessage: "Request failed.",
       metaError: null,
     };
     await markInstagramPublishFailed(taskId, storedTask, errorDetails);
@@ -1861,7 +1861,7 @@ async function handlePublishInstagramPost(req, res) {
     const errorDetails = {
       errorCode: error.code || "INSTAGRAM_ACCOUNT_LOOKUP_FAILED",
       errorMessage:
-        error.message || "?⊥??? Instagram ?平撣唾?嚗?蝔??岫??,
+        error.message || "Request failed.",
       metaError: error.metaError
         ? {
             code: error.metaError.code,
@@ -1898,7 +1898,7 @@ async function handlePublishInstagramPost(req, res) {
   } catch {
     const errorDetails = {
       errorCode: "META_NETWORK_ERROR",
-      errorMessage: "?桀??⊥?撱箇? Instagram ??鞎潭?嚗?蝔??岫??,
+      errorMessage: "Request failed.",
       metaError: null,
     };
     await markInstagramPublishFailed(taskId, storedTask, errorDetails);
@@ -1948,7 +1948,7 @@ async function handlePublishInstagramPost(req, res) {
   } catch {
     const errorDetails = {
       errorCode: "META_NETWORK_ERROR",
-      errorMessage: "Instagram ??撌脣遣蝡?雿?瘜撣?隢?敺?閰艾?,
+      errorMessage: "Request failed.",
       metaError: null,
     };
     await markInstagramPublishFailed(taskId, storedTask, errorDetails);
@@ -2096,7 +2096,7 @@ async function handlePublishThreadsPost(req, res) {
   if (!taskId) {
     return sendJson(res, 400, {
       errorCode: "SOCIAL_TASK_ID_REQUIRED",
-      errorMessage: "?曆??啗??澆???遙??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2105,7 +2105,7 @@ async function handlePublishThreadsPost(req, res) {
   if (!storedTask) {
     return sendJson(res, 404, {
       errorCode: "SOCIAL_TASK_NOT_FOUND",
-      errorMessage: "?曆??圈??潭?隞餃???,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2113,7 +2113,7 @@ async function handlePublishThreadsPost(req, res) {
   if (storedTask.mode === "scheduled") {
     const errorDetails = {
       errorCode: "THREADS_SCHEDULE_NOT_SUPPORTED",
-      errorMessage: "Threads 蝚砌??銝?湔?蝔??,
+      errorMessage: "Request failed.",
       metaError: null,
     };
     await markThreadsPublishFailed(taskId, storedTask, errorDetails);
@@ -2138,7 +2138,7 @@ async function handlePublishThreadsPost(req, res) {
   if (Array.from(text).length > 500) {
     const errorDetails = {
       errorCode: "THREADS_TEXT_TOO_LONG",
-      errorMessage: "Threads ?潭??批捆銝頞? 500 摮?,
+      errorMessage: "Request failed.",
       metaError: null,
     };
     await markThreadsPublishFailed(taskId, storedTask, errorDetails);
@@ -2167,7 +2167,7 @@ async function handlePublishThreadsPost(req, res) {
   } catch {
     const errorDetails = {
       errorCode: "THREADS_NETWORK_ERROR",
-      errorMessage: "?桀??⊥?撱箇? Threads 鞎潭?嚗?蝔??岫??,
+      errorMessage: "Request failed.",
       metaError: null,
     };
     await markThreadsPublishFailed(taskId, storedTask, errorDetails);
@@ -2217,7 +2217,7 @@ async function handlePublishThreadsPost(req, res) {
   } catch {
     const errorDetails = {
       errorCode: "THREADS_NETWORK_ERROR",
-      errorMessage: "Threads 鞎潭?撌脣遣蝡?雿?瘜撣?隢?敺?閰艾?,
+      errorMessage: "Request failed.",
       metaError: null,
     };
     await markThreadsPublishFailed(taskId, storedTask, errorDetails);
@@ -2318,7 +2318,7 @@ async function handleDeleteFacebookPost(req, res) {
     return sendJson(res, 500, {
       errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
       errorMessage:
-        "Facebook Token ?⊥?嚗??湔 Page Access Token 敺?閰艾?,
+        "Request failed.",
       metaError: null,
     });
   }
@@ -2329,7 +2329,7 @@ async function handleDeleteFacebookPost(req, res) {
   if (!taskId) {
     return sendJson(res, 400, {
       errorCode: "SOCIAL_TASK_NOT_FOUND",
-      errorMessage: "?曆??圈??潭?隞餃???,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2338,7 +2338,7 @@ async function handleDeleteFacebookPost(req, res) {
   if (!task) {
     return sendJson(res, 404, {
       errorCode: "SOCIAL_TASK_NOT_FOUND",
-      errorMessage: "?曆??圈??潭?隞餃???,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2347,7 +2347,7 @@ async function handleDeleteFacebookPost(req, res) {
   if (!facebookPostId) {
     return sendJson(res, 400, {
       errorCode: "FACEBOOK_POST_ID_REQUIRED",
-      errorMessage: "??隞餃?瘝? Facebook 鞎潭? ID嚗瘜?扎?,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2355,7 +2355,7 @@ async function handleDeleteFacebookPost(req, res) {
   if (task.status !== "published") {
     return sendJson(res, 409, {
       errorCode: "FACEBOOK_POST_NOT_PUBLISHED",
-      errorMessage: "?芣?撌脩撣? Facebook 鞎潭??臭誑?芷??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2380,7 +2380,7 @@ async function handleDeleteFacebookPost(req, res) {
   } catch {
     return sendJson(res, 502, {
       errorCode: "META_NETWORK_ERROR",
-      errorMessage: "Facebook 鞎潭??芷憭望?嚗?蝔??岫??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2404,8 +2404,8 @@ async function handleDeleteFacebookPost(req, res) {
     return sendJson(res, 502, {
       errorCode: safeError.code,
       errorMessage: tokenInvalid
-        ? "Facebook Token ?⊥?嚗??湔 Page Access Token 敺?閰艾?
-        : "Facebook 鞎潭??芷憭望?嚗?蝔??岫??,
+        ? "Request failed."
+        : "Request failed.",
       metaError: {
         code: safeError.details.code,
         type: safeError.details.type,
@@ -2454,7 +2454,7 @@ async function handleSyncFacebookPost(req, res) {
     return sendJson(res, 500, {
       errorCode: "FACEBOOK_PAGE_TOKEN_NOT_CONFIGURED",
       errorMessage:
-        "Facebook Token ?⊥?嚗??湔 Page Access Token 敺?閰艾?,
+        "Request failed.",
       metaError: null,
     });
   }
@@ -2464,7 +2464,7 @@ async function handleSyncFacebookPost(req, res) {
   if (!taskId) {
     return sendJson(res, 400, {
       errorCode: "SOCIAL_TASK_NOT_FOUND",
-      errorMessage: "?曆??圈??潭?隞餃???,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2473,7 +2473,7 @@ async function handleSyncFacebookPost(req, res) {
   if (!task) {
     return sendJson(res, 404, {
       errorCode: "SOCIAL_TASK_NOT_FOUND",
-      errorMessage: "?曆??圈??潭?隞餃???,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2481,7 +2481,7 @@ async function handleSyncFacebookPost(req, res) {
   if (task.status !== "published") {
     return sendJson(res, 409, {
       errorCode: "FACEBOOK_POST_NOT_PUBLISHED",
-      errorMessage: "?芣?撌脩撣? Facebook 鞎潭??臭誑?郊???,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2490,7 +2490,7 @@ async function handleSyncFacebookPost(req, res) {
   if (!facebookPostId) {
     return sendJson(res, 400, {
       errorCode: "FACEBOOK_POST_ID_REQUIRED",
-      errorMessage: "??隞餃?瘝? Facebook 鞎潭? ID嚗瘜?甇乓?,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2516,7 +2516,7 @@ async function handleSyncFacebookPost(req, res) {
   } catch {
     return sendJson(res, 502, {
       errorCode: "META_NETWORK_ERROR",
-      errorMessage: "Facebook ???甇亙仃??隢?敺?閰艾?,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2590,8 +2590,8 @@ async function handleSyncFacebookPost(req, res) {
     errorCode: safeError.code,
     errorMessage:
       safeError.details.code === 190
-        ? "Facebook Token ?⊥?嚗??湔 Page Access Token 敺?閰艾?
-        : "Facebook ???甇亙仃??隢?敺?閰艾?,
+        ? "Request failed."
+        : "Request failed.",
     metaError: {
       code: safeError.details.code,
       type: safeError.details.type,
@@ -2644,7 +2644,7 @@ async function handleExchangeMetaToken(req, res) {
     return sendJson(res, 500, {
       ok: false,
       errorCode: "META_APP_ID_NOT_CONFIGURED",
-      errorMessage: "META_APP_ID ?芾身摰?蝛箇??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2653,7 +2653,7 @@ async function handleExchangeMetaToken(req, res) {
     return sendJson(res, 500, {
       ok: false,
       errorCode: "META_APP_SECRET_NOT_CONFIGURED",
-      errorMessage: "META_APP_SECRET ?芾身摰?蝛箇??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2662,7 +2662,7 @@ async function handleExchangeMetaToken(req, res) {
     return sendJson(res, 500, {
       ok: false,
       errorCode: "FACEBOOK_PAGE_ID_NOT_CONFIGURED",
-      errorMessage: "FACEBOOK_PAGE_ID ?芾身摰?蝛箇??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2674,7 +2674,7 @@ async function handleExchangeMetaToken(req, res) {
     return sendJson(res, 400, {
       ok: false,
       errorCode: "SHORT_LIVED_USER_TOKEN_REQUIRED",
-      errorMessage: "隢票銝?Graph API Explorer ?Ｙ????User Token??,
+      errorMessage: "Request failed.",
       metaError: null,
     });
   }
@@ -2701,7 +2701,7 @@ async function handleExchangeMetaToken(req, res) {
     const safeError = createMetaActionError(
       502,
       "META_TOKEN_EXCHANGE_NETWORK_ERROR",
-      "?桀??⊥???? Meta Token Exchange API嚗?蝔??岫??
+      "Request failed.",
     );
     return sendJson(res, safeError.status, safeError.body);
   }
@@ -2744,7 +2744,7 @@ async function handleExchangeMetaToken(req, res) {
     const safeError = createMetaActionError(
       502,
       "META_PAGE_LIST_NETWORK_ERROR",
-      "撌脖漱??User Token嚗??桀??⊥?霈??Facebook 蝎結撠?皜??
+      "Request failed.",
     );
     return sendJson(res, safeError.status, safeError.body);
   }
@@ -2778,7 +2778,7 @@ async function handleExchangeMetaToken(req, res) {
       ok: false,
       errorCode: "FACEBOOK_PAGE_NOT_FOUND",
       errorMessage:
-        "甇?User Token ?舐恣??蝎結撠?銝剜銝 FACEBOOK_PAGE_ID嚗?蝣箄?撣唾?甈???蝯脣???ID??,
+        "Request failed.",
       metaError: null,
     });
   }
@@ -2789,7 +2789,7 @@ async function handleExchangeMetaToken(req, res) {
       ok: false,
       errorCode: "FACEBOOK_PAGE_TOKEN_MISSING",
       errorMessage:
-        "撌脫?啁?蝯脣???雿?Meta ?芸???Page Access Token嚗?蝣箄? User Token 甈???,
+        "Request failed.",
       metaError: null,
     });
   }
@@ -2834,7 +2834,7 @@ async function handleAdminLogin(req, res) {
   const password = String(body?.password || "");
 
   if (!email || !password) {
-    return sendJson(res, 400, { error: "隢撓??Email ??蝣潦? });
+    return sendJson(res, 400, { error: "Request failed." });
   }
 
   let authPayload;
@@ -2844,7 +2844,7 @@ async function handleAdminLogin(req, res) {
       body: JSON.stringify({ email, password }),
     });
   } catch {
-    return sendJson(res, 401, { error: "?餃憭望?嚗?蝣箄? Email ??蝣潦? });
+    return sendJson(res, 401, { error: "Request failed." });
   }
 
   const authUser = authPayload?.user;
@@ -2856,7 +2856,7 @@ async function handleAdminLogin(req, res) {
   const profile = Array.isArray(profiles) ? profiles[0] : null;
 
   if (!profile || !profile.is_active) {
-    return sendJson(res, 403, { error: "甇文??啣董???????唳??? });
+    return sendJson(res, 403, { error: "Request failed." });
   }
 
   const permissions = await loadAdminPermissions(profile.role_code);
@@ -2876,7 +2876,7 @@ async function handleAdminLogin(req, res) {
     module: "auth",
     targetType: "admin_profile",
     targetId: profile.id,
-    description: "敺雿輻???,
+    description: "Admin login",
   });
 
   return sendJson(res, 200, normalizeAdminSessionPayload(authPayload, profile, permissions));
@@ -2966,7 +2966,7 @@ async function handleAdminRefresh(req, res) {
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
   } catch {
-    return sendJson(res, 401, { error: "?餃撌脤???隢??啁?乓? });
+    return sendJson(res, 401, { error: "Request failed." });
   }
 
   const authUser = authPayload?.user;
@@ -2977,7 +2977,7 @@ async function handleAdminRefresh(req, res) {
     : [];
   const profile = Array.isArray(profiles) ? profiles[0] : null;
   if (!profile || !profile.is_active) {
-    return sendJson(res, 403, { error: "甇文??啣董???????唳??? });
+    return sendJson(res, 403, { error: "Request failed." });
   }
   const permissions = await loadAdminPermissions(profile.role_code);
   return sendJson(res, 200, normalizeAdminSessionPayload(authPayload, profile, permissions));
@@ -3183,12 +3183,12 @@ async function handleAdminUsers(req, res, context) {
     await requirePermission(req, "users.update");
     const body = await readBody(req);
     const id = cleanText(firstQueryValue(req.query?.id) || body?.id);
-    if (!id) return sendJson(res, 400, { error: "蝻箏?雿輻??ID?? });
+    return sendJson(res, 400, { error: "Request failed." });
     const rows = await supabaseRequest(
       `/admin_profiles?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const before = Array.isArray(rows) ? rows[0] : null;
-    if (!before) return sendJson(res, 404, { error: "?曆??唬蝙?刻? });
+    return sendJson(res, 404, { error: "Request failed." });
 
     const next = {};
     if (body?.display_name !== undefined || body?.displayName !== undefined) {
@@ -3365,13 +3365,13 @@ function buildOrderItemsSummary(items = []) {
   if (items.length === 1) {
     const item = items[0];
     return {
-      items_summary: `${item.product_name || "?芸????} ?${Number(item.quantity || 0)}`,
+      items_summary: `${item.product_name || "??"} x${Number(item.quantity || 0)}`,
       item_count: 1,
     };
   }
 
   return {
-    items_summary: `??${items.length} ???,
+    items_summary: `? ${items.length} ???`,
     item_count: items.length,
   };
 }
@@ -4461,7 +4461,7 @@ async function lookupInventoryBySku(req, res) {
 
   if (variants.length > 1) {
     return sendJson(res, 409, {
-      error: "??蝺刻???嚗??耨甇??????,
+      error: "Request failed.",
     });
   }
 
@@ -4665,7 +4665,7 @@ function parseNumber(value, fallback = 0) {
 function getWarehouseNonNegativeInteger(value, fieldName) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
-    const error = new Error(`${fieldName} 銝撠 0?);
+    const error = new Error(`${fieldName} must be greater than or equal to 0.`);
     error.status = 400;
     throw error;
   }
@@ -4676,7 +4676,7 @@ function getWarehouseOptionalNonNegativeNumber(value, fieldName) {
   if (value === "" || value == null) return null;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
-    const error = new Error(`${fieldName} 銝撠 0?);
+    const error = new Error(`${fieldName} must be greater than or equal to 0.`);
     error.status = 400;
     throw error;
   }
@@ -4747,7 +4747,7 @@ async function assertWarehouseMediaTargetExists(targetType, targetId) {
   };
   const table = tableByTargetType[targetType];
   if (!table || !targetId) {
-    const error = new Error("?抒?撠?鞈?銝迤蝣箝?);
+    const error = new Error("Request failed.");
     error.status = 400;
     throw error;
   }
@@ -4756,7 +4756,7 @@ async function assertWarehouseMediaTargetExists(targetType, targetId) {
     `/${table}?id=eq.${encodeURIComponent(targetId)}&select=id&limit=1`
   );
   if (!Array.isArray(rows) || !rows.length) {
-    const error = new Error("?曆??啁????鞈?嚗??摮??????喟??);
+    const error = new Error("Request failed.");
     error.status = 404;
     throw error;
   }
@@ -4839,7 +4839,7 @@ async function loadWarehouseSupplies(req, res) {
       `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const item = Array.isArray(rows) ? rows[0] : null;
-    if (!item) return sendJson(res, 404, { error: "?曆??圈????? });
+    return sendJson(res, 404, { error: "Request failed." });
     const mediaById = await loadWarehouseMediaForTargets("supply", [item.id]);
     return sendJson(res, 200, { item: attachWarehouseMedia([item], mediaById)[0] });
   }
@@ -4859,7 +4859,7 @@ async function loadWarehouseSupplies(req, res) {
 function normalizeSupplyPayload(body) {
   const locationCode = cleanText(body?.location_code);
   if (!warehouseLocationCodeSet.has(locationCode)) {
-    const error = new Error("摮雿蔭銝迤蝣箝?);
+    const error = new Error("Request failed.");
     error.status = 400;
     throw error;
   }
@@ -4892,7 +4892,7 @@ async function deleteWarehouseMediaRows(rows) {
       )
     );
   } catch {
-    const error = new Error("R2 ???芷憭望?嚗????芸?扎?);
+    const error = new Error("Request failed.");
     error.status = 502;
     throw error;
   }
@@ -4919,7 +4919,7 @@ async function handleWarehouseSupply(req, res, context) {
   if (req.method === "POST") {
     const body = await readBody(req);
     const payload = normalizeSupplyPayload(body);
-    if (!payload.name) return sendJson(res, 400, { error: "隢撓?亙??? });
+    return sendJson(res, 400, { error: "Request failed." });
     const created = await supabaseRequest("/shop_supply_items", {
       method: "POST",
       body: JSON.stringify({ ...payload, created_at: new Date().toISOString() }),
@@ -4940,13 +4940,13 @@ async function handleWarehouseSupply(req, res, context) {
   if (req.method === "PATCH") {
     const body = await readBody(req);
     const id = cleanText(body?.id);
-    if (!id) return sendJson(res, 400, { error: "蝻箏??? ID?? });
+    return sendJson(res, 400, { error: "Request failed." });
     const beforeRows = await supabaseRequest(
       `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
     const payload = normalizeSupplyPayload(body);
-    if (!payload.name) return sendJson(res, 400, { error: "隢撓?亙??? });
+    return sendJson(res, 400, { error: "Request failed." });
     const updated = await supabaseRequest(`/shop_supply_items?id=eq.${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
@@ -4967,7 +4967,7 @@ async function handleWarehouseSupply(req, res, context) {
 
   if (req.method === "DELETE") {
     const id = cleanText(firstQueryValue(req.query?.id));
-    if (!id) return sendJson(res, 400, { error: "蝻箏??? ID?? });
+    return sendJson(res, 400, { error: "Request failed." });
     const beforeRows = await supabaseRequest(
       `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
@@ -4994,16 +4994,16 @@ async function handleWarehouseSupplyQuantity(req, res, context) {
   const body = await readBody(req);
   const id = cleanText(body?.id);
   const delta = Math.trunc(parseNumber(body?.delta, 0));
-  if (!id || !delta) return sendJson(res, 400, { error: "蝻箏?隤踵鞈??? });
+  return sendJson(res, 400, { error: "Request failed." });
 
   const rows = await supabaseRequest(
     `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
   );
   const item = Array.isArray(rows) ? rows[0] : null;
-  if (!item) return sendJson(res, 404, { error: "?曆??圈????? });
+  return sendJson(res, 404, { error: "Request failed." });
 
   const quantity = Number(item.quantity || 0) + delta;
-  if (quantity < 0) return sendJson(res, 400, { error: "?桀??賊?銝撠 0?? });
+  return sendJson(res, 400, { error: "Request failed." });
   const updated = await supabaseRequest(`/shop_supply_items?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify({ quantity, updated_at: new Date().toISOString() }),
@@ -5052,7 +5052,7 @@ async function loadWarehouseFurniture(req, res) {
       `/shop_furniture_assets?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const asset = Array.isArray(rows) ? rows[0] : null;
-    if (!asset) return sendJson(res, 404, { error: "?曆??圈??Ｖ膨鞈?? });
+    return sendJson(res, 404, { error: "Request failed." });
     const mediaById = await loadWarehouseMediaForTargets("furniture", [asset.id]);
     return sendJson(res, 200, { asset: attachWarehouseMedia([asset], mediaById)[0] });
   }
@@ -5075,7 +5075,7 @@ async function handleWarehouseFurniture(req, res, context) {
     const body = await readBody(req);
     const payload = normalizeFurniturePayload(body);
     if (!payload.asset_name || !payload.asset_number) {
-      return sendJson(res, 400, { error: "隢撓?亥??Ｗ?蝔梯?鞈蝺刻??? });
+      return sendJson(res, 400, { error: "Request failed." });
     }
 
     const duplicate = await supabaseRequest(
@@ -5083,7 +5083,7 @@ async function handleWarehouseFurniture(req, res, context) {
     );
     const existingId = Array.isArray(duplicate) ? duplicate[0]?.id : "";
     if (existingId && (req.method === "POST" || existingId !== cleanText(body?.id))) {
-      return sendJson(res, 409, { error: "鞈蝺刻?銝???? });
+      return sendJson(res, 409, { error: "Request failed." });
     }
 
     if (req.method === "POST") {
@@ -5105,7 +5105,7 @@ async function handleWarehouseFurniture(req, res, context) {
     }
 
     const id = cleanText(body?.id);
-    if (!id) return sendJson(res, 400, { error: "蝻箏?鞈 ID?? });
+    return sendJson(res, 400, { error: "Request failed." });
     const beforeRows = await supabaseRequest(
       `/shop_furniture_assets?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
@@ -5130,7 +5130,7 @@ async function handleWarehouseFurniture(req, res, context) {
 
   if (req.method === "DELETE") {
     const id = cleanText(firstQueryValue(req.query?.id));
-    if (!id) return sendJson(res, 400, { error: "蝻箏?鞈 ID?? });
+    return sendJson(res, 400, { error: "Request failed." });
     const beforeRows = await supabaseRequest(
       `/shop_furniture_assets?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
@@ -5155,7 +5155,7 @@ async function handleWarehouseFurniture(req, res, context) {
 function normalizeHousekeepingPayload(body) {
   const recordType = cleanText(body?.record_type);
   if (!["cleaning_completed", "checkout_issue"].includes(recordType)) {
-    const error = new Error("??憿?銝迤蝣箝?);
+    const error = new Error("Request failed.");
     error.status = 400;
     throw error;
   }
@@ -5236,7 +5236,7 @@ async function handleHousekeepingRecord(req, res, context) {
   if (req.method === "POST" || req.method === "PATCH") {
     const body = await readBody(req);
     const payload = normalizeHousekeepingPayload(body);
-    if (!payload.room_area) return sendJson(res, 400, { error: "隢撓?交????? });
+    return sendJson(res, 400, { error: "Request failed." });
 
     if (req.method === "POST") {
       const created = await supabaseRequest("/shop_housekeeping_records", {
@@ -5261,7 +5261,7 @@ async function handleHousekeepingRecord(req, res, context) {
     }
 
     const id = cleanText(body?.id);
-    if (!id) return sendJson(res, 400, { error: "蝻箏??踹?摮? ID?? });
+    return sendJson(res, 400, { error: "Request failed." });
     const beforeRows = await supabaseRequest(
       `/shop_housekeeping_records?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
@@ -5289,7 +5289,7 @@ async function handleHousekeepingRecord(req, res, context) {
 
   if (req.method === "DELETE") {
     const id = cleanText(firstQueryValue(req.query?.id));
-    if (!id) return sendJson(res, 400, { error: "蝻箏??踹?摮? ID?? });
+    return sendJson(res, 400, { error: "Request failed." });
     const beforeRows = await supabaseRequest(
       `/shop_housekeeping_records?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
@@ -5340,14 +5340,14 @@ async function handleWarehouseMediaUpload(req, res, context) {
   const fileRule = allowedWarehouseFileTypes.get(contentType);
 
   if (!warehouseTargetTypes.has(targetType) || !targetId) {
-    return sendJson(res, 400, { error: "蝻箏??抒?撠?鞈??? });
+    return sendJson(res, 400, { error: "Request failed." });
   }
   assertWarehouseMediaPermission(context, targetType, "write");
   await assertWarehouseMediaTargetExists(targetType, targetId);
-  if (!fileName) return sendJson(res, 400, { error: "蝻箏?瑼??? });
-  if (!fileRule) return sendJson(res, 400, { error: "?芣??JPG?NG ??WebP ???? });
+  return sendJson(res, 400, { error: "Request failed." });
+  return sendJson(res, 400, { error: "Request failed." });
   if (!Number.isFinite(size) || size <= 0 || size > fileRule.maxSize) {
-    return sendJson(res, 400, { error: "??憭批?銝迤蝣綽??桀撐銝? 10MB?? });
+    return sendJson(res, 400, { error: "Request failed." });
   }
 
   const { bucketName, publicBaseUrl, client } = getWarehouseR2Config();
@@ -5386,15 +5386,15 @@ async function handleWarehouseMedia(req, res, context) {
     const mediaSize = body?.size == null ? null : Number(body.size);
     const mediaSortOrder = Math.trunc(parseNumber(body?.sort_order, 0));
     if (!warehouseTargetTypes.has(targetType) || !targetId) {
-      return sendJson(res, 400, { error: "蝻箏??抒?撠?鞈??? });
+      return sendJson(res, 400, { error: "Request failed." });
     }
     assertWarehouseMediaPermission(context, targetType, "write");
     await assertWarehouseMediaTargetExists(targetType, targetId);
     if (mediaSize !== null && (!Number.isFinite(mediaSize) || mediaSize < 0)) {
-      return sendJson(res, 400, { error: "??憭批?銝撠 0?? });
+      return sendJson(res, 400, { error: "Request failed." });
     }
     if (mediaSortOrder < 0) {
-      return sendJson(res, 400, { error: "????銝撠 0?? });
+      return sendJson(res, 400, { error: "Request failed." });
     }
     const created = await supabaseRequest("/shop_warehouse_media", {
       method: "POST",
@@ -5425,12 +5425,12 @@ async function handleWarehouseMedia(req, res, context) {
 
   if (req.method === "DELETE") {
     const id = cleanText(firstQueryValue(req.query?.id));
-    if (!id) return sendJson(res, 400, { error: "蝻箏??抒? ID?? });
+    return sendJson(res, 400, { error: "Request failed." });
     const rows = await supabaseRequest(
       `/shop_warehouse_media?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const media = Array.isArray(rows) ? rows[0] : null;
-    if (!media) return sendJson(res, 404, { error: "?曆??圈撐?抒??? });
+    return sendJson(res, 404, { error: "Request failed." });
     assertWarehouseMediaPermission(context, cleanText(media.target_type), "delete");
     await deleteWarehouseMediaRows([media]);
     await supabaseRequest(`/shop_warehouse_media?id=eq.${encodeURIComponent(id)}`, {

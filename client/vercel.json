@@ -7,16 +7,28 @@
       "includeFiles": "api/knowledge/guesthouse-rules.md"
     },
     "api/shop.js": {
-      "includeFiles": "server/shopShared.js"
+      "includeFiles": [
+        "api/package.json",
+        "server/**"
+      ]
     },
     "api/admin-shop.js": {
-      "includeFiles": "server/shopShared.js"
+      "includeFiles": [
+        "api/package.json",
+        "server/**"
+      ]
     },
     "api/social-upload.js": {
-      "includeFiles": "server/shopShared.js"
+      "includeFiles": [
+        "api/package.json",
+        "server/**"
+      ]
     },
     "api/instagram-oauth-callback.js": {
-      "includeFiles": "server/shopShared.js"
+      "includeFiles": [
+        "api/package.json",
+        "server/**"
+      ]
     }
   },
   "rewrites": [

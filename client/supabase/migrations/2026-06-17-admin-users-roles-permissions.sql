@@ -83,9 +83,6 @@ create trigger set_admin_profiles_updated_at
 create index if not exists admin_profiles_auth_user_id_idx
   on public.admin_profiles (auth_user_id);
 
-create index if not exists admin_profiles_email_idx
-  on public.admin_profiles (email);
-
 create index if not exists admin_profiles_role_code_idx
   on public.admin_profiles (role_code);
 
@@ -204,6 +201,9 @@ where permission_code = 'warehouse.view';
 
 delete from public.admin_permissions
 where code = 'warehouse.view';
+
+delete from public.admin_role_permissions
+where role_code in ('super_admin', 'admin', 'housekeeper', 'cleaner');
 
 insert into public.admin_role_permissions (role_code, permission_code)
 select 'super_admin', code from public.admin_permissions

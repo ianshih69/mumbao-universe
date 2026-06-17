@@ -1,3 +1,5 @@
+import { withHandlerSafety } from "../server/adminShop/withHandlerSafety.js";
+
 const routeLoaders = {
   "admin-legacy-login": () => import("../server/adminShop/legacyLogin.js"),
   "warehouse-supply-quantity": () =>
@@ -11,43 +13,26 @@ function firstQueryValue(value) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function sendJson(res, status, body) {
-  res.statusCode = status;
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.end(JSON.stringify(body));
-}
-
 function getAction(req) {
   return String(firstQueryValue(req.query?.action) || "").trim();
 }
 
 function loadRoute(action) {
-  return routeLoaders[action] || (() => import("../server/adminShop/core.js"));
+  return routeLoaders[action] || (() => import("../server/adminShop/fallback.js"));
 }
 
-export default async function handler(req, res) {
+async function dispatchAdminShop(req, res) {
   const action = getAction(req);
+  const routeModule = await loadRoute(action)();
+  const routeHandler = routeModule.default;
 
-  try {
-    const routeModule = await loadRoute(action)();
-    const routeHandler = routeModule.default;
-
-    if (typeof routeHandler !== "function") {
-      return sendJson(res, 500, { error: "Admin shop route is not configured." });
-    }
-
-    return await routeHandler(req, res);
-  } catch (error) {
-    console.error("admin shop router error:", error);
-    return sendJson(res, error.status || 500, {
-      error:
-        error.status === 401
-          ? "Unauthorized."
-          : error.status === 403
-            ? "Permission denied."
-            : error.status === 400 || error.status === 404 || error.status === 409
-              ? error.message
-            : "Admin shop request failed.",
-    });
+  if (typeof routeHandler !== "function") {
+    const error = new Error("Admin shop route is not configured.");
+    error.status = 500;
+    throw error;
   }
+
+  return await routeHandler(req, res);
 }
+
+export default withHandlerSafety(dispatchAdminShop, { name: "admin-shop-router" });

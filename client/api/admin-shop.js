@@ -7,8 +7,6 @@ import {
   supabaseRpc,
 } from "../server/shopShared.js";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const defaultLimit = 30;
 const maxLimit = 50;
@@ -93,10 +91,25 @@ const allowedWarehouseFileTypes = new Map([
   ["image/webp", { extension: "webp", maxSize: 10 * 1024 * 1024 }],
 ]);
 const warehousePresignedUrlExpiresInSeconds = 10 * 60;
+let warehouseAwsSdkPromise = null;
 const legacySessionTtlMs = 60 * 60 * 1000;
 const bootstrapRateLimitWindowMs = 15 * 60 * 1000;
 const bootstrapRateLimitMaxAttempts = 5;
 const bootstrapAttempts = new Map();
+
+async function loadWarehouseAwsSdk() {
+  warehouseAwsSdkPromise ||= Promise.all([
+    import("@aws-sdk/client-s3"),
+    import("@aws-sdk/s3-request-presigner"),
+  ]).then(([clientS3, presigner]) => ({
+    DeleteObjectCommand: clientS3.DeleteObjectCommand,
+    PutObjectCommand: clientS3.PutObjectCommand,
+    S3Client: clientS3.S3Client,
+    getSignedUrl: presigner.getSignedUrl,
+  }));
+
+  return warehouseAwsSdkPromise;
+}
 
 function requireAdmin(req) {
   const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
@@ -4706,7 +4719,7 @@ function getWarehouseTaipeiDate() {
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
-function getWarehouseR2Config() {
+async function getWarehouseR2Config() {
   const bucketName = cleanText(getServerEnv("R2_BUCKET_NAME"));
   const accessKeyId = cleanText(getServerEnv("R2_ACCESS_KEY_ID"));
   const secretAccessKey = cleanText(getServerEnv("R2_SECRET_ACCESS_KEY"));
@@ -4718,6 +4731,8 @@ function getWarehouseR2Config() {
     error.status = 500;
     throw error;
   }
+
+  const { S3Client } = await loadWarehouseAwsSdk();
 
   return {
     bucketName,
@@ -4879,7 +4894,8 @@ function normalizeSupplyPayload(body) {
 
 async function deleteWarehouseMediaRows(rows) {
   if (!rows.length) return;
-  const { bucketName, client } = getWarehouseR2Config();
+  const { DeleteObjectCommand } = await loadWarehouseAwsSdk();
+  const { bucketName, client } = await getWarehouseR2Config();
   try {
     await Promise.all(
       rows.map((media) =>
@@ -5350,7 +5366,8 @@ async function handleWarehouseMediaUpload(req, res, context) {
     return sendJson(res, 400, { error: "Request failed." });
   }
 
-  const { bucketName, publicBaseUrl, client } = getWarehouseR2Config();
+  const { PutObjectCommand, getSignedUrl } = await loadWarehouseAwsSdk();
+  const { bucketName, publicBaseUrl, client } = await getWarehouseR2Config();
   const key = [
     warehouseMediaPrefix(targetType, targetId),
     getWarehouseTaipeiDate(),

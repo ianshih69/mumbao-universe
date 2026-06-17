@@ -5,11 +5,13 @@ import AdminShopNav from "@/components/shop/AdminShopNav";
 import {
   adminAuthExpiredMessage,
   clearAdminToken,
+  getAdminIdentity,
   getAdminToken,
   getInitialAdminAuthStatus,
-  setAdminToken,
+  setAdminSession,
   type AdminAuthStatus,
 } from "@/lib/shop/adminAuth";
+import { fetchAdminSession } from "@/lib/shop/adminIdentityApi";
 import {
   adjustSupplyQuantity,
   deleteFurnitureAsset,
@@ -165,7 +167,17 @@ function LoginCard({ onLogin }: { onLogin: (token: string) => void }) {
           onSubmit={(event) => {
             event.preventDefault();
             if (!password.trim()) return;
-            setAdminToken(password.trim());
+            setAdminSession({
+              accessToken: password.trim(),
+              authMode: "legacy",
+              user: {
+                display_name: "舊版共用密碼",
+                role_code: "legacy_admin",
+                role_name: "舊版共用密碼",
+                permissions: ["*"],
+                is_active: true,
+              },
+            });
             onLogin(password.trim());
           }}
         >
@@ -179,6 +191,12 @@ function LoginCard({ onLogin }: { onLogin: (token: string) => void }) {
           <button className="w-full rounded-full bg-[#8b6f5b] px-5 py-3 text-sm font-semibold text-white">
             進入後台
           </button>
+          <a
+            className="block text-center text-sm font-medium text-[#8b6f5b] underline"
+            href="/admin/shop/login?redirect=/admin/shop/warehouse"
+          >
+            使用個人帳號登入
+          </a>
         </form>
       </div>
     </main>
@@ -210,6 +228,7 @@ export default function AdminShopWarehouse() {
   const [files, setFiles] = useState<File[]>([]);
   const [supplyPhotoPreview, setSupplyPhotoPreview] = useState("");
   const [supplyPhotoFileName, setSupplyPhotoFileName] = useState("");
+  const identity = getAdminIdentity();
 
   useEffect(() => {
     const nextToken = getAdminToken();
@@ -234,6 +253,8 @@ export default function AdminShopWarehouse() {
     if (!nextToken) return;
     setIsLoading(true);
     try {
+      const session = await fetchAdminSession(nextToken);
+      setAdminSession({ accessToken: nextToken, user: session.user, authMode: session.authMode });
       const [locationData, dashboardData, supplyData, furnitureData, recordData] = await Promise.all([
         fetchWarehouseLocations(nextToken),
         fetchWarehouseDashboard(nextToken),
@@ -378,6 +399,11 @@ export default function AdminShopWarehouse() {
             <h1 className="mt-2 text-3xl font-semibold text-stone-950">倉儲與資產</h1>
             <p className="mt-2 text-sm text-stone-600">
               管理備品庫存、傢俱資產、房務存證與倉庫位置 QR Code。
+            </p>
+            <p className="mt-2 text-xs text-stone-500">
+              登入方式：{identity?.authMode === "account" ? "個人帳號" : "舊版共用密碼"}
+              {identity?.display_name ? `｜${identity.display_name}` : ""}
+              {identity?.role_name ? `｜${identity.role_name}` : ""}
             </p>
           </div>
           <button

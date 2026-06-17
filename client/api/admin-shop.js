@@ -116,6 +116,252 @@ function requireAdmin(req) {
   }
 }
 
+const legacyAdminPermissions = ["*"];
+
+function createHttpError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+function getBearerToken(req) {
+  const authHeader = String(req.headers?.authorization || "");
+  return authHeader.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length).trim()
+    : "";
+}
+
+function getSupabaseBaseUrl() {
+  const url = String(getServerEnv("SUPABASE_URL") || "").replace(/\/$/, "");
+  if (!url) throw createHttpError(500, "SUPABASE_URL is not configured.");
+  return url;
+}
+
+function getSupabaseServiceRoleKey() {
+  const key = String(getServerEnv("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
+  if (!key) {
+    throw createHttpError(500, "SUPABASE_SERVICE_ROLE_KEY is not configured.");
+  }
+  return key;
+}
+
+async function supabaseAuthRequest(pathname, options = {}) {
+  const url = `${getSupabaseBaseUrl()}${pathname}`;
+  const serviceRoleKey = getSupabaseServiceRoleKey();
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+
+  if (!response.ok) {
+    const error = createHttpError(
+      response.status,
+      data?.error_description || data?.msg || data?.message || "Supabase Auth request failed."
+    );
+    error.details = data;
+    throw error;
+  }
+
+  return data;
+}
+
+function getRoleName(roleCode) {
+  const names = {
+    super_admin: "超級管理員",
+    admin: "一般管理員",
+    housekeeper: "管家",
+    cleaner: "清潔人員",
+  };
+  return names[roleCode] || roleCode || "未設定角色";
+}
+
+function normalizeAdminProfile(profile, permissions = []) {
+  if (!profile) return null;
+  return {
+    id: profile.id,
+    auth_user_id: profile.auth_user_id,
+    display_name: profile.display_name,
+    email: profile.email,
+    role_code: profile.role_code,
+    role_name: getRoleName(profile.role_code),
+    is_active: Boolean(profile.is_active),
+    created_at: profile.created_at || null,
+    updated_at: profile.updated_at || null,
+    created_by: profile.created_by || null,
+    last_login_at: profile.last_login_at || null,
+    permissions,
+  };
+}
+
+async function loadAdminPermissions(roleCode) {
+  if (!roleCode) return [];
+  if (roleCode === "super_admin") {
+    const rows = await supabaseRequest("/admin_permissions?select=code&order=code.asc");
+    return Array.isArray(rows) ? rows.map((row) => row.code).filter(Boolean) : [];
+  }
+
+  const rows = await supabaseRequest(
+    `/admin_role_permissions?role_code=eq.${encodeURIComponent(roleCode)}&select=permission_code`
+  );
+  return Array.isArray(rows)
+    ? rows.map((row) => row.permission_code).filter(Boolean)
+    : [];
+}
+
+function getLegacyAdminContext(req) {
+  const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
+  const bearerToken = getBearerToken(req);
+  const providedPassword =
+    bearerToken || String(req.headers?.["x-admin-password"] || "").trim();
+
+  if (adminPassword && providedPassword === adminPassword) {
+    return {
+      authMode: "legacy",
+      actorAuthUserId: null,
+      actorName: "舊版共用密碼",
+      actorEmail: "",
+      roleCode: "legacy_admin",
+      roleName: "舊版共用密碼",
+      permissions: legacyAdminPermissions,
+      profile: null,
+    };
+  }
+
+  return null;
+}
+
+async function verifySupabaseAccessToken(accessToken) {
+  if (!accessToken) throw createHttpError(401, "Unauthorized.");
+
+  const response = await fetch(`${getSupabaseBaseUrl()}/auth/v1/user`, {
+    headers: {
+      apikey: getSupabaseServiceRoleKey(),
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok || !data?.id) {
+    throw createHttpError(401, "Unauthorized.");
+  }
+
+  return data;
+}
+
+async function requireAuthenticatedAdmin(req) {
+  const legacyContext = getLegacyAdminContext(req);
+  if (legacyContext) return legacyContext;
+
+  const authUser = await verifySupabaseAccessToken(getBearerToken(req));
+  const profiles = await supabaseRequest(
+    `/admin_profiles?auth_user_id=eq.${encodeURIComponent(authUser.id)}&select=*&limit=1`
+  );
+  const profile = Array.isArray(profiles) ? profiles[0] : null;
+
+  if (!profile || !profile.is_active) {
+    throw createHttpError(403, "Admin account is inactive or not allowed.");
+  }
+
+  const permissions = await loadAdminPermissions(profile.role_code);
+  return {
+    authMode: "account",
+    actorAuthUserId: profile.auth_user_id,
+    actorName: profile.display_name,
+    actorEmail: profile.email,
+    roleCode: profile.role_code,
+    roleName: getRoleName(profile.role_code),
+    permissions,
+    profile: normalizeAdminProfile(profile, permissions),
+  };
+}
+
+async function requirePermission(req, permissionCode) {
+  const context = await requireAuthenticatedAdmin(req);
+  if (
+    context.permissions.includes("*") ||
+    context.roleCode === "super_admin" ||
+    context.permissions.includes(permissionCode)
+  ) {
+    return context;
+  }
+
+  throw createHttpError(403, "Permission denied.");
+}
+
+function filterSensitiveAuditData(value) {
+  if (!value || typeof value !== "object") return value ?? null;
+  const sensitiveKeys = new Set([
+    "password",
+    "access_token",
+    "refresh_token",
+    "token",
+    "secret",
+    "service_role",
+    "service_role_key",
+    "r2_secret",
+    "facebook_page_access_token",
+    "instagram_user_access_token",
+    "threads_access_token",
+  ]);
+
+  if (Array.isArray(value)) return value.map((item) => filterSensitiveAuditData(item));
+
+  const next = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const lowerKey = key.toLowerCase();
+    if ([...sensitiveKeys].some((sensitiveKey) => lowerKey.includes(sensitiveKey))) {
+      next[key] = "[redacted]";
+    } else if (entry && typeof entry === "object") {
+      next[key] = filterSensitiveAuditData(entry);
+    } else {
+      next[key] = entry;
+    }
+  }
+  return next;
+}
+
+async function writeAdminActivityLog({
+  req,
+  context,
+  action,
+  module,
+  targetType,
+  targetId,
+  description,
+  beforeData,
+  afterData,
+}) {
+  try {
+    await supabaseRequest("/admin_activity_logs", {
+      method: "POST",
+      body: JSON.stringify({
+        actor_auth_user_id: context?.actorAuthUserId || null,
+        actor_name: context?.actorName || null,
+        actor_email: context?.actorEmail || null,
+        action,
+        module,
+        target_type: targetType || null,
+        target_id: targetId ? String(targetId) : null,
+        description: description || null,
+        before_data: filterSensitiveAuditData(beforeData),
+        after_data: filterSensitiveAuditData(afterData),
+        request_id: String(req.headers?.["x-vercel-id"] || req.headers?.["x-request-id"] || "") || null,
+        ip_address: String(req.headers?.["x-forwarded-for"] || "").split(",")[0].trim() || null,
+        user_agent: String(req.headers?.["user-agent"] || "") || null,
+      }),
+    });
+  } catch (error) {
+    console.warn("admin activity log failed:", error?.message || "unknown");
+  }
+}
+
 function isSecureRequest(req) {
   const forwardedProto = String(req.headers?.["x-forwarded-proto"] || "")
     .split(",")[0]
@@ -2425,6 +2671,341 @@ async function handleExchangeMetaToken(req, res) {
   });
 }
 
+function normalizeAdminSessionPayload(authPayload, profile, permissions) {
+  const accessToken = authPayload?.access_token || "";
+  const refreshToken = authPayload?.refresh_token || "";
+  const expiresIn = Number(authPayload?.expires_in || 0);
+  return {
+    accessToken,
+    refreshToken,
+    expiresAt: expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null,
+    user: normalizeAdminProfile(profile, permissions),
+  };
+}
+
+async function handleAdminLogin(req, res) {
+  if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
+  const body = await readBody(req);
+  const email = cleanText(body?.email).toLowerCase();
+  const password = String(body?.password || "");
+
+  if (!email || !password) {
+    return sendJson(res, 400, { error: "請輸入 Email 與密碼。" });
+  }
+
+  let authPayload;
+  try {
+    authPayload = await supabaseAuthRequest("/auth/v1/token?grant_type=password", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    return sendJson(res, 401, { error: "登入失敗，請確認 Email 或密碼。" });
+  }
+
+  const authUser = authPayload?.user;
+  const profiles = authUser?.id
+    ? await supabaseRequest(
+      `/admin_profiles?auth_user_id=eq.${encodeURIComponent(authUser.id)}&select=*&limit=1`
+    )
+    : [];
+  const profile = Array.isArray(profiles) ? profiles[0] : null;
+
+  if (!profile || !profile.is_active) {
+    return sendJson(res, 403, { error: "此後台帳號未啟用或沒有後台權限。" });
+  }
+
+  const permissions = await loadAdminPermissions(profile.role_code);
+  await supabaseRequest(`/admin_profiles?id=eq.${encodeURIComponent(profile.id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ last_login_at: new Date().toISOString() }),
+  });
+
+  await writeAdminActivityLog({
+    req,
+    context: {
+      actorAuthUserId: profile.auth_user_id,
+      actorName: profile.display_name,
+      actorEmail: profile.email,
+    },
+    action: "login",
+    module: "auth",
+    targetType: "admin_profile",
+    targetId: profile.id,
+    description: "後台使用者登入",
+  });
+
+  return sendJson(res, 200, normalizeAdminSessionPayload(authPayload, profile, permissions));
+}
+
+async function handleAdminRefresh(req, res) {
+  if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
+  const body = await readBody(req);
+  const refreshToken = String(body?.refreshToken || "").trim();
+  if (!refreshToken) return sendJson(res, 400, { error: "Missing refresh token." });
+
+  let authPayload;
+  try {
+    authPayload = await supabaseAuthRequest("/auth/v1/token?grant_type=refresh_token", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+  } catch {
+    return sendJson(res, 401, { error: "登入已過期，請重新登入。" });
+  }
+
+  const authUser = authPayload?.user;
+  const profiles = authUser?.id
+    ? await supabaseRequest(
+      `/admin_profiles?auth_user_id=eq.${encodeURIComponent(authUser.id)}&select=*&limit=1`
+    )
+    : [];
+  const profile = Array.isArray(profiles) ? profiles[0] : null;
+  if (!profile || !profile.is_active) {
+    return sendJson(res, 403, { error: "此後台帳號未啟用或沒有後台權限。" });
+  }
+  const permissions = await loadAdminPermissions(profile.role_code);
+  return sendJson(res, 200, normalizeAdminSessionPayload(authPayload, profile, permissions));
+}
+
+async function handleAdminSession(req, res, context) {
+  if (req.method !== "GET") return sendJson(res, 405, { error: "Method not allowed." });
+  return sendJson(res, 200, {
+    authMode: context.authMode,
+    user:
+      context.authMode === "legacy"
+        ? {
+          display_name: "舊版共用密碼",
+          email: "",
+          role_code: "legacy_admin",
+          role_name: "舊版共用密碼",
+          permissions: legacyAdminPermissions,
+          is_active: true,
+        }
+        : context.profile,
+    permissions: context.permissions,
+  });
+}
+
+async function createSupabaseAdminUser({ email, password, displayName }) {
+  return await supabaseAuthRequest("/auth/v1/admin/users", {
+    method: "POST",
+    body: JSON.stringify({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { display_name: displayName },
+    }),
+  });
+}
+
+async function handleAdminBootstrapSuper(req, res) {
+  if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
+  const body = await readBody(req);
+  const legacyPassword = String(body?.legacyAdminPassword || "");
+  const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
+  if (!adminPassword || legacyPassword !== adminPassword) {
+    return sendJson(res, 401, { error: "Unauthorized." });
+  }
+
+  const existing = await supabaseRequest(
+    "/admin_profiles?role_code=eq.super_admin&select=id&limit=1"
+  );
+  if (Array.isArray(existing) && existing.length > 0) {
+    return sendJson(res, 409, { error: "第一位 super_admin 已存在，bootstrap 已停用。" });
+  }
+
+  const displayName = cleanText(body?.displayName);
+  const email = cleanText(body?.email).toLowerCase();
+  const password = String(body?.password || "");
+  if (!displayName || !email || !password) {
+    return sendJson(res, 400, { error: "請輸入姓名、Email 與初始密碼。" });
+  }
+
+  const authUser = await createSupabaseAdminUser({ email, password, displayName });
+  const authUserId = authUser?.id || authUser?.user?.id;
+  if (!authUserId) return sendJson(res, 500, { error: "Supabase Auth 使用者建立失敗。" });
+
+  const profileRows = await supabaseRequest("/admin_profiles", {
+    method: "POST",
+    body: JSON.stringify({
+      auth_user_id: authUserId,
+      display_name: displayName,
+      email,
+      role_code: "super_admin",
+      is_active: true,
+    }),
+  });
+
+  return sendJson(res, 201, {
+    ok: true,
+    profile: normalizeAdminProfile(profileRows?.[0], await loadAdminPermissions("super_admin")),
+  });
+}
+
+async function loadAdminUsers(req, res, context) {
+  await requirePermission(req, "users.view");
+  const rows = await supabaseRequest(
+    "/admin_profiles?select=*&order=created_at.desc&limit=200"
+  );
+  return sendJson(res, 200, {
+    users: Array.isArray(rows)
+      ? rows.map((row) => normalizeAdminProfile(row, []))
+      : [],
+    currentUser: context.profile,
+  });
+}
+
+async function assertCanMutateAdminUser(context, targetProfile, nextRoleCode = targetProfile?.role_code) {
+  if (context.authMode === "legacy") return;
+  if (context.roleCode !== "super_admin") {
+    if (targetProfile?.role_code === "super_admin" || nextRoleCode === "super_admin") {
+      throw createHttpError(403, "一般管理員不可修改 super_admin。");
+    }
+  }
+}
+
+async function assertNotLastSuperAdmin(profile, nextValues = {}) {
+  const willRemainSuper = (nextValues.role_code || profile.role_code) === "super_admin";
+  const willRemainActive =
+    typeof nextValues.is_active === "boolean" ? nextValues.is_active : profile.is_active;
+  if (willRemainSuper && willRemainActive) return;
+  if (profile.role_code !== "super_admin" || !profile.is_active) return;
+
+  const rows = await supabaseRequest(
+    "/admin_profiles?role_code=eq.super_admin&is_active=eq.true&select=id"
+  );
+  const activeSuperCount = Array.isArray(rows) ? rows.length : 0;
+  if (activeSuperCount <= 1) {
+    throw createHttpError(409, "不可停用或降級最後一位 super_admin。");
+  }
+}
+
+async function handleAdminUsers(req, res, context) {
+  if (req.method === "GET") return await loadAdminUsers(req, res, context);
+
+  if (req.method === "POST") {
+    await requirePermission(req, "users.create");
+    const body = await readBody(req);
+    const displayName = cleanText(body?.display_name || body?.displayName);
+    const email = cleanText(body?.email).toLowerCase();
+    const password = String(body?.password || "");
+    const roleCode = cleanText(body?.role_code || body?.roleCode) || "cleaner";
+    const isActive = body?.is_active !== false;
+
+    if (!displayName || !email || !password) {
+      return sendJson(res, 400, { error: "請輸入姓名、Email 與初始密碼。" });
+    }
+    await assertCanMutateAdminUser(context, null, roleCode);
+
+    const authUser = await createSupabaseAdminUser({ email, password, displayName });
+    const authUserId = authUser?.id || authUser?.user?.id;
+    if (!authUserId) return sendJson(res, 500, { error: "Supabase Auth 使用者建立失敗。" });
+
+    const rows = await supabaseRequest("/admin_profiles", {
+      method: "POST",
+      body: JSON.stringify({
+        auth_user_id: authUserId,
+        display_name: displayName,
+        email,
+        role_code: roleCode,
+        is_active: isActive,
+        created_by: context.actorAuthUserId,
+      }),
+    });
+    const profile = rows?.[0] || null;
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "create",
+      module: "users",
+      targetType: "admin_profile",
+      targetId: profile?.id,
+      description: `新增後台使用者 ${displayName}`,
+      afterData: profile,
+    });
+    return sendJson(res, 201, { user: normalizeAdminProfile(profile, []) });
+  }
+
+  if (req.method === "PATCH") {
+    await requirePermission(req, "users.update");
+    const body = await readBody(req);
+    const id = cleanText(firstQueryValue(req.query?.id) || body?.id);
+    if (!id) return sendJson(res, 400, { error: "缺少使用者 ID。" });
+    const rows = await supabaseRequest(
+      `/admin_profiles?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
+    );
+    const before = Array.isArray(rows) ? rows[0] : null;
+    if (!before) return sendJson(res, 404, { error: "找不到使用者。" });
+
+    const next = {};
+    if (body?.display_name !== undefined || body?.displayName !== undefined) {
+      next.display_name = cleanText(body.display_name || body.displayName);
+    }
+    if (body?.role_code !== undefined || body?.roleCode !== undefined) {
+      await requirePermission(req, "users.manage_roles");
+      next.role_code = cleanText(body.role_code || body.roleCode);
+    }
+    if (body?.is_active !== undefined) {
+      await requirePermission(req, "users.disable");
+      next.is_active = Boolean(body.is_active);
+    }
+    if (body?.password) {
+      await supabaseAuthRequest(`/auth/v1/admin/users/${before.auth_user_id}`, {
+        method: "PUT",
+        body: JSON.stringify({ password: String(body.password) }),
+      });
+    }
+
+    await assertCanMutateAdminUser(context, before, next.role_code || before.role_code);
+    await assertNotLastSuperAdmin(before, next);
+
+    const updatedRows = Object.keys(next).length
+      ? await supabaseRequest(`/admin_profiles?id=eq.${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(next),
+      })
+      : [before];
+    const updated = updatedRows?.[0] || before;
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "update",
+      module: "users",
+      targetType: "admin_profile",
+      targetId: id,
+      description: `更新後台使用者 ${updated.display_name}`,
+      beforeData: before,
+      afterData: updated,
+    });
+    return sendJson(res, 200, { user: normalizeAdminProfile(updated, []) });
+  }
+
+  return sendJson(res, 405, { error: "Method not allowed." });
+}
+
+async function loadAdminAuditLogs(req, res) {
+  await requirePermission(req, "audit_logs.view");
+  const params = [];
+  const actor = cleanText(firstQueryValue(req.query?.actor));
+  const moduleName = cleanText(firstQueryValue(req.query?.module));
+  const actionName = cleanText(firstQueryValue(req.query?.actionName) || firstQueryValue(req.query?.logAction));
+  const date = cleanText(firstQueryValue(req.query?.date));
+  if (actor) params.push(`actor_email=ilike.*${encodeURIComponent(actor)}*`);
+  if (moduleName && moduleName !== "all") params.push(`module=eq.${encodeURIComponent(moduleName)}`);
+  if (actionName && actionName !== "all") params.push(`action=eq.${encodeURIComponent(actionName)}`);
+  if (date) {
+    const nextDate = getNextDateString(date);
+    params.push(`created_at=gte.${encodeURIComponent(`${date}T00:00:00.000Z`)}`);
+    if (nextDate) params.push(`created_at=lt.${encodeURIComponent(`${nextDate}T00:00:00.000Z`)}`);
+  }
+  params.push("select=*");
+  params.push("order=created_at.desc");
+  params.push("limit=200");
+  const rows = await supabaseRequest(`/admin_activity_logs?${params.join("&")}`);
+  return sendJson(res, 200, { logs: Array.isArray(rows) ? rows : [] });
+}
+
 function getPositiveInt(value, fallback, maxValue) {
   const parsed = Number.parseInt(String(value || ""), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -4080,7 +4661,7 @@ async function deleteWarehouseRecord({ table, targetType, id }) {
   });
 }
 
-async function handleWarehouseSupply(req, res) {
+async function handleWarehouseSupply(req, res, context) {
   if (req.method === "GET") return await loadWarehouseSupplies(req, res);
 
   if (req.method === "POST") {
@@ -4091,6 +4672,16 @@ async function handleWarehouseSupply(req, res) {
       method: "POST",
       body: JSON.stringify({ ...payload, created_at: new Date().toISOString() }),
     });
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "create",
+      module: "warehouse",
+      targetType: "supply",
+      targetId: created?.[0]?.id,
+      description: `新增備品 ${payload.name}`,
+      afterData: created?.[0],
+    });
     return sendJson(res, 201, { item: created?.[0] || null });
   }
 
@@ -4098,11 +4689,26 @@ async function handleWarehouseSupply(req, res) {
     const body = await readBody(req);
     const id = cleanText(body?.id);
     if (!id) return sendJson(res, 400, { error: "缺少備品 ID。" });
+    const beforeRows = await supabaseRequest(
+      `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
+    );
+    const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
     const payload = normalizeSupplyPayload(body);
     if (!payload.name) return sendJson(res, 400, { error: "請輸入品名。" });
     const updated = await supabaseRequest(`/shop_supply_items?id=eq.${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
+    });
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "update",
+      module: "warehouse",
+      targetType: "supply",
+      targetId: id,
+      description: `更新備品 ${payload.name}`,
+      beforeData: before,
+      afterData: updated?.[0],
     });
     return sendJson(res, 200, { item: updated?.[0] || null });
   }
@@ -4110,14 +4716,28 @@ async function handleWarehouseSupply(req, res) {
   if (req.method === "DELETE") {
     const id = cleanText(firstQueryValue(req.query?.id));
     if (!id) return sendJson(res, 400, { error: "缺少備品 ID。" });
+    const beforeRows = await supabaseRequest(
+      `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
+    );
+    const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
     await deleteWarehouseRecord({ table: "shop_supply_items", targetType: "supply", id });
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "delete",
+      module: "warehouse",
+      targetType: "supply",
+      targetId: id,
+      description: `刪除備品 ${before?.name || id}`,
+      beforeData: before,
+    });
     return sendJson(res, 200, { ok: true });
   }
 
   return sendJson(res, 405, { error: "Method not allowed." });
 }
 
-async function handleWarehouseSupplyQuantity(req, res) {
+async function handleWarehouseSupplyQuantity(req, res, context) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
   const body = await readBody(req);
   const id = cleanText(body?.id);
@@ -4135,6 +4755,17 @@ async function handleWarehouseSupplyQuantity(req, res) {
   const updated = await supabaseRequest(`/shop_supply_items?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify({ quantity, updated_at: new Date().toISOString() }),
+  });
+  await writeAdminActivityLog({
+    req,
+    context,
+    action: "adjust_quantity",
+    module: "warehouse",
+    targetType: "supply",
+    targetId: id,
+    description: `調整備品數量 ${item.name || id}: ${item.quantity} -> ${quantity}`,
+    beforeData: item,
+    afterData: updated?.[0],
   });
 
   return sendJson(res, 200, { item: updated?.[0] || null });
@@ -4185,7 +4816,7 @@ async function loadWarehouseFurniture(req, res) {
   return sendJson(res, 200, { assets: attachWarehouseMedia(filtered, mediaById) });
 }
 
-async function handleWarehouseFurniture(req, res) {
+async function handleWarehouseFurniture(req, res, context) {
   if (req.method === "GET") return await loadWarehouseFurniture(req, res);
 
   if (req.method === "POST" || req.method === "PATCH") {
@@ -4208,14 +4839,39 @@ async function handleWarehouseFurniture(req, res) {
         method: "POST",
         body: JSON.stringify({ ...payload, created_at: new Date().toISOString() }),
       });
+      await writeAdminActivityLog({
+        req,
+        context,
+        action: "create",
+        module: "warehouse",
+        targetType: "furniture",
+        targetId: created?.[0]?.id,
+        description: `新增傢俱資產 ${payload.asset_name}`,
+        afterData: created?.[0],
+      });
       return sendJson(res, 201, { asset: created?.[0] || null });
     }
 
     const id = cleanText(body?.id);
     if (!id) return sendJson(res, 400, { error: "缺少資產 ID。" });
+    const beforeRows = await supabaseRequest(
+      `/shop_furniture_assets?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
+    );
+    const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
     const updated = await supabaseRequest(`/shop_furniture_assets?id=eq.${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
+    });
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "update",
+      module: "warehouse",
+      targetType: "furniture",
+      targetId: id,
+      description: `更新傢俱資產 ${payload.asset_name}`,
+      beforeData: before,
+      afterData: updated?.[0],
     });
     return sendJson(res, 200, { asset: updated?.[0] || null });
   }
@@ -4223,7 +4879,21 @@ async function handleWarehouseFurniture(req, res) {
   if (req.method === "DELETE") {
     const id = cleanText(firstQueryValue(req.query?.id));
     if (!id) return sendJson(res, 400, { error: "缺少資產 ID。" });
+    const beforeRows = await supabaseRequest(
+      `/shop_furniture_assets?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
+    );
+    const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
     await deleteWarehouseRecord({ table: "shop_furniture_assets", targetType: "furniture", id });
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "delete",
+      module: "warehouse",
+      targetType: "furniture",
+      targetId: id,
+      description: `刪除傢俱資產 ${before?.asset_name || id}`,
+      beforeData: before,
+    });
     return sendJson(res, 200, { ok: true });
   }
 
@@ -4286,7 +4956,7 @@ async function loadHousekeepingRecords(req, res) {
   return sendJson(res, 200, { records: attachWarehouseMedia(filtered, mediaById) });
 }
 
-async function handleHousekeepingRecord(req, res) {
+async function handleHousekeepingRecord(req, res, context) {
   if (req.method === "GET") return await loadHousekeepingRecords(req, res);
 
   if (req.method === "POST" || req.method === "PATCH") {
@@ -4299,14 +4969,39 @@ async function handleHousekeepingRecord(req, res) {
         method: "POST",
         body: JSON.stringify({ ...payload, created_at: new Date().toISOString() }),
       });
+      await writeAdminActivityLog({
+        req,
+        context,
+        action: "create",
+        module: "warehouse",
+        targetType: "housekeeping",
+        targetId: created?.[0]?.id,
+        description: `新增房務存證 ${payload.room_area}`,
+        afterData: created?.[0],
+      });
       return sendJson(res, 201, { record: created?.[0] || null });
     }
 
     const id = cleanText(body?.id);
     if (!id) return sendJson(res, 400, { error: "缺少房務存證 ID。" });
+    const beforeRows = await supabaseRequest(
+      `/shop_housekeeping_records?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
+    );
+    const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
     const updated = await supabaseRequest(`/shop_housekeeping_records?id=eq.${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
+    });
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "update",
+      module: "warehouse",
+      targetType: "housekeeping",
+      targetId: id,
+      description: `更新房務存證 ${payload.room_area}`,
+      beforeData: before,
+      afterData: updated?.[0],
     });
     return sendJson(res, 200, { record: updated?.[0] || null });
   }
@@ -4314,7 +5009,21 @@ async function handleHousekeepingRecord(req, res) {
   if (req.method === "DELETE") {
     const id = cleanText(firstQueryValue(req.query?.id));
     if (!id) return sendJson(res, 400, { error: "缺少房務存證 ID。" });
+    const beforeRows = await supabaseRequest(
+      `/shop_housekeeping_records?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
+    );
+    const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
     await deleteWarehouseRecord({ table: "shop_housekeeping_records", targetType: "housekeeping", id });
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "delete",
+      module: "warehouse",
+      targetType: "housekeeping",
+      targetId: id,
+      description: `刪除房務存證 ${before?.room_area || id}`,
+      beforeData: before,
+    });
     return sendJson(res, 200, { ok: true });
   }
 
@@ -4370,7 +5079,7 @@ async function handleWarehouseMediaUpload(req, res) {
   });
 }
 
-async function handleWarehouseMedia(req, res) {
+async function handleWarehouseMedia(req, res, context) {
   if (req.method === "POST") {
     const body = await readBody(req);
     const targetType = cleanText(body?.target_type);
@@ -4401,6 +5110,16 @@ async function handleWarehouseMedia(req, res) {
         metadata: body?.metadata || {},
       }),
     });
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "create",
+      module: "warehouse",
+      targetType: "media",
+      targetId: created?.[0]?.id,
+      description: `新增倉儲圖片 ${targetType}`,
+      afterData: created?.[0],
+    });
     return sendJson(res, 201, { media: created?.[0] || null });
   }
 
@@ -4417,6 +5136,16 @@ async function handleWarehouseMedia(req, res) {
       method: "DELETE",
       headers: { Prefer: "return=minimal" },
     });
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "delete",
+      module: "warehouse",
+      targetType: "media",
+      targetId: id,
+      description: "刪除倉儲圖片",
+      beforeData: media,
+    });
     return sendJson(res, 200, { ok: true });
   }
 
@@ -4427,7 +5156,31 @@ export default async function handler(req, res) {
   const action = String(firstQueryValue(req.query?.action) || "").trim();
 
   try {
-    requireAdmin(req);
+    if (action === "admin-login") {
+      return await handleAdminLogin(req, res);
+    }
+
+    if (action === "admin-refresh") {
+      return await handleAdminRefresh(req, res);
+    }
+
+    if (action === "admin-bootstrap-super") {
+      return await handleAdminBootstrapSuper(req, res);
+    }
+
+    const adminContext = await requireAuthenticatedAdmin(req);
+
+    if (action === "admin-session") {
+      return await handleAdminSession(req, res, adminContext);
+    }
+
+    if (action === "admin-users") {
+      return await handleAdminUsers(req, res, adminContext);
+    }
+
+    if (req.method === "GET" && action === "admin-audit-logs") {
+      return await loadAdminAuditLogs(req, res);
+    }
 
     if (action === "instagram-oauth-start") {
       return await handleInstagramOAuthStart(req, res);
@@ -4518,35 +5271,53 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "GET" && action === "warehouse-dashboard") {
+      await requirePermission(req, "warehouse.view");
       return await loadWarehouseDashboard(req, res);
     }
 
     if (req.method === "GET" && action === "warehouse-locations") {
+      await requirePermission(req, "warehouse.locations.view");
       return await loadWarehouseLocations(req, res);
     }
 
     if (action === "warehouse-supply") {
-      return await handleWarehouseSupply(req, res);
+      if (req.method === "GET") await requirePermission(req, "warehouse.view");
+      if (req.method === "POST") await requirePermission(req, "warehouse.supply.create");
+      if (req.method === "PATCH") await requirePermission(req, "warehouse.supply.update");
+      if (req.method === "DELETE") await requirePermission(req, "warehouse.supply.delete");
+      return await handleWarehouseSupply(req, res, adminContext);
     }
 
     if (action === "warehouse-supply-quantity") {
-      return await handleWarehouseSupplyQuantity(req, res);
+      await requirePermission(req, "warehouse.supply.adjust_quantity");
+      return await handleWarehouseSupplyQuantity(req, res, adminContext);
     }
 
     if (action === "warehouse-furniture-asset") {
-      return await handleWarehouseFurniture(req, res);
+      if (req.method === "GET") await requirePermission(req, "warehouse.view");
+      if (req.method === "POST") await requirePermission(req, "warehouse.furniture.create");
+      if (req.method === "PATCH") await requirePermission(req, "warehouse.furniture.update");
+      if (req.method === "DELETE") await requirePermission(req, "warehouse.furniture.delete");
+      return await handleWarehouseFurniture(req, res, adminContext);
     }
 
     if (action === "warehouse-housekeeping-record") {
-      return await handleHousekeepingRecord(req, res);
+      if (req.method === "GET") await requirePermission(req, "warehouse.view");
+      if (req.method === "POST") await requirePermission(req, "warehouse.housekeeping.create");
+      if (req.method === "PATCH") await requirePermission(req, "warehouse.housekeeping.update");
+      if (req.method === "DELETE") await requirePermission(req, "warehouse.housekeeping.delete");
+      return await handleHousekeepingRecord(req, res, adminContext);
     }
 
     if (action === "warehouse-media-upload") {
+      await requirePermission(req, "warehouse.view");
       return await handleWarehouseMediaUpload(req, res);
     }
 
     if (action === "warehouse-media") {
-      return await handleWarehouseMedia(req, res);
+      if (req.method === "POST") await requirePermission(req, "warehouse.view");
+      if (req.method === "DELETE") await requirePermission(req, "warehouse.view");
+      return await handleWarehouseMedia(req, res, adminContext);
     }
 
     res.setHeader("Allow", "GET, POST, PATCH");
@@ -4557,6 +5328,8 @@ export default async function handler(req, res) {
       error:
         error.status === 401
           ? "Unauthorized."
+          : error.status === 403
+            ? "Permission denied."
           : error.status === 400 || error.status === 404 || error.status === 409
             ? error.message
             : "Admin shop request failed.",

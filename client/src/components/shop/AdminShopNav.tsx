@@ -5,10 +5,13 @@ import {
   Megaphone,
   PackageCheck,
   ScanLine,
+  ShieldCheck,
   ShoppingBag,
+  UserCog,
   Warehouse,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getAdminIdentity } from "@/lib/shop/adminAuth";
 
 type AdminShopNavKey =
   | "home"
@@ -18,7 +21,9 @@ type AdminShopNavKey =
   | "scan"
   | "pos"
   | "social"
-  | "warehouse";
+  | "warehouse"
+  | "users"
+  | "audit";
 
 type AdminShopNavProps = {
   current?: AdminShopNavKey;
@@ -29,17 +34,28 @@ const navItems: Array<{
   label: string;
   href: string;
   icon: typeof Boxes;
+  permission?: string;
 }> = [
-  { key: "products", label: "商品", href: "/admin/shop/products", icon: Boxes },
-  { key: "orders", label: "訂單", href: "/admin/shop/orders", icon: ClipboardList },
-  { key: "inventory", label: "庫存", href: "/admin/shop/inventory", icon: PackageCheck },
-  { key: "scan", label: "入庫", href: "/admin/shop/scan", icon: ScanLine },
-  { key: "pos", label: "現場銷售 POS", href: "/admin/shop/pos", icon: ShoppingBag },
-  { key: "social", label: "自動發文", href: "/admin/shop/social", icon: Megaphone },
-  { key: "warehouse", label: "倉儲與資產", href: "/admin/shop/warehouse", icon: Warehouse },
+  { key: "products", label: "商品", href: "/admin/shop/products", icon: Boxes, permission: "products.view" },
+  { key: "orders", label: "訂單", href: "/admin/shop/orders", icon: ClipboardList, permission: "orders.view" },
+  { key: "inventory", label: "庫存", href: "/admin/shop/inventory", icon: PackageCheck, permission: "inventory.view" },
+  { key: "scan", label: "入庫", href: "/admin/shop/scan", icon: ScanLine, permission: "receiving.view" },
+  { key: "pos", label: "現場銷售 POS", href: "/admin/shop/pos", icon: ShoppingBag, permission: "pos.view" },
+  { key: "social", label: "自動發文", href: "/admin/shop/social", icon: Megaphone, permission: "social.view" },
+  { key: "warehouse", label: "倉儲與資產", href: "/admin/shop/warehouse", icon: Warehouse, permission: "warehouse.view" },
+  { key: "users", label: "使用者", href: "/admin/shop/users", icon: UserCog, permission: "users.view" },
+  { key: "audit", label: "操作紀錄", href: "/admin/shop/audit-logs", icon: ShieldCheck, permission: "audit_logs.view" },
 ];
 
 export default function AdminShopNav({ current = "home" }: AdminShopNavProps) {
+  const identity = getAdminIdentity();
+  const permissions = identity?.permissions || [];
+  const canView = (permission?: string) =>
+    !permission ||
+    identity?.role_code === "super_admin" ||
+    permissions.includes("*") ||
+    permissions.includes(permission);
+
   return (
     <nav className="border-b border-stone-200 bg-[#fbf7f1]/95 px-4 py-3 backdrop-blur md:px-8">
       <div className="mx-auto flex max-w-7xl items-center gap-3 overflow-x-auto">
@@ -55,7 +71,7 @@ export default function AdminShopNav({ current = "home" }: AdminShopNavProps) {
           總覽
         </Link>
         <div className="flex min-w-max gap-2">
-          {navItems.map((item) => {
+          {navItems.filter((item) => canView(item.permission)).map((item) => {
             const Icon = item.icon;
             const isActive = current === item.key;
 

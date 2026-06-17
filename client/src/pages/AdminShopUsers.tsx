@@ -55,7 +55,6 @@ export default function AdminShopUsers() {
   });
   const [bootstrapForm, setBootstrapForm] = useState({
     legacyAdminPassword: "",
-    bootstrapSecret: "",
     displayName: "",
     email: "",
     password: "",
@@ -128,7 +127,7 @@ export default function AdminShopUsers() {
     setNotice("");
     try {
       await bootstrapSuperAdmin(bootstrapForm);
-      setBootstrapForm({ legacyAdminPassword: "", bootstrapSecret: "", displayName: "", email: "", password: "" });
+      setBootstrapForm({ legacyAdminPassword: "", displayName: "", email: "", password: "" });
       setNotice("第一位 super_admin 已建立，請使用個人帳號登入。");
       await load();
     } catch (error) {
@@ -190,11 +189,10 @@ export default function AdminShopUsers() {
           <section className="rounded-[24px] border border-amber-200 bg-amber-50/70 p-5 shadow-sm">
             <h2 className="text-lg font-semibold text-stone-900">建立第一位 super_admin</h2>
             <p className="mt-2 text-sm leading-6 text-stone-600">
-              僅在系統尚無任何後台帳號時可使用。需要同時輸入舊版 ADMIN_PASSWORD 與 ADMIN_BOOTSTRAP_SECRET。
+              僅在系統尚無任何後台帳號時可使用。需要輸入舊版 ADMIN_PASSWORD。
             </p>
             <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={handleBootstrap}>
               <input className={inputClass()} placeholder="舊版 ADMIN_PASSWORD" type="password" value={bootstrapForm.legacyAdminPassword} onChange={(event) => setBootstrapForm({ ...bootstrapForm, legacyAdminPassword: event.target.value })} />
-              <input className={inputClass()} placeholder="ADMIN_BOOTSTRAP_SECRET" type="password" value={bootstrapForm.bootstrapSecret} onChange={(event) => setBootstrapForm({ ...bootstrapForm, bootstrapSecret: event.target.value })} />
               <input className={inputClass()} placeholder="姓名" value={bootstrapForm.displayName} onChange={(event) => setBootstrapForm({ ...bootstrapForm, displayName: event.target.value })} />
               <input className={inputClass()} placeholder="Email" type="email" value={bootstrapForm.email} onChange={(event) => setBootstrapForm({ ...bootstrapForm, email: event.target.value })} />
               <input className={inputClass()} placeholder="初始密碼" type="password" value={bootstrapForm.password} onChange={(event) => setBootstrapForm({ ...bootstrapForm, password: event.target.value })} />

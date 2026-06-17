@@ -2980,17 +2980,13 @@ async function handleAdminBootstrapSuper(req, res) {
   assertBootstrapRateLimit(req);
   const body = await readBody(req);
   const legacyPassword = String(body?.legacyAdminPassword || "");
-  const bootstrapSecret = String(body?.bootstrapSecret || "");
   const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
-  const expectedBootstrapSecret = String(getServerEnv("ADMIN_BOOTSTRAP_SECRET") || "").trim();
 
   const existingProfiles = await supabaseRequest("/admin_profiles?select=id&limit=1");
   const bootstrapUnavailable = Array.isArray(existingProfiles) && existingProfiles.length > 0;
   const bootstrapAuthFailed =
     !adminPassword ||
-    !expectedBootstrapSecret ||
-    legacyPassword !== adminPassword ||
-    bootstrapSecret !== expectedBootstrapSecret;
+    legacyPassword !== adminPassword;
 
   if (bootstrapAuthFailed || bootstrapUnavailable) {
     return sendJson(res, 401, { error: "Bootstrap verification failed or is disabled." });

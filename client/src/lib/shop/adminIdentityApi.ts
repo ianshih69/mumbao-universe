@@ -161,7 +161,6 @@ export async function fetchAdminSession(token: string) {
 
 export async function bootstrapSuperAdmin(payload: {
   legacyAdminPassword: string;
-  bootstrapSecret: string;
   displayName: string;
   email: string;
   password: string;

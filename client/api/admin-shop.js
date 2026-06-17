@@ -2882,25 +2882,71 @@ async function handleAdminLogin(req, res) {
   return sendJson(res, 200, normalizeAdminSessionPayload(authPayload, profile, permissions));
 }
 
+function logLegacyLoginDiagnostic(stage, status, details = {}) {
+  console.info("admin-legacy-login", {
+    stage,
+    status,
+    hasAdminPassword: Boolean(details.hasAdminPassword),
+    hasLegacySessionSecret: Boolean(details.hasLegacySessionSecret),
+    tokenSigned: Boolean(details.tokenSigned),
+  });
+}
+
 async function handleAdminLegacyLogin(req, res) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
   const body = await readBody(req);
   const legacyPassword = String(body?.legacyAdminPassword || body?.password || "");
   const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
+  const legacySessionSecret = String(getServerEnv("ADMIN_LEGACY_SESSION_SECRET") || "").trim();
+  const hasAdminPassword = Boolean(adminPassword);
+  const hasLegacySessionSecret = Boolean(legacySessionSecret);
+  const errorMessage = "\u820a\u7248\u5171\u7528\u5bc6\u78bc\u767b\u5165\u5931\u6557\uff0c\u8acb\u78ba\u8a8d\u5bc6\u78bc\u8207\u4f3a\u670d\u5668\u8a2d\u5b9a\u3002";
 
-  if (!adminPassword || legacyPassword !== adminPassword) {
-    return sendJson(res, 401, { error: "?餃憭望?嚗??蝣箄?敺撖Ⅳ?? });
+  if (!hasAdminPassword || legacyPassword !== adminPassword) {
+    logLegacyLoginDiagnostic("verify_admin_password", 401, {
+      hasAdminPassword,
+      hasLegacySessionSecret,
+      tokenSigned: false,
+    });
+    return sendJson(res, 401, { error: errorMessage });
   }
 
+  if (!hasLegacySessionSecret) {
+    logLegacyLoginDiagnostic("verify_legacy_session_secret", 500, {
+      hasAdminPassword,
+      hasLegacySessionSecret,
+      tokenSigned: false,
+    });
+    return sendJson(res, 500, { error: errorMessage });
+  }
+
+  let accessToken = "";
+  try {
+    accessToken = createLegacySessionToken();
+  } catch {
+    logLegacyLoginDiagnostic("sign_legacy_session", 500, {
+      hasAdminPassword,
+      hasLegacySessionSecret,
+      tokenSigned: false,
+    });
+    return sendJson(res, 500, { error: errorMessage });
+  }
+
+  logLegacyLoginDiagnostic("success", 200, {
+    hasAdminPassword,
+    hasLegacySessionSecret,
+    tokenSigned: true,
+  });
+
   return sendJson(res, 200, {
-    accessToken: createLegacySessionToken(),
+    accessToken,
     expiresAt: new Date(Date.now() + legacySessionTtlMs).toISOString(),
     authMode: "legacy",
     user: {
-      display_name: "???梁撖Ⅳ",
+      display_name: "\u820a\u7248\u5171\u7528\u5bc6\u78bc",
       email: "",
       role_code: "legacy_admin",
-      role_name: "???梁撖Ⅳ",
+      role_name: "\u820a\u7248\u5171\u7528\u5bc6\u78bc",
       permissions: legacyAdminPermissions,
       is_active: true,
     },

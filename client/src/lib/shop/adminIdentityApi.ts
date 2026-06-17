@@ -66,7 +66,7 @@ export async function loginAdminAccount(email: string, password: string) {
     body: JSON.stringify({ email, password }),
   });
   const data = await parseJson(response);
-  if (!response.ok) throw new Error(data.error || "Admin login failed.");
+  if (!response.ok) throw new Error(data.error || "\u767b\u5165\u5931\u6557\uff0c\u8acb\u78ba\u8a8d Email \u8207\u5bc6\u78bc\u3002");
   setAdminSession({
     accessToken: data.accessToken,
     refreshToken: data.refreshToken,
@@ -89,7 +89,9 @@ export async function loginLegacyAdminPassword(legacyAdminPassword: string) {
     body: JSON.stringify({ legacyAdminPassword }),
   });
   const data = await parseJson(response);
-  if (!response.ok) throw new Error(data.error || "Legacy admin login failed.");
+  if (!response.ok) {
+    throw new Error(data.error || "\u820a\u7248\u5171\u7528\u5bc6\u78bc\u767b\u5165\u5931\u6557\uff0c\u8acb\u78ba\u8a8d\u5bc6\u78bc\u8207\u4f3a\u670d\u5668\u8a2d\u5b9a\u3002");
+  }
   setAdminSession({
     accessToken: data.accessToken,
     expiresAt: data.expiresAt,

@@ -655,18 +655,18 @@ export default function AdminShopWarehouse() {
                         )}
                         <div className="min-w-0 self-center">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-xl font-semibold leading-tight text-stone-950">{item.name}</h3>
+                            <h3 className="text-[1.35rem] font-bold leading-tight text-stone-950">{item.name}</h3>
                             <span className={`rounded-full px-3 py-1 text-xs font-semibold ${status.tone}`}>{status.label}</span>
                           </div>
                           <p className="mt-1 text-sm text-stone-500">{brandSpec.brand}｜{brandSpec.spec}｜{item.location_code}</p>
-                          <div className="mt-3 flex flex-wrap gap-2 text-sm">
-                            <span className="rounded-full bg-white/70 px-3 py-1 font-semibold text-stone-950">庫存 {item.quantity}</span>
-                            <span className="rounded-full bg-white/50 px-3 py-1 text-stone-500">安全庫存 {item.safety_stock}</span>
-                            <span className="rounded-full bg-white/50 px-3 py-1 text-stone-500">單價 {formatMoney(item.unit_price)}</span>
+                          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
+                            <span className="rounded-full bg-white/75 px-3 py-1 font-semibold text-stone-950">庫存 {item.quantity}</span>
+                            <span className="text-stone-500">安全庫存 {item.safety_stock}</span>
+                            <span className="text-stone-500">單價 {formatMoney(item.unit_price)}</span>
                           </div>
                         </div>
                       </div>
-                      <div className="mt-3 flex w-full flex-col items-center rounded-2xl border border-[#e8dacb] bg-[#fbf6ef] p-2.5 shadow-sm md:mt-0 md:w-[156px]">
+                      <div className="mt-3 flex w-full flex-col items-center rounded-2xl border border-[#f0e5d9] bg-[#fff8f0]/60 p-2.5 md:mt-0 md:w-[156px]">
                         <div className="grid h-10 w-[136px] grid-cols-[40px_1fr_40px] overflow-hidden rounded-full border border-stone-200 bg-white/90">
                           <button
                             className="text-lg font-semibold text-stone-500 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-35"

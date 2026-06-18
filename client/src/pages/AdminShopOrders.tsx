@@ -41,9 +41,7 @@ import {
   clearAdminToken as clearStoredAdminToken,
   getAdminToken,
   isAdminAuthError,
-  setAdminToken as setStoredAdminToken,
 } from "@/lib/shop/adminAuth";
-import { loginLegacyAdminPassword } from "@/lib/shop/adminIdentityApi";
 import { cn } from "@/lib/utils";
 
 const orderListLimit = 30;
@@ -125,9 +123,6 @@ function getStoredAdminToken() {
   return getAdminToken();
 }
 
-function saveAdminToken(token: string) {
-  setStoredAdminToken(token);
-}
 
 function clearAdminToken() {
   clearStoredAdminToken();
@@ -313,8 +308,6 @@ export default function AdminShopOrders() {
   const autoOpenOrderNumberRef = useRef(initialQuery.orderNumber);
   const hasAutoOpenedOrderRef = useRef(false);
   const [token, setToken] = useState(() => getStoredAdminToken());
-  const [password, setPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
   const [orders, setOrders] = useState<AdminShopOrderSummary[]>([]);
   const [selectedOrderNumber, setSelectedOrderNumber] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<AdminShopOrderDetail | null>(null);
@@ -348,8 +341,6 @@ export default function AdminShopOrders() {
   const handleAuthFailure = useCallback(() => {
     clearAdminToken();
     setToken("");
-    setPassword("");
-    setLoginError(adminAuthExpiredMessage);
     setError("");
   }, []);
 
@@ -458,30 +449,12 @@ export default function AdminShopOrders() {
 
   const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
-    const legacyPassword = password.trim();
-
-    if (!legacyPassword) {
-      setLoginError("??? ADMIN_PASSWORD");
-      return;
-    }
-
-    try {
-      const session = await loginLegacyAdminPassword(legacyPassword);
-      saveAdminToken(session.accessToken);
-      setToken(session.accessToken);
-      setPassword("");
-      setLoginError("");
-    } catch (error) {
-      clearAdminToken();
-      setToken("");
-      setLoginError(error instanceof Error ? error.message : adminAuthExpiredMessage);
-    }
+    window.location.href = "/admin/shop/login?redirect=/admin/shop/orders";
   };
 
   const logout = () => {
     clearAdminToken();
     setToken("");
-    setPassword("");
     setOrders([]);
     setSelectedOrderNumber("");
     setSelectedOrder(null);
@@ -701,14 +674,7 @@ export default function AdminShopOrders() {
               <h1 className="text-2xl font-semibold">商城訂單管理</h1>
             </div>
           </div>
-          <Input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="請輸入 ADMIN_PASSWORD"
-            className="h-11 rounded-[8px]"
-          />
-          {loginError && <p className="mt-3 text-sm text-red-600">{loginError}</p>}
+          <p className="text-sm leading-6 text-stone-600">請使用個人管理員帳號登入後再進入此功能。</p>
           <Button type="submit" className="mt-5 h-11 w-full rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]">
             進入訂單管理
           </Button>

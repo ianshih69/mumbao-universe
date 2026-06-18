@@ -82,25 +82,6 @@ export async function loginAdminAccount(email: string, password: string) {
   };
 }
 
-export async function loginLegacyAdminPassword(legacyAdminPassword: string) {
-  const response = await fetch("/api/admin-shop?action=admin-legacy-login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ legacyAdminPassword }),
-  });
-  const data = await parseJson(response);
-  if (!response.ok) {
-    throw new Error(data.error || "\u820a\u7248\u5171\u7528\u5bc6\u78bc\u767b\u5165\u5931\u6557\uff0c\u8acb\u78ba\u8a8d\u5bc6\u78bc\u8207\u4f3a\u670d\u5668\u8a2d\u5b9a\u3002");
-  }
-  setAdminSession({
-    accessToken: data.accessToken,
-    expiresAt: data.expiresAt,
-    user: data.user,
-    authMode: "legacy",
-  });
-  return data as { accessToken: string; expiresAt?: string; user: AdminIdentity };
-}
-
 export async function refreshAdminSession() {
   const refreshToken = getAdminRefreshToken();
   if (!refreshToken) throw new Error(adminAuthExpiredMessage);
@@ -129,7 +110,7 @@ export async function refreshAdminSession() {
 export async function ensureFreshAdminSession(currentToken: string) {
   const identity = getAdminIdentity();
   const storedToken = getAdminToken() || currentToken;
-  if (!storedToken || identity?.authMode === "legacy") return storedToken;
+  if (!storedToken) return storedToken;
 
   const expiresAt = getAdminTokenExpiresAt();
   if (!expiresAt) return storedToken;
@@ -146,7 +127,7 @@ export async function ensureFreshAdminSession(currentToken: string) {
 
 export async function fetchAdminSession(token: string) {
   const data = await requestAdminIdentity<{
-    authMode: "account" | "legacy";
+    authMode: "account";
     user: AdminIdentity;
     permissions: string[];
   }>("/api/admin-shop?action=admin-session", token);
@@ -162,10 +143,9 @@ export async function fetchAdminSession(token: string) {
 }
 
 export async function bootstrapSuperAdmin(payload: {
-  legacyAdminPassword: string;
+  adminPassword: string;
   displayName: string;
   email: string;
-  password: string;
 }) {
   const response = await fetch("/api/admin-shop?action=admin-bootstrap-super", {
     method: "POST",
@@ -175,6 +155,13 @@ export async function bootstrapSuperAdmin(payload: {
   const data = await parseJson(response);
   if (!response.ok) throw new Error(data.error || "Bootstrap super admin failed.");
   return data;
+}
+
+export async function fetchAdminBootstrapStatus() {
+  const response = await fetch("/api/admin-shop?action=admin-bootstrap-status");
+  const data = await parseJson(response);
+  if (!response.ok) return { available: false };
+  return { available: Boolean(data.available) };
 }
 
 export function fetchAdminUsers(token: string) {

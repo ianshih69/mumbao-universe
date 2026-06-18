@@ -10,7 +10,6 @@ import {
   type AdminAuthStatus,
 } from "@/lib/shop/adminAuth";
 import {
-  bootstrapSuperAdmin,
   createAdminUser,
   fetchAdminSession,
   fetchAdminUsers,
@@ -53,13 +52,6 @@ export default function AdminShopUsers() {
     role_code: "cleaner",
     is_active: true,
   });
-  const [bootstrapForm, setBootstrapForm] = useState({
-    legacyAdminPassword: "",
-    displayName: "",
-    email: "",
-    password: "",
-  });
-
   const identity = getAdminIdentity();
 
   useEffect(() => {
@@ -122,19 +114,6 @@ export default function AdminShopUsers() {
     }
   }
 
-  async function handleBootstrap(event: React.FormEvent) {
-    event.preventDefault();
-    setNotice("");
-    try {
-      await bootstrapSuperAdmin(bootstrapForm);
-      setBootstrapForm({ legacyAdminPassword: "", displayName: "", email: "", password: "" });
-      setNotice("第一位 super_admin 已建立，請使用個人帳號登入。");
-      await load();
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "建立 super_admin 失敗。");
-    }
-  }
-
   async function patchUser(id: string, payload: Record<string, unknown>) {
     setNotice("");
     try {
@@ -183,20 +162,6 @@ export default function AdminShopUsers() {
                 啟用帳號
               </label>
               <button className="w-full rounded-full bg-[#8b6f5b] px-5 py-3 text-sm font-semibold text-white">新增使用者</button>
-            </form>
-          </section>
-
-          <section className="rounded-[24px] border border-amber-200 bg-amber-50/70 p-5 shadow-sm">
-            <h2 className="text-lg font-semibold text-stone-900">建立第一位 super_admin</h2>
-            <p className="mt-2 text-sm leading-6 text-stone-600">
-              僅在系統尚無任何後台帳號時可使用。需要輸入舊版 ADMIN_PASSWORD。
-            </p>
-            <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={handleBootstrap}>
-              <input className={inputClass()} placeholder="舊版 ADMIN_PASSWORD" type="password" value={bootstrapForm.legacyAdminPassword} onChange={(event) => setBootstrapForm({ ...bootstrapForm, legacyAdminPassword: event.target.value })} />
-              <input className={inputClass()} placeholder="姓名" value={bootstrapForm.displayName} onChange={(event) => setBootstrapForm({ ...bootstrapForm, displayName: event.target.value })} />
-              <input className={inputClass()} placeholder="Email" type="email" value={bootstrapForm.email} onChange={(event) => setBootstrapForm({ ...bootstrapForm, email: event.target.value })} />
-              <input className={inputClass()} placeholder="初始密碼" type="password" value={bootstrapForm.password} onChange={(event) => setBootstrapForm({ ...bootstrapForm, password: event.target.value })} />
-              <button className="rounded-full border border-[#8b6f5b] bg-white px-5 py-3 text-sm font-semibold text-[#8b6f5b] md:col-span-2">建立 super_admin</button>
             </form>
           </section>
         </div>

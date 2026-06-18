@@ -8,7 +8,6 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import AdminShopNav from "@/components/shop/AdminShopNav";
 import {
   type AdminAuthStatus,
@@ -17,9 +16,7 @@ import {
   getAdminToken,
   getInitialAdminAuthStatus,
   isAdminAuthError,
-  setAdminToken,
 } from "@/lib/shop/adminAuth";
-import { loginLegacyAdminPassword } from "@/lib/shop/adminIdentityApi";
 import {
   type AdminDashboardRecentMovement,
   type AdminDashboardRecentOrder,
@@ -227,7 +224,6 @@ export default function AdminShopHome() {
   const [authStatus, setAuthStatus] = useState<AdminAuthStatus>(() =>
     getInitialAdminAuthStatus()
   );
-  const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [isChecking, setIsChecking] = useState(Boolean(token));
   const [dashboard, setDashboard] = useState<AdminShopDashboard | null>(null);
@@ -286,40 +282,13 @@ export default function AdminShopHome() {
 
   const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
-    const legacyPassword = password.trim();
-
-    if (!legacyPassword) {
-      setLoginError("??? ADMIN_PASSWORD");
-      return;
-    }
-
-    setIsChecking(true);
-    setAuthStatus("checking");
-    try {
-      const session = await loginLegacyAdminPassword(legacyPassword);
-      const nextToken = session.accessToken;
-      const nextDashboard = await fetchAdminShopDashboard(nextToken);
-      setAdminToken(nextToken);
-      setTokenState(nextToken);
-      setDashboard(nextDashboard);
-      setAuthStatus("loggedIn");
-      setPassword("");
-      setLoginError("");
-      setDashboardError("");
-    } catch (error) {
-      clearAdminToken();
-      setAuthStatus("loggedOut");
-      setLoginError(error instanceof Error ? error.message : adminAuthExpiredMessage);
-    } finally {
-      setIsChecking(false);
-    }
+    window.location.href = "/admin/shop/login?redirect=/admin/shop";
   };
 
   const logout = () => {
     clearAdminToken();
     setTokenState("");
     setAuthStatus("loggedOut");
-    setPassword("");
     setLoginError("");
     setDashboard(null);
     setDashboardError("");
@@ -351,21 +320,15 @@ export default function AdminShopHome() {
               <h1 className="text-2xl font-semibold">商城後台登入</h1>
             </div>
           </div>
-          <Input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="請輸入 ADMIN_PASSWORD"
-            className="h-11 rounded-[8px]"
-            disabled={isChecking}
-          />
-          {loginError && <p className="mt-3 text-sm text-red-600">{loginError}</p>}
+          <p className="text-sm leading-6 text-stone-600">
+            請使用個人管理員帳號登入後再進入後台。
+          </p>
           <Button
             type="submit"
             className="mt-5 h-11 w-full rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
             disabled={isChecking}
           >
-            {isChecking ? "登入確認中..." : "登入商城後台"}
+            使用個人帳號登入
           </Button>
         </form>
       </main>

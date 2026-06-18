@@ -35,9 +35,7 @@ import {
   clearAdminToken as clearStoredAdminToken,
   getAdminToken,
   isAdminAuthError,
-  setAdminToken as setStoredAdminToken,
 } from "@/lib/shop/adminAuth";
-import { loginLegacyAdminPassword } from "@/lib/shop/adminIdentityApi";
 import { cn } from "@/lib/utils";
 
 const productListLimit = 50;
@@ -72,9 +70,6 @@ function getStoredAdminToken() {
   return getAdminToken();
 }
 
-function saveAdminToken(token: string) {
-  setStoredAdminToken(token);
-}
 
 function clearAdminToken() {
   clearStoredAdminToken();
@@ -131,8 +126,6 @@ function getInventoryStatusLabel(inventory: number) {
 
 export default function AdminShopInventory() {
   const [token, setToken] = useState(() => getStoredAdminToken());
-  const [password, setPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
   const [products, setProducts] = useState<AdminShopProductSummary[]>([]);
   const [inventoryProductDetails, setInventoryProductDetails] = useState<
     Record<string, AdminShopProductDetail>
@@ -161,8 +154,6 @@ export default function AdminShopInventory() {
   const handleAuthFailure = useCallback(() => {
     clearAdminToken();
     setToken("");
-    setPassword("");
-    setLoginError(adminAuthExpiredMessage);
     setError("");
     setSuccess("");
   }, []);
@@ -353,30 +344,12 @@ export default function AdminShopInventory() {
 
   const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
-    const legacyPassword = password.trim();
-
-    if (!legacyPassword) {
-      setLoginError("??? ADMIN_PASSWORD");
-      return;
-    }
-
-    try {
-      const session = await loginLegacyAdminPassword(legacyPassword);
-      saveAdminToken(session.accessToken);
-      setToken(session.accessToken);
-      setPassword("");
-      setLoginError("");
-    } catch (error) {
-      clearAdminToken();
-      setToken("");
-      setLoginError(error instanceof Error ? error.message : adminAuthExpiredMessage);
-    }
+    window.location.href = "/admin/shop/login?redirect=/admin/shop/inventory";
   };
 
   const logout = () => {
     clearAdminToken();
     setToken("");
-    setPassword("");
     setProducts([]);
     setInventoryProductDetails({});
     setSelectedProductId("");
@@ -533,14 +506,7 @@ export default function AdminShopInventory() {
               <h1 className="text-2xl font-semibold">庫存管理登入</h1>
             </div>
           </div>
-          <Input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="請輸入 ADMIN_PASSWORD"
-            className="h-11 rounded-[8px]"
-          />
-          {loginError && <p className="mt-3 text-sm text-red-600">{loginError}</p>}
+          <p className="text-sm leading-6 text-stone-600">請使用個人管理員帳號登入後再進入此功能。</p>
           <Button
             type="submit"
             className="mt-5 h-11 w-full rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"

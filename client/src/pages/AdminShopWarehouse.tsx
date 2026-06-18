@@ -11,7 +11,7 @@ import {
   setAdminSession,
   type AdminAuthStatus,
 } from "@/lib/shop/adminAuth";
-import { fetchAdminSession, loginLegacyAdminPassword } from "@/lib/shop/adminIdentityApi";
+import { fetchAdminSession } from "@/lib/shop/adminIdentityApi";
 import {
   adjustSupplyQuantity,
   deleteFurnitureAsset,
@@ -153,49 +153,21 @@ function MediaPreview({ media }: { media?: WarehouseMedia | null }) {
   );
 }
 
-function LoginCard({ onLogin }: { onLogin: (token: string) => void }) {
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-
+function LoginCard() {
   return (
     <main className="min-h-screen bg-[#f7f1e9] px-4 py-12">
-      <div className="mx-auto max-w-md rounded-[28px] border border-stone-200 bg-white p-8 shadow-sm">
+      <div className="mx-auto max-w-md rounded-[8px] border border-stone-200 bg-white p-8 shadow-sm">
         <p className="text-xs uppercase tracking-[0.28em] text-[#b08d73]">Warehouse Admin</p>
-        <h1 className="mt-3 text-2xl font-semibold text-stone-900">倉儲與資產管理</h1>
-        <p className="mt-2 text-sm text-stone-600">請登入後台後再管理備品、傢俱與房務存證。</p>
-        <form
-          className="mt-6 space-y-4"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            if (!password.trim()) return;
-            setError("");
-            try {
-              const session = await loginLegacyAdminPassword(password.trim());
-              setPassword("");
-              onLogin(session.accessToken);
-            } catch (loginError) {
-              setError(loginError instanceof Error ? loginError.message : "登入失敗，請重新確認。");
-            }
-          }}
+        <h1 className="mt-3 text-2xl font-semibold text-stone-900">請先登入後台</h1>
+        <p className="mt-2 text-sm leading-6 text-stone-600">
+          請使用個人管理員帳號登入後再管理備品、傢俱與房務存證。
+        </p>
+        <a
+          className="mt-6 inline-flex w-full items-center justify-center rounded-full bg-[#8b6f5b] px-5 py-3 text-sm font-semibold text-white hover:bg-[#765d4a]"
+          href="/admin/shop/login?redirect=/admin/shop/warehouse"
         >
-          <input
-            className={fieldClass()}
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="請輸入後台密碼"
-          />
-          {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-          <button className="w-full rounded-full bg-[#8b6f5b] px-5 py-3 text-sm font-semibold text-white">
-            登入
-          </button>
-          <a
-            className="block text-center text-sm font-medium text-[#8b6f5b] underline"
-            href="/admin/shop/login?redirect=/admin/shop/warehouse"
-          >
-            使用個人帳號登入
-          </a>
-        </form>
+          使用個人帳號登入
+        </a>
       </div>
     </main>
   );
@@ -377,13 +349,7 @@ export default function AdminShopWarehouse() {
 
   if (authStatus === "loggedOut") {
     return (
-      <LoginCard
-        onLogin={(nextToken) => {
-          setToken(nextToken);
-          setAuthStatus("loggedIn");
-          void loadAll(nextToken);
-        }}
-      />
+      <LoginCard />
     );
   }
 
@@ -399,7 +365,7 @@ export default function AdminShopWarehouse() {
               管理備品庫存、傢俱資產、房務存證與倉庫位置 QR Code。
             </p>
             <p className="mt-2 text-xs text-stone-500">
-              登入方式：{identity?.authMode === "account" ? "個人帳號" : "舊版共用密碼"}
+              登入方式：個人帳號
               {identity?.display_name ? `｜${identity.display_name}` : ""}
               {identity?.role_name ? `｜${identity.role_name}` : ""}
             </p>

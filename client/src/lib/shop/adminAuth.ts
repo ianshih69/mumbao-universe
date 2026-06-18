@@ -4,15 +4,11 @@ export const adminShopTokenKey = "adminShopToken";
 export const adminShopRefreshTokenKey = "adminShopRefreshToken";
 export const adminShopIdentityKey = "adminShopIdentity";
 export const adminShopTokenExpiresAtKey = "adminShopTokenExpiresAt";
-const legacyAdminShopTokenKey = "mumbao-admin-shop-order-token";
 
 export const adminAuthExpiredMessage = "登入已過期，請重新登入";
 
 export function getAdminToken() {
   try {
-    if (sessionStorage.getItem(legacyAdminShopTokenKey)) {
-      sessionStorage.removeItem(legacyAdminShopTokenKey);
-    }
     return sessionStorage.getItem(adminShopTokenKey) || "";
   } catch {
     return "";
@@ -25,11 +21,10 @@ export function getInitialAdminAuthStatus(): AdminAuthStatus {
 
 export function setAdminToken(token: string) {
   sessionStorage.setItem(adminShopTokenKey, token);
-  sessionStorage.removeItem(legacyAdminShopTokenKey);
 }
 
 export type AdminIdentity = {
-  authMode: "account" | "legacy";
+  authMode: "account";
   display_name: string;
   email?: string;
   role_code: string;
@@ -65,15 +60,12 @@ export function setAdminSession({
   refreshToken?: string;
   expiresAt?: string | null;
   user?: Partial<AdminIdentity> | null;
-  authMode?: "account" | "legacy";
+  authMode?: "account";
 }) {
   setAdminToken(accessToken);
   if (refreshToken) sessionStorage.setItem(adminShopRefreshTokenKey, refreshToken);
   if (expiresAt) {
     sessionStorage.setItem(adminShopTokenExpiresAtKey, expiresAt);
-  } else if (authMode === "legacy") {
-    sessionStorage.removeItem(adminShopRefreshTokenKey);
-    sessionStorage.removeItem(adminShopTokenExpiresAtKey);
   }
   if (user) {
     sessionStorage.setItem(
@@ -82,8 +74,8 @@ export function setAdminSession({
         authMode,
         display_name: user.display_name || user.email || "後台使用者",
         email: user.email || "",
-        role_code: user.role_code || (authMode === "legacy" ? "legacy_admin" : ""),
-        role_name: user.role_name || (authMode === "legacy" ? "舊版共用密碼" : ""),
+        role_code: user.role_code || "",
+        role_name: user.role_name || "",
         permissions: Array.isArray(user.permissions) ? user.permissions : [],
         is_active: user.is_active !== false,
       })
@@ -115,7 +107,6 @@ export function clearAdminToken() {
   sessionStorage.removeItem(adminShopRefreshTokenKey);
   sessionStorage.removeItem(adminShopTokenExpiresAtKey);
   sessionStorage.removeItem(adminShopIdentityKey);
-  sessionStorage.removeItem(legacyAdminShopTokenKey);
 }
 
 export function isAdminLoggedIn() {
@@ -129,6 +120,6 @@ export function isAdminAuthError(error: unknown) {
     message.includes("Unauthorized") ||
     message.includes("401") ||
     message.includes("登入已過期") ||
-    message.includes("後台密碼錯誤")
+    message.includes("請重新登入")
   );
 }

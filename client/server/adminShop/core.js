@@ -6,7 +6,7 @@ import {
   supabaseRequest,
   supabaseRpc,
 } from "../shopShared.js";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
 
 const defaultLimit = 30;
 const maxLimit = 50;
@@ -92,7 +92,6 @@ const allowedWarehouseFileTypes = new Map([
 ]);
 const warehousePresignedUrlExpiresInSeconds = 10 * 60;
 let warehouseAwsSdkPromise = null;
-const legacySessionTtlMs = 60 * 60 * 1000;
 const bootstrapRateLimitWindowMs = 15 * 60 * 1000;
 const bootstrapRateLimitMaxAttempts = 5;
 const bootstrapAttempts = new Map();
@@ -111,30 +110,6 @@ async function loadWarehouseAwsSdk() {
   return warehouseAwsSdkPromise;
 }
 
-function requireAdmin(req) {
-  const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
-  const authHeader = String(req.headers?.authorization || "");
-  const bearerToken = authHeader.startsWith("Bearer ")
-    ? authHeader.slice("Bearer ".length).trim()
-    : "";
-  const providedPassword =
-    bearerToken || String(req.headers?.["x-admin-password"] || "").trim();
-
-  if (!adminPassword) {
-    const error = new Error("ADMIN_PASSWORD is not configured.");
-    error.status = 500;
-    throw error;
-  }
-
-  if (providedPassword !== adminPassword) {
-    const error = new Error("Unauthorized.");
-    error.status = 401;
-    throw error;
-  }
-}
-
-const legacyAdminPermissions = ["*"];
-
 function createHttpError(status, message) {
   const error = new Error(message);
   error.status = status;
@@ -146,75 +121,6 @@ function getBearerToken(req) {
   return authHeader.startsWith("Bearer ")
     ? authHeader.slice("Bearer ".length).trim()
     : "";
-}
-
-function base64UrlEncode(value) {
-  return Buffer.from(value).toString("base64url");
-}
-
-function base64UrlJson(value) {
-  return base64UrlEncode(JSON.stringify(value));
-}
-
-function getLegacySessionSecret() {
-  const secret = String(getServerEnv("ADMIN_LEGACY_SESSION_SECRET") || "").trim();
-  if (!secret) throw createHttpError(500, "Legacy admin session is not configured.");
-  return secret;
-}
-
-function signLegacyPayload(payloadSegment) {
-  return createHmac("sha256", getLegacySessionSecret())
-    .update(payloadSegment)
-    .digest("base64url");
-}
-
-function createLegacySessionToken() {
-  const issuedAt = Date.now();
-  const payload = {
-    authMode: "legacy",
-    issuedAt,
-    expiresAt: issuedAt + legacySessionTtlMs,
-    nonce: randomBytes(16).toString("hex"),
-  };
-  const payloadSegment = base64UrlJson(payload);
-  return `${payloadSegment}.${signLegacyPayload(payloadSegment)}`;
-}
-
-function verifyLegacySessionToken(token) {
-  if (!token || !token.includes(".")) return null;
-  const parts = token.split(".");
-  if (parts.length !== 2) return null;
-  const [payloadSegment, signature] = parts;
-  if (!payloadSegment || !signature) return null;
-
-  let expected;
-  try {
-    expected = signLegacyPayload(payloadSegment);
-  } catch {
-    return null;
-  }
-  const expectedBuffer = Buffer.from(expected);
-  const signatureBuffer = Buffer.from(signature);
-  if (
-    expectedBuffer.length !== signatureBuffer.length ||
-    !timingSafeEqual(expectedBuffer, signatureBuffer)
-  ) {
-    return null;
-  }
-
-  let payload;
-  try {
-    payload = JSON.parse(Buffer.from(payloadSegment, "base64url").toString("utf8"));
-  } catch {
-    return null;
-  }
-
-  if (payload?.authMode !== "legacy") return null;
-  if (!Number.isFinite(Number(payload.expiresAt)) || Number(payload.expiresAt) <= Date.now()) {
-    return null;
-  }
-
-  return payload;
 }
 
 function getSupabaseBaseUrl() {
@@ -264,7 +170,6 @@ function getRoleName(roleCode) {
     admin: "Admin",
     housekeeper: "Housekeeper",
     cleaner: "Cleaner",
-    legacy_admin: "Legacy Shared Password",
   };
   return names[roleCode] || roleCode || "Admin";
 }
@@ -302,26 +207,6 @@ async function loadAdminPermissions(roleCode) {
     : [];
 }
 
-function getLegacyAdminContext(req) {
-  const bearerToken = getBearerToken(req);
-  const legacyPayload = verifyLegacySessionToken(bearerToken);
-
-  if (legacyPayload) {
-    return {
-      authMode: "legacy",
-      actorAuthUserId: null,
-      actorName: "Legacy Shared Password",
-      actorEmail: "",
-      roleCode: "legacy_admin",
-      roleName: "Legacy Shared Password",
-      permissions: legacyAdminPermissions,
-      profile: null,
-    };
-  }
-
-  return null;
-}
-
 async function verifySupabaseAccessToken(accessToken) {
   if (!accessToken) throw createHttpError(401, "Unauthorized.");
 
@@ -341,9 +226,6 @@ async function verifySupabaseAccessToken(accessToken) {
 }
 
 async function requireAuthenticatedAdmin(req) {
-  const legacyContext = getLegacyAdminContext(req);
-  if (legacyContext) return legacyContext;
-
   const authUser = await verifySupabaseAccessToken(getBearerToken(req));
   const profiles = await supabaseRequest(
     `/admin_profiles?auth_user_id=eq.${encodeURIComponent(authUser.id)}&select=*&limit=1`
@@ -2895,77 +2777,6 @@ async function handleAdminLogin(req, res) {
   return sendJson(res, 200, normalizeAdminSessionPayload(authPayload, profile, permissions));
 }
 
-function logLegacyLoginDiagnostic(stage, status, details = {}) {
-  console.info("admin-legacy-login", {
-    stage,
-    status,
-    hasAdminPassword: Boolean(details.hasAdminPassword),
-    hasLegacySessionSecret: Boolean(details.hasLegacySessionSecret),
-    tokenSigned: Boolean(details.tokenSigned),
-  });
-}
-
-async function handleAdminLegacyLogin(req, res) {
-  if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
-  const body = await readBody(req);
-  const legacyPassword = String(body?.legacyAdminPassword || body?.password || "");
-  const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
-  const legacySessionSecret = String(getServerEnv("ADMIN_LEGACY_SESSION_SECRET") || "").trim();
-  const hasAdminPassword = Boolean(adminPassword);
-  const hasLegacySessionSecret = Boolean(legacySessionSecret);
-  const errorMessage = "\u820a\u7248\u5171\u7528\u5bc6\u78bc\u767b\u5165\u5931\u6557\uff0c\u8acb\u78ba\u8a8d\u5bc6\u78bc\u8207\u4f3a\u670d\u5668\u8a2d\u5b9a\u3002";
-
-  if (!hasAdminPassword || legacyPassword !== adminPassword) {
-    logLegacyLoginDiagnostic("verify_admin_password", 401, {
-      hasAdminPassword,
-      hasLegacySessionSecret,
-      tokenSigned: false,
-    });
-    return sendJson(res, 401, { error: errorMessage });
-  }
-
-  if (!hasLegacySessionSecret) {
-    logLegacyLoginDiagnostic("verify_legacy_session_secret", 500, {
-      hasAdminPassword,
-      hasLegacySessionSecret,
-      tokenSigned: false,
-    });
-    return sendJson(res, 500, { error: errorMessage });
-  }
-
-  let accessToken = "";
-  try {
-    accessToken = createLegacySessionToken();
-  } catch {
-    logLegacyLoginDiagnostic("sign_legacy_session", 500, {
-      hasAdminPassword,
-      hasLegacySessionSecret,
-      tokenSigned: false,
-    });
-    return sendJson(res, 500, { error: errorMessage });
-  }
-
-  logLegacyLoginDiagnostic("success", 200, {
-    hasAdminPassword,
-    hasLegacySessionSecret,
-    tokenSigned: true,
-  });
-
-  return sendJson(res, 200, {
-    accessToken,
-    expiresAt: new Date(Date.now() + legacySessionTtlMs).toISOString(),
-    authMode: "legacy",
-    user: {
-      display_name: "\u820a\u7248\u5171\u7528\u5bc6\u78bc",
-      email: "",
-      role_code: "legacy_admin",
-      role_name: "\u820a\u7248\u5171\u7528\u5bc6\u78bc",
-      permissions: legacyAdminPermissions,
-      is_active: true,
-    },
-  });
-}
-
 async function handleAdminRefresh(req, res) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
   const body = await readBody(req);
@@ -3000,17 +2811,7 @@ async function handleAdminSession(req, res, context) {
   if (req.method !== "GET") return sendJson(res, 405, { error: "Method not allowed." });
   return sendJson(res, 200, {
     authMode: context.authMode,
-    user:
-      context.authMode === "legacy"
-        ? {
-          display_name: "???梁撖Ⅳ",
-          email: "",
-          role_code: "legacy_admin",
-          role_name: "???梁撖Ⅳ",
-          permissions: legacyAdminPermissions,
-          is_active: true,
-        }
-        : context.profile,
+    user: context.profile,
     permissions: context.permissions,
   });
 }
@@ -3038,27 +2839,31 @@ async function handleAdminBootstrapSuper(req, res) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
   assertBootstrapRateLimit(req);
   const body = await readBody(req);
-  const legacyPassword = String(body?.legacyAdminPassword || "");
+  const providedAdminPassword = String(body?.adminPassword || body?.password || "");
   const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
 
   const existingProfiles = await supabaseRequest("/admin_profiles?select=id&limit=1");
   const bootstrapUnavailable = Array.isArray(existingProfiles) && existingProfiles.length > 0;
-  const bootstrapAuthFailed =
-    !adminPassword ||
-    legacyPassword !== adminPassword;
 
-  if (bootstrapAuthFailed || bootstrapUnavailable) {
-    return sendJson(res, 401, { error: "Bootstrap verification failed or is disabled." });
+  if (bootstrapUnavailable) {
+    return sendJson(res, 409, { error: "Bootstrap is disabled." });
+  }
+
+  if (!adminPassword || providedAdminPassword !== adminPassword) {
+    return sendJson(res, 401, { error: "Bootstrap verification failed." });
   }
 
   const displayName = cleanText(body?.displayName);
   const email = cleanText(body?.email).toLowerCase();
-  const password = String(body?.password || "");
-  if (!displayName || !email || !password) {
-    return sendJson(res, 400, { error: "Display name, email, and password are required." });
+  if (!displayName || !email || !providedAdminPassword) {
+    return sendJson(res, 400, { error: "Display name, email, and ADMIN_PASSWORD are required." });
   }
 
-  const authUser = await createSupabaseAdminUser({ email, password, displayName });
+  const authUser = await createSupabaseAdminUser({
+    email,
+    password: providedAdminPassword,
+    displayName,
+  });
   const authUserId = authUser?.id || authUser?.user?.id;
   if (!authUserId) return sendJson(res, 500, { error: "Supabase Auth user creation failed." });
 
@@ -3101,6 +2906,14 @@ async function handleAdminBootstrapSuper(req, res) {
   });
 }
 
+async function handleAdminBootstrapStatus(req, res) {
+  if (req.method !== "GET") return sendJson(res, 405, { error: "Method not allowed." });
+  const existingProfiles = await supabaseRequest("/admin_profiles?select=id&limit=1");
+  return sendJson(res, 200, {
+    available: !Array.isArray(existingProfiles) || existingProfiles.length === 0,
+  });
+}
+
 async function loadAdminUsers(req, res, context) {
   await requirePermission(req, "users.view");
   const rows = await supabaseRequest(
@@ -3115,7 +2928,6 @@ async function loadAdminUsers(req, res, context) {
 }
 
 async function assertCanMutateAdminUser(context, targetProfile, nextRoleCode = targetProfile?.role_code) {
-  if (context.authMode === "legacy") return;
   if (context.roleCode !== "super_admin") {
     if (targetProfile?.role_code === "super_admin" || nextRoleCode === "super_admin") {
       throw createHttpError(403, "Only super_admin can manage super_admin users.");
@@ -5470,10 +5282,6 @@ async function handleWarehouseMedia(req, res, context) {
   return sendJson(res, 405, { error: "Method not allowed." });
 }
 
-export async function handleLegacyLoginAction(req, res) {
-  return await handleAdminLegacyLogin(req, res);
-}
-
 export async function handleWarehouseSupplyQuantityAction(req, res) {
   const adminContext = await requireAuthenticatedAdmin(req);
   await requirePermission(req, "warehouse.supply.adjust_quantity");
@@ -5503,16 +5311,16 @@ export default async function handler(req, res) {
       return await handleAdminLogin(req, res);
     }
 
-    if (action === "admin-legacy-login") {
-      return await handleAdminLegacyLogin(req, res);
-    }
-
     if (action === "admin-refresh") {
       return await handleAdminRefresh(req, res);
     }
 
     if (action === "admin-bootstrap-super") {
       return await handleAdminBootstrapSuper(req, res);
+    }
+
+    if (action === "admin-bootstrap-status") {
+      return await handleAdminBootstrapStatus(req, res);
     }
 
     const adminContext = await requireAuthenticatedAdmin(req);

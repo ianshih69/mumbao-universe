@@ -5,9 +5,9 @@ const loadUsersRoles = () => import("../server/adminShop/usersRoles.js");
 const ROUTES = {
   test: () => import("../server/adminShop/test.js"),
   "admin-login": loadFallback,
-  "admin-legacy-login": () => import("../server/adminShop/legacyLogin.js"),
   "admin-refresh": loadFallback,
   "admin-bootstrap-super": loadFallback,
+  "admin-bootstrap-status": loadFallback,
   "admin-session": loadFallback,
   "admin-users": loadUsersRoles,
   "admin-roles": loadUsersRoles,

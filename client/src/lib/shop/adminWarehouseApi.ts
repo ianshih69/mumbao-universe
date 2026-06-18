@@ -147,6 +147,10 @@ export async function adjustSupplyQuantity(
   id: string,
   delta: number
 ) {
+  if (!Number.isInteger(delta) || delta === 0) {
+    throw new Error("數量調整必須是非零整數。");
+  }
+
   return fetchAdminJson<{ item: SupplyItem }>(
     "/api/admin-shop?action=warehouse-supply-quantity",
     token,

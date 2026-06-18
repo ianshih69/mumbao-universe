@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import QRCode from "qrcode";
 import AdminShopNav from "@/components/shop/AdminShopNav";
@@ -36,6 +36,20 @@ import {
 
 type TabKey = "supplies" | "furniture" | "housekeeping" | "locations";
 type UploadTarget = "supply" | "furniture" | "housekeeping";
+type QuantityUpdateState = {
+  optimisticQuantity: number;
+  pendingDelta: number;
+  isSaving: boolean;
+  error: string | null;
+  saved: boolean;
+};
+type QuantityQueueState = {
+  committedQuantity: number;
+  optimisticQuantity: number;
+  pendingDelta: number;
+  isSaving: boolean;
+  savedTimer?: number;
+};
 
 const emptySupply: Partial<SupplyItem> = {
   name: "",
@@ -198,6 +212,8 @@ export default function AdminShopWarehouse() {
   const [files, setFiles] = useState<File[]>([]);
   const [supplyPhotoPreview, setSupplyPhotoPreview] = useState("");
   const [supplyPhotoFileName, setSupplyPhotoFileName] = useState("");
+  const [quantityUpdates, setQuantityUpdates] = useState<Record<string, QuantityUpdateState>>({});
+  const quantityQueuesRef = useRef<Record<string, QuantityQueueState>>({});
   const identity = getAdminIdentity();
 
   useEffect(() => {
@@ -219,6 +235,163 @@ export default function AdminShopWarehouse() {
     }
   }, []);
 
+  const mergeQueuedSupplyQuantities = (items: SupplyItem[]) =>
+    items.map((item) => {
+      const queue = quantityQueuesRef.current[item.id];
+      if (!queue || (!queue.isSaving && queue.pendingDelta === 0)) return item;
+      return { ...item, quantity: queue.optimisticQuantity };
+    });
+
+  const updateSupplyLocally = (id: string, updater: (item: SupplyItem) => SupplyItem) => {
+    setSupplies((current) => current.map((item) => (item.id === id ? updater(item) : item)));
+  };
+
+  const setQuantityStatus = (id: string, next: Partial<QuantityUpdateState>) => {
+    setQuantityUpdates((current) => {
+      const queue = quantityQueuesRef.current[id];
+      const previous = current[id] || {
+        optimisticQuantity: queue?.optimisticQuantity || 0,
+        pendingDelta: queue?.pendingDelta || 0,
+        isSaving: Boolean(queue?.isSaving),
+        error: null,
+        saved: false,
+      };
+      return {
+        ...current,
+        [id]: {
+          ...previous,
+          ...next,
+        },
+      };
+    });
+  };
+
+  const clearSavedStatusLater = (id: string) => {
+    const queue = quantityQueuesRef.current[id];
+    if (!queue) return;
+    if (queue.savedTimer) window.clearTimeout(queue.savedTimer);
+    queue.savedTimer = window.setTimeout(() => {
+      setQuantityUpdates((current) => {
+        const previous = current[id];
+        if (!previous || previous.isSaving || previous.error) return current;
+        return {
+          ...current,
+          [id]: {
+            ...previous,
+            saved: false,
+          },
+        };
+      });
+    }, 1600);
+  };
+
+  const flushSupplyQuantityQueue = async (id: string, activeToken: string) => {
+    const queue = quantityQueuesRef.current[id];
+    if (!queue || queue.isSaving || queue.pendingDelta === 0) return;
+
+    const deltaToSave = queue.pendingDelta;
+    queue.pendingDelta = 0;
+    queue.isSaving = true;
+    setQuantityStatus(id, {
+      optimisticQuantity: queue.optimisticQuantity,
+      pendingDelta: queue.pendingDelta,
+      isSaving: true,
+      error: null,
+      saved: false,
+    });
+
+    try {
+      const result = await adjustSupplyQuantity(activeToken, id, deltaToSave);
+      const updatedItem = result.item;
+      const serverQuantity = Number(updatedItem?.quantity);
+      if (!updatedItem?.id || !Number.isFinite(serverQuantity)) {
+        throw new Error("數量儲存回應不完整。");
+      }
+
+      queue.committedQuantity = serverQuantity;
+      queue.isSaving = false;
+
+      if (queue.pendingDelta === 0) {
+        queue.optimisticQuantity = serverQuantity;
+        updateSupplyLocally(id, (item) => ({ ...item, ...updatedItem, quantity: serverQuantity }));
+        setQuantityStatus(id, {
+          optimisticQuantity: serverQuantity,
+          pendingDelta: 0,
+          isSaving: false,
+          error: null,
+          saved: true,
+        });
+        clearSavedStatusLater(id);
+        return;
+      }
+
+      updateSupplyLocally(id, (item) => ({
+        ...item,
+        ...updatedItem,
+        quantity: queue.optimisticQuantity,
+      }));
+      setQuantityStatus(id, {
+        optimisticQuantity: queue.optimisticQuantity,
+        pendingDelta: queue.pendingDelta,
+        isSaving: true,
+        error: null,
+        saved: false,
+      });
+      void flushSupplyQuantityQueue(id, activeToken);
+    } catch (error) {
+      queue.pendingDelta = 0;
+      queue.isSaving = false;
+      queue.optimisticQuantity = queue.committedQuantity;
+      updateSupplyLocally(id, (item) => ({ ...item, quantity: queue.committedQuantity }));
+      setQuantityStatus(id, {
+        optimisticQuantity: queue.committedQuantity,
+        pendingDelta: 0,
+        isSaving: false,
+        error: "數量儲存失敗，已恢復原數量。",
+        saved: false,
+      });
+      if (error instanceof Error && error.message === adminAuthExpiredMessage) {
+        clearAdminToken();
+        setAuthStatus("loggedOut");
+      }
+    }
+  };
+
+  const queueSupplyQuantityChange = (item: SupplyItem, delta: number) => {
+    if (!token || !Number.isInteger(delta) || delta === 0) return;
+    const id = item.id;
+    const queue =
+      quantityQueuesRef.current[id] ||
+      {
+        committedQuantity: Number(item.quantity || 0),
+        optimisticQuantity: Number(item.quantity || 0),
+        pendingDelta: 0,
+        isSaving: false,
+      };
+    quantityQueuesRef.current[id] = queue;
+
+    const nextQuantity = Math.max(0, queue.optimisticQuantity + delta);
+    const actualDelta = nextQuantity - queue.optimisticQuantity;
+    if (actualDelta === 0) return;
+
+    queue.optimisticQuantity = nextQuantity;
+    queue.pendingDelta += actualDelta;
+    if (queue.savedTimer) {
+      window.clearTimeout(queue.savedTimer);
+      queue.savedTimer = undefined;
+    }
+
+    updateSupplyLocally(id, (currentItem) => ({ ...currentItem, quantity: nextQuantity }));
+    setQuantityStatus(id, {
+      optimisticQuantity: nextQuantity,
+      pendingDelta: queue.pendingDelta,
+      isSaving: true,
+      error: null,
+      saved: false,
+    });
+    void flushSupplyQuantityQueue(id, token);
+  };
+
   const loadAll = async (nextToken = token) => {
     if (!nextToken) return;
     setIsLoading(true);
@@ -234,7 +407,7 @@ export default function AdminShopWarehouse() {
       ]);
       setLocations(locationData.locations || []);
       setDashboard(dashboardData);
-      setSupplies(supplyData.items || []);
+      setSupplies(mergeQueuedSupplyQuantities(supplyData.items || []));
       setFurniture(furnitureData.assets || []);
       setRecords(recordData.records || []);
     } catch (error) {
@@ -269,6 +442,9 @@ export default function AdminShopWarehouse() {
   useEffect(() => {
     return () => {
       if (supplyPhotoPreview) URL.revokeObjectURL(supplyPhotoPreview);
+      Object.values(quantityQueuesRef.current).forEach((queue) => {
+        if (queue.savedTimer) window.clearTimeout(queue.savedTimer);
+      });
     };
   }, [supplyPhotoPreview]);
 
@@ -448,6 +624,12 @@ export default function AdminShopWarehouse() {
               <div className="mt-5 space-y-3">
                 {supplies.map((item) => {
                   const status = stockStatus(item);
+                  const quantityState = quantityUpdates[item.id];
+                  const quantityMessage = quantityState?.isSaving
+                    ? "儲存中…"
+                    : quantityState?.saved
+                      ? "已儲存"
+                      : "";
                   return (
                     <article key={item.id} className="grid gap-4 rounded-3xl border border-stone-200 bg-[#fffaf5] p-4 md:grid-cols-[90px_1fr_auto] md:items-center">
                       <MediaPreview media={item.main_media} />
@@ -467,13 +649,15 @@ export default function AdminShopWarehouse() {
                             <button
                               className="rounded-full border border-stone-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
                               disabled={Number(item.quantity) <= 0}
-                              onClick={() => void adjustSupplyQuantity(token, item.id, -1).then(() => loadAll())}
+                              onClick={() => queueSupplyQuantityChange(item, -1)}
                             >
                               -1
                             </button>
                             <strong className="min-w-20 text-center text-sm text-stone-700">目前 {item.quantity}</strong>
-                            <button className="rounded-full border border-stone-200 bg-white px-3 py-2 text-sm" onClick={() => void adjustSupplyQuantity(token, item.id, 1).then(() => loadAll())}>+1</button>
+                            <button className="rounded-full border border-stone-200 bg-white px-3 py-2 text-sm" onClick={() => queueSupplyQuantityChange(item, 1)}>+1</button>
                           </div>
+                          {quantityMessage ? <p className="mt-2 text-center text-xs font-medium text-stone-500">{quantityMessage}</p> : null}
+                          {quantityState?.error ? <p className="mt-2 max-w-40 text-center text-xs font-medium text-rose-600">{quantityState.error}</p> : null}
                         </div>
                         <div className="rounded-2xl border border-stone-200 bg-white/80 p-2">
                           <p className="mb-2 text-xs font-semibold text-stone-500">其他操作</p>
@@ -731,15 +915,18 @@ export default function AdminShopWarehouse() {
                             <div className="min-w-0 flex-1">
                               <p className="font-semibold">{supply.name}</p>
                               <p className="text-sm text-stone-500">目前數量 {supply.quantity}</p>
+                              {quantityUpdates[supply.id]?.isSaving ? <p className="mt-1 text-xs font-medium text-stone-500">儲存中…</p> : null}
+                              {quantityUpdates[supply.id]?.saved ? <p className="mt-1 text-xs font-medium text-stone-500">已儲存</p> : null}
+                              {quantityUpdates[supply.id]?.error ? <p className="mt-1 text-xs font-medium text-rose-600">{quantityUpdates[supply.id]?.error}</p> : null}
                             </div>
                             <button
                               className="rounded-full bg-white px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
                               disabled={Number(supply.quantity) <= 0}
-                              onClick={() => void adjustSupplyQuantity(token, supply.id, -1).then(() => loadAll())}
+                              onClick={() => queueSupplyQuantityChange(supply, -1)}
                             >
                               -1
                             </button>
-                            <button className="rounded-full bg-white px-3 py-2" onClick={() => void adjustSupplyQuantity(token, supply.id, 1).then(() => loadAll())}>+1</button>
+                            <button className="rounded-full bg-white px-3 py-2" onClick={() => queueSupplyQuantityChange(supply, 1)}>+1</button>
                           </div>
                         )) : <p className="text-sm text-stone-500">此層目前沒有備品。</p>}
                       </div>

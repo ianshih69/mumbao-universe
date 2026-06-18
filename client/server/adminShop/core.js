@@ -4825,7 +4825,7 @@ async function handleWarehouseSupplyQuantity(req, res, context) {
   const body = await readBody(req);
   const id = cleanText(body?.id);
   const delta = Number(body?.delta);
-  if (!id || !Number.isInteger(delta)) {
+  if (!id || !Number.isInteger(delta) || delta === 0) {
     return sendJson(res, 400, { error: "Request failed." });
   }
 
@@ -4853,7 +4853,7 @@ async function handleWarehouseSupplyQuantity(req, res, context) {
     afterData: updated?.[0],
   });
 
-  return sendJson(res, 200, { item: updated?.[0] || null });
+  return sendJson(res, 200, { item: updated?.[0] || { id, quantity } });
 }
 
 function filterWarehouseFurniture(items, q = "") {

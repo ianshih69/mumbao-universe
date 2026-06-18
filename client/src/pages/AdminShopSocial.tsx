@@ -88,6 +88,7 @@ type MetaConnectionUiStatus = MetaPlatformConnection | {
   error: null;
   errorCode: null;
   metaError: null;
+  diagnostics?: undefined;
 };
 
 type SocialDraftForm = {
@@ -266,7 +267,7 @@ function storedDraftFromForm(
 function normalizeStoredDraft(value: unknown): StoredSocialDraft | null {
   if (!value || typeof value !== "object") return null;
 
-  const source = value as Partial<StoredSocialDraft> & {
+  const source = value as Omit<Partial<StoredSocialDraft>, "status"> & {
     publishMode?: PublishMode;
     fileNames?: string[];
     status?: DraftStatus | "draft";

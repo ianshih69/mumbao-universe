@@ -92,6 +92,8 @@ function getTaipeiDateKey(value?: string) {
 }
 
 function formatDateLabel(value?: string) {
+  if (!value) return "";
+
   const key = getTaipeiDateKey(value);
   if (!key) return "";
 
@@ -637,7 +639,11 @@ export default function AdminChats() {
                         {getDisplayName(session)}
                       </p>
                       <span className="flex-none text-xs text-stone-400">
-                        {formatSessionTime(session.latest_message_at)}
+                        {formatSessionTime(
+                          session.latest_message_at ||
+                            session.updated_at ||
+                            session.created_at
+                        ) || "—"}
                       </span>
                     </div>
                     <p className="mt-1 line-clamp-1 text-sm text-stone-500">

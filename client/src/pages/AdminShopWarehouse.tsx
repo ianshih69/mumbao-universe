@@ -618,7 +618,7 @@ export default function AdminShopWarehouse() {
                   <option value="all">全部位置</option>
                   {locations.map((item) => <option key={item.code} value={item.code}>{item.code}</option>)}
                 </select>
-                <button className="rounded-full bg-[#8b6f5b] px-4 py-2 text-sm font-semibold text-white" onClick={() => void loadAll()}>重新整理</button>
+                <button className="rounded-full bg-[#8b6f5b] px-3 py-2 text-sm font-semibold text-white" onClick={() => void loadAll()}>重新整理</button>
               </div>
 
               <div className="mt-5 space-y-3">
@@ -631,7 +631,7 @@ export default function AdminShopWarehouse() {
                       ? "已儲存"
                       : "";
                   return (
-                    <article key={item.id} className="grid gap-4 rounded-3xl border border-stone-200 bg-[#fffaf5] p-4 md:grid-cols-[90px_1fr_auto] md:items-center">
+                    <article key={item.id} className="grid gap-3 rounded-2xl border border-stone-200 bg-[#fffaf5] p-3 md:grid-cols-[72px_minmax(0,1fr)_auto] md:items-center md:gap-4">
                       <MediaPreview media={item.main_media} />
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -639,32 +639,38 @@ export default function AdminShopWarehouse() {
                           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${status.tone}`}>{status.label}</span>
                         </div>
                         <p className="mt-1 text-sm text-stone-600">{item.brand_spec || "未填品牌／規格"}｜{item.location_code}</p>
-                        <p className="mt-1 text-sm font-medium text-stone-700">目前數量：{item.quantity}｜安全庫存：{item.safety_stock}</p>
-                        <p className="mt-1 text-sm text-stone-500">單價 {formatMoney(item.unit_price)}</p>
+                        <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-stone-600">
+                          <span><span className="font-semibold text-stone-900">目前庫存 {item.quantity}</span></span>
+                          <span>安全庫存 {item.safety_stock}</span>
+                          <span>單價 {formatMoney(item.unit_price)}</span>
+                        </p>
                       </div>
-                      <div className="flex flex-col gap-3 md:items-end">
-                        <div className="rounded-2xl border border-stone-200 bg-white/80 p-2">
-                          <p className="mb-2 text-xs font-semibold text-stone-500">數量調整</p>
-                          <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between md:flex-col md:items-end">
+                        <div className="flex flex-col items-start gap-1 sm:items-center md:items-end">
+                          <div className="inline-flex items-center overflow-hidden rounded-full border border-stone-200 bg-white/80 shadow-sm">
                             <button
-                              className="rounded-full border border-stone-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                              className="h-9 w-10 text-base font-semibold text-stone-500 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-35"
                               disabled={Number(item.quantity) <= 0}
                               onClick={() => queueSupplyQuantityChange(item, -1)}
+                              aria-label="減少備品數量"
                             >
-                              -1
+                              －
                             </button>
-                            <strong className="min-w-20 text-center text-sm text-stone-700">目前 {item.quantity}</strong>
-                            <button className="rounded-full border border-stone-200 bg-white px-3 py-2 text-sm" onClick={() => queueSupplyQuantityChange(item, 1)}>+1</button>
+                            <strong className="min-w-14 px-3 text-center text-xl font-bold text-stone-950">{item.quantity}</strong>
+                            <button
+                              className="h-9 w-10 text-base font-semibold text-[#8b6f5b] transition hover:bg-stone-50"
+                              onClick={() => queueSupplyQuantityChange(item, 1)}
+                              aria-label="增加備品數量"
+                            >
+                              ＋
+                            </button>
                           </div>
-                          {quantityMessage ? <p className="mt-2 text-center text-xs font-medium text-stone-500">{quantityMessage}</p> : null}
-                          {quantityState?.error ? <p className="mt-2 max-w-40 text-center text-xs font-medium text-rose-600">{quantityState.error}</p> : null}
+                          {quantityMessage ? <p className="text-xs font-medium text-stone-500">{quantityMessage}</p> : null}
+                          {quantityState?.error ? <p className="max-w-48 text-xs font-medium text-rose-600 sm:text-center md:text-right">{quantityState.error}</p> : null}
                         </div>
-                        <div className="rounded-2xl border border-stone-200 bg-white/80 p-2">
-                          <p className="mb-2 text-xs font-semibold text-stone-500">其他操作</p>
-                          <div className="flex flex-wrap gap-2 md:justify-end">
-                            <button className="rounded-full border border-stone-200 bg-white px-4 py-2 text-sm" onClick={() => editSupply(item)}>編輯</button>
-                            <button className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700" onClick={() => confirm("確定刪除這筆備品與照片嗎？") && void deleteSupplyItem(token, item.id).then(() => loadAll())}>刪除</button>
-                          </div>
+                        <div className="flex flex-wrap gap-2 sm:justify-end">
+                          <button className="rounded-full px-3 py-1.5 text-sm font-medium text-stone-600 hover:bg-white/80" onClick={() => editSupply(item)}>編輯</button>
+                          <button className="rounded-full px-3 py-1.5 text-sm font-medium text-rose-600 hover:bg-rose-50" onClick={() => confirm("確定刪除這筆備品與照片嗎？") && void deleteSupplyItem(token, item.id).then(() => loadAll())}>刪除</button>
                         </div>
                       </div>
                     </article>

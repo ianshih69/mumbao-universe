@@ -1,7 +1,6 @@
 {
   "name": "wandering-walls",
   "version": "1.0.0",
-  "type": "module",
   "license": "MIT",
   "scripts": {
     "dev": "vercel dev --cwd client --listen 3000 --local-config client/vercel.json",

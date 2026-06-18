@@ -1,20 +1,29 @@
 import { withHandlerSafety } from "./withHandlerSafety.js";
 
-function resolveHandleAdminShop(mod) {
-  if (typeof mod?.handleAdminShop === "function") {
-    return mod.handleAdminShop;
-  }
+function resolveHandleAdminShop(moduleValue) {
+  let current = moduleValue;
+  const visited = new Set();
 
-  if (typeof mod?.default?.handleAdminShop === "function") {
-    return mod.default.handleAdminShop;
-  }
+  for (let depth = 0; depth < 10; depth += 1) {
+    if (typeof current === "function") {
+      return current;
+    }
 
-  if (typeof mod?.default?.default?.handleAdminShop === "function") {
-    return mod.default.default.handleAdminShop;
-  }
+    if (!current || typeof current !== "object" || visited.has(current)) {
+      return null;
+    }
 
-  if (typeof mod?.default === "function") {
-    return mod.default;
+    visited.add(current);
+
+    if (typeof current.handleAdminShop === "function") {
+      return current.handleAdminShop;
+    }
+
+    if (!("default" in current)) {
+      return null;
+    }
+
+    current = current.default;
   }
 
   return null;
@@ -38,7 +47,10 @@ async function handleAdminShopFallback(req, res) {
     console.error("[admin-shop-fallback] invalid core export", {
       moduleKeys: Object.keys(coreModule || {}),
       defaultType: typeof coreModule?.default,
-      namedType: typeof coreModule?.handleAdminShop,
+      defaultKeys:
+        coreModule?.default && typeof coreModule.default === "object"
+          ? Object.keys(coreModule.default)
+          : [],
     });
 
     return sendJson(res, 500, {

@@ -644,47 +644,53 @@ export default function AdminShopWarehouse() {
                       ? "已儲存"
                       : "";
                   return (
-                    <article key={item.id} className="grid gap-3 rounded-2xl border border-stone-200 bg-[#fffaf5] p-3.5 md:min-h-[84px] md:grid-cols-[80px_minmax(0,1fr)_auto] md:items-center md:gap-4">
-                      <MediaPreview media={item.main_media} />
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-semibold text-stone-950">{item.name}</h3>
-                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${status.tone}`}>{status.label}</span>
-                        </div>
-                        <p className="mt-1 text-sm text-stone-600">{brandSpec.brand}｜{brandSpec.spec}｜{item.location_code}</p>
-                        <p className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-stone-500">
-                          <span className="font-semibold text-stone-950">庫存 {item.quantity}</span>
-                          <span>安全庫存 {item.safety_stock}</span>
-                          <span>單價 {formatMoney(item.unit_price)}</span>
-                        </p>
-                      </div>
-                      <div className="flex flex-col items-start gap-1.5 md:items-end">
-                        <div className="flex flex-col items-start gap-1 sm:items-center md:items-end">
-                          <div className="inline-flex items-center overflow-hidden rounded-full border border-stone-200 bg-white/80 shadow-sm">
-                            <button
-                              className="h-9 w-10 text-base font-semibold text-stone-500 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-35"
-                              disabled={Number(item.quantity) <= 0}
-                              onClick={() => queueSupplyQuantityChange(item, -1)}
-                              aria-label="減少備品數量"
-                            >
-                              －
-                            </button>
-                            <strong className="min-w-14 px-3 text-center text-xl font-bold text-stone-950">{item.quantity}</strong>
-                            <button
-                              className="h-9 w-10 text-base font-semibold text-[#8b6f5b] transition hover:bg-stone-50"
-                              onClick={() => queueSupplyQuantityChange(item, 1)}
-                              aria-label="增加備品數量"
-                            >
-                              ＋
-                            </button>
+                    <article key={item.id} className="rounded-2xl border border-stone-200 bg-[#fffaf5] p-3.5 md:grid md:min-h-[96px] md:grid-cols-[72px_minmax(0,1fr)_156px] md:items-center md:gap-4">
+                      <div className="flex min-w-0 gap-3 md:contents">
+                        {item.main_media?.public_url ? (
+                          <img src={item.main_media.public_url} alt={item.main_media.file_name || item.name} className="h-[72px] w-[72px] shrink-0 rounded-2xl object-cover" />
+                        ) : (
+                          <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-2xl bg-[#f3ece4] text-xs text-stone-500">
+                            無照片
                           </div>
-                          {quantityMessage ? <p className="text-xs font-medium text-stone-500">{quantityMessage}</p> : null}
-                          {quantityState?.error ? <p className="max-w-48 text-xs font-medium text-rose-600 sm:text-center md:text-right">{quantityState.error}</p> : null}
+                        )}
+                        <div className="min-w-0 self-center">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-xl font-semibold leading-tight text-stone-950">{item.name}</h3>
+                            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${status.tone}`}>{status.label}</span>
+                          </div>
+                          <p className="mt-1 text-sm text-stone-500">{brandSpec.brand}｜{brandSpec.spec}｜{item.location_code}</p>
+                          <div className="mt-3 flex flex-wrap gap-2 text-sm">
+                            <span className="rounded-full bg-white/70 px-3 py-1 font-semibold text-stone-950">庫存 {item.quantity}</span>
+                            <span className="rounded-full bg-white/50 px-3 py-1 text-stone-500">安全庫存 {item.safety_stock}</span>
+                            <span className="rounded-full bg-white/50 px-3 py-1 text-stone-500">單價 {formatMoney(item.unit_price)}</span>
+                          </div>
                         </div>
-                        <div className="flex flex-wrap gap-1.5 sm:justify-end">
-                          <button className="h-7 rounded-full border border-stone-200 bg-white/70 px-3 text-xs font-medium text-stone-600 hover:bg-white" onClick={() => editSupply(item)}>編輯</button>
-                          <button className="h-7 rounded-full border border-rose-100 bg-rose-50/70 px-3 text-xs font-medium text-rose-600 hover:bg-rose-50" onClick={() => confirm("確定刪除這筆備品與照片嗎？") && void deleteSupplyItem(token, item.id).then(() => loadAll())}>刪除</button>
+                      </div>
+                      <div className="mt-3 flex w-full flex-col items-center rounded-2xl border border-[#e8dacb] bg-[#fbf6ef] p-2.5 shadow-sm md:mt-0 md:w-[156px]">
+                        <div className="grid h-10 w-[136px] grid-cols-[40px_1fr_40px] overflow-hidden rounded-full border border-stone-200 bg-white/90">
+                          <button
+                            className="text-lg font-semibold text-stone-500 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-35"
+                            disabled={Number(item.quantity) <= 0}
+                            onClick={() => queueSupplyQuantityChange(item, -1)}
+                            aria-label="減少備品數量"
+                          >
+                            －
+                          </button>
+                          <strong className="flex items-center justify-center text-xl font-semibold text-stone-950">{item.quantity}</strong>
+                          <button
+                            className="text-lg font-semibold text-[#8b6f5b] transition hover:bg-stone-50"
+                            onClick={() => queueSupplyQuantityChange(item, 1)}
+                            aria-label="增加備品數量"
+                          >
+                            ＋
+                          </button>
                         </div>
+                        <div className="mt-2 flex gap-2">
+                          <button className="h-8 w-16 rounded-full border border-[#d9c8b8] bg-[#f4eadf] text-sm font-medium text-stone-700 hover:bg-[#efe1d2]" onClick={() => editSupply(item)}>編輯</button>
+                          <button className="h-8 w-16 rounded-full border border-rose-100 bg-rose-50 text-sm font-medium text-rose-600 hover:bg-rose-100" onClick={() => confirm("確定刪除這筆備品與照片嗎？") && void deleteSupplyItem(token, item.id).then(() => loadAll())}>刪除</button>
+                        </div>
+                        {quantityMessage ? <p className="mt-1.5 text-xs font-medium text-stone-500">{quantityMessage}</p> : null}
+                        {quantityState?.error ? <p className="mt-1.5 max-w-[136px] text-center text-xs font-medium text-rose-600">{quantityState.error}</p> : null}
                       </div>
                     </article>
                   );

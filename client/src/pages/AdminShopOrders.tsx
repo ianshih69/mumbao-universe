@@ -90,7 +90,22 @@ const trackingFilterOptions: Array<{ value: AdminTrackingFilter; label: string }
   { value: "without", label: "無物流單號" },
 ];
 
-function getInitialOrderQuery() {
+function isAllowedOptionValue<T extends string>(
+  value: string,
+  options: Array<{ value: "" | T; label: string }>
+): value is T {
+  return options.some((option) => option.value !== "" && option.value === value);
+}
+
+type InitialOrderQuery = {
+  search: string;
+  orderNumber: string;
+  status: "" | AdminOrderStatus;
+  source: "" | AdminOrderSource;
+  paymentStatus: "" | AdminPaymentStatus;
+};
+
+function getInitialOrderQuery(): InitialOrderQuery {
   const params =
     typeof window === "undefined"
       ? new URLSearchParams()
@@ -100,22 +115,27 @@ function getInitialOrderQuery() {
   const queryPaymentStatus = params.get("paymentStatus") || "";
   const queryOrderNumber = params.get("orderNumber") || "";
   const querySearch = params.get("q") || "";
-  const validSource = orderSourceOptions.some(
-    (option) => option.value && option.value === querySource
-  );
-  const validStatus = orderStatusOptions.some(
-    (option) => option.value && option.value === queryStatus
-  );
-  const validPaymentStatus = paymentStatusFilterOptions.some(
-    (option) => option.value && option.value === queryPaymentStatus
-  );
-
   return {
     search: queryOrderNumber || querySearch,
     orderNumber: queryOrderNumber,
-    status: validStatus ? (queryStatus as AdminOrderStatus) : "",
-    source: validSource ? (querySource as AdminOrderSource) : "",
-    paymentStatus: validPaymentStatus ? (queryPaymentStatus as AdminPaymentStatus) : "",
+    status: isAllowedOptionValue<AdminOrderStatus>(
+      queryStatus,
+      orderStatusOptions
+    )
+      ? queryStatus
+      : "",
+    source: isAllowedOptionValue<AdminOrderSource>(
+      querySource,
+      orderSourceOptions
+    )
+      ? querySource
+      : "",
+    paymentStatus: isAllowedOptionValue<AdminPaymentStatus>(
+      queryPaymentStatus,
+      paymentStatusFilterOptions
+    )
+      ? queryPaymentStatus
+      : "",
   };
 }
 

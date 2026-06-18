@@ -20,6 +20,7 @@ import VariantQrCode from "@/components/shop/VariantQrCode";
 import {
   type AdminProductStatus,
   type AdminShopImage,
+  type AdminShopProductInput,
   type AdminShopProductDetail,
   type AdminShopProductSummary,
   type AdminShopVariant,
@@ -431,8 +432,7 @@ export default function AdminShopProducts() {
     setIsSaving(true);
     setSuccess("");
     try {
-      const productPayload = {
-        ...(isCreating ? {} : { id: selectedProduct.id }),
+      const productPayload: AdminShopProductInput = {
         name: selectedProduct.name,
         slug: selectedProduct.slug,
         subtitle: selectedProduct.subtitle || "",
@@ -452,7 +452,7 @@ export default function AdminShopProducts() {
           })
         : await updateAdminShopProduct({
             token,
-            product: productPayload,
+            product: { ...productPayload, id: selectedProduct.id },
             variants: selectedProduct.variants,
             images: selectedProduct.images,
           });

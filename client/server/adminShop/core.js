@@ -3008,12 +3008,12 @@ async function handleAdminUsers(req, res, context) {
     await requirePermission(req, "users.update");
     const body = await readBody(req);
     const id = cleanText(firstQueryValue(req.query?.id) || body?.id);
-    return sendJson(res, 400, { error: "Request failed." });
+    if (!id) return sendJson(res, 400, { error: "Request failed." });
     const rows = await supabaseRequest(
       `/admin_profiles?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const before = Array.isArray(rows) ? rows[0] : null;
-    return sendJson(res, 404, { error: "Request failed." });
+    if (!before) return sendJson(res, 404, { error: "Request failed." });
 
     const next = {};
     if (body?.display_name !== undefined || body?.displayName !== undefined) {
@@ -3027,15 +3027,16 @@ async function handleAdminUsers(req, res, context) {
       await requirePermission(req, "users.disable");
       next.is_active = Boolean(body.is_active);
     }
+
+    await assertCanMutateAdminUser(context, before, next.role_code || before.role_code);
+    await assertNotLastSuperAdmin(before, next);
+
     if (body?.password) {
       await supabaseAuthRequest(`/auth/v1/admin/users/${before.auth_user_id}`, {
         method: "PUT",
         body: JSON.stringify({ password: String(body.password) }),
       });
     }
-
-    await assertCanMutateAdminUser(context, before, next.role_code || before.role_code);
-    await assertNotLastSuperAdmin(before, next);
 
     const updatedRows = Object.keys(next).length
       ? await supabaseRequest(`/admin_profiles?id=eq.${encodeURIComponent(id)}`, {
@@ -4666,7 +4667,7 @@ async function loadWarehouseSupplies(req, res) {
       `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const item = Array.isArray(rows) ? rows[0] : null;
-    return sendJson(res, 404, { error: "Request failed." });
+    if (!item) return sendJson(res, 404, { error: "Request failed." });
     const mediaById = await loadWarehouseMediaForTargets("supply", [item.id]);
     return sendJson(res, 200, { item: attachWarehouseMedia([item], mediaById)[0] });
   }
@@ -4747,7 +4748,7 @@ async function handleWarehouseSupply(req, res, context) {
   if (req.method === "POST") {
     const body = await readBody(req);
     const payload = normalizeSupplyPayload(body);
-    return sendJson(res, 400, { error: "Request failed." });
+    if (!payload.name) return sendJson(res, 400, { error: "Request failed." });
     const created = await supabaseRequest("/shop_supply_items", {
       method: "POST",
       body: JSON.stringify({ ...payload, created_at: new Date().toISOString() }),
@@ -4768,13 +4769,14 @@ async function handleWarehouseSupply(req, res, context) {
   if (req.method === "PATCH") {
     const body = await readBody(req);
     const id = cleanText(body?.id);
-    return sendJson(res, 400, { error: "Request failed." });
+    if (!id) return sendJson(res, 400, { error: "Request failed." });
     const beforeRows = await supabaseRequest(
       `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
     const payload = normalizeSupplyPayload(body);
-    return sendJson(res, 400, { error: "Request failed." });
+    if (!before) return sendJson(res, 404, { error: "Request failed." });
+    if (!payload.name) return sendJson(res, 400, { error: "Request failed." });
     const updated = await supabaseRequest(`/shop_supply_items?id=eq.${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
@@ -4795,11 +4797,12 @@ async function handleWarehouseSupply(req, res, context) {
 
   if (req.method === "DELETE") {
     const id = cleanText(firstQueryValue(req.query?.id));
-    return sendJson(res, 400, { error: "Request failed." });
+    if (!id) return sendJson(res, 400, { error: "Request failed." });
     const beforeRows = await supabaseRequest(
       `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
+    if (!before) return sendJson(res, 404, { error: "Request failed." });
     await deleteWarehouseRecord({ table: "shop_supply_items", targetType: "supply", id });
     await writeAdminActivityLog({
       req,
@@ -4821,17 +4824,19 @@ async function handleWarehouseSupplyQuantity(req, res, context) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
   const body = await readBody(req);
   const id = cleanText(body?.id);
-  const delta = Math.trunc(parseNumber(body?.delta, 0));
-  return sendJson(res, 400, { error: "Request failed." });
+  const delta = Number(body?.delta);
+  if (!id || !Number.isInteger(delta)) {
+    return sendJson(res, 400, { error: "Request failed." });
+  }
 
   const rows = await supabaseRequest(
     `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
   );
   const item = Array.isArray(rows) ? rows[0] : null;
-  return sendJson(res, 404, { error: "Request failed." });
+  if (!item) return sendJson(res, 404, { error: "Request failed." });
 
   const quantity = Number(item.quantity || 0) + delta;
-  return sendJson(res, 400, { error: "Request failed." });
+  if (quantity < 0) return sendJson(res, 400, { error: "Request failed." });
   const updated = await supabaseRequest(`/shop_supply_items?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify({ quantity, updated_at: new Date().toISOString() }),
@@ -4880,7 +4885,7 @@ async function loadWarehouseFurniture(req, res) {
       `/shop_furniture_assets?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const asset = Array.isArray(rows) ? rows[0] : null;
-    return sendJson(res, 404, { error: "Request failed." });
+    if (!asset) return sendJson(res, 404, { error: "Request failed." });
     const mediaById = await loadWarehouseMediaForTargets("furniture", [asset.id]);
     return sendJson(res, 200, { asset: attachWarehouseMedia([asset], mediaById)[0] });
   }
@@ -4933,11 +4938,12 @@ async function handleWarehouseFurniture(req, res, context) {
     }
 
     const id = cleanText(body?.id);
-    return sendJson(res, 400, { error: "Request failed." });
+    if (!id) return sendJson(res, 400, { error: "Request failed." });
     const beforeRows = await supabaseRequest(
       `/shop_furniture_assets?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
+    if (!before) return sendJson(res, 404, { error: "Request failed." });
     const updated = await supabaseRequest(`/shop_furniture_assets?id=eq.${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
@@ -4958,11 +4964,12 @@ async function handleWarehouseFurniture(req, res, context) {
 
   if (req.method === "DELETE") {
     const id = cleanText(firstQueryValue(req.query?.id));
-    return sendJson(res, 400, { error: "Request failed." });
+    if (!id) return sendJson(res, 400, { error: "Request failed." });
     const beforeRows = await supabaseRequest(
       `/shop_furniture_assets?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
+    if (!before) return sendJson(res, 404, { error: "Request failed." });
     await deleteWarehouseRecord({ table: "shop_furniture_assets", targetType: "furniture", id });
     await writeAdminActivityLog({
       req,
@@ -5064,7 +5071,7 @@ async function handleHousekeepingRecord(req, res, context) {
   if (req.method === "POST" || req.method === "PATCH") {
     const body = await readBody(req);
     const payload = normalizeHousekeepingPayload(body);
-    return sendJson(res, 400, { error: "Request failed." });
+    if (!payload.room_area) return sendJson(res, 400, { error: "Request failed." });
 
     if (req.method === "POST") {
       const created = await supabaseRequest("/shop_housekeeping_records", {
@@ -5089,7 +5096,7 @@ async function handleHousekeepingRecord(req, res, context) {
     }
 
     const id = cleanText(body?.id);
-    return sendJson(res, 400, { error: "Request failed." });
+    if (!id) return sendJson(res, 400, { error: "Request failed." });
     const beforeRows = await supabaseRequest(
       `/shop_housekeeping_records?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
@@ -5117,11 +5124,14 @@ async function handleHousekeepingRecord(req, res, context) {
 
   if (req.method === "DELETE") {
     const id = cleanText(firstQueryValue(req.query?.id));
-    return sendJson(res, 400, { error: "Request failed." });
+    if (!id) return sendJson(res, 400, { error: "Request failed." });
     const beforeRows = await supabaseRequest(
       `/shop_housekeeping_records?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
+    if (!before) return sendJson(res, 404, { error: "Housekeeping record not found." });
+    const allowedRecords = await filterHousekeepingRecordsForContext([before], context);
+    if (!allowedRecords.length) return sendJson(res, 403, { error: "Permission denied." });
     await deleteWarehouseRecord({ table: "shop_housekeeping_records", targetType: "housekeeping", id });
     await writeAdminActivityLog({
       req,
@@ -5172,8 +5182,9 @@ async function handleWarehouseMediaUpload(req, res, context) {
   }
   assertWarehouseMediaPermission(context, targetType, "write");
   await assertWarehouseMediaTargetExists(targetType, targetId);
-  return sendJson(res, 400, { error: "Request failed." });
-  return sendJson(res, 400, { error: "Request failed." });
+  if (!fileRule) {
+    return sendJson(res, 400, { error: "Request failed." });
+  }
   if (!Number.isFinite(size) || size <= 0 || size > fileRule.maxSize) {
     return sendJson(res, 400, { error: "Request failed." });
   }
@@ -5254,12 +5265,12 @@ async function handleWarehouseMedia(req, res, context) {
 
   if (req.method === "DELETE") {
     const id = cleanText(firstQueryValue(req.query?.id));
-    return sendJson(res, 400, { error: "Request failed." });
+    if (!id) return sendJson(res, 400, { error: "Request failed." });
     const rows = await supabaseRequest(
       `/shop_warehouse_media?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
     );
     const media = Array.isArray(rows) ? rows[0] : null;
-    return sendJson(res, 404, { error: "Request failed." });
+    if (!media) return sendJson(res, 404, { error: "Request failed." });
     assertWarehouseMediaPermission(context, cleanText(media.target_type), "delete");
     await deleteWarehouseMediaRows([media]);
     await supabaseRequest(`/shop_warehouse_media?id=eq.${encodeURIComponent(id)}`, {

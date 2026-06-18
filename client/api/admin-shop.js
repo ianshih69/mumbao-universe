@@ -61,6 +61,26 @@ function sendJson(res, status, body) {
   return res.end(JSON.stringify(body));
 }
 
+function resolveRouteHandler(mod) {
+  if (typeof mod === "function") {
+    return mod;
+  }
+
+  if (typeof mod?.default === "function") {
+    return mod.default;
+  }
+
+  if (typeof mod?.default?.default === "function") {
+    return mod.default.default;
+  }
+
+  if (typeof mod?.handler === "function") {
+    return mod.handler;
+  }
+
+  return null;
+}
+
 export default async function handler(req, res) {
   const action = String(firstQueryValue(req.query?.action) || "").trim();
 
@@ -78,15 +98,24 @@ export default async function handler(req, res) {
     }
 
     const mod = await loader();
+    const routeHandler = resolveRouteHandler(mod);
 
-    if (!mod?.default) {
+    if (!routeHandler) {
+      console.error("[admin-shop] invalid handler export", {
+        action,
+        moduleKeys: Object.keys(mod || {}),
+        defaultType: typeof mod?.default,
+        nestedDefaultType: typeof mod?.default?.default,
+      });
+
       return sendJson(res, 500, {
         ok: false,
-        error: "invalid handler export",
+        error: "invalid_handler_export",
+        action,
       });
     }
 
-    return await mod.default(req, res);
+    return await routeHandler(req, res);
   } catch (err) {
     console.error("[admin-shop crash]", {
       action,

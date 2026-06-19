@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { AlertCircle, ArrowLeft, CreditCard, MapPin, MessageSquare, UserRound } from "lucide-react";
 import { Header } from "@/components/layout/Header";
@@ -18,8 +18,76 @@ import {
 } from "@/lib/shop/cartStore";
 import type { CartItem, CheckoutCustomer } from "@/lib/shop/types";
 
+const checkoutKeyStorageKey = "mumbao-shop-checkout-idempotency";
+const orderLookupStoragePrefix = "mumbao-shop-order-lookup:";
+
+type StoredCheckoutKey = {
+  fingerprint: string;
+  key: string;
+};
+
+function getCartFingerprint(items: CartItem[]) {
+  return items
+    .map((item) => `${item.variantId}:${item.quantity}`)
+    .sort()
+    .join("|");
+}
+
+function createSecureCheckoutKey() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+
+  throw new Error("瀏覽器無法建立安全結帳憑證，請更新瀏覽器後再試。");
+}
+
+function readStoredCheckoutKey() {
+  try {
+    const rawValue = sessionStorage.getItem(checkoutKeyStorageKey);
+    if (!rawValue) return null;
+    const parsed = JSON.parse(rawValue) as Partial<StoredCheckoutKey>;
+    if (typeof parsed.fingerprint !== "string" || typeof parsed.key !== "string") {
+      return null;
+    }
+    return parsed as StoredCheckoutKey;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredCheckoutKey(value: StoredCheckoutKey) {
+  try {
+    sessionStorage.setItem(checkoutKeyStorageKey, JSON.stringify(value));
+  } catch {
+    // Session storage can be unavailable in strict private modes; component memory still covers this tab.
+  }
+}
+
+function clearStoredCheckoutKey() {
+  try {
+    sessionStorage.removeItem(checkoutKeyStorageKey);
+  } catch {
+    // Ignore storage cleanup failures.
+  }
+}
+
+function saveOrderLookupToken(orderNumber: string, lookupToken: string) {
+  try {
+    sessionStorage.setItem(`${orderLookupStoragePrefix}${orderNumber}`, lookupToken);
+  } catch {
+    // If storage is unavailable, the completion page will show a clear fallback message.
+  }
+}
+
 export default function Checkout() {
   const [, setLocation] = useLocation();
+  const fallbackCheckoutKeyRef = useRef<StoredCheckoutKey | null>(null);
   const [items, setItems] = useState<CartItem[]>(() => readCartItems());
   const [customer, setCustomer] = useState<CheckoutCustomer>({
     name: "",
@@ -33,8 +101,43 @@ export default function Checkout() {
 
   useEffect(() => subscribeCart(() => setItems(readCartItems())), []);
 
+  useEffect(() => {
+    const fingerprint = getCartFingerprint(items);
+    const stored = readStoredCheckoutKey();
+    if (stored && stored.fingerprint !== fingerprint) {
+      clearStoredCheckoutKey();
+    }
+    if (
+      fallbackCheckoutKeyRef.current &&
+      fallbackCheckoutKeyRef.current.fingerprint !== fingerprint
+    ) {
+      fallbackCheckoutKeyRef.current = null;
+    }
+  }, [items]);
+
   const updateCustomer = (key: keyof CheckoutCustomer, value: string) => {
     setCustomer((current) => ({ ...current, [key]: value }));
+  };
+
+  const getCheckoutIdempotencyKey = () => {
+    const fingerprint = getCartFingerprint(items);
+    const stored = readStoredCheckoutKey();
+    if (stored?.fingerprint === fingerprint) {
+      fallbackCheckoutKeyRef.current = stored;
+      return stored.key;
+    }
+
+    if (fallbackCheckoutKeyRef.current?.fingerprint === fingerprint) {
+      return fallbackCheckoutKeyRef.current.key;
+    }
+
+    const nextValue = {
+      fingerprint,
+      key: createSecureCheckoutKey(),
+    };
+    fallbackCheckoutKeyRef.current = nextValue;
+    writeStoredCheckoutKey(nextValue);
+    return nextValue.key;
   };
 
   const submitOrder = async (event: FormEvent) => {
@@ -45,15 +148,20 @@ export default function Checkout() {
     setError("");
 
     try {
-      const order = await createShopOrder({
+      const checkoutIdempotencyKey = getCheckoutIdempotencyKey();
+      const { order, lookupToken } = await createShopOrder({
         customer,
+        checkoutIdempotencyKey,
         note,
         items: items.map((item) => ({
           variant_id: item.variantId,
           quantity: item.quantity,
         })),
       });
+      saveOrderLookupToken(order.order_number, lookupToken);
       clearCartItems();
+      clearStoredCheckoutKey();
+      fallbackCheckoutKeyRef.current = null;
       setLocation(`/order-complete/${encodeURIComponent(order.order_number)}`);
     } catch (submitError) {
       setError(
@@ -83,15 +191,15 @@ export default function Checkout() {
             結帳
           </h1>
           <p className="mt-2 text-sm text-stone-500">
-            填寫收件資料後送出訂單，管家會再確認付款與出貨。
+            目前可直接以訪客身分完成訂單；會員功能即將推出，不會影響本次購買。
           </p>
         </div>
 
         {items.length === 0 ? (
           <section className="rounded-[8px] border border-dashed border-[#d7c6b5] bg-[#fffdf8] px-6 py-14 text-center">
-            <h2 className="font-serif text-2xl text-stone-900">購物車目前沒有商品</h2>
+            <h2 className="font-serif text-2xl text-stone-900">購物車內沒有商品</h2>
             <Button asChild className="mt-6 rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]">
-              <Link href="/shop">返回宇宙碎品商店</Link>
+              <Link href="/shop">前往商城</Link>
             </Button>
           </section>
         ) : (
@@ -103,8 +211,8 @@ export default function Checkout() {
                     <UserRound className="h-5 w-5" />
                   </span>
                   <div>
-                    <h2 className="font-serif text-2xl text-stone-900">基本資料</h2>
-                    <p className="mt-1 text-xs text-stone-500">姓名與電話為必填，方便管家確認訂單。</p>
+                    <h2 className="font-serif text-2xl text-stone-900">收件資料</h2>
+                    <p className="mt-1 text-xs text-stone-500">請填寫方便我們聯繫與出貨的資料。</p>
                   </div>
                 </div>
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -144,12 +252,12 @@ export default function Checkout() {
                     <MapPin className="h-5 w-5" />
                   </span>
                   <div>
-                    <h2 className="font-serif text-2xl text-stone-900">收件地址</h2>
-                    <p className="mt-1 text-xs text-stone-500">請填寫可收件的完整地址。</p>
+                    <h2 className="font-serif text-2xl text-stone-900">配送地址</h2>
+                    <p className="mt-1 text-xs text-stone-500">請填寫完整地址，方便後續安排出貨。</p>
                   </div>
                 </div>
                 <label className="mt-5 block space-y-2 text-sm text-stone-600">
-                  <span className="font-medium text-stone-900">地址</span>
+                  <span className="font-medium text-stone-900">收件地址</span>
                   <Input
                     value={customer.address}
                     onChange={(event) => updateCustomer("address", event.target.value)}
@@ -166,7 +274,7 @@ export default function Checkout() {
                   </span>
                   <div>
                     <h2 className="font-serif text-2xl text-stone-900">備註</h2>
-                    <p className="mt-1 text-xs text-stone-500">有指定時間或包裝需求，可寫在這裡。</p>
+                    <p className="mt-1 text-xs text-stone-500">有希望我們留意的事項，可以在這裡補充。</p>
                   </div>
                 </div>
                 <Textarea
@@ -177,7 +285,7 @@ export default function Checkout() {
               </div>
 
               <div className="space-y-3">
-                <h2 className="font-serif text-2xl text-stone-900">商品明細</h2>
+                <h2 className="font-serif text-2xl text-stone-900">訂單商品</h2>
                 {items.map((item) => (
                   <CartLineItem
                     key={item.variantId}
@@ -201,7 +309,7 @@ export default function Checkout() {
                     <h2 className="font-serif text-2xl text-stone-900">付款方式</h2>
                     <p className="mt-2 font-semibold text-stone-800">人工確認付款</p>
                     <p className="mt-1">
-                      送出訂單後，商品會先為你保留。管家會再確認付款方式、金額與出貨資訊。
+                      送出訂單後，我們會與您確認付款與出貨資訊。訂單完成頁會提供安全查詢連結，請妥善保存。
                     </p>
                   </div>
                 </div>
@@ -214,7 +322,7 @@ export default function Checkout() {
               )}
               <CheckoutSummary
                 items={items}
-                actionLabel={isSubmitting ? "建立訂單中..." : "送出訂單"}
+                actionLabel={isSubmitting ? "正在建立訂單..." : "送出訂單"}
                 disabled={isSubmitting}
                 onAction={() => {
                   const submitButton = document.getElementById("checkout-submit");

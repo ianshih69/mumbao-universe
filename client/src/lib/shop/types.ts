@@ -69,3 +69,32 @@ export type CreatedOrder = {
     | "completed"
     | "cancelled";
 };
+
+export type PublicOrderLookupItem = {
+  product_name: string;
+  product_image_url?: string | null;
+  variant_name?: string;
+  variant_option?: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+};
+
+export type PublicOrderLookup = {
+  order_number: string;
+  created_at: string;
+  order_status: CreatedOrder["order_status"];
+  payment_status: CreatedOrder["payment_status"];
+  shipping_carrier?: string | null;
+  tracking_number?: string | null;
+  subtotal: number;
+  shipping_fee: number;
+  total: number;
+  customer: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+  };
+  items: PublicOrderLookupItem[];
+};

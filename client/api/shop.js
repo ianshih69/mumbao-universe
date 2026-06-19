@@ -1,21 +1,104 @@
+import { createHash, createHmac } from "node:crypto";
 import {
   firstQueryValue,
+  getServerEnv,
   readBody,
   sendJson,
   supabaseRequest,
   supabaseRpc,
 } from "../server/shopShared.js";
 
+const lookupTokenInvalidMessage = "查詢連結無效或已失效。";
+const lookupBodyLimitBytes = 2048;
+const idempotencyKeyPattern = /^[A-Za-z0-9_-]{16,128}$/;
+const lookupTokenPattern = /^[A-Za-z0-9_-]{32,128}$/;
+
 const knownOrderErrors = new Map([
-  ["ORDER_ITEMS_REQUIRED", "購物車目前沒有商品。"],
+  ["ORDER_ITEMS_REQUIRED", "購物車內沒有可結帳的商品。"],
   ["CUSTOMER_NAME_REQUIRED", "請填寫收件人姓名。"],
   ["CUSTOMER_PHONE_REQUIRED", "請填寫聯絡電話。"],
   ["SHIPPING_ADDRESS_REQUIRED", "請填寫收件地址。"],
   ["INVALID_QUANTITY", "商品數量不正確。"],
-  ["VARIANT_NOT_FOUND", "部分商品規格已下架，請重新整理購物車。"],
-  ["PRODUCT_NOT_AVAILABLE", "部分商品目前無法購買，請重新整理購物車。"],
-  ["INSUFFICIENT_INVENTORY", "部分商品庫存不足，請調整數量。"],
+  ["VARIANT_NOT_FOUND", "商品規格已不存在，請重新選擇商品。"],
+  ["PRODUCT_NOT_AVAILABLE", "商品目前無法購買，請重新確認購物車。"],
+  ["INSUFFICIENT_INVENTORY", "商品庫存不足，請調整數量。"],
+  ["INVALID_CHECKOUT_IDEMPOTENCY_KEY", "結帳安全憑證無效，請重新整理後再試。"],
 ]);
+
+function createHttpError(statusCode, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function toBase64Url(buffer) {
+  return buffer
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function getLookupSecret() {
+  const secret = getServerEnv("SHOP_ORDER_LOOKUP_SECRET");
+  if (!secret) {
+    throw createHttpError(500, "Server configuration error.");
+  }
+
+  return secret;
+}
+
+function createLookupToken(checkoutIdempotencyKey) {
+  return toBase64Url(
+    createHmac("sha256", getLookupSecret())
+      .update(checkoutIdempotencyKey, "utf8")
+      .digest()
+  );
+}
+
+function hashLookupToken(token) {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+function isValidIdempotencyKey(value) {
+  return typeof value === "string" && idempotencyKeyPattern.test(value);
+}
+
+function isValidLookupToken(value) {
+  return typeof value === "string" && lookupTokenPattern.test(value);
+}
+
+async function readLimitedBody(req, maxBytes) {
+  const contentLength = Number.parseInt(String(req.headers?.["content-length"] || ""), 10);
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    throw createHttpError(413, "Request body too large.");
+  }
+
+  if (req.body && typeof req.body === "object") {
+    return req.body;
+  }
+
+  if (typeof req.body === "string") {
+    if (Buffer.byteLength(req.body, "utf8") > maxBytes) {
+      throw createHttpError(413, "Request body too large.");
+    }
+    return req.body ? JSON.parse(req.body) : {};
+  }
+
+  const chunks = [];
+  let totalBytes = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.length;
+    if (totalBytes > maxBytes) {
+      throw createHttpError(413, "Request body too large.");
+    }
+    chunks.push(buffer);
+  }
+
+  const rawBody = Buffer.concat(chunks).toString("utf8");
+  return rawBody ? JSON.parse(rawBody) : {};
+}
 
 function normalizeVariant(variant) {
   return {
@@ -46,7 +129,7 @@ function normalizeProduct(product, variantsByProductId) {
     name: product.name,
     subtitle: product.subtitle || "",
     description: product.description || "",
-    category: product.category || "文創商品",
+    category: product.category || "商品",
     cover_image_url: product.cover_image_url || "",
     featured: Boolean(product.featured),
     sort_order: Number(product.sort_order || 0),
@@ -86,6 +169,65 @@ function getKnownOrderErrorMessage(error) {
   );
 
   return matchedKey ? knownOrderErrors.get(matchedKey) : "";
+}
+
+function maskEmail(email) {
+  const value = String(email || "").trim();
+  if (!value || !value.includes("@")) return "";
+
+  const [name, domain] = value.split("@");
+  const visibleName = name.slice(0, 1);
+  return `${visibleName}${name.length > 1 ? "***" : "*"}@${domain}`;
+}
+
+function maskPhone(phone) {
+  const value = String(phone || "").replace(/\s+/g, "");
+  if (!value) return "";
+  if (value.length <= 4) return "****";
+  return `${value.slice(0, 2)}****${value.slice(-3)}`;
+}
+
+function maskAddress(address) {
+  const value = String(address || "").trim();
+  if (!value) return "";
+  if (value.length <= 6) return `${value.slice(0, 2)}***`;
+  return `${value.slice(0, 6)}***`;
+}
+
+function maskName(name) {
+  const value = String(name || "").trim();
+  if (!value) return "";
+  if (value.length <= 1) return value;
+  return `${value.slice(0, 1)}${"*".repeat(Math.min(value.length - 1, 2))}`;
+}
+
+function normalizePublicOrder(order, items) {
+  return {
+    order_number: order.order_number,
+    created_at: order.created_at,
+    order_status: order.order_status,
+    payment_status: order.payment_status,
+    shipping_carrier: order.shipping_carrier || null,
+    tracking_number: order.tracking_number || null,
+    subtotal: Number(order.subtotal || 0),
+    shipping_fee: Number(order.shipping_fee || 0),
+    total: Number(order.total || 0),
+    customer: {
+      name: maskName(order.customer_name),
+      phone: maskPhone(order.customer_phone),
+      email: maskEmail(order.customer_email),
+      address: maskAddress(order.shipping_address),
+    },
+    items: (items || []).map((item) => ({
+      product_name: item.product_name || "",
+      product_image_url: item.product_image_url || null,
+      variant_name: item.variant_name || "",
+      variant_option: item.variant_option || "",
+      quantity: Number(item.quantity || 0),
+      unit_price: Number(item.unit_price || 0),
+      line_total: Number(item.line_total || 0),
+    })),
+  };
 }
 
 async function loadProducts(req, res) {
@@ -161,7 +303,7 @@ async function loadProduct(req, res) {
       name: product.name,
       subtitle: product.subtitle || "",
       description: product.description || "",
-      category: product.category || "文創商品",
+      category: product.category || "商品",
       cover_image_url: product.cover_image_url || "",
       featured: Boolean(product.featured),
       sort_order: Number(product.sort_order || 0),
@@ -178,6 +320,14 @@ async function loadProduct(req, res) {
 
 async function createOrder(req, res) {
   const body = await readBody(req);
+  const checkoutIdempotencyKey = String(body?.checkout_idempotency_key || "").trim();
+
+  if (!isValidIdempotencyKey(checkoutIdempotencyKey)) {
+    return sendJson(res, 400, { error: "結帳安全憑證無效，請重新整理後再試。" });
+  }
+
+  const lookupToken = createLookupToken(checkoutIdempotencyKey);
+  const lookupTokenHash = hashLookupToken(lookupToken);
   const payload = {
     customer: {
       name: String(body?.customer?.name || "").trim(),
@@ -187,17 +337,57 @@ async function createOrder(req, res) {
     },
     note: String(body?.note || "").trim(),
     items: normalizeItems(body?.items),
+    checkout_idempotency_key: checkoutIdempotencyKey,
+    guest_lookup_token_hash: lookupTokenHash,
   };
 
   if (!payload.items.length) {
-    return sendJson(res, 400, { error: "購物車目前沒有商品。" });
+    return sendJson(res, 400, { error: "購物車內沒有可結帳的商品。" });
   }
 
   const order = await supabaseRpc("create_shop_order", {
     order_payload: payload,
   });
 
-  return sendJson(res, 201, { order });
+  return sendJson(res, 201, { order, lookupToken });
+}
+
+async function lookupOrder(req, res) {
+  let body;
+  try {
+    body = await readLimitedBody(req, lookupBodyLimitBytes);
+  } catch (error) {
+    if (error?.statusCode === 413) {
+      throw error;
+    }
+    return sendJson(res, 404, { error: lookupTokenInvalidMessage });
+  }
+
+  const token = String(body?.token || "").trim();
+
+  if (!isValidLookupToken(token)) {
+    return sendJson(res, 404, { error: lookupTokenInvalidMessage });
+  }
+
+  const tokenHash = hashLookupToken(token);
+  const orders = await supabaseRequest(
+    `/shop_orders?guest_lookup_token_hash=eq.${encodeURIComponent(
+      tokenHash
+    )}&select=id,order_number,created_at,customer_name,customer_phone,customer_email,shipping_address,subtotal,shipping_fee,total,payment_status,order_status,shipping_carrier,tracking_number&limit=1`
+  );
+  const order = orders?.[0];
+
+  if (!order) {
+    return sendJson(res, 404, { error: lookupTokenInvalidMessage });
+  }
+
+  const items = await supabaseRequest(
+    `/shop_order_items?order_id=eq.${encodeURIComponent(
+      order.id
+    )}&select=product_name,product_image_url,variant_name,variant_option,quantity,unit_price,line_total&order=created_at.asc`
+  );
+
+  return sendJson(res, 200, { order: normalizePublicOrder(order, items) });
 }
 
 export default async function handler(req, res) {
@@ -216,15 +406,26 @@ export default async function handler(req, res) {
       return await createOrder(req, res);
     }
 
+    if (req.method === "POST" && action === "order-lookup") {
+      return await lookupOrder(req, res);
+    }
+
     res.setHeader("Allow", "GET, POST");
     return sendJson(res, 405, { error: "Method or action not allowed." });
   } catch (error) {
+    if (error?.statusCode) {
+      return sendJson(res, error.statusCode, { error: error.message });
+    }
+
     const knownOrderErrorMessage = getKnownOrderErrorMessage(error);
     if (knownOrderErrorMessage) {
       return sendJson(res, 409, { error: knownOrderErrorMessage });
     }
 
-    console.error("shop api error:", error);
+    console.error("shop api error:", {
+      message: error?.message,
+      stack: error?.stack,
+    });
     return sendJson(res, 500, { error: "Shop request failed." });
   }
 }

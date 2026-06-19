@@ -43,6 +43,12 @@ const knownInventoryErrors = new Map([
   ["VARIANT_NOT_FOUND", "Product variant not found."],
   ["INSUFFICIENT_INVENTORY", "Inventory cannot be less than 0."],
 ]);
+const knownSupplyQuantityErrors = new Map([
+  ["SUPPLY_ITEM_ID_REQUIRED", { status: 400, message: "Supply item id is required." }],
+  ["INVALID_SUPPLY_QUANTITY_DELTA", { status: 400, message: "Supply quantity delta is invalid." }],
+  ["SUPPLY_ITEM_NOT_FOUND", { status: 404, message: "Supply item not found." }],
+  ["SUPPLY_QUANTITY_BELOW_ZERO", { status: 409, message: "Supply quantity cannot be less than 0." }],
+]);
 const validPosPaymentMethods = new Set(["cash", "transfer", "other"]);
 const knownManualSaleErrors = new Map([
   ["SALE_ITEMS_REQUIRED", "Sale items are required."],
@@ -3147,6 +3153,15 @@ function getKnownInventoryErrorMessage(error) {
   return matchedKey ? knownInventoryErrors.get(matchedKey) : "";
 }
 
+function getKnownSupplyQuantityError(error) {
+  const message = String(error?.details?.message || error?.message || "");
+  const matchedKey = Array.from(knownSupplyQuantityErrors.keys()).find((key) =>
+    message.includes(key)
+  );
+
+  return matchedKey ? knownSupplyQuantityErrors.get(matchedKey) : null;
+}
+
 function getKnownManualSaleErrorMessage(error) {
   const message = String(error?.details?.message || error?.message || "");
   const matchedKey = Array.from(knownManualSaleErrors.keys()).find((key) =>
@@ -4829,31 +4844,39 @@ async function handleWarehouseSupplyQuantity(req, res, context) {
     return sendJson(res, 400, { error: "Request failed." });
   }
 
-  const rows = await supabaseRequest(
-    `/shop_supply_items?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
-  );
-  const item = Array.isArray(rows) ? rows[0] : null;
-  if (!item) return sendJson(res, 404, { error: "Request failed." });
+  try {
+    const result = await supabaseRpc("adjust_shop_supply_quantity", {
+      p_item_id: id,
+      p_delta: delta,
+    });
+    const item = result?.item;
+    const before = result?.before;
+    const quantity = Number(item?.quantity);
 
-  const quantity = Number(item.quantity || 0) + delta;
-  if (quantity < 0) return sendJson(res, 400, { error: "Request failed." });
-  const updated = await supabaseRequest(`/shop_supply_items?id=eq.${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    body: JSON.stringify({ quantity, updated_at: new Date().toISOString() }),
-  });
-  await writeAdminActivityLog({
-    req,
-    context,
-    action: "adjust_quantity",
-    module: "warehouse",
-    targetType: "supply",
-    targetId: id,
-    description: `隤踵???賊? ${item.name || id}: ${item.quantity} -> ${quantity}`,
-    beforeData: item,
-    afterData: updated?.[0],
-  });
+    if (!item?.id || !Number.isFinite(quantity)) {
+      throw new Error("Supply quantity RPC returned invalid item.");
+    }
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "adjust_quantity",
+      module: "warehouse",
+      targetType: "supply",
+      targetId: id,
+      description: `?方葭??謕??鞈? ${before?.name || id}: ${before?.quantity} -> ${quantity}`,
+      beforeData: before,
+      afterData: item,
+    });
 
-  return sendJson(res, 200, { item: updated?.[0] || { id, quantity } });
+    return sendJson(res, 200, { item });
+  } catch (rpcError) {
+    const knownError = getKnownSupplyQuantityError(rpcError);
+    if (knownError) {
+      return sendJson(res, knownError.status, { error: knownError.message });
+    }
+
+    throw rpcError;
+  }
 }
 
 function filterWarehouseFurniture(items, q = "") {

@@ -23,6 +23,7 @@ import AdminShopWarehouse from "./pages/AdminShopWarehouse";
 import AdminShopLogin from "./pages/AdminShopLogin";
 import AdminShopUsers from "./pages/AdminShopUsers";
 import AdminShopAuditLogs from "./pages/AdminShopAuditLogs";
+import AdminShopAccount from "./pages/AdminShopAccount";
 import AiChat from "./pages/AiChat";
 import Chat from "./pages/Chat";
 import Shop from "./pages/Shop";
@@ -50,6 +51,7 @@ function Router() {
       <Route path={"/admin/shop/social"} component={AdminShopSocial} />
       <Route path={"/admin/shop/warehouse"} component={AdminShopWarehouse} />
       <Route path={"/admin/shop/login"} component={AdminShopLogin} />
+      <Route path={"/admin/shop/account"} component={AdminShopAccount} />
       <Route path={"/admin/shop/users"} component={AdminShopUsers} />
       <Route path={"/admin/shop/audit-logs"} component={AdminShopAuditLogs} />
       <Route path={"/about"} component={About} />

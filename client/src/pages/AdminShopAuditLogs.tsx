@@ -3,11 +3,13 @@ import AdminShopNav from "@/components/shop/AdminShopNav";
 import {
   adminAuthExpiredMessage,
   clearAdminToken,
+  getAdminIdentity,
   getAdminToken,
   getInitialAdminAuthStatus,
+  type AdminIdentity,
   type AdminAuthStatus,
 } from "@/lib/shop/adminAuth";
-import { fetchAdminAuditLogs, type AdminAuditLog } from "@/lib/shop/adminIdentityApi";
+import { deleteAdminAuditLog, fetchAdminAuditLogs, type AdminAuditLog } from "@/lib/shop/adminIdentityApi";
 
 function inputClass() {
   return "w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-800 outline-none transition focus:border-[#9a7a63] focus:ring-2 focus:ring-[#ead8c8]";
@@ -27,14 +29,17 @@ function formatDate(value?: string | null) {
 export default function AdminShopAuditLogs() {
   const [authStatus, setAuthStatus] = useState<AdminAuthStatus>("checking");
   const [token, setToken] = useState("");
+  const [identity, setIdentity] = useState<AdminIdentity | null>(null);
   const [logs, setLogs] = useState<AdminAuditLog[]>([]);
   const [notice, setNotice] = useState("");
   const [filters, setFilters] = useState({ actor: "", module: "all", actionName: "all", date: "" });
   const [isLoading, setIsLoading] = useState(false);
+  const [deletingLogId, setDeletingLogId] = useState("");
 
   useEffect(() => {
     const nextToken = getAdminToken();
     setToken(nextToken);
+    setIdentity(getAdminIdentity());
     setAuthStatus(getInitialAdminAuthStatus());
   }, []);
 
@@ -48,10 +53,45 @@ export default function AdminShopAuditLogs() {
       if (error instanceof Error && error.message === adminAuthExpiredMessage) {
         clearAdminToken();
         setAuthStatus("loggedOut");
+        setIdentity(null);
       }
       setNotice(error instanceof Error ? error.message : "讀取操作紀錄失敗。");
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleDelete(log: AdminAuditLog) {
+    if (!token || identity?.role_code !== "super_admin") return;
+
+    const actor = log.actor_email || log.actor_name || "系統";
+    const summary = log.description || `${log.module}.${log.action}`;
+    const confirmed = window.confirm(
+      [
+        "確定要刪除這筆操作紀錄嗎？",
+        "",
+        `時間：${formatDate(log.created_at)}`,
+        `操作者：${actor}`,
+        `摘要：${summary}`,
+      ].join("\n")
+    );
+    if (!confirmed) return;
+
+    setDeletingLogId(log.id);
+    setNotice("");
+    try {
+      await deleteAdminAuditLog(token, log.id);
+      setLogs((current) => current.filter((item) => item.id !== log.id));
+      setNotice("操作紀錄已刪除。");
+    } catch (error) {
+      if (error instanceof Error && error.message === adminAuthExpiredMessage) {
+        clearAdminToken();
+        setAuthStatus("loggedOut");
+        setIdentity(null);
+      }
+      setNotice(error instanceof Error ? error.message : "刪除操作紀錄失敗。");
+    } finally {
+      setDeletingLogId("");
     }
   }
 
@@ -109,6 +149,7 @@ export default function AdminShopAuditLogs() {
                 <option value="create">新增</option>
                 <option value="update">編輯</option>
                 <option value="delete">刪除</option>
+                <option value="delete_audit_log">刪除操作紀錄</option>
                 <option value="adjust_quantity">數量調整</option>
                 <option value="login">登入</option>
               </select>
@@ -140,6 +181,16 @@ export default function AdminShopAuditLogs() {
                   <span className="rounded-full bg-stone-100 px-3 py-1 text-stone-600">{log.module}</span>
                   <span className="rounded-full bg-[#efe5da] px-3 py-1 text-[#8b6f5b]">{log.action}</span>
                   {log.target_type ? <span className="rounded-full bg-white px-3 py-1 text-stone-500">{log.target_type}</span> : null}
+                  {identity?.role_code === "super_admin" ? (
+                    <button
+                      className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-600 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={deletingLogId === log.id}
+                      onClick={() => void handleDelete(log)}
+                      type="button"
+                    >
+                      {deletingLogId === log.id ? "刪除中..." : "刪除"}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </article>

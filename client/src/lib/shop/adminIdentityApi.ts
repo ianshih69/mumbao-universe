@@ -219,3 +219,11 @@ export function fetchAdminAuditLogs(
     token
   );
 }
+
+export function deleteAdminAuditLog(token: string, id: string) {
+  return requestAdminIdentity<{ ok: true; id: string }>(
+    `/api/admin-shop?action=admin-audit-logs&id=${encodeURIComponent(id)}`,
+    token,
+    { method: "DELETE" }
+  );
+}

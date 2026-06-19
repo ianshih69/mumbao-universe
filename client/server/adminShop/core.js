@@ -91,6 +91,7 @@ const warehouseLocationCodes = [
 ];
 const warehouseLocationCodeSet = new Set(warehouseLocationCodes);
 const warehouseTargetTypes = new Set(["supply", "furniture", "housekeeping"]);
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const allowedWarehouseFileTypes = new Map([
   ["image/jpeg", { extension: "jpg", maxSize: 10 * 1024 * 1024 }],
   ["image/png", { extension: "png", maxSize: 10 * 1024 * 1024 }],
@@ -329,6 +330,17 @@ const auditFieldAllowLists = {
     "content_type",
     "size",
     "sort_order",
+  ],
+  audit_log: [
+    "id",
+    "actor_name",
+    "actor_email",
+    "action",
+    "module",
+    "target_type",
+    "target_id",
+    "description",
+    "created_at",
   ],
 };
 
@@ -3068,8 +3080,57 @@ async function handleAdminUsers(req, res, context) {
   return sendJson(res, 405, { error: "Method not allowed." });
 }
 
-async function loadAdminAuditLogs(req, res) {
-  await requirePermission(req, "audit_logs.view");
+function summarizeAuditLogForDeletion(log) {
+  const actor = log?.actor_email || log?.actor_name || "系統";
+  const action = [log?.module, log?.action].filter(Boolean).join(".");
+  const description = log?.description || action || log?.id || "操作紀錄";
+  return `${log?.created_at || ""} ${actor} ${description}`.trim().slice(0, 240);
+}
+
+async function handleAdminAuditLogs(req, res, context) {
+  if (!hasAdminPermission(context, "audit_logs.view")) {
+    return sendJson(res, 403, { error: "Permission denied." });
+  }
+
+  if (req.method === "DELETE") {
+    if (context.roleCode !== "super_admin") {
+      return sendJson(res, 403, { error: "Permission denied." });
+    }
+
+    const id = cleanText(firstQueryValue(req.query?.id));
+    if (!id || !uuidPattern.test(id)) {
+      return sendJson(res, 400, { error: "Request failed." });
+    }
+
+    const rows = await supabaseRequest(
+      `/admin_activity_logs?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
+    );
+    const before = Array.isArray(rows) ? rows[0] : null;
+    if (!before) return sendJson(res, 404, { error: "Audit log not found." });
+
+    await supabaseRequest(`/admin_activity_logs?id=eq.${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" },
+    });
+
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "delete_audit_log",
+      module: "audit_logs",
+      targetType: "audit_log",
+      targetId: id,
+      description: `Super Admin 刪除操作紀錄：${summarizeAuditLogForDeletion(before)}`,
+      afterData: before,
+    });
+
+    return sendJson(res, 200, { ok: true, id });
+  }
+
+  if (req.method !== "GET") {
+    return sendJson(res, 405, { error: "Method not allowed." });
+  }
+
   const params = [];
   const actor = cleanText(firstQueryValue(req.query?.actor));
   const moduleName = cleanText(firstQueryValue(req.query?.module));
@@ -5367,8 +5428,8 @@ export default async function handler(req, res) {
       return await handleAdminUsers(req, res, adminContext);
     }
 
-    if (req.method === "GET" && action === "admin-audit-logs") {
-      return await loadAdminAuditLogs(req, res);
+    if (action === "admin-audit-logs") {
+      return await handleAdminAuditLogs(req, res, adminContext);
     }
 
     if (action === "instagram-oauth-start") {

@@ -3016,6 +3016,11 @@ async function handleAdminUsers(req, res, context) {
     }
 
     const profile = rows?.[0] || null;
+    if (!profile?.id) {
+      await deleteSupabaseAdminUser(authUserId).catch(() => undefined);
+      throw createHttpError(500, "User creation failed; incomplete auth account was cleaned up.");
+    }
+
     await writeAdminActivityLog({
       req,
       context,
@@ -3023,7 +3028,7 @@ async function handleAdminUsers(req, res, context) {
       module: "users",
       targetType: "admin_profile",
       targetId: profile?.id,
-      description: "Created admin user " + displayName,
+      description: `新增後台使用者：${displayName}`,
       afterData: profile,
     });
     return sendJson(res, 201, { user: normalizeAdminProfile(profile, []) });

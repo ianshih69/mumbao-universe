@@ -45,6 +45,7 @@ export default function AdminShopUsers() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [form, setForm] = useState({
     display_name: "",
     email: "",
@@ -60,20 +61,24 @@ export default function AdminShopUsers() {
     setAuthStatus(getInitialAdminAuthStatus());
   }, []);
 
-  async function load(nextToken = token) {
-    if (!nextToken) return;
+  async function load(nextToken = token, options: { rethrow?: boolean } = {}) {
+    if (!nextToken) return [];
     setIsLoading(true);
     try {
       const session = await fetchAdminSession(nextToken);
       setAdminSession({ accessToken: nextToken, user: session.user, authMode: session.authMode });
       const data = await fetchAdminUsers(nextToken);
-      setUsers(data.users || []);
+      const nextUsers = data.users || [];
+      setUsers(nextUsers);
+      return nextUsers;
     } catch (error) {
       if (error instanceof Error && error.message === adminAuthExpiredMessage) {
         clearAdminToken();
         setAuthStatus("loggedOut");
       }
       setNotice(error instanceof Error ? error.message : "讀取使用者失敗。");
+      if (options.rethrow) throw error;
+      return [];
     } finally {
       setIsLoading(false);
     }
@@ -104,13 +109,33 @@ export default function AdminShopUsers() {
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
     setNotice("");
+    const currentToken = token || getAdminToken();
+    if (!currentToken) {
+      clearAdminToken();
+      setAuthStatus("loggedOut");
+      return;
+    }
+
+    setIsCreating(true);
     try {
-      await createAdminUser(token, form);
+      const data = await createAdminUser(currentToken, form);
+      if (!data.user?.id) {
+        throw new Error("使用者建立回應不完整，請重新整理確認。");
+      }
+      const nextUsers = await load(currentToken, { rethrow: true });
+      if (!nextUsers.some((user) => user.id === data.user.id)) {
+        throw new Error("使用者已建立，但列表重新讀取未包含新帳號，請重新整理確認。");
+      }
       setForm({ display_name: "", email: "", password: "", role_code: "cleaner", is_active: true });
       setNotice("使用者已建立。");
-      await load();
     } catch (error) {
+      if (error instanceof Error && error.message === adminAuthExpiredMessage) {
+        clearAdminToken();
+        setAuthStatus("loggedOut");
+      }
       setNotice(error instanceof Error ? error.message : "建立使用者失敗。");
+    } finally {
+      setIsCreating(false);
     }
   }
 
@@ -161,7 +186,12 @@ export default function AdminShopUsers() {
                 <input type="checkbox" checked={form.is_active} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} />
                 啟用帳號
               </label>
-              <button className="w-full rounded-full bg-[#8b6f5b] px-5 py-3 text-sm font-semibold text-white">新增使用者</button>
+              <button
+                className="w-full rounded-full bg-[#8b6f5b] px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isCreating}
+              >
+                {isCreating ? "建立中..." : "新增使用者"}
+              </button>
             </form>
           </section>
         </div>

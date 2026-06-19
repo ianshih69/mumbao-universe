@@ -50,6 +50,7 @@ const knownSupplyQuantityErrors = new Map([
   ["SUPPLY_ITEM_NOT_FOUND", { status: 404, message: "Supply item not found." }],
   ["SUPPLY_QUANTITY_BELOW_ZERO", { status: 409, message: "Supply quantity cannot be less than 0." }],
 ]);
+const duplicateAdminEmailMessage = "此 Email 已存在，請使用其他 Email。";
 const validPosPaymentMethods = new Set(["cash", "transfer", "other"]);
 const knownManualSaleErrors = new Map([
   ["SALE_ITEMS_REQUIRED", "Sale items are required."],
@@ -2860,6 +2861,24 @@ async function deleteSupabaseAdminUser(authUserId) {
   });
 }
 
+function isDuplicateAdminEmailError(error) {
+  const message = String(
+    error?.message ||
+      error?.details?.message ||
+      error?.details?.error_description ||
+      error?.details?.msg ||
+      ""
+  ).toLowerCase();
+
+  return (
+    message.includes("already registered") ||
+    message.includes("already exists") ||
+    message.includes("already been registered") ||
+    message.includes("duplicate key") ||
+    message.includes("admin_profiles_email_unique_idx")
+  );
+}
+
 async function handleAdminBootstrapSuper(req, res) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
   assertBootstrapRateLimit(req);
@@ -2993,7 +3012,23 @@ async function handleAdminUsers(req, res, context) {
     }
     await assertCanMutateAdminUser(context, null, roleCode);
 
-    const authUser = await createSupabaseAdminUser({ email, password, displayName });
+    const existingProfiles = await supabaseRequest(
+      `/admin_profiles?email=eq.${encodeURIComponent(email)}&select=id&limit=1`
+    );
+    if (Array.isArray(existingProfiles) && existingProfiles.length > 0) {
+      throw createHttpError(409, duplicateAdminEmailMessage);
+    }
+
+    let authUser;
+    try {
+      authUser = await createSupabaseAdminUser({ email, password, displayName });
+    } catch (error) {
+      if (isDuplicateAdminEmailError(error)) {
+        throw createHttpError(409, duplicateAdminEmailMessage);
+      }
+      throw error;
+    }
+
     const authUserId = authUser?.id || authUser?.user?.id;
     if (!authUserId) return sendJson(res, 500, { error: "Supabase Auth user creation failed." });
 
@@ -3010,8 +3045,11 @@ async function handleAdminUsers(req, res, context) {
           created_by: context.actorAuthUserId,
         }),
       });
-    } catch {
+    } catch (error) {
       await deleteSupabaseAdminUser(authUserId).catch(() => undefined);
+      if (isDuplicateAdminEmailError(error)) {
+        throw createHttpError(409, duplicateAdminEmailMessage);
+      }
       throw createHttpError(500, "User creation failed; incomplete auth account was cleaned up.");
     }
 

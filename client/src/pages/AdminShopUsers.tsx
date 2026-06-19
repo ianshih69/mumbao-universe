@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import AdminShopNav from "@/components/shop/AdminShopNav";
 import {
   adminAuthExpiredMessage,
@@ -46,6 +47,7 @@ export default function AdminShopUsers() {
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [showInitialPassword, setShowInitialPassword] = useState(false);
   const [form, setForm] = useState({
     display_name: "",
     email: "",
@@ -127,12 +129,14 @@ export default function AdminShopUsers() {
         throw new Error("使用者已建立，但列表重新讀取未包含新帳號，請重新整理確認。");
       }
       setForm({ display_name: "", email: "", password: "", role_code: "cleaner", is_active: true });
+      setShowInitialPassword(false);
       setNotice("使用者已建立。");
     } catch (error) {
       if (error instanceof Error && error.message === adminAuthExpiredMessage) {
         clearAdminToken();
         setAuthStatus("loggedOut");
       }
+      setShowInitialPassword(false);
       setNotice(error instanceof Error ? error.message : "建立使用者失敗。");
     } finally {
       setIsCreating(false);
@@ -178,7 +182,23 @@ export default function AdminShopUsers() {
             <form className="mt-4 space-y-3" onSubmit={handleCreate}>
               <input className={inputClass()} placeholder="姓名" value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} />
               <input className={inputClass()} placeholder="Email" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
-              <input className={inputClass()} placeholder="初始密碼" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
+              <div className="relative">
+                <input
+                  className={`${inputClass()} pr-12`}
+                  placeholder="初始密碼"
+                  type={showInitialPassword ? "text" : "password"}
+                  value={form.password}
+                  onChange={(event) => setForm({ ...form, password: event.target.value })}
+                />
+                <button
+                  aria-label={showInitialPassword ? "隱藏密碼" : "顯示密碼"}
+                  className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"
+                  onClick={() => setShowInitialPassword((visible) => !visible)}
+                  type="button"
+                >
+                  {showInitialPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               <select className={inputClass()} value={form.role_code} onChange={(event) => setForm({ ...form, role_code: event.target.value })}>
                 {roleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
               </select>

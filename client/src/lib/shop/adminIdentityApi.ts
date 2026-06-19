@@ -59,6 +59,15 @@ export type AdminAuditLog = {
   created_at: string;
 };
 
+export type AdminAuditLogsResponse = {
+  logs?: AdminAuditLog[];
+  items?: AdminAuditLog[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
 export async function loginAdminAccount(email: string, password: string) {
   const response = await fetch("/api/admin-shop?action=admin-login", {
     method: "POST",
@@ -207,14 +216,16 @@ export function updateAdminUser(
 
 export function fetchAdminAuditLogs(
   token: string,
-  filters: { actor?: string; module?: string; actionName?: string; date?: string } = {}
+  filters: { actor?: string; module?: string; actionName?: string; date?: string; page?: number; pageSize?: number } = {}
 ) {
   const params = new URLSearchParams({ action: "admin-audit-logs" });
   if (filters.actor) params.set("actor", filters.actor);
   if (filters.module) params.set("module", filters.module);
   if (filters.actionName) params.set("actionName", filters.actionName);
   if (filters.date) params.set("date", filters.date);
-  return requestAdminIdentity<{ logs: AdminAuditLog[] }>(
+  if (filters.page) params.set("page", String(filters.page));
+  if (filters.pageSize) params.set("pageSize", String(filters.pageSize));
+  return requestAdminIdentity<AdminAuditLogsResponse>(
     `/api/admin-shop?${params.toString()}`,
     token
   );
@@ -225,5 +236,13 @@ export function deleteAdminAuditLog(token: string, id: string) {
     `/api/admin-shop?action=admin-audit-logs&id=${encodeURIComponent(id)}`,
     token,
     { method: "DELETE" }
+  );
+}
+
+export function deleteAdminAuditLogs(token: string, ids: string[]) {
+  return requestAdminIdentity<{ ok: true; deletedIds: string[]; deletedCount: number }>(
+    "/api/admin-shop?action=admin-audit-logs",
+    token,
+    { method: "DELETE", body: JSON.stringify({ ids }) }
   );
 }

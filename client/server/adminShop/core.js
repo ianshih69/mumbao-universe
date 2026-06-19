@@ -1,5 +1,6 @@
 import {
   firstQueryValue,
+  getSupabaseConfig,
   getServerEnv,
   readBody,
   sendJson,
@@ -341,6 +342,12 @@ const auditFieldAllowLists = {
     "target_id",
     "description",
     "created_at",
+    "deleted_count",
+    "deleted_ids",
+    "time_range",
+    "actor_emails",
+    "module_actions",
+    "preview",
   ],
 };
 
@@ -3087,6 +3094,68 @@ function summarizeAuditLogForDeletion(log) {
   return `${log?.created_at || ""} ${actor} ${description}`.trim().slice(0, 240);
 }
 
+function parseContentRangeTotal(contentRange) {
+  const total = Number(String(contentRange || "").split("/")[1]);
+  return Number.isFinite(total) && total >= 0 ? total : 0;
+}
+
+async function fetchAdminAuditLogPage(params, page, pageSize) {
+  const { restUrl, serviceRoleKey } = getSupabaseConfig();
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  const response = await fetch(`${restUrl}/admin_activity_logs?${params.join("&")}`, {
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json",
+      Prefer: "count=exact",
+      Range: `${from}-${to}`,
+    },
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(data?.message || `Supabase request failed: ${response.status}`);
+  }
+
+  return {
+    rows: Array.isArray(data) ? data : [],
+    total: parseContentRangeTotal(response.headers.get("content-range")),
+  };
+}
+
+function getAuditLogDeleteSummary(logs, deletedIds) {
+  const createdTimes = logs.map((log) => log.created_at).filter(Boolean).sort();
+  const actorEmails = Array.from(
+    new Set(logs.map((log) => log.actor_email).filter(Boolean))
+  ).slice(0, 20);
+  const moduleActions = Array.from(
+    new Set(logs.map((log) => [log.module, log.action].filter(Boolean).join(".")).filter(Boolean))
+  ).slice(0, 20);
+  const preview = logs
+    .slice(0, 5)
+    .map((log) => ({
+      id: log.id,
+      created_at: log.created_at || null,
+      actor_email: log.actor_email || null,
+      module: log.module || null,
+      action: log.action || null,
+      description: log.description || null,
+    }));
+
+  return {
+    id: deletedIds[0] || null,
+    deleted_count: deletedIds.length,
+    deleted_ids: deletedIds,
+    time_range: {
+      earliest: createdTimes[0] || null,
+      latest: createdTimes[createdTimes.length - 1] || null,
+    },
+    actor_emails: actorEmails,
+    module_actions: moduleActions,
+    preview,
+  };
+}
+
 async function handleAdminAuditLogs(req, res, context) {
   if (!hasAdminPermission(context, "audit_logs.view")) {
     return sendJson(res, 403, { error: "Permission denied." });
@@ -3097,34 +3166,55 @@ async function handleAdminAuditLogs(req, res, context) {
       return sendJson(res, 403, { error: "Permission denied." });
     }
 
-    const id = cleanText(firstQueryValue(req.query?.id));
-    if (!id || !uuidPattern.test(id)) {
+    const queryId = cleanText(firstQueryValue(req.query?.id));
+    const body = queryId ? null : await readBody(req);
+    const bodyIds = Array.isArray(body?.ids) ? body.ids : [];
+    const ids = queryId ? [queryId] : bodyIds.map((id) => cleanText(id));
+
+    if (!ids.length || ids.length > 10 || ids.some((id) => !id || !uuidPattern.test(id))) {
+      return sendJson(res, 400, { error: "Request failed." });
+    }
+    const uniqueIds = Array.from(new Set(ids));
+    if (uniqueIds.length !== ids.length) {
       return sendJson(res, 400, { error: "Request failed." });
     }
 
     const rows = await supabaseRequest(
-      `/admin_activity_logs?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
+      `/admin_activity_logs?id=in.(${uniqueIds.join(",")})&select=*`
     );
-    const before = Array.isArray(rows) ? rows[0] : null;
-    if (!before) return sendJson(res, 404, { error: "Audit log not found." });
+    const beforeRows = Array.isArray(rows) ? rows : [];
+    const foundIds = new Set(beforeRows.map((row) => row.id));
+    const missingIds = uniqueIds.filter((id) => !foundIds.has(id));
+    if (missingIds.length) {
+      return sendJson(res, 404, { error: "Audit log not found.", missingIds });
+    }
 
-    await supabaseRequest(`/admin_activity_logs?id=eq.${encodeURIComponent(id)}`, {
+    await supabaseRequest(`/admin_activity_logs?id=in.(${uniqueIds.join(",")})`, {
       method: "DELETE",
       headers: { Prefer: "return=minimal" },
     });
 
+    const deleteSummary = getAuditLogDeleteSummary(beforeRows, uniqueIds);
+    const isBatch = uniqueIds.length > 1 || !queryId;
     await writeAdminActivityLog({
       req,
       context,
-      action: "delete_audit_log",
+      action: isBatch ? "delete_audit_logs" : "delete_audit_log",
       module: "audit_logs",
       targetType: "audit_log",
-      targetId: id,
-      description: `Super Admin 刪除操作紀錄：${summarizeAuditLogForDeletion(before)}`,
-      afterData: before,
+      targetId: uniqueIds.length === 1 ? uniqueIds[0] : null,
+      description: isBatch
+        ? `Super Admin 批次刪除操作紀錄：共 ${uniqueIds.length} 筆`
+        : `Super Admin 刪除操作紀錄：${summarizeAuditLogForDeletion(beforeRows[0])}`,
+      afterData: deleteSummary,
     });
 
-    return sendJson(res, 200, { ok: true, id });
+    return sendJson(res, 200, {
+      ok: true,
+      id: uniqueIds.length === 1 ? uniqueIds[0] : undefined,
+      deletedIds: uniqueIds,
+      deletedCount: uniqueIds.length,
+    });
   }
 
   if (req.method !== "GET") {
@@ -3136,6 +3226,8 @@ async function handleAdminAuditLogs(req, res, context) {
   const moduleName = cleanText(firstQueryValue(req.query?.module));
   const actionName = cleanText(firstQueryValue(req.query?.actionName) || firstQueryValue(req.query?.logAction));
   const date = cleanText(firstQueryValue(req.query?.date));
+  const pageSize = 10;
+  const requestedPage = Math.max(1, getPage(firstQueryValue(req.query?.page)) || 1);
   if (actor) params.push(`actor_email=ilike.*${encodeURIComponent(actor)}*`);
   if (moduleName && moduleName !== "all") params.push(`module=eq.${encodeURIComponent(moduleName)}`);
   if (actionName && actionName !== "all") params.push(`action=eq.${encodeURIComponent(actionName)}`);
@@ -3146,9 +3238,22 @@ async function handleAdminAuditLogs(req, res, context) {
   }
   params.push("select=*");
   params.push("order=created_at.desc");
-  params.push("limit=200");
-  const rows = await supabaseRequest(`/admin_activity_logs?${params.join("&")}`);
-  return sendJson(res, 200, { logs: Array.isArray(rows) ? rows : [] });
+  let page = requestedPage;
+  let result = await fetchAdminAuditLogPage(params, page, pageSize);
+  let totalPages = Math.max(1, Math.ceil(result.total / pageSize));
+  if (page > totalPages) {
+    page = totalPages;
+    result = await fetchAdminAuditLogPage(params, page, pageSize);
+    totalPages = Math.max(1, Math.ceil(result.total / pageSize));
+  }
+  return sendJson(res, 200, {
+    logs: result.rows,
+    items: result.rows,
+    page,
+    pageSize,
+    total: result.total,
+    totalPages,
+  });
 }
 
 function getPositiveInt(value, fallback, maxValue) {

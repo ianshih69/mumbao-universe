@@ -3058,7 +3058,7 @@ async function handleAdminUsers(req, res, context) {
       module: "users",
       targetType: "admin_profile",
       targetId: id,
-      description: `?湔敺雿輻??${updated.display_name}`,
+      description: `更新後台使用者：${updated.display_name}`,
       beforeData: before,
       afterData: updated,
     });
@@ -4775,7 +4775,7 @@ async function handleWarehouseSupply(req, res, context) {
       module: "warehouse",
       targetType: "supply",
       targetId: created?.[0]?.id,
-      description: `?啣??? ${payload.name}`,
+      description: `新增備品：${payload.name}`,
       afterData: created?.[0],
     });
     return sendJson(res, 201, { item: created?.[0] || null });
@@ -4803,7 +4803,7 @@ async function handleWarehouseSupply(req, res, context) {
       module: "warehouse",
       targetType: "supply",
       targetId: id,
-      description: `?湔?? ${payload.name}`,
+      description: `更新備品：${payload.name}`,
       beforeData: before,
       afterData: updated?.[0],
     });
@@ -4826,7 +4826,7 @@ async function handleWarehouseSupply(req, res, context) {
       module: "warehouse",
       targetType: "supply",
       targetId: id,
-      description: `?芷?? ${before?.name || id}`,
+      description: `刪除備品：${before?.name || id}`,
       beforeData: before,
     });
     return sendJson(res, 200, { ok: true });
@@ -4863,7 +4863,7 @@ async function handleWarehouseSupplyQuantity(req, res, context) {
       module: "warehouse",
       targetType: "supply",
       targetId: id,
-      description: `?方葭??謕??鞈? ${before?.name || id}: ${before?.quantity} -> ${quantity}`,
+      description: `調整備品數量：${before?.name || id} ${before?.quantity} → ${quantity}`,
       beforeData: before,
       afterData: item,
     });
@@ -4954,7 +4954,7 @@ async function handleWarehouseFurniture(req, res, context) {
         module: "warehouse",
         targetType: "furniture",
         targetId: created?.[0]?.id,
-        description: `?啣??Ｖ膨鞈 ${payload.asset_name}`,
+        description: `新增傢俱資產：${payload.asset_name}`,
         afterData: created?.[0],
       });
       return sendJson(res, 201, { asset: created?.[0] || null });
@@ -4978,7 +4978,7 @@ async function handleWarehouseFurniture(req, res, context) {
       module: "warehouse",
       targetType: "furniture",
       targetId: id,
-      description: `?湔?Ｖ膨鞈 ${payload.asset_name}`,
+      description: `更新傢俱資產：${payload.asset_name}`,
       beforeData: before,
       afterData: updated?.[0],
     });
@@ -5001,7 +5001,7 @@ async function handleWarehouseFurniture(req, res, context) {
       module: "warehouse",
       targetType: "furniture",
       targetId: id,
-      description: `?芷?Ｖ膨鞈 ${before?.asset_name || id}`,
+      description: `刪除傢俱資產：${before?.asset_name || id}`,
       beforeData: before,
     });
     return sendJson(res, 200, { ok: true });
@@ -5112,7 +5112,7 @@ async function handleHousekeepingRecord(req, res, context) {
         module: "warehouse",
         targetType: "housekeeping",
         targetId: created?.[0]?.id,
-        description: `?啣??踹?摮? ${payload.room_area}`,
+        description: `新增房務存證：${payload.room_area}`,
         afterData: created?.[0],
       });
       return sendJson(res, 201, { record: created?.[0] || null });
@@ -5138,7 +5138,7 @@ async function handleHousekeepingRecord(req, res, context) {
       module: "warehouse",
       targetType: "housekeeping",
       targetId: id,
-      description: `?湔?踹?摮? ${payload.room_area}`,
+      description: `更新房務存證：${payload.room_area}`,
       beforeData: before,
       afterData: updated?.[0],
     });
@@ -5163,7 +5163,7 @@ async function handleHousekeepingRecord(req, res, context) {
       module: "warehouse",
       targetType: "housekeeping",
       targetId: id,
-      description: `?芷?踹?摮? ${before?.room_area || id}`,
+      description: `刪除房務存證：${before?.room_area || id}`,
       beforeData: before,
     });
     return sendJson(res, 200, { ok: true });
@@ -5280,7 +5280,7 @@ async function handleWarehouseMedia(req, res, context) {
       module: "warehouse",
       targetType: "media",
       targetId: created?.[0]?.id,
-      description: `?啣???? ${targetType}`,
+      description: `新增倉儲圖片：${targetType}`,
       afterData: created?.[0],
     });
     return sendJson(res, 201, { media: created?.[0] || null });
@@ -5307,7 +5307,7 @@ async function handleWarehouseMedia(req, res, context) {
       module: "warehouse",
       targetType: "media",
       targetId: id,
-      description: "?芷???",
+      description: "刪除倉儲圖片",
       beforeData: media,
     });
     return sendJson(res, 200, { ok: true });

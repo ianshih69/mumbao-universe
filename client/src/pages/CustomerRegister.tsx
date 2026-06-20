@@ -5,7 +5,11 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
-import { getCustomerAuthErrorMessage, normalizeCustomerEmail } from "@/lib/shop/customerAuthClient";
+import {
+  getCustomerAuthErrorMessage,
+  isCustomerEmailMayExistError,
+  normalizeCustomerEmail,
+} from "@/lib/shop/customerAuthClient";
 
 function inputClass() {
   return "h-11 w-full rounded-[8px] border border-[#eadfce] bg-white px-4 text-sm text-stone-800 outline-none transition focus:border-[#9f7868] focus:ring-2 focus:ring-[#ead8c8]";
@@ -23,6 +27,7 @@ export default function CustomerRegister() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [message, setMessage] = useState("");
+  const [showAccountRecoveryLinks, setShowAccountRecoveryLinks] = useState(false);
   const [success, setSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -42,6 +47,7 @@ export default function CustomerRegister() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setMessage("");
+    setShowAccountRecoveryLinks(false);
     setSuccess("");
 
     const validationError = validateForm();
@@ -67,9 +73,10 @@ export default function CustomerRegister() {
       });
       setShowPassword(false);
       setShowConfirmPassword(false);
-      setSuccess("註冊成功，請至信箱完成 Email 驗證後再登入。");
+      setSuccess("註冊成功，請至信箱完成 Email 驗證。驗證完成後即可開始使用會員功能。");
     } catch (error) {
-      setMessage(getCustomerAuthErrorMessage(error, "註冊失敗，請稍後再試。"));
+      setShowAccountRecoveryLinks(isCustomerEmailMayExistError(error));
+      setMessage(getCustomerAuthErrorMessage(error, "註冊暫時無法完成，請稍後再試。"));
     } finally {
       setIsSubmitting(false);
     }
@@ -105,6 +112,16 @@ export default function CustomerRegister() {
           {message && (
             <div className="mb-4 rounded-[8px] border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
               {message}
+              {showAccountRecoveryLinks && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button asChild size="sm" variant="outline" className="rounded-full bg-white">
+                    <Link href="/account/login">前往登入</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline" className="rounded-full bg-white">
+                    <Link href="/account/forgot-password">忘記密碼</Link>
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 

@@ -78,6 +78,30 @@ export function isEmailNotConfirmedError(error: unknown) {
   return message.includes("email not confirmed") || message.includes("email_not_confirmed");
 }
 
+export function createCustomerEmailMayExistError() {
+  const error = new Error("CUSTOMER_EMAIL_MAY_ALREADY_REGISTERED");
+  error.name = "CustomerEmailMayExistError";
+  return error;
+}
+
+export function isCustomerEmailMayExistError(error: unknown) {
+  if (error instanceof Error && error.name === "CustomerEmailMayExistError") return true;
+
+  const authError = error as AuthError | undefined;
+  const code = String(authError?.code || authError?.status || "").toLowerCase();
+  const message = authError?.message || (error instanceof Error ? error.message : "");
+  const normalizedMessage = message.toLowerCase();
+
+  return (
+    code.includes("user_already_exists") ||
+    code.includes("email_exists") ||
+    normalizedMessage.includes("customer_email_may_already_registered") ||
+    normalizedMessage.includes("user already registered") ||
+    normalizedMessage.includes("already registered") ||
+    normalizedMessage.includes("already exists")
+  );
+}
+
 export function getCustomerAuthErrorMessage(error: unknown, fallback: string) {
   const authError = error as AuthError | undefined;
   const message = authError?.message || (error instanceof Error ? error.message : "");
@@ -91,12 +115,8 @@ export function getCustomerAuthErrorMessage(error: unknown, fallback: string) {
   ) {
     return "登入失敗，請確認 Email 與密碼。";
   }
-  if (
-    normalizedMessage.includes("user already registered") ||
-    normalizedMessage.includes("already registered") ||
-    normalizedMessage.includes("already exists")
-  ) {
-    return "此 Email 已註冊，請直接登入或使用忘記密碼。";
+  if (isCustomerEmailMayExistError(error)) {
+    return "此 Email 可能已註冊，請直接登入或使用忘記密碼。";
   }
   if (normalizedMessage.includes("password")) {
     return "密碼格式不符合要求，請確認至少 12 碼。";

@@ -8,6 +8,11 @@ import {
 
 const PROFILE_SELECT =
   "id,auth_user_id,email,name,phone,default_postal_code,default_city,default_district,default_address,is_active,created_at,updated_at";
+const CUSTOMER_ORDER_SELECT =
+  "id,order_number,created_at,order_source,subtotal,shipping_fee,total,payment_status,order_status,shipping_carrier,tracking_number";
+const CUSTOMER_ORDER_DETAIL_SELECT =
+  "id,order_number,created_at,order_source,customer_name,customer_phone,customer_email,shipping_address,subtotal,shipping_fee,total,payment_status,order_status,shipping_carrier,tracking_number";
+const ORDER_NUMBER_PATTERN = /^[A-Za-z0-9_-]{3,64}$/;
 
 const PROFILE_FIELDS = new Set([
   "name",
@@ -36,6 +41,31 @@ function createHttpError(status, message, code) {
   error.status = status;
   error.code = code;
   return error;
+}
+
+async function supabaseRest(pathname, options = {}) {
+  const { restUrl, serviceRoleKey } = getSupabaseConfig();
+  const response = await fetch(`${restUrl}${pathname}`, {
+    ...options,
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+
+  if (!response.ok) {
+    throw new Error(data?.message || `Supabase request failed: ${response.status}`);
+  }
+
+  return {
+    data,
+    contentRange: response.headers.get("content-range") || "",
+  };
 }
 
 function getBearerToken(req) {
@@ -272,6 +302,180 @@ async function handleProfile(req, res, requestId) {
   return sendJson(res, 405, { error: "method_not_allowed", requestId });
 }
 
+function getPositiveIntegerQuery(value, fallback, max) {
+  const parsed = Number.parseInt(String(firstQueryValue(value) || ""), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(parsed, max);
+}
+
+function parseTotalFromContentRange(contentRange, fallback) {
+  const totalPart = String(contentRange || "").split("/")[1];
+  if (!totalPart || totalPart === "*") return fallback;
+  const total = Number.parseInt(totalPart, 10);
+  return Number.isFinite(total) ? total : fallback;
+}
+
+function groupOrderItems(items) {
+  const grouped = new Map();
+  for (const item of items || []) {
+    const list = grouped.get(item.order_id) || [];
+    list.push(item);
+    grouped.set(item.order_id, list);
+  }
+  return grouped;
+}
+
+function getOrderItemSummary(items) {
+  if (!items?.length) {
+    return "尚無商品明細";
+  }
+
+  const first = items[0];
+  const suffix = items.length > 1 ? ` 等 ${items.length} 項` : "";
+  return `${first.product_name || "未命名商品"}${suffix}`;
+}
+
+function getOrderItemCount(items) {
+  return (items || []).reduce((total, item) => total + Number(item.quantity || 0), 0);
+}
+
+function normalizeCustomerOrderListItem(order, items) {
+  return {
+    order_number: order.order_number,
+    created_at: order.created_at,
+    order_status: order.order_status,
+    payment_status: order.payment_status,
+    order_source: order.order_source || "online",
+    subtotal: Number(order.subtotal || 0),
+    shipping_fee: Number(order.shipping_fee || 0),
+    total: Number(order.total || 0),
+    shipping_carrier: order.shipping_carrier || null,
+    tracking_number: order.tracking_number || null,
+    item_count: getOrderItemCount(items),
+    item_summary: getOrderItemSummary(items),
+  };
+}
+
+function normalizeCustomerOrderDetail(order, items) {
+  return {
+    order_number: order.order_number,
+    created_at: order.created_at,
+    order_status: order.order_status,
+    payment_status: order.payment_status,
+    order_source: order.order_source || "online",
+    shipping_carrier: order.shipping_carrier || null,
+    tracking_number: order.tracking_number || null,
+    subtotal: Number(order.subtotal || 0),
+    shipping_fee: Number(order.shipping_fee || 0),
+    total: Number(order.total || 0),
+    customer: {
+      name: order.customer_name || "",
+      phone: order.customer_phone || "",
+      email: order.customer_email || "",
+      address: order.shipping_address || "",
+    },
+    items: (items || []).map((item) => ({
+      product_name: item.product_name || "",
+      product_image_url: item.product_image_url || null,
+      variant_name: item.variant_name || "",
+      variant_option: item.variant_option || "",
+      quantity: Number(item.quantity || 0),
+      unit_price: Number(item.unit_price || 0),
+      line_total: Number(item.line_total || 0),
+    })),
+  };
+}
+
+async function getAuthenticatedProfile(req) {
+  const accessToken = getBearerToken(req);
+  const user = await getCustomerAuthUser(accessToken);
+  return ensureProfile(user);
+}
+
+async function handleOrders(req, res, requestId) {
+  if (req.method !== "GET") {
+    return sendJson(res, 405, { error: "method_not_allowed", requestId });
+  }
+
+  const profile = await getAuthenticatedProfile(req);
+  const page = getPositiveIntegerQuery(req.query?.page, 1, 100000);
+  const pageSize = getPositiveIntegerQuery(req.query?.pageSize, 10, 10);
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const { data: orders, contentRange } = await supabaseRest(
+    `/shop_orders?customer_profile_id=eq.${encodeURIComponent(
+      profile.id
+    )}&select=${CUSTOMER_ORDER_SELECT}&order=created_at.desc`,
+    {
+      headers: {
+        Prefer: "count=exact",
+        Range: `${from}-${to}`,
+      },
+    },
+  );
+
+  const orderIds = (orders || []).map((order) => order.id);
+  let itemsByOrderId = new Map();
+  if (orderIds.length) {
+    const orderItems = await supabaseRequest(
+      `/shop_order_items?order_id=in.(${orderIds.join(
+        ","
+      )})&select=order_id,product_name,variant_name,variant_option,quantity&order=created_at.asc`,
+    );
+    itemsByOrderId = groupOrderItems(orderItems);
+  }
+
+  const total = parseTotalFromContentRange(contentRange, orders?.length || 0);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  return sendJson(res, 200, {
+    items: (orders || []).map((order) =>
+      normalizeCustomerOrderListItem(order, itemsByOrderId.get(order.id) || []),
+    ),
+    page,
+    pageSize,
+    total,
+    totalPages,
+    requestId,
+  });
+}
+
+async function handleOrderDetail(req, res, requestId) {
+  if (req.method !== "GET") {
+    return sendJson(res, 405, { error: "method_not_allowed", requestId });
+  }
+
+  const profile = await getAuthenticatedProfile(req);
+  const orderNumber = String(firstQueryValue(req.query?.orderNumber) || "").trim();
+
+  if (!ORDER_NUMBER_PATTERN.test(orderNumber)) {
+    throw createHttpError(404, "找不到這筆訂單。", "CUSTOMER_ORDER_NOT_FOUND");
+  }
+
+  const orders = await supabaseRequest(
+    `/shop_orders?customer_profile_id=eq.${encodeURIComponent(
+      profile.id
+    )}&order_number=eq.${encodeURIComponent(orderNumber)}&select=${CUSTOMER_ORDER_DETAIL_SELECT}&limit=1`,
+  );
+  const order = Array.isArray(orders) && orders.length ? orders[0] : null;
+
+  if (!order) {
+    throw createHttpError(404, "找不到這筆訂單。", "CUSTOMER_ORDER_NOT_FOUND");
+  }
+
+  const items = await supabaseRequest(
+    `/shop_order_items?order_id=eq.${encodeURIComponent(
+      order.id
+    )}&select=product_name,product_image_url,variant_name,variant_option,quantity,unit_price,line_total&order=created_at.asc`,
+  );
+
+  return sendJson(res, 200, {
+    order: normalizeCustomerOrderDetail(order, items),
+    requestId,
+  });
+}
+
 export default async function handler(req, res) {
   const requestId = createRequestId();
   res.setHeader("X-Request-Id", requestId);
@@ -281,6 +485,14 @@ export default async function handler(req, res) {
   try {
     if (action === "profile") {
       return await handleProfile(req, res, requestId);
+    }
+
+    if (action === "orders") {
+      return await handleOrders(req, res, requestId);
+    }
+
+    if (action === "order") {
+      return await handleOrderDetail(req, res, requestId);
     }
 
     return sendJson(res, 404, {

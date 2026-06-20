@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CartLineItem } from "@/components/shop/CartLineItem";
 import { CheckoutSummary } from "@/components/shop/CheckoutSummary";
 import { createShopOrder } from "@/lib/shop/api";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import {
   clearCartItems,
   readCartItems,
@@ -87,6 +88,7 @@ function saveOrderLookupToken(orderNumber: string, lookupToken: string) {
 
 export default function Checkout() {
   const [, setLocation] = useLocation();
+  const { session } = useCustomerAuth();
   const fallbackCheckoutKeyRef = useRef<StoredCheckoutKey | null>(null);
   const [items, setItems] = useState<CartItem[]>(() => readCartItems());
   const [customer, setCustomer] = useState<CheckoutCustomer>({
@@ -152,6 +154,7 @@ export default function Checkout() {
       const { order, lookupToken } = await createShopOrder({
         customer,
         checkoutIdempotencyKey,
+        customerAccessToken: session?.access_token || null,
         note,
         items: items.map((item) => ({
           variant_id: item.variantId,

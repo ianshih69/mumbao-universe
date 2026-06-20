@@ -31,6 +31,133 @@ function createHttpError(statusCode, message) {
   return error;
 }
 
+function getOptionalCustomerBearerToken(req) {
+  const header = req.headers?.authorization || req.headers?.Authorization || "";
+  if (!header) return null;
+
+  if (typeof header !== "string" || !header.startsWith("Bearer ")) {
+    throw createHttpError(401, "請重新登入會員後再下單。");
+  }
+
+  const token = header.slice("Bearer ".length).trim();
+  if (!token) {
+    throw createHttpError(401, "請重新登入會員後再下單。");
+  }
+
+  return token;
+}
+
+async function getCustomerAuthUser(accessToken) {
+  const serviceRoleKey = getServerEnv("SUPABASE_SERVICE_ROLE_KEY");
+  const supabaseUrl = getServerEnv("SUPABASE_URL").replace(/\/$/, "");
+
+  if (!serviceRoleKey || !supabaseUrl) {
+    throw createHttpError(500, "Server configuration error.");
+  }
+
+  const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    method: "GET",
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (response.status === 401 || response.status === 403) {
+    throw createHttpError(401, "請重新登入會員後再下單。");
+  }
+
+  if (!response.ok) {
+    throw createHttpError(500, "會員資料暫時無法確認，請稍後再試。");
+  }
+
+  const user = await response.json();
+  if (!user?.id || !user?.email) {
+    throw createHttpError(401, "請重新登入會員後再下單。");
+  }
+
+  return user;
+}
+
+function normalizeCustomerEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+async function findCustomerProfile(authUserId) {
+  const rows = await supabaseRequest(
+    `/shop_customer_profiles?auth_user_id=eq.${encodeURIComponent(
+      authUserId
+    )}&select=id,auth_user_id,email,name,phone,is_active&limit=1`
+  );
+  return Array.isArray(rows) && rows.length ? rows[0] : null;
+}
+
+function isCustomerProfileUniqueConflict(error) {
+  const message = String(error?.message || "");
+  return (
+    message.includes("23505") ||
+    message.toLowerCase().includes("duplicate") ||
+    message.includes("shop_customer_profiles_auth_user_id_key")
+  );
+}
+
+async function ensureCustomerProfile(user) {
+  const existing = await findCustomerProfile(user.id);
+  if (existing) {
+    if (existing.is_active === false) {
+      throw createHttpError(403, "此會員帳號目前已停用，請聯絡客服。");
+    }
+    return existing;
+  }
+
+  const metadata = user.user_metadata && typeof user.user_metadata === "object" ? user.user_metadata : {};
+  const payload = {
+    auth_user_id: user.id,
+    email: normalizeCustomerEmail(user.email),
+    name: typeof metadata.name === "string" ? metadata.name.trim() || null : null,
+    phone: typeof metadata.phone === "string" ? metadata.phone.trim() || null : null,
+  };
+
+  try {
+    const rows = await supabaseRequest(
+      "/shop_customer_profiles?select=id,auth_user_id,email,name,phone,is_active",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+    const inserted = Array.isArray(rows) && rows.length ? rows[0] : null;
+    if (inserted?.is_active === false) {
+      throw createHttpError(403, "此會員帳號目前已停用，請聯絡客服。");
+    }
+    return inserted;
+  } catch (error) {
+    if (!isCustomerProfileUniqueConflict(error)) {
+      throw error;
+    }
+  }
+
+  const profile = await findCustomerProfile(user.id);
+  if (!profile) {
+    throw createHttpError(500, "會員資料暫時無法建立，請稍後再試。");
+  }
+
+  if (profile.is_active === false) {
+    throw createHttpError(403, "此會員帳號目前已停用，請聯絡客服。");
+  }
+
+  return profile;
+}
+
+async function resolveCustomerProfileId(req) {
+  const accessToken = getOptionalCustomerBearerToken(req);
+  if (!accessToken) return null;
+
+  const user = await getCustomerAuthUser(accessToken);
+  const profile = await ensureCustomerProfile(user);
+  return profile.id;
+}
+
 function toBase64Url(buffer) {
   return buffer
     .toString("base64")
@@ -230,6 +357,18 @@ function normalizePublicOrder(order, items) {
   };
 }
 
+function normalizeCreatedOrder(order) {
+  return {
+    id: order.id,
+    order_number: order.order_number,
+    subtotal: Number(order.subtotal || 0),
+    shipping_fee: Number(order.shipping_fee || 0),
+    total: Number(order.total || 0),
+    payment_status: order.payment_status || "pending",
+    order_status: order.order_status || "pending_confirm",
+  };
+}
+
 async function loadProducts(req, res) {
   const category = String(firstQueryValue(req.query?.category) || "").trim();
   const categoryFilter = category
@@ -328,6 +467,7 @@ async function createOrder(req, res) {
 
   const lookupToken = createLookupToken(checkoutIdempotencyKey);
   const lookupTokenHash = hashLookupToken(lookupToken);
+  const customerProfileId = await resolveCustomerProfileId(req);
   const payload = {
     customer: {
       name: String(body?.customer?.name || "").trim(),
@@ -339,6 +479,7 @@ async function createOrder(req, res) {
     items: normalizeItems(body?.items),
     checkout_idempotency_key: checkoutIdempotencyKey,
     guest_lookup_token_hash: lookupTokenHash,
+    ...(customerProfileId ? { customer_profile_id: customerProfileId } : {}),
   };
 
   if (!payload.items.length) {
@@ -349,7 +490,7 @@ async function createOrder(req, res) {
     order_payload: payload,
   });
 
-  return sendJson(res, 201, { order, lookupToken });
+  return sendJson(res, 201, { order: normalizeCreatedOrder(order), lookupToken });
 }
 
 async function lookupOrder(req, res) {

@@ -34,16 +34,23 @@ export async function fetchShopProduct(slug: string) {
 export async function createShopOrder({
   customer,
   checkoutIdempotencyKey,
+  customerAccessToken,
   note,
   items,
 }: {
   customer: CheckoutCustomer;
   checkoutIdempotencyKey: string;
+  customerAccessToken?: string | null;
   note?: string;
   items: Array<{ variant_id: string; quantity: number }>;
 }) {
   const data = await fetchJson<{ order?: CreatedOrder; lookupToken?: string }>("/api/shop?action=order", {
     method: "POST",
+    headers: customerAccessToken
+      ? {
+          Authorization: `Bearer ${customerAccessToken}`,
+        }
+      : undefined,
     body: JSON.stringify({
       customer,
       checkout_idempotency_key: checkoutIdempotencyKey,

@@ -1,11 +1,18 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { LogOut, PackageSearch, RotateCcw, UserRound } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import {
+  fetchCustomerOrderDetail,
+  fetchCustomerOrders,
+  type CustomerOrderDetail,
+  type CustomerOrdersPage,
+} from "@/lib/shop/customerOrdersApi";
 import type { CustomerProfileUpdatePayload } from "@/lib/shop/customerProfileApi";
+import { getOrderStatusLabel, getPaymentStatusLabel } from "@/lib/shop/labels";
 
 type AccountTab = "profile" | "address" | "orders";
 
@@ -38,10 +45,28 @@ function fieldClassName() {
   return "h-11 rounded-[8px] border border-[#eadfce] bg-white px-3 text-sm text-stone-900 outline-none transition focus:border-[#b7957c] focus:ring-2 focus:ring-[#eadfce]";
 }
 
+function formatCurrency(value: number) {
+  return `$${Number(value || 0).toLocaleString("zh-TW")}`;
+}
+
+function formatDateTime(value: string) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat("zh-TW", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 export default function CustomerAccount() {
   const [, setLocation] = useLocation();
   const {
     user,
+    session,
     profile,
     isLoading,
     isProfileLoading,
@@ -56,6 +81,14 @@ export default function CustomerAccount() {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [ordersData, setOrdersData] = useState<CustomerOrdersPage | null>(null);
+  const [isOrdersLoading, setIsOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState("");
+  const [selectedOrder, setSelectedOrder] = useState<CustomerOrderDetail | null>(null);
+  const [selectedOrderNumber, setSelectedOrderNumber] = useState("");
+  const [isOrderDetailLoading, setIsOrderDetailLoading] = useState(false);
+  const [orderDetailError, setOrderDetailError] = useState("");
 
   useEffect(() => {
     setForm(getProfileFormState(profile));
@@ -90,6 +123,64 @@ export default function CustomerAccount() {
       setIsSaving(false);
     }
   }
+
+  const loadOrders = useCallback(
+    async (page = ordersPage) => {
+      if (!session?.access_token) return;
+
+      setIsOrdersLoading(true);
+      setOrdersError("");
+
+      try {
+        const nextData = await fetchCustomerOrders(session.access_token, page);
+        setOrdersData(nextData);
+        setOrdersPage(nextData.page);
+        setSelectedOrder(null);
+        setSelectedOrderNumber("");
+        setOrderDetailError("");
+      } catch (loadError) {
+        setOrdersError(loadError instanceof Error ? loadError.message : "會員訂單暫時無法讀取，請稍後再試。");
+      } finally {
+        setIsOrdersLoading(false);
+      }
+    },
+    [ordersPage, session?.access_token],
+  );
+
+  async function loadOrderDetail(orderNumber: string) {
+    if (!session?.access_token) return;
+
+    setSelectedOrderNumber(orderNumber);
+    setSelectedOrder(null);
+    setOrderDetailError("");
+    setIsOrderDetailLoading(true);
+
+    try {
+      const detail = await fetchCustomerOrderDetail(session.access_token, orderNumber);
+      setSelectedOrder(detail);
+    } catch (detailError) {
+      setOrderDetailError(detailError instanceof Error ? detailError.message : "會員訂單暫時無法讀取，請稍後再試。");
+    } finally {
+      setIsOrderDetailLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === "orders" && isAuthenticated && session?.access_token && !ordersData && !isOrdersLoading) {
+      void loadOrders(1);
+    }
+  }, [activeTab, isAuthenticated, isOrdersLoading, loadOrders, ordersData, session?.access_token]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setOrdersData(null);
+      setOrdersPage(1);
+      setOrdersError("");
+      setSelectedOrder(null);
+      setSelectedOrderNumber("");
+      setOrderDetailError("");
+    }
+  }, [isAuthenticated]);
 
   return (
     <div className="min-h-screen bg-[#fbf8f2] text-stone-900">
@@ -310,16 +401,182 @@ export default function CustomerAccount() {
                   )}
 
                   {activeTab === "orders" && (
-                    <div className="rounded-[8px] border border-[#eadfce] bg-[#fffdf8] p-6 shadow-sm shadow-stone-200/60">
-                      <div className="flex items-start gap-3">
-                        <PackageSearch className="mt-1 h-5 w-5 text-[#9f7868]" />
-                        <div>
-                          <h2 className="font-serif text-2xl text-stone-900">歷史訂單即將推出</h2>
-                          <p className="mt-2 text-sm leading-6 text-stone-500">
-                            下一階段會加入會員訂單綁定與歷史訂單查詢。本頁目前不顯示假資料。
-                          </p>
+                    <div className="space-y-4">
+                      <div className="rounded-[8px] border border-[#eadfce] bg-[#fffdf8] p-6 shadow-sm shadow-stone-200/60">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="flex items-start gap-3">
+                            <PackageSearch className="mt-1 h-5 w-5 text-[#9f7868]" />
+                            <div>
+                              <p className="text-sm uppercase tracking-[0.18em] text-[#9f7868]">Orders</p>
+                              <h2 className="mt-1 font-serif text-2xl text-stone-900">歷史訂單</h2>
+                              <p className="mt-2 text-sm leading-6 text-stone-500">
+                                只會顯示登入會員本人下單並已綁定會員的訂單。訪客訂單仍可使用查詢連結查看。
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
+                            disabled={isOrdersLoading}
+                            onClick={() => void loadOrders(ordersPage)}
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                            重新整理
+                          </Button>
                         </div>
+
+                        {isOrdersLoading && <p className="mt-6 text-sm text-stone-500">正在讀取歷史訂單...</p>}
+                        {ordersError && <p className="mt-6 text-sm text-red-700">{ordersError}</p>}
+
+                        {!isOrdersLoading && !ordersError && ordersData && ordersData.items.length === 0 && (
+                          <div className="mt-6 rounded-[8px] border border-dashed border-[#d7c6b5] bg-white/70 p-6 text-center text-sm text-stone-500">
+                            目前還沒有會員訂單。
+                          </div>
+                        )}
+
+                        {!isOrdersLoading && !ordersError && ordersData && ordersData.items.length > 0 && (
+                          <div className="mt-6 space-y-3">
+                            {ordersData.items.map((order) => (
+                              <article
+                                key={order.order_number}
+                                className="rounded-[8px] border border-[#eadfce] bg-white/80 p-4"
+                              >
+                                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-stone-900">{order.order_number}</p>
+                                    <p className="mt-1 text-xs text-stone-500">{formatDateTime(order.created_at)}</p>
+                                    <p className="mt-2 text-sm text-stone-600">{order.item_summary}</p>
+                                  </div>
+                                  <div className="grid gap-2 text-sm text-stone-600 sm:grid-cols-3 md:min-w-[22rem]">
+                                    <span>{getOrderStatusLabel(order.order_status)}</span>
+                                    <span>{getPaymentStatusLabel(order.payment_status)}</span>
+                                    <span className="font-semibold text-stone-900">{formatCurrency(order.total)}</span>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-9 rounded-full border-[#eadfce] bg-[#fffdf8] px-4 hover:bg-[#f3eadf]"
+                                    onClick={() => void loadOrderDetail(order.order_number)}
+                                  >
+                                    查看詳情
+                                  </Button>
+                                </div>
+                              </article>
+                            ))}
+
+                            <div className="flex flex-col gap-3 border-t border-[#eadfce] pt-4 text-sm text-stone-500 sm:flex-row sm:items-center sm:justify-between">
+                              <span>
+                                共 {ordersData.total} 筆，第 {ordersData.page} / {ordersData.totalPages} 頁
+                              </span>
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-9 rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
+                                  disabled={isOrdersLoading || ordersData.page <= 1}
+                                  onClick={() => void loadOrders(Math.max(1, ordersData.page - 1))}
+                                >
+                                  上一頁
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-9 rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
+                                  disabled={isOrdersLoading || ordersData.page >= ordersData.totalPages}
+                                  onClick={() => void loadOrders(Math.min(ordersData.totalPages, ordersData.page + 1))}
+                                >
+                                  下一頁
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
+
+                      {(isOrderDetailLoading || orderDetailError || selectedOrder) && (
+                        <div className="rounded-[8px] border border-[#eadfce] bg-[#fffdf8] p-6 shadow-sm shadow-stone-200/60">
+                          {isOrderDetailLoading && (
+                            <p className="text-sm text-stone-500">
+                              正在讀取 {selectedOrderNumber || "訂單"} 詳情...
+                            </p>
+                          )}
+
+                          {!isOrderDetailLoading && orderDetailError && (
+                            <p className="text-sm text-red-700">{orderDetailError}</p>
+                          )}
+
+                          {!isOrderDetailLoading && selectedOrder && (
+                            <div className="space-y-5">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                  <p className="text-sm uppercase tracking-[0.18em] text-[#9f7868]">Order Detail</p>
+                                  <h3 className="mt-1 font-serif text-2xl text-stone-900">
+                                    {selectedOrder.order_number}
+                                  </h3>
+                                  <p className="mt-1 text-sm text-stone-500">
+                                    {formatDateTime(selectedOrder.created_at)}
+                                  </p>
+                                </div>
+                                <div className="grid gap-1 text-sm text-stone-600 sm:text-right">
+                                  <span>訂單狀態：{getOrderStatusLabel(selectedOrder.order_status)}</span>
+                                  <span>付款狀態：{getPaymentStatusLabel(selectedOrder.payment_status)}</span>
+                                </div>
+                              </div>
+
+                              <div className="grid gap-3 rounded-[8px] border border-[#eadfce] bg-white/75 p-4 text-sm text-stone-600 sm:grid-cols-2">
+                                <p>收件人：{selectedOrder.customer.name || "-"}</p>
+                                <p>電話：{selectedOrder.customer.phone || "-"}</p>
+                                <p>Email：{selectedOrder.customer.email || "-"}</p>
+                                <p>地址：{selectedOrder.customer.address || "-"}</p>
+                                <p>物流：{selectedOrder.shipping_carrier || "尚未出貨"}</p>
+                                <p>單號：{selectedOrder.tracking_number || "-"}</p>
+                              </div>
+
+                              <div className="space-y-3">
+                                {selectedOrder.items.map((item, index) => (
+                                  <div
+                                    key={`${item.product_name}-${item.variant_name}-${index}`}
+                                    className="flex flex-col gap-2 rounded-[8px] border border-[#eadfce] bg-white/75 p-4 sm:flex-row sm:items-center sm:justify-between"
+                                  >
+                                    <div>
+                                      <p className="text-sm font-semibold text-stone-900">
+                                        {item.product_name || "未命名商品"}
+                                      </p>
+                                      <p className="mt-1 text-xs text-stone-500">
+                                        {[item.variant_name, item.variant_option].filter(Boolean).join(" / ") ||
+                                          "一般規格"}
+                                      </p>
+                                    </div>
+                                    <div className="flex gap-4 text-sm text-stone-600">
+                                      <span>x {item.quantity}</span>
+                                      <span>{formatCurrency(item.unit_price)}</span>
+                                      <span className="font-semibold text-stone-900">
+                                        {formatCurrency(item.line_total)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div className="ml-auto max-w-xs space-y-2 rounded-[8px] bg-white/75 p-4 text-sm">
+                                <div className="flex justify-between text-stone-500">
+                                  <span>小計</span>
+                                  <span>{formatCurrency(selectedOrder.subtotal)}</span>
+                                </div>
+                                <div className="flex justify-between text-stone-500">
+                                  <span>運費</span>
+                                  <span>{formatCurrency(selectedOrder.shipping_fee)}</span>
+                                </div>
+                                <div className="flex justify-between border-t border-[#eadfce] pt-2 font-semibold text-stone-900">
+                                  <span>總額</span>
+                                  <span>{formatCurrency(selectedOrder.total)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </>

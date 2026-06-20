@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Menu, Globe, X } from "lucide-react";
+import { Menu, Globe, X, LogOut, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +21,7 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [location, setLocation] = useLocation();
+  const { isAuthenticated, isLoading, user, signOut } = useCustomerAuth();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -54,10 +56,28 @@ export function Header() {
 
   const languages = ["繁體中文", "日本語", "韓語", "English"];
   const isShopPage = location === "/shop" || location.startsWith("/shop/");
+  const isAccountPage = location.startsWith("/account");
   const isLegalPage = ["/privacy", "/terms", "/data-deletion"].includes(
     location
   );
-  const useDarkControls = isScrolled || isShopPage || isLegalPage;
+  const useDarkControls = isScrolled || isShopPage || isLegalPage || isAccountPage;
+  const authLinkClass = cn(
+    "inline-flex h-9 items-center justify-center rounded-full px-3 text-sm font-medium transition-colors",
+    useDarkControls
+      ? "text-[#8b6f5b] hover:bg-[#f3eadf]"
+      : "text-white hover:bg-white/15"
+  );
+  const registerLinkClass = cn(
+    "inline-flex h-9 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors",
+    useDarkControls
+      ? "bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
+      : "bg-white/90 text-[#8b6f5b] hover:bg-white"
+  );
+
+  const handleCustomerSignOut = async () => {
+    await signOut();
+    setLocation("/shop");
+  };
 
   return (
     <header
@@ -122,6 +142,52 @@ export function Header() {
                     </SheetClose>
                   );
                 })}
+                <div className="mt-2 border-t border-[#eadfce] pt-8">
+                  {isLoading ? (
+                    <p className="text-sm text-stone-400">會員狀態確認中...</p>
+                  ) : isAuthenticated ? (
+                    <div className="flex flex-col gap-4">
+                      <SheetClose asChild>
+                        <Link
+                          href="/account"
+                          className="inline-flex items-center gap-2 font-serif text-2xl text-primary hover:text-[#E8A0BF]"
+                        >
+                          <UserRound className="h-5 w-5" />
+                          會員中心
+                        </Link>
+                      </SheetClose>
+                      <SheetClose asChild>
+                        <button
+                          className="inline-flex items-center gap-2 text-left font-serif text-2xl text-primary hover:text-[#E8A0BF]"
+                          type="button"
+                          onClick={() => void handleCustomerSignOut()}
+                        >
+                          <LogOut className="h-5 w-5" />
+                          登出
+                        </button>
+                      </SheetClose>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-4">
+                      <SheetClose asChild>
+                        <Link
+                          href="/account/login"
+                          className="font-serif text-2xl text-primary hover:text-[#E8A0BF]"
+                        >
+                          登入
+                        </Link>
+                      </SheetClose>
+                      <SheetClose asChild>
+                        <Link
+                          href="/account/register"
+                          className="font-serif text-2xl text-primary hover:text-[#E8A0BF]"
+                        >
+                          註冊
+                        </Link>
+                      </SheetClose>
+                    </div>
+                  )}
+                </div>
               </nav>
             </div>
           </SheetContent>
@@ -141,6 +207,37 @@ export function Header() {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-4 md:gap-6">
+          <div className="hidden items-center gap-2 md:flex">
+            {!isLoading &&
+              (isAuthenticated ? (
+                <>
+                  <Link
+                    href="/account"
+                    className={authLinkClass}
+                    title={user?.email || "會員中心"}
+                  >
+                    <UserRound className="mr-1 h-4 w-4" />
+                    會員中心
+                  </Link>
+                  <button
+                    className={authLinkClass}
+                    type="button"
+                    onClick={() => void handleCustomerSignOut()}
+                  >
+                    登出
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link href="/account/login" className={authLinkClass}>
+                    登入
+                  </Link>
+                  <Link href="/account/register" className={registerLinkClass}>
+                    註冊
+                  </Link>
+                </>
+              ))}
+          </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <div

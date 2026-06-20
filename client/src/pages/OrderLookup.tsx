@@ -43,6 +43,19 @@ function readTokenFromHash() {
   return params.get("token") || "";
 }
 
+function clearHashToken() {
+  const hash = window.location.hash.replace(/^#/, "");
+  const params = new URLSearchParams(hash);
+
+  if (params.has("token")) {
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}`
+    );
+  }
+}
+
 export default function OrderLookup() {
   const [order, setOrder] = useState<PublicOrderLookup | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -50,35 +63,50 @@ export default function OrderLookup() {
 
   useEffect(() => {
     let isMounted = true;
-    const token = readTokenFromHash();
-    window.history.replaceState(null, "", window.location.pathname);
+    let lookupId = 0;
 
-    if (!token) {
-      setError(invalidLookupMessage);
-      setIsLoading(false);
-      return;
-    }
+    const runLookup = () => {
+      const currentLookupId = lookupId + 1;
+      lookupId = currentLookupId;
+      const token = readTokenFromHash();
+      clearHashToken();
 
-    lookupShopOrder(token)
-      .then((nextOrder) => {
-        if (!isMounted) return;
-        setOrder(nextOrder);
-        setError("");
-      })
-      .catch((lookupError) => {
-        if (!isMounted) return;
-        setError(
-          lookupError instanceof Error && lookupError.message
-            ? lookupError.message
-            : "系統暫時無法查詢，請稍後再試。"
-        );
-      })
-      .finally(() => {
-        if (isMounted) setIsLoading(false);
-      });
+      setOrder(null);
+
+      if (!token) {
+        setError(invalidLookupMessage);
+        setIsLoading(false);
+        return;
+      }
+
+      setError("");
+      setIsLoading(true);
+
+      lookupShopOrder(token)
+        .then((nextOrder) => {
+          if (!isMounted || currentLookupId !== lookupId) return;
+          setOrder(nextOrder);
+          setError("");
+        })
+        .catch((lookupError) => {
+          if (!isMounted || currentLookupId !== lookupId) return;
+          setError(
+            lookupError instanceof Error && lookupError.message
+              ? lookupError.message
+              : "系統暫時無法查詢，請稍後再試。"
+          );
+        })
+        .finally(() => {
+          if (isMounted && currentLookupId === lookupId) setIsLoading(false);
+        });
+    };
+
+    runLookup();
+    window.addEventListener("hashchange", runLookup);
 
     return () => {
       isMounted = false;
+      window.removeEventListener("hashchange", runLookup);
     };
   }, []);
 

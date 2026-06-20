@@ -5,6 +5,7 @@ import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import FixedViewport from "@/components/utils/FixedViewport";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { CustomerAuthProvider } from "./contexts/CustomerAuthContext";
 import { MumbaoChatLauncher } from "./components/ai/MumbaoChatLauncher";
 import { SiteConstructionNotice } from "./components/layout/SiteConstructionNotice";
 import Home from "./pages/Home";
@@ -32,6 +33,11 @@ import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
 import OrderComplete from "./pages/OrderComplete";
 import OrderLookup from "./pages/OrderLookup";
+import CustomerAccount from "./pages/CustomerAccount";
+import CustomerLogin from "./pages/CustomerLogin";
+import CustomerRegister from "./pages/CustomerRegister";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import DataDeletion from "./pages/DataDeletion";
@@ -64,6 +70,11 @@ function Router() {
       <Route path={"/checkout"} component={Checkout} />
       <Route path={"/order-complete/:orderNumber"} component={OrderComplete} />
       <Route path={"/order/lookup"} component={OrderLookup} />
+      <Route path={"/account"} component={CustomerAccount} />
+      <Route path={"/account/login"} component={CustomerLogin} />
+      <Route path={"/account/register"} component={CustomerRegister} />
+      <Route path={"/account/forgot-password"} component={ForgotPassword} />
+      <Route path={"/account/reset-password"} component={ResetPassword} />
       <Route path={"/privacy"} component={Privacy} />
       <Route path={"/terms"} component={Terms} />
       <Route path={"/data-deletion"} component={DataDeletion} />
@@ -99,10 +110,12 @@ function App() {
       // switchable
       >
         <TooltipProvider>
-          <Toaster />
-          {showFrontendNotice && <SiteConstructionNotice />}
-          <Router />
-          {!isAdminRoute && <MumbaoChatLauncher />}
+          <CustomerAuthProvider>
+            <Toaster />
+            {showFrontendNotice && <SiteConstructionNotice />}
+            <Router />
+            {!isAdminRoute && <MumbaoChatLauncher />}
+          </CustomerAuthProvider>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

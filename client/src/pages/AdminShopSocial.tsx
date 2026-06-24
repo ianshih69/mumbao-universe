@@ -650,9 +650,6 @@ export default function AdminShopSocial() {
   } | null>(null);
   const [isPageTokenVisible, setIsPageTokenVisible] = useState(false);
   const [pageTokenCopied, setPageTokenCopied] = useState(false);
-  const [businessSuiteCopy, setBusinessSuiteCopy] = useState("");
-  const [businessSuiteCopyTouched, setBusinessSuiteCopyTouched] =
-    useState(false);
   const [copiedTarget, setCopiedTarget] = useState("");
 
   const platformOptions: Platform[] = useMemo(
@@ -1199,8 +1196,6 @@ export default function AdminShopSocial() {
     setEditingDraftId(null);
     setSelectedFiles([]);
     setUploadError("");
-    setBusinessSuiteCopy("");
-    setBusinessSuiteCopyTouched(false);
     setFileInputKey((current) => current + 1);
     setNotice("表單已清空，可以新增另一筆發文任務。");
   };
@@ -1770,7 +1765,7 @@ export default function AdminShopSocial() {
     return "尚未發布";
   };
 
-  const buildBusinessSuiteCopy = (form: SocialDraftForm) =>
+  const buildPublishText = (form: SocialDraftForm) =>
     [form.content.trim() || form.title.trim(), form.hashtags.trim()]
       .filter(Boolean)
       .join("\n\n");
@@ -1779,29 +1774,6 @@ export default function AdminShopSocial() {
     [item.content.trim() || item.title.trim(), item.hashtags.trim()]
       .filter(Boolean)
       .join("\n\n");
-
-  const generateBusinessSuiteCopy = () => {
-    const nextCopy = buildBusinessSuiteCopy(draft);
-    if (!nextCopy) {
-      setNotice("請先填寫發文內容或標題，再產生 Meta Business Suite 文案。");
-      return;
-    }
-
-    if (
-      businessSuiteCopyTouched &&
-      businessSuiteCopy.trim() &&
-      businessSuiteCopy !== nextCopy
-    ) {
-      const confirmed = window.confirm(
-        "目前的 Meta Business Suite 文案已手動修改，要用表單內容重新產生並覆蓋嗎？"
-      );
-      if (!confirmed) return;
-    }
-
-    setBusinessSuiteCopy(nextCopy);
-    setBusinessSuiteCopyTouched(false);
-    setNotice("已產生 Meta Business Suite 建議文案。");
-  };
 
   const copyText = async (text: string, target: string, successMessage: string) => {
     if (!text.trim()) {
@@ -2227,7 +2199,7 @@ export default function AdminShopSocial() {
   }
 
   const primaryMedia = draft.mediaFiles[0];
-  const helperCopy = businessSuiteCopy || buildBusinessSuiteCopy(draft);
+  const publishText = buildPublishText(draft);
 
   return (
     <main className="min-h-[100svh] bg-[#f7f2ea] text-stone-900">
@@ -2332,15 +2304,6 @@ export default function AdminShopSocial() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={generateBusinessSuiteCopy}
-                  className="h-10 rounded-full bg-white px-4 text-sm"
-                >
-                  <Sparkles className="size-4" />
-                  產生建議文案
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
                   onClick={clearForm}
                   className="h-10 rounded-full bg-white px-4 text-sm"
                 >
@@ -2413,23 +2376,6 @@ export default function AdminShopSocial() {
                     </label>
                   ))}
                 </div>
-              </div>
-
-              <div className="grid gap-2">
-                <label htmlFor="business-suite-copy">
-                  <FieldLabel>建議文案</FieldLabel>
-                </label>
-                <textarea
-                  id="business-suite-copy"
-                  value={businessSuiteCopy}
-                  onChange={(event) => {
-                    setBusinessSuiteCopy(event.target.value);
-                    setBusinessSuiteCopyTouched(true);
-                  }}
-                  placeholder="按「產生建議文案」後，可在這裡微調再複製。"
-                  rows={5}
-                  className="w-full resize-y rounded-[8px] border border-stone-200 bg-white px-4 py-3 text-sm leading-7 outline-none transition focus:border-[#8b6f5b]"
-                />
               </div>
 
               <div className="rounded-[8px] border border-[#eadfce] bg-[#fffaf3] p-4">
@@ -2579,26 +2525,15 @@ export default function AdminShopSocial() {
                 發布助手
               </h2>
               <p className="mt-2 text-sm leading-6 text-stone-500">
-                複製文案後，開啟 Meta Business Suite，貼上文字與圖片，再回來標記已發布。
+                開啟 Meta Business Suite，貼上左側文案與圖片後發布。完成後回來標記已發布。
               </p>
               <div className="mt-4 grid gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    void copyText(helperCopy, "business-copy", "已複製")
-                  }
-                  className="h-11 rounded-full bg-white px-4"
-                >
-                  <Clipboard className="size-4" />
-                  {copiedTarget === "business-copy" ? "已複製" : "複製文案"}
-                </Button>
                 {metaBusinessSuiteUrl ? (
                   <a
                     href={metaBusinessSuiteUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-stone-200 bg-white px-4 text-sm font-semibold text-[#8b6f5b] transition hover:bg-[#fbf7f1]"
+                    className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-[#8b6f5b] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#765d4a]"
                   >
                     <ExternalLink className="size-4" />
                     開啟 Meta Business Suite
@@ -2607,38 +2542,40 @@ export default function AdminShopSocial() {
                   <button
                     type="button"
                     disabled
-                    className="inline-flex h-11 items-center justify-center rounded-full border border-stone-200 bg-stone-100 px-4 text-sm font-semibold text-stone-400"
+                    className="inline-flex h-12 items-center justify-center rounded-full bg-stone-100 px-5 text-sm font-semibold text-stone-400"
                   >
-                    尚未設定連結
-                  </button>
-                )}
-                {primaryMedia ? (
-                  <a
-                    href={primaryMedia.publicUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-stone-200 bg-white px-4 text-sm font-semibold text-[#8b6f5b] transition hover:bg-[#fbf7f1]"
-                  >
-                    <ExternalLink className="size-4" />
-                    開啟圖片
-                  </a>
-                ) : (
-                  <button
-                    type="button"
-                    disabled
-                    className="inline-flex h-11 items-center justify-center rounded-full border border-stone-200 bg-stone-100 px-4 text-sm font-semibold text-stone-400"
-                  >
-                    開啟圖片
+                    尚未設定 Meta Business Suite 連結
                   </button>
                 )}
                 <Button
                   type="button"
                   onClick={markCurrentDraftPublishedByBusinessSuite}
-                  className="h-11 rounded-full bg-[#8b6f5b] px-4 text-white hover:bg-[#765d4a]"
+                  className="h-11 rounded-full bg-[#f3eadf] px-4 text-[#765d4a] hover:bg-[#eadfce]"
                 >
                   <CheckCircle2 className="size-4" />
                   標記已發布
                 </Button>
+                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 pt-1 text-sm">
+                  <button
+                    type="button"
+                    onClick={() => void copyText(publishText, "business-copy", "已複製")}
+                    className="font-semibold text-[#8b6f5b] underline-offset-4 hover:underline"
+                  >
+                    {copiedTarget === "business-copy" ? "已複製" : "複製文字"}
+                  </button>
+                  {primaryMedia ? (
+                    <a
+                      href={primaryMedia.publicUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-semibold text-[#8b6f5b] underline-offset-4 hover:underline"
+                    >
+                      開啟圖片
+                    </a>
+                  ) : (
+                    <span className="text-stone-400">尚未上傳圖片</span>
+                  )}
+                </div>
               </div>
             </section>
 
@@ -2760,7 +2697,7 @@ export default function AdminShopSocial() {
                           <Copy className="size-3.5" />
                           {copiedTarget === `task-copy-${item.id}`
                             ? "已複製"
-                            : "複製"}
+                            : "複製文字"}
                         </Button>
                         <Button
                           type="button"

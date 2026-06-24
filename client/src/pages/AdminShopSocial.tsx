@@ -1892,7 +1892,7 @@ export default function AdminShopSocial() {
     const nextForm = formFromStoredDraft(finalDraft);
 
     persistDrafts(finalDrafts);
-    setEditingDraftId(finalDraft.id);
+    setEditingDraftId(null);
     setDraft(nextForm);
     setPreview(nextForm);
     setSelectedTaskIds(new Set());
@@ -2266,64 +2266,12 @@ export default function AdminShopSocial() {
 
       <div className="mx-auto max-w-7xl space-y-6 px-5 py-6 md:px-8 md:py-8">
         <section className="rounded-[8px] border border-[#eadfce] bg-[#fffaf3] px-4 py-3 shadow-sm">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-start gap-3">
-              <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-700" />
-              <p className="text-sm leading-6 text-stone-700">
-                目前使用安全半自動流程：整理文案與圖片後，前往 Meta Business Suite 發布。
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-xs font-semibold text-stone-500">
-                Meta API：未啟用
-              </span>
-              <button
-                type="button"
-                aria-expanded={isMetaDetailsExpanded}
-                onClick={() =>
-                  setIsMetaDetailsExpanded((isExpanded) => !isExpanded)
-                }
-                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 text-xs font-semibold text-[#8b6f5b] transition hover:bg-[#fbf7f1]"
-              >
-                API 狀態
-                <ChevronDown
-                  className={cn(
-                    "size-3.5 transition-transform",
-                    isMetaDetailsExpanded && "rotate-180"
-                  )}
-                />
-              </button>
-            </div>
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-700" />
+            <p className="text-sm leading-6 text-stone-700">
+              目前使用半自動流程：整理文案與圖片後，到 Meta Business Suite 發布。
+            </p>
           </div>
-
-          {isMetaDetailsExpanded && (
-            <div className="mt-4 border-t border-[#eadfce] pt-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <p className="text-xs leading-5 text-stone-500">
-                  Meta API 狀態只供診斷；目前主流程不會呼叫 Facebook、Instagram 或 Threads 發文 API。
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={refreshMetaConnections}
-                  disabled={isCheckingMeta || isCheckingFacebookToken}
-                  className="h-9 rounded-full bg-white px-4 text-xs"
-                >
-                  {isCheckingMeta || isCheckingFacebookToken ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="size-3.5" />
-                  )}
-                  重新檢查
-                </Button>
-              </div>
-              {metaCheckError && (
-                <p className="mt-3 rounded-[8px] border border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
-                  {metaCheckError}
-                </p>
-              )}
-            </div>
-          )}
         </section>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -2391,7 +2339,7 @@ export default function AdminShopSocial() {
               </div>
 
               <div className="grid gap-2">
-                <FieldLabel>預計發布到</FieldLabel>
+                <FieldLabel>紀錄平台</FieldLabel>
                 <div className="flex flex-wrap gap-2">
                   {platformOptions.map((platform) => (
                     <label
@@ -2413,6 +2361,9 @@ export default function AdminShopSocial() {
                     </label>
                   ))}
                 </div>
+                <p className="text-xs leading-5 text-stone-500">
+                  實際發布平台請在 Meta Business Suite 內選擇。
+                </p>
               </div>
 
               <div className="rounded-[8px] border border-[#eadfce] bg-[#fffaf3] p-4">
@@ -2562,7 +2513,7 @@ export default function AdminShopSocial() {
                 發布助手
               </h2>
               <p className="mt-2 text-sm leading-6 text-stone-500">
-                開啟 Meta Business Suite，貼上左側文案與圖片後發布。完成後回來標記已發布。
+                到 Meta Business Suite 貼上文案與圖片，發布或排程後，回來記錄為已發布。
               </p>
               <div className="mt-4 grid gap-3">
                 {metaBusinessSuiteUrl ? (
@@ -2590,7 +2541,7 @@ export default function AdminShopSocial() {
                   className="h-11 rounded-full bg-[#f3eadf] px-4 text-[#765d4a] hover:bg-[#eadfce]"
                 >
                   <CheckCircle2 className="size-4" />
-                  標記已發布
+                  完成後，記錄為已發布
                 </Button>
                 <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 pt-1 text-sm">
                   <button
@@ -2609,51 +2560,11 @@ export default function AdminShopSocial() {
                     >
                       開啟圖片
                     </a>
-                  ) : (
-                    <span className="text-stone-400">尚未上傳圖片</span>
-                  )}
+                  ) : null}
                 </div>
               </div>
             </section>
 
-            <section className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-3 border-b border-stone-100 pb-3">
-                <h2 className="text-lg font-semibold text-stone-900">
-                  發文預覽
-                </h2>
-                <Sparkles className="size-4 text-[#8b6f5b]" />
-              </div>
-              <div className="mt-4 space-y-3">
-                <p className="text-base font-semibold text-stone-900">
-                  {preview.title || draft.title || "尚未填寫標題"}
-                </p>
-                <p className="line-clamp-4 whitespace-pre-wrap rounded-[8px] bg-[#fbf7f1] p-3 text-sm leading-6 text-stone-700">
-                  {preview.content || draft.content || "文案會顯示在這裡。"}
-                </p>
-                {(preview.hashtags || draft.hashtags) && (
-                  <p className="text-sm leading-6 text-[#8b6f5b]">
-                    {preview.hashtags || draft.hashtags}
-                  </p>
-                )}
-                {(preview.mediaFiles[0] || primaryMedia) && (
-                  <div className="overflow-hidden rounded-[8px] border border-stone-100 bg-[#fbf7f1]">
-                    {(preview.mediaFiles[0] || primaryMedia)?.contentType.startsWith(
-                      "image/"
-                    ) ? (
-                      <img
-                        src={(preview.mediaFiles[0] || primaryMedia)?.publicUrl}
-                        alt={(preview.mediaFiles[0] || primaryMedia)?.fileName}
-                        className="max-h-48 w-full bg-white object-contain"
-                      />
-                    ) : (
-                      <div className="p-4 text-sm text-stone-500">
-                        已選擇影片素材
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </section>
           </aside>
         </div>
 
@@ -2744,8 +2655,7 @@ export default function AdminShopSocial() {
                           </div>
                           <p className="mt-1 text-xs leading-5 text-stone-500">
                             {formatDateTime(recordDate)} ·{" "}
-                            {item.platforms.join(" / ") || "未指定平台"} ·{" "}
-                            {getPublishMethodLabel(item)}
+                            {item.platforms.join(" / ") || "未指定平台"}
                           </p>
                         </div>
                       </div>
@@ -2775,15 +2685,20 @@ export default function AdminShopSocial() {
                             ? "已複製"
                             : "複製文字"}
                         </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => markSavedDraftPublishedByBusinessSuite(item)}
-                          className="h-9 rounded-full bg-white px-3 text-xs"
-                        >
-                          <CheckCircle2 className="size-3.5" />
-                          標記已發布
-                        </Button>
+                        {item.status !== "published" &&
+                          item.status !== "deleted" && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() =>
+                                markSavedDraftPublishedByBusinessSuite(item)
+                              }
+                              className="h-9 rounded-full bg-white px-3 text-xs"
+                            >
+                              <CheckCircle2 className="size-3.5" />
+                              標記已發布
+                            </Button>
+                          )}
                         <Button
                           type="button"
                           variant="outline"

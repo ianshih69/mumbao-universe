@@ -1,10 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   getServerEnv,
   readBody,
   sendJson,
+  supabaseRequest,
 } from "../server/shopShared.js";
 
 const allowedFileTypes = new Map([
@@ -15,23 +14,76 @@ const allowedFileTypes = new Map([
 ]);
 const presignedUrlExpiresInSeconds = 10 * 60;
 
-function requireAdmin(req) {
-  const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
+function getBearerToken(req) {
   const authHeader = String(req.headers?.authorization || "");
-  const bearerToken = authHeader.startsWith("Bearer ")
+  return authHeader.startsWith("Bearer ")
     ? authHeader.slice("Bearer ".length).trim()
     : "";
+}
 
-  if (!adminPassword) {
-    const error = new Error("ADMIN_PASSWORD is not configured.");
-    error.status = 500;
-    throw error;
+function createHttpError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+async function verifySupabaseAccessToken(accessToken) {
+  const supabaseUrl = String(getServerEnv("SUPABASE_URL") || "").replace(/\/$/, "");
+  const serviceRoleKey = String(getServerEnv("SUPABASE_SERVICE_ROLE_KEY") || "");
+
+  if (!accessToken) throw createHttpError(401, "Unauthorized.");
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw createHttpError(500, "Supabase environment variables are not configured.");
   }
 
-  if (!bearerToken || bearerToken !== adminPassword) {
-    const error = new Error("Unauthorized.");
-    error.status = 401;
-    throw error;
+  const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok || !data?.id) {
+    throw createHttpError(401, "Unauthorized.");
+  }
+
+  return data;
+}
+
+async function loadAdminPermissions(roleCode) {
+  if (!roleCode) return [];
+  if (roleCode === "super_admin") return ["*"];
+
+  const rows = await supabaseRequest(
+    `/admin_role_permissions?role_code=eq.${encodeURIComponent(roleCode)}&select=permission_code`
+  );
+
+  return Array.isArray(rows)
+    ? rows.map((row) => row.permission_code).filter(Boolean)
+    : [];
+}
+
+async function requireAdmin(req) {
+  const authUser = await verifySupabaseAccessToken(getBearerToken(req));
+  const profiles = await supabaseRequest(
+    `/admin_profiles?auth_user_id=eq.${encodeURIComponent(authUser.id)}&select=*&limit=1`
+  );
+  const profile = Array.isArray(profiles) ? profiles[0] : null;
+
+  if (!profile || !profile.is_active) {
+    throw createHttpError(403, "Permission denied.");
+  }
+
+  const permissions = await loadAdminPermissions(profile.role_code);
+  const canUpload =
+    profile.role_code === "super_admin" ||
+    permissions.includes("*") ||
+    permissions.includes("social.publish") ||
+    permissions.includes("social.manage_connection");
+
+  if (!canUpload) {
+    throw createHttpError(403, "Permission denied.");
   }
 }
 
@@ -57,7 +109,7 @@ function joinPublicUrl(baseUrl, key) {
   return `${normalizedBaseUrl}/${encodedKey}`;
 }
 
-function getR2Config() {
+async function getR2Config() {
   const bucketName = String(getServerEnv("R2_BUCKET_NAME") || "").trim();
   const accessKeyId = String(getServerEnv("R2_ACCESS_KEY_ID") || "").trim();
   const secretAccessKey = String(getServerEnv("R2_SECRET_ACCESS_KEY") || "").trim();
@@ -70,8 +122,11 @@ function getR2Config() {
     throw error;
   }
 
+  const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
+
   return {
     bucketName,
+    PutObjectCommand,
     publicBaseUrl,
     client: new S3Client({
       region: "auto",
@@ -86,7 +141,7 @@ function getR2Config() {
 
 export default async function handler(req, res) {
   try {
-    requireAdmin(req);
+    await requireAdmin(req);
 
     if (req.method !== "POST") {
       res.setHeader("Allow", "POST");
@@ -121,7 +176,9 @@ export default async function handler(req, res) {
       });
     }
 
-    const { bucketName, publicBaseUrl, client } = getR2Config();
+    const { bucketName, publicBaseUrl, client, PutObjectCommand } =
+      await getR2Config();
+    const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
     const key = [
       "social-temp",
       getTaipeiDate(),

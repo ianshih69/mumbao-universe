@@ -94,7 +94,7 @@ export default function CustomerRegister() {
             <p className="text-xs uppercase tracking-[0.2em] text-[#9f7868]">Create Account</p>
             <h1 className="mt-2 font-serif text-3xl font-light">建立會員帳號</h1>
             <p className="mt-2 text-sm leading-6 text-stone-500">
-              第一版會員功能會先提供登入與密碼管理，會員資料與訂單紀錄即將推出。
+              加入慢寶會員後，可以管理會員資料、查看歷史訂單，未來也會陸續加入更多慢寶會員專屬功能。
             </p>
           </div>
 

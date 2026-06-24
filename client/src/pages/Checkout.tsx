@@ -194,7 +194,7 @@ export default function Checkout() {
             結帳
           </h1>
           <p className="mt-2 text-sm text-stone-500">
-            目前可直接以訪客身分完成訂單；會員功能即將推出，不會影響本次購買。
+            登入會員後，本次訂單會自動保存到會員中心；不登入也可以繼續訪客結帳。
           </p>
         </div>
 

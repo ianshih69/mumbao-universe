@@ -52,7 +52,7 @@ export default function OrderComplete() {
               感謝您的訂購。我們會盡快確認付款與出貨資訊，請保存訂單編號與查詢連結。
             </p>
             <p>
-              會員功能即將推出，未來可更方便查看歷史訂單與快速結帳。
+              已登入會員完成的訂單會保存到會員中心；訪客也可以使用本頁的查詢連結追蹤訂單。
             </p>
             {!lookupToken && (
               <p className="rounded-[8px] border border-amber-100 bg-amber-50 px-4 py-3 text-amber-800">

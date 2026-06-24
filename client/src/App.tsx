@@ -19,7 +19,6 @@ import AdminShopProducts from "./pages/AdminShopProducts";
 import AdminShopInventory from "./pages/AdminShopInventory";
 import AdminShopScan from "./pages/AdminShopScan";
 import AdminShopPos from "./pages/AdminShopPos";
-import AdminShopSocial from "./pages/AdminShopSocial";
 import AdminShopWarehouse from "./pages/AdminShopWarehouse";
 import AdminShopLogin from "./pages/AdminShopLogin";
 import AdminShopUsers from "./pages/AdminShopUsers";
@@ -55,7 +54,6 @@ function Router() {
       <Route path={"/admin/shop/inventory"} component={AdminShopInventory} />
       <Route path={"/admin/shop/scan"} component={AdminShopScan} />
       <Route path={"/admin/shop/pos"} component={AdminShopPos} />
-      <Route path={"/admin/shop/social"} component={AdminShopSocial} />
       <Route path={"/admin/shop/warehouse"} component={AdminShopWarehouse} />
       <Route path={"/admin/shop/login"} component={AdminShopLogin} />
       <Route path={"/admin/shop/account"} component={AdminShopAccount} />

@@ -3,7 +3,6 @@ import {
   Boxes,
   ClipboardList,
   KeyRound,
-  Megaphone,
   PackageCheck,
   ScanLine,
   ShieldCheck,
@@ -21,7 +20,6 @@ type AdminShopNavKey =
   | "inventory"
   | "scan"
   | "pos"
-  | "social"
   | "warehouse"
   | "account"
   | "users"
@@ -43,7 +41,6 @@ const navItems: Array<{
   { key: "inventory", label: "庫存", href: "/admin/shop/inventory", icon: PackageCheck, permission: "inventory.view" },
   { key: "scan", label: "入庫", href: "/admin/shop/scan", icon: ScanLine, permission: "receiving.view" },
   { key: "pos", label: "POS", href: "/admin/shop/pos", icon: ShoppingBag, permission: "pos.view" },
-  { key: "social", label: "自動發文", href: "/admin/shop/social", icon: Megaphone, permission: "social.view" },
   { key: "warehouse", label: "倉儲與資產", href: "/admin/shop/warehouse", icon: Warehouse, permission: "warehouse.supplies.view" },
   { key: "account", label: "帳號設定", href: "/admin/shop/account", icon: KeyRound },
   { key: "users", label: "使用者", href: "/admin/shop/users", icon: UserCog, permission: "users.view" },

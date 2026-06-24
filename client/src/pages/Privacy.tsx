@@ -43,7 +43,7 @@ export default function Privacy() {
                   粉絲專頁授權或 LINE 登入資料。
                 </li>
                 <li>
-                  社群自動發文系統所需的粉絲專頁 ID、貼文紀錄與發文狀態。
+                  後台營運工具所需的公開平台識別資料與操作紀錄。
                 </li>
               </ul>
               <p className="font-medium text-stone-800">
@@ -90,7 +90,7 @@ export default function Privacy() {
           content: (
             <p>
               本網站可能使用 Cookie、localStorage、sessionStorage
-              或類似技術，保存登入狀態、購物車、發文草稿、偏好設定及必要的操作資訊，以維持功能與改善使用體驗。您可透過瀏覽器設定管理相關資料，但停用後部分功能可能無法正常使用。
+              或類似技術，保存登入狀態、購物車、偏好設定及必要的操作資訊，以維持功能與改善使用體驗。您可透過瀏覽器設定管理相關資料，但停用後部分功能可能無法正常使用。
             </p>
           ),
         },

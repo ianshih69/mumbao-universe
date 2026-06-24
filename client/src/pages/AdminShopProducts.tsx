@@ -429,6 +429,19 @@ export default function AdminShopProducts() {
   const saveProduct = async () => {
     if (!token || !selectedProduct) return;
 
+    const previousStatus = isCreating ? "" : selectedSummary?.status;
+    const isArchivingProduct =
+      !isCreating && previousStatus !== "archived" && selectedProduct.status === "archived";
+
+    if (
+      isArchivingProduct &&
+      !window.confirm(
+        "封存後，商品將不會在前台顯示，也不能被購買；歷史訂單、庫存異動與操作紀錄仍會保留。"
+      )
+    ) {
+      return;
+    }
+
     setIsSaving(true);
     setSuccess("");
     try {

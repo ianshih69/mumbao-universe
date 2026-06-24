@@ -38,7 +38,7 @@ export const INVENTORY_MOVEMENT_LABELS = {
 export const PRODUCT_STATUS_LABELS = {
   draft: "草稿",
   published: "上架",
-  archived: "封存",
+  archived: "已封存",
 } as const;
 
 export const VARIANT_STATUS_LABELS = {

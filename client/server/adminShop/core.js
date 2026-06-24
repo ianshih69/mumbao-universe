@@ -4521,6 +4521,38 @@ function buildImageCreate(image, productId) {
   };
 }
 
+function getProductUpdateAuditSummary(beforeProduct, product) {
+  const beforeStatus = cleanText(beforeProduct?.status);
+  const afterStatus = cleanText(product?.status);
+  const productName = product?.name || beforeProduct?.name || "";
+
+  if (beforeStatus !== "archived" && afterStatus === "archived") {
+    return {
+      action: "archive",
+      description: `封存商品：${productName}`,
+    };
+  }
+
+  if (beforeStatus === "archived" && afterStatus === "published") {
+    return {
+      action: "restore_publish",
+      description: `恢復上架：${productName}`,
+    };
+  }
+
+  if (beforeStatus === "archived" && afterStatus === "draft") {
+    return {
+      action: "restore_draft",
+      description: `恢復為草稿：${productName}`,
+    };
+  }
+
+  return {
+    action: "update",
+    description: `更新商品：${productName}`,
+  };
+}
+
 async function updateProduct(req, res, context) {
   const body = await readBody(req);
   const { id: productId, patch } = validateProductPatch(body?.product || {});
@@ -4564,14 +4596,15 @@ async function updateProduct(req, res, context) {
   }
 
   const product = await loadProductById(productId);
+  const auditSummary = getProductUpdateAuditSummary(beforeProduct, product);
   await writeAdminActivityLog({
     req,
     context,
-    action: "update",
+    action: auditSummary.action,
     module: "products",
     targetType: "product",
     targetId: product.id,
-    description: `更新商品：${product.name}`,
+    description: auditSummary.description,
     beforeData: beforeProduct,
     afterData: product,
   });

@@ -25,7 +25,7 @@ import {
 } from "@/lib/shop/adminDashboardApi";
 import { formatPrice, getVariantLabel } from "@/lib/shop/format";
 import {
-  getInventoryMovementLabel,
+  getInventoryMovementDisplayLabel,
   getOrderSourceLabel,
   getOrderStatusLabel,
   getPaymentStatusLabel,
@@ -199,7 +199,7 @@ function RecentMovementRow({ movement }: { movement: AdminDashboardRecentMovemen
           <p className="mt-1 text-xs text-stone-500">{formatDateTime(movement.created_at)}</p>
         </div>
         <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs text-stone-600">
-          {getInventoryMovementLabel(movement.movement_type)}
+          {getInventoryMovementDisplayLabel(movement.movement_type, movement.reference_type)}
         </span>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">

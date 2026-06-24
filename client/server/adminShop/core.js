@@ -356,6 +356,7 @@ const auditFieldAllowLists = {
     "quantity_before",
     "quantity_after",
     "reference_type",
+    "reference_id",
     "reference_number",
     "note",
     "created_at",
@@ -3627,6 +3628,7 @@ function normalizeInventoryMovement(
     quantity_before: Number(movement.quantity_before || 0),
     quantity_after: Number(movement.quantity_after || 0),
     reference_type: movement.reference_type || "",
+    reference_id: movement.reference_id || "",
     reference_number: movement.reference_number || "",
     note: movement.note || "",
     created_at: movement.created_at || "",
@@ -3769,7 +3771,7 @@ async function loadDashboard(req, res) {
   const orderSelect =
     "id,order_number,customer_name,subtotal,shipping_fee,total,payment_status,order_status,order_source,created_at";
   const movementSelect =
-    "id,product_id,variant_id,movement_type,quantity_delta,quantity_before,quantity_after,reference_type,reference_number,note,created_at,created_by";
+    "id,product_id,variant_id,movement_type,quantity_delta,quantity_before,quantity_after,reference_type,reference_id,reference_number,note,created_at,created_by";
   const [
     todayOrders,
     pendingOnlineOrders,
@@ -4065,7 +4067,33 @@ function validateStatusPatch(body) {
   return patch;
 }
 
-async function restockCancelledOrderItems({ req, context, order }) {
+function hasOrderPatchChanges(order, patch) {
+  return Object.entries(patch).some(([key, value]) => {
+    const beforeValue = order?.[key];
+    return String(beforeValue ?? "") !== String(value ?? "");
+  });
+}
+
+function isDuplicateRestockMovementError(error) {
+  const message = String(error?.details?.message || error?.message || "");
+  return (
+    message.includes("23505") ||
+    message.toLowerCase().includes("duplicate") ||
+    message.includes("shop_inventory_movements_order_cancel_restock_unique_idx")
+  );
+}
+
+async function loadOrderRestockMovements(orderNumber) {
+  if (!orderNumber) return [];
+  const rows = await supabaseRequest(
+    `/shop_inventory_movements?reference_type=eq.order_cancel_restock&reference_number=eq.${encodeURIComponent(
+      orderNumber
+    )}&select=id,product_id,variant_id,movement_type,quantity_delta,quantity_before,quantity_after,reference_type,reference_id,reference_number,note,created_at,created_by`
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function restockCancelledOrderItemsLegacy({ req, context, order }) {
   const movements = [];
   const items = Array.isArray(order?.items) ? order.items : [];
 
@@ -4107,6 +4135,73 @@ async function restockCancelledOrderItems({ req, context, order }) {
   return movements;
 }
 
+async function restockCancelledOrderItems({ req, context, order }) {
+  const movements = [];
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const existingMovements = await loadOrderRestockMovements(order.order_number);
+  const existingVariantIds = new Set(
+    existingMovements.map((movement) => cleanText(movement.variant_id)).filter(Boolean)
+  );
+
+  for (const item of items) {
+    const variantId = cleanText(item?.variant_id);
+    const quantity = getInteger(item?.quantity, 0);
+    if (!variantId || quantity <= 0) continue;
+    if (existingVariantIds.has(variantId)) {
+      const existing = existingMovements.find(
+        (movement) => cleanText(movement.variant_id) === variantId
+      );
+      if (existing) movements.push(normalizeInventoryMovement(existing));
+      continue;
+    }
+
+    try {
+      const result = await supabaseRpc("adjust_shop_inventory", {
+        adjustment_payload: {
+          variant_id: variantId,
+          movement_type: "stock_in",
+          quantity,
+          reference_type: "order_cancel_restock",
+          reference_id: order.id,
+          reference_number: order.order_number,
+          note: `訂單取消回補：${order.order_number}`,
+          created_by: context?.actorEmail || "admin",
+        },
+      });
+      if (result?.movement) movements.push(normalizeInventoryMovement(result.movement));
+    } catch (error) {
+      if (!isDuplicateRestockMovementError(error)) throw error;
+      const currentMovements = await loadOrderRestockMovements(order.order_number);
+      const existing = currentMovements.find(
+        (movement) => cleanText(movement.variant_id) === variantId
+      );
+      if (existing) movements.push(normalizeInventoryMovement(existing));
+    }
+  }
+
+  const createdMovements = movements.filter(
+    (movement) => !existingVariantIds.has(cleanText(movement.variant_id))
+  );
+
+  if (createdMovements.length) {
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "cancel_restock",
+      module: "orders",
+      targetType: "order",
+      targetId: order.id,
+      description: `取消訂單庫存回補：${order.order_number}`,
+      afterData: {
+        ...order,
+        restock_movements: createdMovements,
+      },
+    });
+  }
+
+  return movements;
+}
+
 async function handleOrderAction(req, res, context) {
   if (req.method === "GET") {
     const orderNumber = String(firstQueryValue(req.query?.orderNumber) || "").trim();
@@ -4128,6 +4223,11 @@ async function handleOrderAction(req, res, context) {
     const beforeOrder = await loadOrder(orderNumber);
     const shouldRestock =
       patch.order_status === "cancelled" && beforeOrder.order_status !== "cancelled";
+    const hasChanges = hasOrderPatchChanges(beforeOrder, patch);
+
+    if (!hasChanges && !shouldRestock) {
+      return sendJson(res, 200, { order: beforeOrder });
+    }
 
     await supabaseRequest(
       `/shop_orders?order_number=eq.${encodeURIComponent(orderNumber)}`,
@@ -4153,6 +4253,10 @@ async function handleOrderAction(req, res, context) {
       targetType: "order",
       targetId: afterOrder.id,
       description: `更新訂單狀態：${orderNumber}`,
+      description:
+        beforeOrder.order_status !== afterOrder.order_status
+          ? `更新訂單狀態：${orderNumber}`
+          : `更新訂單資料：${orderNumber}`,
       beforeData: beforeOrder,
       afterData: {
         ...afterOrder,
@@ -4595,7 +4699,7 @@ async function loadInventoryMovements(req, res) {
       ? `&movement_type=eq.${encodeURIComponent(movementType)}`
       : "";
   const select =
-    "id,product_id,variant_id,movement_type,quantity_delta,quantity_before,quantity_after,reference_type,reference_number,note,created_at,created_by";
+    "id,product_id,variant_id,movement_type,quantity_delta,quantity_before,quantity_after,reference_type,reference_id,reference_number,note,created_at,created_by";
   const movements = await supabaseRequest(
     `/shop_inventory_movements?select=${select}${productFilter}${variantFilter}${typeFilter}&order=created_at.desc&limit=${
       limit + 1

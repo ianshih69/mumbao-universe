@@ -29,7 +29,7 @@ import {
   fetchAdminInventoryMovements,
 } from "@/lib/shop/adminInventoryApi";
 import { formatPrice, getVariantLabel } from "@/lib/shop/format";
-import { INVENTORY_MOVEMENT_LABELS } from "@/lib/shop/labels";
+import { getInventoryMovementDisplayLabel } from "@/lib/shop/labels";
 import {
   adminAuthExpiredMessage,
   clearAdminToken as clearStoredAdminToken,
@@ -52,9 +52,6 @@ type InventoryAlertItem = {
   sku?: string;
   inventory: number;
 };
-
-const movementLabels: Record<AdminInventoryMovementType, string> =
-  INVENTORY_MOVEMENT_LABELS;
 
 const actionOptions: Array<{
   value: "stock_in" | "stock_out" | "adjustment";
@@ -943,7 +940,10 @@ export default function AdminShopInventory() {
                         getMovementTone(movement.movement_type)
                       )}
                     >
-                      {movementLabels[movement.movement_type]}
+                      {getInventoryMovementDisplayLabel(
+                        movement.movement_type,
+                        movement.reference_type
+                      )}
                     </span>
                   </div>
                   <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">

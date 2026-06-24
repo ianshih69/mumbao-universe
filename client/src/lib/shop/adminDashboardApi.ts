@@ -46,6 +46,9 @@ export type AdminDashboardRecentMovement = {
   quantity_delta: number;
   quantity_before: number;
   quantity_after: number;
+  reference_type?: string;
+  reference_id?: string;
+  reference_number?: string;
   note?: string;
   created_at?: string;
 };

@@ -70,6 +70,11 @@ export function getInventoryMovementLabel(value?: string) {
   );
 }
 
+export function getInventoryMovementDisplayLabel(value?: string, referenceType?: string) {
+  if (referenceType === "order_cancel_restock") return "訂單取消回補";
+  return getInventoryMovementLabel(value);
+}
+
 export function getProductStatusLabel(value?: string) {
   return PRODUCT_STATUS_LABELS[value as keyof typeof PRODUCT_STATUS_LABELS] || value || "-";
 }

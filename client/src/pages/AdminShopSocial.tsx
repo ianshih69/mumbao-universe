@@ -2226,10 +2226,13 @@ export default function AdminShopSocial() {
     );
   }
 
+  const primaryMedia = draft.mediaFiles[0];
+  const helperCopy = businessSuiteCopy || buildBusinessSuiteCopy(draft);
+
   return (
     <main className="min-h-[100svh] bg-[#f7f2ea] text-stone-900">
-      <header className="border-b border-stone-200 bg-white/95 px-5 py-7 backdrop-blur md:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="border-b border-stone-200 bg-white/95 px-5 py-6 backdrop-blur md:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
               Social Publishing Assistant
@@ -2237,295 +2240,208 @@ export default function AdminShopSocial() {
             <h1 className="mt-2 font-serif text-3xl font-light tracking-wide">
               社群發布助手
             </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-stone-500">
-              先在這裡整理慢慢蒔光的文案與圖片，再使用 Meta Business Suite 完成 Facebook、Instagram、Threads 發布或排程。
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
+              整理慢慢蒔光的文案與圖片，再到 Meta Business Suite 手動發布或排程。
             </p>
           </div>
-          <div className="rounded-[8px] border border-[#eadfce] bg-[#fffaf3] px-4 py-3 text-sm leading-6 text-stone-600">
-            <p className="font-semibold text-stone-800">目前建議流程</p>
-            <p>後台整理素材，Meta Business Suite 負責正式發布。</p>
-          </div>
+          <Link
+            href="/admin/shop"
+            className="inline-flex h-10 items-center justify-center rounded-full border border-stone-200 bg-white px-4 text-sm font-semibold text-[#8b6f5b] transition hover:bg-[#fbf7f1]"
+          >
+            回到後台
+          </Link>
         </div>
       </header>
 
       <AdminShopNav current="social" />
 
       <div className="mx-auto max-w-7xl space-y-6 px-5 py-6 md:px-8 md:py-8">
-        <section className="grid gap-4 md:grid-cols-2">
-          <article className="rounded-[8px] border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
+        <section className="rounded-[8px] border border-[#eadfce] bg-[#fffaf3] px-4 py-3 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-emerald-700">
-                <CheckCircle2 className="size-5" />
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">
-                  半自動發布
-                </p>
-                <h2 className="mt-1 text-xl font-semibold text-stone-900">可用</h2>
-                <p className="mt-2 text-sm leading-6 text-emerald-900">
-                  目前建議使用 Meta Business Suite 完成發布，不需要 Meta Developer API。
-                </p>
-              </div>
+              <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-700" />
+              <p className="text-sm leading-6 text-stone-700">
+                目前使用安全半自動流程：整理文案與圖片後，前往 Meta Business Suite 發布。
+              </p>
             </div>
-          </article>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-xs font-semibold text-stone-500">
+                Meta API：未啟用
+              </span>
+              <button
+                type="button"
+                aria-expanded={isMetaDetailsExpanded}
+                onClick={() =>
+                  setIsMetaDetailsExpanded((isExpanded) => !isExpanded)
+                }
+                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 text-xs font-semibold text-[#8b6f5b] transition hover:bg-[#fbf7f1]"
+              >
+                API 狀態
+                <ChevronDown
+                  className={cn(
+                    "size-3.5 transition-transform",
+                    isMetaDetailsExpanded && "rotate-180"
+                  )}
+                />
+              </button>
+            </div>
+          </div>
 
-          <article className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#fbf0e4] text-[#8b6f5b]">
-                <KeyRound className="size-5" />
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-stone-400">
-                  Meta API 自動發布
-                </p>
-                <h2 className="mt-1 text-xl font-semibold text-stone-900">未啟用</h2>
-                <p className="mt-2 text-sm leading-6 text-stone-500">
-                  未來若重新設定 Meta Developer、App 與權限，可再啟用 API 自動發布。
+          {isMetaDetailsExpanded && (
+            <div className="mt-4 border-t border-[#eadfce] pt-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <p className="text-xs leading-5 text-stone-500">
+                  Meta API 狀態只供診斷；目前主流程不會呼叫 Facebook、Instagram 或 Threads 發文 API。
                 </p>
                 <Button
                   type="button"
                   variant="outline"
-                  aria-expanded={isMetaDetailsExpanded}
-                  onClick={() =>
-                    setIsMetaDetailsExpanded((isExpanded) => !isExpanded)
-                  }
-                  className="mt-4 h-10 rounded-full bg-white px-4 text-sm"
+                  onClick={refreshMetaConnections}
+                  disabled={isCheckingMeta || isCheckingFacebookToken}
+                  className="h-9 rounded-full bg-white px-4 text-xs"
                 >
-                  進階設定 / API 狀態
-                  <ChevronDown
-                    className={cn(
-                      "size-4 transition-transform",
-                      isMetaDetailsExpanded && "rotate-180"
-                    )}
-                  />
+                  {isCheckingMeta || isCheckingFacebookToken ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-3.5" />
+                  )}
+                  重新檢查
+                </Button>
+              </div>
+              {metaCheckError && (
+                <p className="mt-3 rounded-[8px] border border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                  {metaCheckError}
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm md:p-6">
+            <div className="flex flex-col gap-2 border-b border-stone-100 pb-4 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-stone-400">
+                  Content
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold text-stone-900">
+                  發文內容
+                </h2>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={generateBusinessSuiteCopy}
+                  className="h-10 rounded-full bg-white px-4 text-sm"
+                >
+                  <Sparkles className="size-4" />
+                  產生建議文案
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={clearForm}
+                  className="h-10 rounded-full bg-white px-4 text-sm"
+                >
+                  清空
                 </Button>
               </div>
             </div>
-          </article>
-        </section>
 
-        {isMetaDetailsExpanded && (
-          <section className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm md:p-6">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-stone-400">
-                  API Status
-                </p>
-                <h2 className="mt-1 font-serif text-2xl font-light">
-                  Meta API 狀態僅供診斷
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-stone-500">
-                  目前主流程不會呼叫 Facebook、Instagram 或 Threads 發文 API；這裡只保留未來重新啟用時的狀態檢查。
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={refreshMetaConnections}
-                disabled={isCheckingMeta || isCheckingFacebookToken}
-                className="h-10 rounded-full bg-white px-4 text-sm"
-              >
-                {isCheckingMeta || isCheckingFacebookToken ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="size-4" />
-                )}
-                重新檢查
-              </Button>
-            </div>
-
-            {metaCheckError && (
-              <div className="mt-4 rounded-[8px] border border-amber-100 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
-                {metaCheckError}
-              </div>
-            )}
-
-            <div className="mt-5 grid gap-3 md:grid-cols-3">
-              {(
-                [
-                  ["facebook", "Facebook"],
-                  ["instagram", "Instagram"],
-                  ["threads", "Threads"],
-                ] as const
-              ).map(([key, label]) => {
-                const connection = metaConnections[key];
-                return (
-                  <article
-                    key={key}
-                    className="rounded-[8px] border border-stone-100 bg-[#fffaf7] p-4"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="font-semibold text-stone-900">{label}</h3>
-                      <span
-                        className={cn(
-                          "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
-                          getMetaStatusClasses(connection.status)
-                        )}
-                      >
-                        {connection.status === "checking" && (
-                          <Loader2 className="size-3 animate-spin" />
-                        )}
-                        {connection.status === "connected" && (
-                          <CheckCircle2 className="size-3" />
-                        )}
-                        {connection.status === "error" && (
-                          <AlertCircle className="size-3" />
-                        )}
-                        {getMetaStatusLabel(connection.status)}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-xs leading-5 text-stone-500">
-                      {connection.accountName || connection.error || "尚未啟用 API 自動發布。"}
-                    </p>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-          <form
-            onSubmit={saveDraft}
-            className="space-y-6 rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm md:p-6"
-          >
-            <section className="space-y-4">
-              <div className="flex items-start gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#8b6f5b] text-sm font-semibold text-white">
-                  1
-                </span>
-                <div>
-                  <h2 className="text-xl font-semibold text-stone-900">寫內容</h2>
-                  <p className="mt-1 text-sm leading-6 text-stone-500">
-                    先整理標題、基本文案與 hashtag，再產生可貼到 Meta Business Suite 的版本。
-                  </p>
-                </div>
+            <div className="mt-5 grid gap-4">
+              <div className="grid gap-2">
+                <label htmlFor="social-title">
+                  <FieldLabel>發文標題</FieldLabel>
+                </label>
+                <input
+                  id="social-title"
+                  value={draft.title}
+                  onChange={(event) => updateDraft("title", event.target.value)}
+                  placeholder="例如：慢慢蒔光週末早晨"
+                  className="h-11 w-full rounded-[8px] border border-stone-200 bg-[#fffaf7] px-4 text-base outline-none transition focus:border-[#8b6f5b] focus:bg-white"
+                />
               </div>
 
-              <div className="grid gap-4">
-                <div className="grid gap-2">
-                  <label htmlFor="social-title">
-                    <FieldLabel>發文標題</FieldLabel>
-                  </label>
-                  <input
-                    id="social-title"
-                    value={draft.title}
-                    onChange={(event) => updateDraft("title", event.target.value)}
-                    placeholder="例如：慢慢蒔光週末早晨"
-                    className="h-11 w-full rounded-[8px] border border-stone-200 bg-[#fffaf7] px-4 text-base outline-none transition focus:border-[#8b6f5b] focus:bg-white"
-                  />
-                </div>
+              <div className="grid gap-2">
+                <label htmlFor="social-content">
+                  <FieldLabel>發文內容</FieldLabel>
+                </label>
+                <textarea
+                  id="social-content"
+                  value={draft.content}
+                  onChange={(event) => updateDraft("content", event.target.value)}
+                  placeholder="寫下今天要發布的主要內容。"
+                  rows={7}
+                  className="w-full resize-y rounded-[8px] border border-stone-200 bg-[#fffaf7] px-4 py-3 text-base leading-7 outline-none transition focus:border-[#8b6f5b] focus:bg-white"
+                />
+              </div>
 
-                <div className="grid gap-2">
-                  <label htmlFor="social-content">
-                    <FieldLabel>發文內容 / 基本文案</FieldLabel>
-                  </label>
-                  <textarea
-                    id="social-content"
-                    value={draft.content}
-                    onChange={(event) => updateDraft("content", event.target.value)}
-                    placeholder="寫下今天要給 Facebook、Instagram、Threads 使用的主要內容。"
-                    rows={7}
-                    className="w-full resize-y rounded-[8px] border border-stone-200 bg-[#fffaf7] px-4 py-3 text-base leading-7 outline-none transition focus:border-[#8b6f5b] focus:bg-white"
-                  />
-                </div>
+              <div className="grid gap-2">
+                <label htmlFor="social-hashtags">
+                  <FieldLabel>Hashtag</FieldLabel>
+                </label>
+                <input
+                  id="social-hashtags"
+                  value={draft.hashtags}
+                  onChange={(event) => updateDraft("hashtags", event.target.value)}
+                  placeholder="#慢慢蒔光 #STimeVilla #台南民宿"
+                  className="h-11 w-full rounded-[8px] border border-stone-200 bg-[#fffaf7] px-4 text-base outline-none transition focus:border-[#8b6f5b] focus:bg-white"
+                />
+              </div>
 
-                <div className="grid gap-2">
-                  <label htmlFor="social-hashtags">
-                    <FieldLabel>Hashtag</FieldLabel>
-                  </label>
-                  <input
-                    id="social-hashtags"
-                    value={draft.hashtags}
-                    onChange={(event) => updateDraft("hashtags", event.target.value)}
-                    placeholder="#慢慢蒔光 #STimeVilla #台南民宿"
-                    className="h-11 w-full rounded-[8px] border border-stone-200 bg-[#fffaf7] px-4 text-base outline-none transition focus:border-[#8b6f5b] focus:bg-white"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <FieldLabel>預計發布平台</FieldLabel>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {platformOptions.map((platform) => (
-                      <label
-                        key={platform}
-                        className={cn(
-                          "flex min-h-11 cursor-pointer items-center gap-3 rounded-[8px] border px-4 py-3 text-sm font-medium transition",
-                          draft.platforms.includes(platform)
-                            ? "border-[#8b6f5b] bg-white text-stone-900 shadow-sm"
-                            : "border-stone-200 bg-white/70 text-stone-500 hover:bg-white"
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={draft.platforms.includes(platform)}
-                          onChange={() => togglePlatform(platform)}
-                          className="size-4 accent-[#8b6f5b]"
-                        />
-                        {platform}
-                      </label>
-                    ))}
-                  </div>
-                  <p className="text-xs leading-5 text-stone-500">
-                    平台選擇只作為後台紀錄；正式勾選 Facebook、Instagram、Threads 請在 Meta Business Suite 內完成。
-                  </p>
-                </div>
-
-                <div className="rounded-[8px] border border-[#eadfce] bg-[#fffaf3] p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <FieldLabel>Meta Business Suite 建議文案</FieldLabel>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={generateBusinessSuiteCopy}
-                      className="h-10 rounded-full bg-white px-4 text-sm"
+              <div className="grid gap-2">
+                <FieldLabel>預計發布到</FieldLabel>
+                <div className="flex flex-wrap gap-2">
+                  {platformOptions.map((platform) => (
+                    <label
+                      key={platform}
+                      className={cn(
+                        "inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border px-3 text-xs font-medium transition",
+                        draft.platforms.includes(platform)
+                          ? "border-[#8b6f5b] bg-[#fffaf3] text-stone-800"
+                          : "border-stone-200 bg-white text-stone-500 hover:bg-[#fbf7f1]"
+                      )}
                     >
-                      <Sparkles className="size-4" />
-                      產生 Meta Business Suite 文案
-                    </Button>
-                  </div>
-                  <textarea
-                    value={businessSuiteCopy}
-                    onChange={(event) => {
-                      setBusinessSuiteCopy(event.target.value);
-                      setBusinessSuiteCopyTouched(true);
-                    }}
-                    placeholder="產生後可在這裡微調，接著複製到 Meta Business Suite。"
-                    rows={6}
-                    className="mt-3 w-full resize-y rounded-[8px] border border-stone-200 bg-white px-4 py-3 text-sm leading-7 outline-none transition focus:border-[#8b6f5b]"
-                  />
-                </div>
-              </div>
-            </section>
-
-            <section className="space-y-4 border-t border-stone-100 pt-6">
-              <div className="flex items-start gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#8b6f5b] text-sm font-semibold text-white">
-                  2
-                </span>
-                <div>
-                  <h2 className="text-xl font-semibold text-stone-900">選圖片</h2>
-                  <p className="mt-1 text-sm leading-6 text-stone-500">
-                    圖片會暫存到 R2，建議先使用圖片；影片可保留素材，但請在 Meta Business Suite 內確認格式支援。
-                  </p>
+                      <input
+                        type="checkbox"
+                        checked={draft.platforms.includes(platform)}
+                        onChange={() => togglePlatform(platform)}
+                        className="size-3.5 accent-[#8b6f5b]"
+                      />
+                      {platform}
+                    </label>
+                  ))}
                 </div>
               </div>
 
-              <div className="rounded-[8px] border border-dashed border-[#d7c4ae] bg-[#fffaf3] p-4">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-start gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-[#8b6f5b]">
-                      <FileImage className="size-5" />
-                    </div>
-                    <div>
-                      <FieldLabel>圖片 / 影片選擇</FieldLabel>
-                      <p className="mt-1 text-sm leading-6 text-stone-500">
-                        支援 JPG、PNG、WebP 與 MP4；圖片最大 10MB，影片最大 100MB。
-                      </p>
-                    </div>
+              <div className="grid gap-2">
+                <label htmlFor="business-suite-copy">
+                  <FieldLabel>建議文案</FieldLabel>
+                </label>
+                <textarea
+                  id="business-suite-copy"
+                  value={businessSuiteCopy}
+                  onChange={(event) => {
+                    setBusinessSuiteCopy(event.target.value);
+                    setBusinessSuiteCopyTouched(true);
+                  }}
+                  placeholder="按「產生建議文案」後，可在這裡微調再複製。"
+                  rows={5}
+                  className="w-full resize-y rounded-[8px] border border-stone-200 bg-white px-4 py-3 text-sm leading-7 outline-none transition focus:border-[#8b6f5b]"
+                />
+              </div>
+
+              <div className="rounded-[8px] border border-[#eadfce] bg-[#fffaf3] p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <FieldLabel>圖片 / 影片選擇</FieldLabel>
+                    <p className="mt-1 text-xs text-stone-500">
+                      選擇圖片後先上傳暫存，再到 Meta Business Suite 使用。
+                    </p>
                   </div>
-                  <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-full bg-white px-5 text-sm font-semibold text-[#8b6f5b] shadow-sm ring-1 ring-stone-200 transition hover:bg-[#f4ece2]">
-                    選擇檔案
+                  <label className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-full bg-white px-4 text-sm font-semibold text-[#8b6f5b] ring-1 ring-stone-200 transition hover:bg-[#f4ece2]">
+                    選擇圖片
                     <input
                       key={fileInputKey}
                       type="file"
@@ -2537,9 +2453,9 @@ export default function AdminShopSocial() {
                   </label>
                 </div>
 
-                <div className="mt-4 space-y-3">
-                  {selectedFiles.length > 0 ? (
-                    selectedFiles.map((file) => (
+                {selectedFiles.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {selectedFiles.map((file) => (
                       <div
                         key={`${file.name}-${file.size}-${file.lastModified}`}
                         className="flex flex-col gap-1 rounded-[8px] bg-white px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
@@ -2551,17 +2467,15 @@ export default function AdminShopSocial() {
                           {file.type || "未知格式"} / {formatFileSize(file.size)}
                         </span>
                       </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-stone-400">尚未選擇新檔案。</p>
-                  )}
-                </div>
+                    ))}
+                  </div>
+                )}
 
                 <Button
                   type="button"
                   onClick={uploadSelectedFiles}
                   disabled={!selectedFiles.length || isUploading}
-                  className="mt-4 h-11 w-full rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a] sm:w-auto"
+                  className="mt-4 h-10 rounded-full bg-[#8b6f5b] px-4 text-white hover:bg-[#765d4a]"
                 >
                   {isUploading ? (
                     <Loader2 className="size-4 animate-spin" />
@@ -2578,7 +2492,7 @@ export default function AdminShopSocial() {
                 )}
 
                 {draft.mediaFiles.length > 0 && (
-                  <div className="mt-5 grid gap-3 border-t border-[#eadfce] pt-4 sm:grid-cols-2">
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
                     {draft.mediaFiles.map((media) => (
                       <article
                         key={media.key}
@@ -2588,27 +2502,22 @@ export default function AdminShopSocial() {
                           <img
                             src={media.publicUrl}
                             alt={media.fileName}
-                            className="h-44 w-full bg-[#fbf7f1] object-contain"
+                            className="h-36 w-full bg-[#fbf7f1] object-contain"
                           />
                         ) : media.contentType === "video/mp4" ? (
                           <video
                             src={media.publicUrl}
                             controls
                             preload="metadata"
-                            className="h-44 w-full bg-black object-contain"
+                            className="h-36 w-full bg-black object-contain"
                           >
                             {media.fileName}
                           </video>
                         ) : null}
                         <div className="space-y-3 p-3">
-                          <div>
-                            <p className="break-all font-medium text-stone-800">
-                              {media.fileName}
-                            </p>
-                            <p className="mt-1 text-xs text-stone-500">
-                              {media.contentType} / {formatFileSize(media.size)}
-                            </p>
-                          </div>
+                          <p className="break-all font-medium text-stone-800">
+                            {media.fileName}
+                          </p>
                           <div className="grid grid-cols-2 gap-2">
                             <a
                               href={media.publicUrl}
@@ -2616,8 +2525,7 @@ export default function AdminShopSocial() {
                               rel="noreferrer"
                               className="inline-flex h-9 items-center justify-center rounded-full border border-stone-200 bg-white px-3 text-xs font-semibold text-[#8b6f5b] transition hover:bg-[#fbf7f1]"
                             >
-                              <ExternalLink className="size-3.5" />
-                              開啟圖片
+                              開啟
                             </a>
                             <button
                               type="button"
@@ -2630,7 +2538,6 @@ export default function AdminShopSocial() {
                               }
                               className="inline-flex h-9 items-center justify-center rounded-full border border-stone-200 bg-white px-3 text-xs font-semibold text-[#8b6f5b] transition hover:bg-[#fbf7f1]"
                             >
-                              <Copy className="size-3.5" />
                               {copiedTarget === `media-${media.key}`
                                 ? "已複製"
                                 : "複製網址"}
@@ -2640,14 +2547,14 @@ export default function AdminShopSocial() {
                               download={media.fileName}
                               className="inline-flex h-9 items-center justify-center rounded-full border border-stone-200 bg-white px-3 text-xs font-semibold text-[#8b6f5b] transition hover:bg-[#fbf7f1]"
                             >
-                              下載圖片
+                              下載
                             </a>
                             <button
                               type="button"
                               onClick={() => removeMediaFile(media.key)}
                               className="inline-flex h-9 items-center justify-center rounded-full border border-red-100 bg-red-50 px-3 text-xs font-semibold text-red-700 transition hover:bg-red-100"
                             >
-                              移除圖片
+                              移除
                             </button>
                           </div>
                         </div>
@@ -2656,280 +2563,150 @@ export default function AdminShopSocial() {
                   </div>
                 )}
               </div>
+
+              {notice && (
+                <div className="flex items-center gap-2 rounded-[8px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                  <CheckCircle2 className="size-4 shrink-0" />
+                  {notice}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <aside className="space-y-4 lg:sticky lg:top-6 lg:h-fit">
+            <section className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
+              <h2 className="text-xl font-semibold text-stone-900">
+                發布助手
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-stone-500">
+                複製文案後，開啟 Meta Business Suite，貼上文字與圖片，再回來標記已發布。
+              </p>
+              <div className="mt-4 grid gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    void copyText(helperCopy, "business-copy", "已複製")
+                  }
+                  className="h-11 rounded-full bg-white px-4"
+                >
+                  <Clipboard className="size-4" />
+                  {copiedTarget === "business-copy" ? "已複製" : "複製文案"}
+                </Button>
+                {metaBusinessSuiteUrl ? (
+                  <a
+                    href={metaBusinessSuiteUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-stone-200 bg-white px-4 text-sm font-semibold text-[#8b6f5b] transition hover:bg-[#fbf7f1]"
+                  >
+                    <ExternalLink className="size-4" />
+                    開啟 Meta Business Suite
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex h-11 items-center justify-center rounded-full border border-stone-200 bg-stone-100 px-4 text-sm font-semibold text-stone-400"
+                  >
+                    尚未設定連結
+                  </button>
+                )}
+                {primaryMedia ? (
+                  <a
+                    href={primaryMedia.publicUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-stone-200 bg-white px-4 text-sm font-semibold text-[#8b6f5b] transition hover:bg-[#fbf7f1]"
+                  >
+                    <ExternalLink className="size-4" />
+                    開啟圖片
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex h-11 items-center justify-center rounded-full border border-stone-200 bg-stone-100 px-4 text-sm font-semibold text-stone-400"
+                  >
+                    開啟圖片
+                  </button>
+                )}
+                <Button
+                  type="button"
+                  onClick={markCurrentDraftPublishedByBusinessSuite}
+                  className="h-11 rounded-full bg-[#8b6f5b] px-4 text-white hover:bg-[#765d4a]"
+                >
+                  <CheckCircle2 className="size-4" />
+                  標記已發布
+                </Button>
+              </div>
             </section>
 
-            <section className="space-y-4 border-t border-stone-100 pt-6">
-              <div className="flex items-start gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#8b6f5b] text-sm font-semibold text-white">
-                  3
-                </span>
-                <div>
-                  <h2 className="text-xl font-semibold text-stone-900">
-                    官方半自動發布，建議使用
-                  </h2>
-                  <p className="mt-1 text-sm leading-6 text-stone-500">
-                    建議使用 Meta Business Suite 完成發布。你可以在這裡複製文案與整理圖片，接著到 Meta Business Suite 貼上內容，勾選 Facebook、Instagram、Threads 後發布或排程。
+            <section className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-3 border-b border-stone-100 pb-3">
+                <h2 className="text-lg font-semibold text-stone-900">
+                  發文預覽
+                </h2>
+                <Sparkles className="size-4 text-[#8b6f5b]" />
+              </div>
+              <div className="mt-4 space-y-3">
+                <p className="text-base font-semibold text-stone-900">
+                  {preview.title || draft.title || "尚未填寫標題"}
+                </p>
+                <p className="line-clamp-4 whitespace-pre-wrap rounded-[8px] bg-[#fbf7f1] p-3 text-sm leading-6 text-stone-700">
+                  {preview.content || draft.content || "文案會顯示在這裡。"}
+                </p>
+                {(preview.hashtags || draft.hashtags) && (
+                  <p className="text-sm leading-6 text-[#8b6f5b]">
+                    {preview.hashtags || draft.hashtags}
                   </p>
-                </div>
-              </div>
-
-              <div className="rounded-[8px] border border-[#eadfce] bg-[#fffaf3] p-4">
-                <ol className="grid gap-2 text-sm leading-6 text-stone-600 md:grid-cols-2">
-                  {[
-                    "複製 Meta Business Suite 文案",
-                    "開啟 Meta Business Suite",
-                    "貼上文案並上傳圖片",
-                    "在 Meta Business Suite 勾選 Facebook / Instagram / Threads",
-                    "發布或排程",
-                    "回到這裡標記已發布",
-                  ].map((step, index) => (
-                    <li key={step} className="flex gap-2">
-                      <span className="font-semibold text-[#8b6f5b]">
-                        {index + 1}.
-                      </span>
-                      <span>{step}</span>
-                    </li>
-                  ))}
-                </ol>
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
-                      void copyText(
-                        businessSuiteCopy || buildBusinessSuiteCopy(draft),
-                        "business-copy",
-                        "已複製 Meta Business Suite 文案。"
-                      )
-                    }
-                    className="h-11 rounded-full bg-white px-4"
-                  >
-                    <Clipboard className="size-4" />
-                    {copiedTarget === "business-copy"
-                      ? "已複製"
-                      : "複製文案"}
-                  </Button>
-                  {metaBusinessSuiteUrl ? (
-                    <a
-                      href={metaBusinessSuiteUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-stone-200 bg-white px-4 text-sm font-semibold text-[#8b6f5b] transition hover:bg-[#fbf7f1]"
-                    >
-                      <ExternalLink className="size-4" />
-                      開啟 Meta Business Suite
-                    </a>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled
-                      className="inline-flex h-11 items-center justify-center rounded-full border border-stone-200 bg-stone-100 px-4 text-sm font-semibold text-stone-400"
-                    >
-                      尚未設定 Meta Business Suite 連結
-                    </button>
-                  )}
-                  {draft.mediaFiles[0] ? (
-                    <a
-                      href={draft.mediaFiles[0].publicUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-stone-200 bg-white px-4 text-sm font-semibold text-[#8b6f5b] transition hover:bg-[#fbf7f1]"
-                    >
-                      <ExternalLink className="size-4" />
-                      開啟圖片
-                    </a>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled
-                      className="inline-flex h-11 items-center justify-center rounded-full border border-stone-200 bg-stone-100 px-4 text-sm font-semibold text-stone-400"
-                    >
-                      尚未上傳圖片
-                    </button>
-                  )}
-                  <Button
-                    type="button"
-                    onClick={markCurrentDraftPublishedByBusinessSuite}
-                    className="h-11 rounded-full bg-[#8b6f5b] px-4 text-white hover:bg-[#765d4a]"
-                  >
-                    <CheckCircle2 className="size-4" />
-                    標記已用 Meta Business Suite 發布
-                  </Button>
-                </div>
+                )}
+                {(preview.mediaFiles[0] || primaryMedia) && (
+                  <div className="overflow-hidden rounded-[8px] border border-stone-100 bg-[#fbf7f1]">
+                    {(preview.mediaFiles[0] || primaryMedia)?.contentType.startsWith(
+                      "image/"
+                    ) ? (
+                      <img
+                        src={(preview.mediaFiles[0] || primaryMedia)?.publicUrl}
+                        alt={(preview.mediaFiles[0] || primaryMedia)?.fileName}
+                        className="max-h-48 w-full bg-white object-contain"
+                      />
+                    ) : (
+                      <div className="p-4 text-sm text-stone-500">
+                        已選擇影片素材
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </section>
-
-            {notice && (
-              <div className="flex items-center gap-2 rounded-[8px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                <CheckCircle2 className="size-4 shrink-0" />
-                {notice}
-              </div>
-            )}
-
-            <div className="flex flex-col gap-3 border-t border-stone-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="grid grid-cols-2 gap-3 sm:flex">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={clearForm}
-                  className="h-11 rounded-full bg-white px-5"
-                >
-                  清空表單
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={updatePreview}
-                  className="h-11 rounded-full bg-white px-5"
-                >
-                  更新預覽
-                </Button>
-              </div>
-              <Button
-                type="submit"
-                variant="outline"
-                disabled={!hasDraftInput}
-                className="h-11 rounded-full border-[#bba38e] bg-white px-6 text-[#765d4a] hover:bg-[#fbf0e4]"
-              >
-                儲存草稿
-              </Button>
-            </div>
-          </form>
-
-          <aside className="h-fit rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm lg:sticky lg:top-6">
-            <div className="flex items-center justify-between gap-3 border-b border-stone-100 pb-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
-                  Preview
-                </p>
-                <h2 className="mt-1 font-serif text-2xl font-light">發文預覽</h2>
-              </div>
-              <div className="flex size-10 items-center justify-center rounded-full bg-[#fbf0e4] text-[#8b6f5b]">
-                <Sparkles className="size-5" />
-              </div>
-            </div>
-
-            <div className="mt-5 space-y-5">
-              <div>
-                <p className="text-xs font-semibold tracking-[0.18em] text-stone-400">
-                  標題
-                </p>
-                <p className="mt-2 text-lg font-semibold text-stone-900">
-                  {preview.title || <EmptyPreviewLine>尚未填寫標題</EmptyPreviewLine>}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold tracking-[0.18em] text-stone-400">
-                  文案
-                </p>
-                <p className="mt-2 whitespace-pre-wrap rounded-[8px] bg-[#fbf7f1] p-4 text-sm leading-7 text-stone-700">
-                  {preview.content || <EmptyPreviewLine>尚未填寫文案</EmptyPreviewLine>}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold tracking-[0.18em] text-stone-400">
-                  Hashtag
-                </p>
-                <p className="mt-2 text-sm leading-6 text-[#8b6f5b]">
-                  {preview.hashtags || <EmptyPreviewLine>尚未填寫 hashtag</EmptyPreviewLine>}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold tracking-[0.18em] text-stone-400">
-                  圖片 / 影片
-                </p>
-                <div className="mt-3 grid gap-3">
-                  {preview.mediaFiles.length > 0 ? (
-                    preview.mediaFiles.map((media) => (
-                      <div
-                        key={media.key}
-                        className="overflow-hidden rounded-[8px] border border-stone-100 bg-[#fbf7f1]"
-                      >
-                        {media.contentType.startsWith("image/") ? (
-                          <img
-                            src={media.publicUrl}
-                            alt={media.fileName}
-                            className="max-h-64 w-full bg-white object-contain"
-                          />
-                        ) : media.contentType === "video/mp4" ? (
-                          <video
-                            src={media.publicUrl}
-                            controls
-                            preload="metadata"
-                            className="max-h-64 w-full bg-black object-contain"
-                          >
-                            {media.fileName}
-                          </video>
-                        ) : null}
-                        <div className="p-3">
-                          <p className="break-all text-xs font-medium text-stone-700">
-                            {media.fileName}
-                          </p>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <EmptyPreviewLine>尚未上傳媒體</EmptyPreviewLine>
-                  )}
-                </div>
-              </div>
-            </div>
           </aside>
         </div>
 
         <section className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm md:p-6">
           <div className="flex flex-col gap-2 border-b border-stone-100 pb-4 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
-                Step 4
+              <p className="text-xs uppercase tracking-[0.2em] text-stone-400">
+                Records
               </p>
-              <h2 className="mt-1 font-serif text-2xl font-light">發文紀錄</h2>
+              <h2 className="mt-1 text-2xl font-semibold text-stone-900">
+                發文紀錄
+              </h2>
             </div>
-            <p className="text-sm leading-6 text-stone-500">
-              目前紀錄主要儲存在此瀏覽器；若要跨裝置同步，未來可升級為資料庫任務系統。
+            <p className="text-sm text-stone-500">
+              目前紀錄主要儲存在此瀏覽器。
             </p>
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            {(
-              [
-                ["all", "全部"],
-                ["draft", "草稿"],
-                ["published", "已發布"],
-                ["deleted", "已刪除"],
-                ["failed", "失敗"],
-                ["facebook", "Facebook"],
-                ["instagram", "Instagram"],
-                ["threads", "Threads"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setTaskFilter(value)}
-                className={cn(
-                  "h-9 rounded-full border px-4 text-sm font-medium transition",
-                  taskFilter === value
-                    ? "border-[#8b6f5b] bg-[#8b6f5b] text-white"
-                    : "border-stone-200 bg-white text-stone-600 hover:border-[#cdbba8] hover:bg-[#fffaf7]"
-                )}
-              >
-                {label}
-              </button>
-            ))}
           </div>
 
           {visibleDrafts.length === 0 ? (
             <div className="mt-5 rounded-[8px] border border-dashed border-stone-200 bg-[#fbf7f1] p-6 text-center text-sm text-stone-500">
-              目前沒有符合條件的發文紀錄。
+              目前沒有發文紀錄。
             </div>
           ) : (
-            <div className="mt-5 grid gap-3">
+            <div className="mt-5 divide-y divide-stone-100">
               {visibleDrafts.map((item) => {
                 const summary = getTaskSummary(item);
                 const copy = getBusinessSuiteCopyForItem(item);
-                const firstMedia = item.mediaFiles[0];
                 const isExpanded = expandedTaskId === item.id;
                 const statusLabel =
                   item.status === "published" &&
@@ -2938,11 +2715,8 @@ export default function AdminShopSocial() {
                     : getStatusLabel(item.status);
 
                 return (
-                  <article
-                    key={item.id}
-                    className="rounded-[8px] border border-stone-100 bg-[#fffaf7] p-4"
-                  >
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <article key={item.id} className="py-4 first:pt-0 last:pb-0">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="truncate text-base font-semibold text-stone-900">
@@ -2957,14 +2731,10 @@ export default function AdminShopSocial() {
                             {statusLabel}
                           </span>
                         </div>
-                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs leading-5 text-stone-500">
-                          <span>發布方式：{getPublishMethodLabel(item)}</span>
-                          <span>圖片數：{item.mediaFiles.length}</span>
-                          <span>建立：{formatDateTime(item.createdAt)}</span>
-                          {item.publishedAt && (
-                            <span>標記發布：{formatDateTime(item.publishedAt)}</span>
-                          )}
-                        </div>
+                        <p className="mt-1 text-xs leading-5 text-stone-500">
+                          {formatDateTime(item.createdAt)} ·{" "}
+                          {item.platforms.join(" / ") || "未指定平台"}
+                        </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Button
@@ -2977,36 +2747,21 @@ export default function AdminShopSocial() {
                           }
                           className="h-9 rounded-full bg-white px-3 text-xs"
                         >
-                          {isExpanded ? "收合文案" : "查看文案"}
+                          {isExpanded ? "收合" : "查看"}
                         </Button>
                         <Button
                           type="button"
                           variant="outline"
                           onClick={() =>
-                            void copyText(
-                              copy,
-                              `task-copy-${item.id}`,
-                              "已複製這筆發文文案。"
-                            )
+                            void copyText(copy, `task-copy-${item.id}`, "已複製")
                           }
                           className="h-9 rounded-full bg-white px-3 text-xs"
                         >
                           <Copy className="size-3.5" />
                           {copiedTarget === `task-copy-${item.id}`
                             ? "已複製"
-                            : "複製文案"}
+                            : "複製"}
                         </Button>
-                        {firstMedia && (
-                          <a
-                            href={firstMedia.publicUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 text-xs font-semibold text-[#8b6f5b] transition hover:bg-[#fbf7f1]"
-                          >
-                            <ExternalLink className="size-3.5" />
-                            開圖片
-                          </a>
-                        )}
                         <Button
                           type="button"
                           variant="outline"
@@ -3029,10 +2784,25 @@ export default function AdminShopSocial() {
                     </div>
 
                     {isExpanded && (
-                      <div className="mt-4 rounded-[8px] bg-white p-4 text-sm leading-7 text-stone-700">
+                      <div className="mt-3 rounded-[8px] bg-[#fbf7f1] p-4 text-sm leading-7 text-stone-700">
                         <p className="whitespace-pre-wrap">
-                          {copy || "這筆紀錄沒有文案。"}
+                          {copy || "這筆紀錄沒有文案內容。"}
                         </p>
+                        {item.mediaFiles.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {item.mediaFiles.map((media) => (
+                              <a
+                                key={media.key}
+                                href={media.publicUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex h-8 items-center rounded-full border border-stone-200 bg-white px-3 text-xs font-semibold text-[#8b6f5b] hover:bg-[#fffaf3]"
+                              >
+                                開啟圖片
+                              </a>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </article>
@@ -3044,6 +2814,8 @@ export default function AdminShopSocial() {
       </div>
     </main>
   );
+
+
 
   return null;
 }

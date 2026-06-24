@@ -316,6 +316,51 @@ const auditFieldAllowLists = {
     "related_asset_number",
     "note",
   ],
+  product: [
+    "id",
+    "slug",
+    "name",
+    "subtitle",
+    "description",
+    "category",
+    "status",
+    "featured",
+    "sort_order",
+    "cover_image_url",
+    "variants",
+    "images",
+  ],
+  order: [
+    "id",
+    "order_number",
+    "customer_name",
+    "subtotal",
+    "shipping_fee",
+    "total",
+    "payment_method",
+    "payment_status",
+    "order_status",
+    "order_source",
+    "shipping_carrier",
+    "tracking_number",
+    "internal_note",
+    "items",
+    "restock_movements",
+  ],
+  inventory_movement: [
+    "id",
+    "product_id",
+    "variant_id",
+    "movement_type",
+    "quantity_delta",
+    "quantity_before",
+    "quantity_after",
+    "reference_type",
+    "reference_number",
+    "note",
+    "created_at",
+    "created_by",
+  ],
   admin_profile: [
     "id",
     "auth_user_id",
@@ -3380,16 +3425,29 @@ function getKnownManualSaleErrorMessage(error) {
   return matchedKey ? knownManualSaleErrors.get(matchedKey) : "";
 }
 
+function getNumberOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function normalizeOrderSummary(order) {
+  const rawShippingFee = getNumberOrNull(order.shipping_fee);
+  const rawSubtotal = getNumberOrNull(order.subtotal);
+  const rawTotal = getNumberOrNull(order.total);
+  const shippingFee = rawShippingFee ?? 0;
+  const subtotal = rawSubtotal ?? (rawTotal !== null ? Math.max(rawTotal - shippingFee, 0) : 0);
+  const total = rawTotal ?? subtotal + shippingFee;
+
   return {
     id: order.id,
     order_number: order.order_number || "",
     customer_name: order.customer_name || "",
     customer_phone: order.customer_phone || "",
     customer_email: order.customer_email || "",
-    subtotal: Number(order.subtotal || 0),
-    shipping_fee: Number(order.shipping_fee || 0),
-    total: Number(order.total || 0),
+    subtotal,
+    shipping_fee: shippingFee,
+    total,
     payment_method: order.payment_method || "manual_confirmation",
     payment_status: order.payment_status || "pending",
     order_status: order.order_status || "pending_confirm",
@@ -3709,7 +3767,7 @@ async function loadDashboard(req, res) {
 
   const { startIso, endIso } = getTaipeiTodayRange();
   const orderSelect =
-    "id,order_number,customer_name,total,payment_status,order_status,order_source,created_at";
+    "id,order_number,customer_name,subtotal,shipping_fee,total,payment_status,order_status,order_source,created_at";
   const movementSelect =
     "id,product_id,variant_id,movement_type,quantity_delta,quantity_before,quantity_after,reference_type,reference_number,note,created_at,created_by";
   const [
@@ -4007,7 +4065,49 @@ function validateStatusPatch(body) {
   return patch;
 }
 
-async function handleOrderAction(req, res) {
+async function restockCancelledOrderItems({ req, context, order }) {
+  const movements = [];
+  const items = Array.isArray(order?.items) ? order.items : [];
+
+  for (const item of items) {
+    const variantId = cleanText(item?.variant_id);
+    const quantity = getInteger(item?.quantity, 0);
+    if (!variantId || quantity <= 0) continue;
+
+    const result = await supabaseRpc("adjust_shop_inventory", {
+      adjustment_payload: {
+        variant_id: variantId,
+        movement_type: "stock_in",
+        quantity,
+        reference_type: "order_cancel_restock",
+        reference_number: order.order_number,
+        note: `訂單取消庫存回補：${order.order_number}`,
+        created_by: context?.actorEmail || "admin",
+      },
+    });
+    if (result?.movement) movements.push(normalizeInventoryMovement(result.movement));
+  }
+
+  if (movements.length) {
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "cancel_restock",
+      module: "orders",
+      targetType: "order",
+      targetId: order.id,
+      description: `取消訂單庫存回補：${order.order_number}`,
+      afterData: {
+        ...order,
+        restock_movements: movements,
+      },
+    });
+  }
+
+  return movements;
+}
+
+async function handleOrderAction(req, res, context) {
   if (req.method === "GET") {
     const orderNumber = String(firstQueryValue(req.query?.orderNumber) || "").trim();
     if (!orderNumber) {
@@ -4025,6 +4125,10 @@ async function handleOrderAction(req, res) {
     }
 
     const patch = validateStatusPatch(body);
+    const beforeOrder = await loadOrder(orderNumber);
+    const shouldRestock =
+      patch.order_status === "cancelled" && beforeOrder.order_status !== "cancelled";
+
     await supabaseRequest(
       `/shop_orders?order_number=eq.${encodeURIComponent(orderNumber)}`,
       {
@@ -4036,7 +4140,27 @@ async function handleOrderAction(req, res) {
       }
     );
 
-    return sendJson(res, 200, { order: await loadOrder(orderNumber) });
+    const restockMovements = shouldRestock
+      ? await restockCancelledOrderItems({ req, context, order: beforeOrder })
+      : [];
+    const afterOrder = await loadOrder(orderNumber);
+
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "update",
+      module: "orders",
+      targetType: "order",
+      targetId: afterOrder.id,
+      description: `更新訂單狀態：${orderNumber}`,
+      beforeData: beforeOrder,
+      afterData: {
+        ...afterOrder,
+        restock_movements: restockMovements,
+      },
+    });
+
+    return sendJson(res, 200, { order: afterOrder });
   }
 
   res.setHeader("Allow", "GET, PATCH");
@@ -4293,11 +4417,12 @@ function buildImageCreate(image, productId) {
   };
 }
 
-async function updateProduct(req, res) {
+async function updateProduct(req, res, context) {
   const body = await readBody(req);
   const { id: productId, patch } = validateProductPatch(body?.product || {});
   const variants = Array.isArray(body?.variants) ? body.variants : [];
   const images = Array.isArray(body?.images) ? body.images : [];
+  const beforeProduct = await loadProductById(productId);
 
   await supabaseRequest(`/shop_products?id=eq.${encodeURIComponent(productId)}`, {
     method: "PATCH",
@@ -4334,7 +4459,20 @@ async function updateProduct(req, res) {
     );
   }
 
-  return sendJson(res, 200, { product: await loadProductById(productId) });
+  const product = await loadProductById(productId);
+  await writeAdminActivityLog({
+    req,
+    context,
+    action: "update",
+    module: "products",
+    targetType: "product",
+    targetId: product.id,
+    description: `更新商品：${product.name}`,
+    beforeData: beforeProduct,
+    afterData: product,
+  });
+
+  return sendJson(res, 200, { product });
 }
 
 async function archiveIncompleteProduct(productId) {
@@ -4351,7 +4489,7 @@ async function archiveIncompleteProduct(productId) {
   }
 }
 
-async function createProduct(req, res) {
+async function createProduct(req, res, context) {
   const body = await readBody(req);
   const productPayload = validateProductCreate(body?.product || {});
   const variants = Array.isArray(body?.variants) ? body.variants : [];
@@ -4402,10 +4540,22 @@ async function createProduct(req, res) {
     throw error;
   }
 
-  return sendJson(res, 201, { product: await loadProductById(createdProduct.id) });
+  const product = await loadProductById(createdProduct.id);
+  await writeAdminActivityLog({
+    req,
+    context,
+    action: "create",
+    module: "products",
+    targetType: "product",
+    targetId: product.id,
+    description: `新增商品：${product.name}`,
+    afterData: product,
+  });
+
+  return sendJson(res, 201, { product });
 }
 
-async function handleProductAction(req, res) {
+async function handleProductAction(req, res, context) {
   if (req.method === "GET") {
     const productId = cleanText(firstQueryValue(req.query?.id));
     if (!productId) {
@@ -4416,11 +4566,11 @@ async function handleProductAction(req, res) {
   }
 
   if (req.method === "PATCH") {
-    return updateProduct(req, res);
+    return updateProduct(req, res, context);
   }
 
   if (req.method === "POST") {
-    return createProduct(req, res);
+    return createProduct(req, res, context);
   }
 
   res.setHeader("Allow", "GET, POST, PATCH");
@@ -4599,7 +4749,7 @@ async function searchInventory(req, res) {
   return sendJson(res, 200, { results });
 }
 
-async function handleInventoryAdjustment(req, res) {
+async function handleInventoryAdjustment(req, res, context) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return sendJson(res, 405, { error: "Method not allowed." });
@@ -4642,6 +4792,21 @@ async function handleInventoryAdjustment(req, res) {
       },
     });
     const movement = result?.movement || null;
+    if (movement) {
+      const isStockIn = movementType === "stock_in";
+      await writeAdminActivityLog({
+        req,
+        context,
+        action: isStockIn ? "stock_in" : "adjust",
+        module: "inventory",
+        targetType: "inventory_movement",
+        targetId: movement.id,
+        description: isStockIn
+          ? `新增入庫紀錄：${movement.reference_number || variantId}`
+          : `調整庫存：${movement.reference_number || variantId}`,
+        afterData: movement,
+      });
+    }
 
     return sendJson(res, 200, {
       inventory: Number(result?.inventory || 0),
@@ -4668,7 +4833,7 @@ function normalizeManualSaleItems(items) {
     .filter((item) => item.variant_id && item.quantity > 0);
 }
 
-async function handleManualSale(req, res) {
+async function handleManualSale(req, res, context) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return sendJson(res, 405, { error: "Method not allowed." });
@@ -4694,6 +4859,17 @@ async function handleManualSale(req, res) {
         note: nullableText(body?.note) || "?曉?瑕",
         items,
       },
+    });
+
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "create",
+      module: "pos",
+      targetType: "order",
+      targetId: order?.id,
+      description: `POS 結帳：${order?.order_number || ""}`,
+      afterData: order,
     });
 
     return sendJson(res, 201, { order });
@@ -5637,7 +5813,7 @@ export default async function handler(req, res) {
     }
 
     if (action === "order") {
-      return await handleOrderAction(req, res);
+      return await handleOrderAction(req, res, adminContext);
     }
 
     if (req.method === "GET" && action === "products") {
@@ -5645,7 +5821,7 @@ export default async function handler(req, res) {
     }
 
     if (action === "product") {
-      return await handleProductAction(req, res);
+      return await handleProductAction(req, res, adminContext);
     }
 
     if (req.method === "GET" && action === "inventory-movements") {
@@ -5661,11 +5837,11 @@ export default async function handler(req, res) {
     }
 
     if (action === "inventory-adjust") {
-      return await handleInventoryAdjustment(req, res);
+      return await handleInventoryAdjustment(req, res, adminContext);
     }
 
     if (action === "manual-sale") {
-      return await handleManualSale(req, res);
+      return await handleManualSale(req, res, adminContext);
     }
 
     if (req.method === "GET" && action === "warehouse-dashboard") {

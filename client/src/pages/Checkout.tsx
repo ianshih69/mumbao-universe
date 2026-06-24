@@ -21,11 +21,21 @@ import type { CartItem, CheckoutCustomer } from "@/lib/shop/types";
 
 const checkoutKeyStorageKey = "mumbao-shop-checkout-idempotency";
 const orderLookupStoragePrefix = "mumbao-shop-order-lookup:";
+const orderCompleteMetaStoragePrefix = "mumbao-shop-order-complete-meta:";
 
 type StoredCheckoutKey = {
   fingerprint: string;
   key: string;
 };
+
+type CheckoutFormCustomer = CheckoutCustomer & {
+  postalCode: string;
+  city: string;
+  district: string;
+  detailAddress: string;
+};
+
+type CustomerFormKey = keyof CheckoutFormCustomer;
 
 function getCartFingerprint(items: CartItem[]) {
   return items
@@ -86,17 +96,61 @@ function saveOrderLookupToken(orderNumber: string, lookupToken: string) {
   }
 }
 
+function saveOrderCompleteMeta(
+  orderNumber: string,
+  meta: {
+    isMemberOrder: boolean;
+    savedDefaultProfile: boolean;
+    defaultProfileSaveFailed: boolean;
+  },
+) {
+  try {
+    sessionStorage.setItem(`${orderCompleteMetaStoragePrefix}${orderNumber}`, JSON.stringify(meta));
+  } catch {
+    // The completion page will still show the core order success state.
+  }
+}
+
+function buildShippingAddress(customer: CheckoutFormCustomer) {
+  return [
+    customer.postalCode.trim(),
+    customer.city.trim(),
+    customer.district.trim(),
+    customer.detailAddress.trim(),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function hasProfileCheckoutDefaults(profile: ReturnType<typeof useCustomerAuth>["profile"]) {
+  if (!profile) return false;
+  return Boolean(
+    profile.name ||
+      profile.phone ||
+      profile.default_postal_code ||
+      profile.default_city ||
+      profile.default_district ||
+      profile.default_address,
+  );
+}
+
 export default function Checkout() {
   const [, setLocation] = useLocation();
-  const { session } = useCustomerAuth();
+  const { isAuthenticated, isProfileLoading, profile, profileError, session, updateProfile } = useCustomerAuth();
   const fallbackCheckoutKeyRef = useRef<StoredCheckoutKey | null>(null);
+  const touchedFieldsRef = useRef<Set<CustomerFormKey>>(new Set());
   const [items, setItems] = useState<CartItem[]>(() => readCartItems());
-  const [customer, setCustomer] = useState<CheckoutCustomer>({
+  const [customer, setCustomer] = useState<CheckoutFormCustomer>({
     name: "",
     phone: "",
     email: "",
     address: "",
+    postalCode: "",
+    city: "",
+    district: "",
+    detailAddress: "",
   });
+  const [saveAsDefaultProfile, setSaveAsDefaultProfile] = useState(false);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -117,7 +171,44 @@ export default function Checkout() {
     }
   }, [items]);
 
-  const updateCustomer = (key: keyof CheckoutCustomer, value: string) => {
+  useEffect(() => {
+    if (!isAuthenticated || !profile) return;
+
+    setCustomer((current) => ({
+      ...current,
+      name:
+        !touchedFieldsRef.current.has("name") && !current.name.trim()
+          ? profile.name || current.name
+          : current.name,
+      phone:
+        !touchedFieldsRef.current.has("phone") && !current.phone.trim()
+          ? profile.phone || current.phone
+          : current.phone,
+      email:
+        !touchedFieldsRef.current.has("email") && !(current.email || "").trim()
+          ? profile.email || current.email
+          : current.email,
+      postalCode:
+        !touchedFieldsRef.current.has("postalCode") && !current.postalCode.trim()
+          ? profile.default_postal_code || current.postalCode
+          : current.postalCode,
+      city:
+        !touchedFieldsRef.current.has("city") && !current.city.trim()
+          ? profile.default_city || current.city
+          : current.city,
+      district:
+        !touchedFieldsRef.current.has("district") && !current.district.trim()
+          ? profile.default_district || current.district
+          : current.district,
+      detailAddress:
+        !touchedFieldsRef.current.has("detailAddress") && !current.detailAddress.trim()
+          ? profile.default_address || current.detailAddress
+          : current.detailAddress,
+    }));
+  }, [isAuthenticated, profile]);
+
+  const updateCustomer = (key: CustomerFormKey, value: string) => {
+    touchedFieldsRef.current.add(key);
     setCustomer((current) => ({ ...current, [key]: value }));
   };
 
@@ -151,8 +242,14 @@ export default function Checkout() {
 
     try {
       const checkoutIdempotencyKey = getCheckoutIdempotencyKey();
+      const checkoutCustomer = {
+        name: customer.name,
+        phone: customer.phone,
+        email: customer.email,
+        address: buildShippingAddress(customer),
+      };
       const { order, lookupToken } = await createShopOrder({
-        customer,
+        customer: checkoutCustomer,
         checkoutIdempotencyKey,
         customerAccessToken: session?.access_token || null,
         note,
@@ -161,7 +258,32 @@ export default function Checkout() {
           quantity: item.quantity,
         })),
       });
+
+      let savedDefaultProfile = false;
+      let defaultProfileSaveFailed = false;
+
+      if (isAuthenticated && saveAsDefaultProfile) {
+        try {
+          await updateProfile({
+            name: customer.name,
+            phone: customer.phone,
+            default_postal_code: customer.postalCode,
+            default_city: customer.city,
+            default_district: customer.district,
+            default_address: customer.detailAddress,
+          });
+          savedDefaultProfile = true;
+        } catch {
+          defaultProfileSaveFailed = true;
+        }
+      }
+
       saveOrderLookupToken(order.order_number, lookupToken);
+      saveOrderCompleteMeta(order.order_number, {
+        isMemberOrder: Boolean(session?.access_token),
+        savedDefaultProfile,
+        defaultProfileSaveFailed,
+      });
       clearCartItems();
       clearStoredCheckoutKey();
       fallbackCheckoutKeyRef.current = null;
@@ -218,6 +340,28 @@ export default function Checkout() {
                     <p className="mt-1 text-xs text-stone-500">請填寫方便我們聯繫與出貨的資料。</p>
                   </div>
                 </div>
+                {isAuthenticated && (
+                  <div className="mt-4 rounded-[8px] border border-[#eadfce] bg-white/75 px-4 py-3 text-sm leading-6 text-stone-600">
+                    <p className="font-medium text-stone-800">
+                      已登入會員，本次訂單會保存到會員中心。
+                    </p>
+                    {isProfileLoading ? (
+                      <p className="mt-1 text-xs text-stone-500">正在讀取會員預設資料...</p>
+                    ) : profileError ? (
+                      <p className="mt-1 text-xs text-amber-700">
+                        無法載入會員預設資料，仍可手動填寫完成結帳。
+                      </p>
+                    ) : hasProfileCheckoutDefaults(profile) ? (
+                      <p className="mt-1 text-xs text-stone-500">
+                        已為你帶入會員資料，可依本次收件需求修改。
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-xs text-stone-500">
+                        你可以填寫本次收件資料，並選擇是否儲存為下次預設資料。
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
                   <label className="space-y-2 text-sm text-stone-600">
                     <span className="font-medium text-stone-900">收件人姓名</span>
@@ -259,15 +403,59 @@ export default function Checkout() {
                     <p className="mt-1 text-xs text-stone-500">請填寫完整地址，方便後續安排出貨。</p>
                   </div>
                 </div>
-                <label className="mt-5 block space-y-2 text-sm text-stone-600">
-                  <span className="font-medium text-stone-900">收件地址</span>
-                  <Input
-                    value={customer.address}
-                    onChange={(event) => updateCustomer("address", event.target.value)}
-                    required
-                    className="h-11 rounded-[8px] border-[#eadfce] bg-white"
-                  />
-                </label>
+                <div className="mt-5 grid gap-4 md:grid-cols-3">
+                  <label className="space-y-2 text-sm text-stone-600">
+                    <span className="font-medium text-stone-900">郵遞區號</span>
+                    <Input
+                      value={customer.postalCode}
+                      onChange={(event) => updateCustomer("postalCode", event.target.value)}
+                      className="h-11 rounded-[8px] border-[#eadfce] bg-white"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm text-stone-600">
+                    <span className="font-medium text-stone-900">縣市</span>
+                    <Input
+                      value={customer.city}
+                      onChange={(event) => updateCustomer("city", event.target.value)}
+                      className="h-11 rounded-[8px] border-[#eadfce] bg-white"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm text-stone-600">
+                    <span className="font-medium text-stone-900">區域</span>
+                    <Input
+                      value={customer.district}
+                      onChange={(event) => updateCustomer("district", event.target.value)}
+                      className="h-11 rounded-[8px] border-[#eadfce] bg-white"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm text-stone-600 md:col-span-3">
+                    <span className="font-medium text-stone-900">詳細地址</span>
+                    <Input
+                      value={customer.detailAddress}
+                      onChange={(event) => updateCustomer("detailAddress", event.target.value)}
+                      required
+                      className="h-11 rounded-[8px] border-[#eadfce] bg-white"
+                    />
+                  </label>
+                </div>
+                {isAuthenticated && (
+                  <label className="mt-5 flex items-start gap-3 rounded-[8px] border border-[#eadfce] bg-white/75 px-4 py-3 text-sm leading-6 text-stone-600">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 rounded border-[#d7c6b5] text-[#8b6f5b]"
+                      checked={saveAsDefaultProfile}
+                      onChange={(event) => setSaveAsDefaultProfile(event.target.checked)}
+                    />
+                    <span>
+                      <span className="block font-medium text-stone-800">
+                        將本次收件資料儲存為我的預設收件資料
+                      </span>
+                      <span className="block text-xs text-stone-500">
+                        只會在訂單成立後更新會員資料；不勾選也可以正常結帳。
+                      </span>
+                    </span>
+                  </label>
+                )}
               </div>
 
               <div className="rounded-[8px] border border-[#eadfce] bg-[#fffdf8] p-5 shadow-sm shadow-stone-200/60">

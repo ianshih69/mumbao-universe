@@ -6,6 +6,13 @@ import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 
 const orderLookupStoragePrefix = "mumbao-shop-order-lookup:";
+const orderCompleteMetaStoragePrefix = "mumbao-shop-order-complete-meta:";
+
+type OrderCompleteMeta = {
+  isMemberOrder?: boolean;
+  savedDefaultProfile?: boolean;
+  defaultProfileSaveFailed?: boolean;
+};
 
 function readOrderLookupToken(orderNumber: string) {
   try {
@@ -15,14 +22,27 @@ function readOrderLookupToken(orderNumber: string) {
   }
 }
 
+function readOrderCompleteMeta(orderNumber: string): OrderCompleteMeta {
+  try {
+    const rawValue = sessionStorage.getItem(`${orderCompleteMetaStoragePrefix}${orderNumber}`);
+    if (!rawValue) return {};
+    const parsed = JSON.parse(rawValue) as OrderCompleteMeta;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 export default function OrderComplete() {
   const [, params] = useRoute("/order-complete/:orderNumber");
   const orderNumber = decodeURIComponent(params?.orderNumber || "");
   const [lookupToken, setLookupToken] = useState("");
+  const [completeMeta, setCompleteMeta] = useState<OrderCompleteMeta>({});
 
   useEffect(() => {
     if (!orderNumber) return;
     setLookupToken(readOrderLookupToken(orderNumber));
+    setCompleteMeta(readOrderCompleteMeta(orderNumber));
   }, [orderNumber]);
 
   const lookupHref = lookupToken
@@ -54,6 +74,21 @@ export default function OrderComplete() {
             <p>
               已登入會員完成的訂單會保存到會員中心；訪客也可以使用本頁的查詢連結追蹤訂單。
             </p>
+            {completeMeta.isMemberOrder && (
+              <p className="rounded-[8px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-emerald-800">
+                此訂單已保存到會員中心，可至會員中心查看歷史訂單。
+              </p>
+            )}
+            {completeMeta.savedDefaultProfile && (
+              <p className="rounded-[8px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-emerald-800">
+                本次收件資料已儲存為預設收件資料。
+              </p>
+            )}
+            {completeMeta.defaultProfileSaveFailed && (
+              <p className="rounded-[8px] border border-amber-100 bg-amber-50 px-4 py-3 text-amber-800">
+                訂單已成立，但預設收件資料暫時無法更新。
+              </p>
+            )}
             {!lookupToken && (
               <p className="rounded-[8px] border border-amber-100 bg-amber-50 px-4 py-3 text-amber-800">
                 此頁目前沒有可用的查詢憑證。若您已重新整理頁面，請保存訂單編號並透過 LINE 聯絡我們確認訂單。

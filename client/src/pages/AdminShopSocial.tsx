@@ -657,8 +657,13 @@ export default function AdminShopSocial() {
     []
   );
 
+  const getDraftSortTime = (item: StoredSocialDraft) =>
+    item.publishedAt || item.updatedAt || item.createdAt || "";
   const sortedDrafts = useMemo(
-    () => [...savedDrafts].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    () =>
+      [...savedDrafts].sort((a, b) =>
+        getDraftSortTime(b).localeCompare(getDraftSortTime(a))
+      ),
     [savedDrafts]
   );
   const visibleDrafts = useMemo(() => {
@@ -1754,6 +1759,35 @@ export default function AdminShopSocial() {
     });
   };
 
+  const deleteSelectedDrafts = () => {
+    const selectedCount = selectedTaskIds.size;
+    if (!selectedCount) return;
+
+    const confirmed = window.confirm(
+      `確定刪除選取的 ${selectedCount} 筆發文紀錄？此動作只會刪除此瀏覽器的紀錄，不會刪除 Meta 上已發布的貼文。`
+    );
+    if (!confirmed) return;
+
+    const nextDrafts = savedDrafts.filter((item) => !selectedTaskIds.has(item.id));
+    persistDrafts(nextDrafts);
+    setSelectedTaskIds(new Set());
+    setNotice(`已刪除 ${selectedCount} 筆紀錄。`);
+  };
+
+  const clearAllLocalDrafts = () => {
+    if (!savedDrafts.length) return;
+
+    const confirmed = window.confirm(
+      "確定清除所有本機發文紀錄？這不會刪除 Meta 上的貼文。"
+    );
+    if (!confirmed) return;
+
+    persistDrafts([]);
+    setSelectedTaskIds(new Set());
+    setExpandedTaskId(null);
+    setNotice("已清除所有本機發文紀錄。");
+  };
+
   const getTaskSummary = (item: StoredSocialDraft) =>
     item.title.trim() || item.content.trim() || "未命名發文任務";
 
@@ -1844,23 +1878,26 @@ export default function AdminShopSocial() {
 
   const markCurrentDraftPublishedByBusinessSuite = () => {
     if (!hasDraftInput) {
-      setNotice("請先填寫發文內容或標題，再標記發布。");
+      setNotice("請先填寫發文內容或標題，再標記已發布。");
       return;
     }
 
     const publishedAt = new Date().toISOString();
     const { nextDraft, nextDrafts } = buildCurrentDraft("published", draft);
     const finalDraft = applyBusinessSuitePublishedState(nextDraft, publishedAt);
-    const finalDrafts = nextDrafts.map((item) =>
-      item.id === finalDraft.id ? finalDraft : item
-    );
+    const hasExistingDraft = nextDrafts.some((item) => item.id === finalDraft.id);
+    const finalDrafts = hasExistingDraft
+      ? nextDrafts.map((item) => (item.id === finalDraft.id ? finalDraft : item))
+      : [finalDraft, ...nextDrafts];
     const nextForm = formFromStoredDraft(finalDraft);
 
     persistDrafts(finalDrafts);
     setEditingDraftId(finalDraft.id);
     setDraft(nextForm);
     setPreview(nextForm);
-    setNotice("已標記為已用 Meta Business Suite 發布。");
+    setSelectedTaskIds(new Set());
+    setTaskFilter("all");
+    setNotice("已記錄為 Meta Business Suite 已發布。");
   };
 
   const markSavedDraftPublishedByBusinessSuite = (item: StoredSocialDraft) => {
@@ -1871,7 +1908,7 @@ export default function AdminShopSocial() {
     );
 
     persistDrafts(nextDrafts);
-    setNotice("已標記為已用 Meta Business Suite 發布。");
+    setNotice("已記錄為 Meta Business Suite 已發布。");
   };
 
   const getPublishMethodLabel = (item: StoredSocialDraft) =>
@@ -2621,7 +2658,7 @@ export default function AdminShopSocial() {
         </div>
 
         <section className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm md:p-6">
-          <div className="flex flex-col gap-2 border-b border-stone-100 pb-4 md:flex-row md:items-end md:justify-between">
+          <div className="flex flex-col gap-3 border-b border-stone-100 pb-4 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-stone-400">
                 Records
@@ -2629,15 +2666,42 @@ export default function AdminShopSocial() {
               <h2 className="mt-1 text-2xl font-semibold text-stone-900">
                 發文紀錄
               </h2>
+              <p className="mt-2 text-sm text-stone-500">
+                目前紀錄主要儲存在此瀏覽器。
+              </p>
             </div>
-            <p className="text-sm text-stone-500">
-              目前紀錄主要儲存在此瀏覽器。
-            </p>
+            <div className="flex flex-wrap gap-2">
+              {selectedTaskIds.size > 0 && (
+                <>
+                  <span className="inline-flex h-9 items-center rounded-full bg-[#fffaf3] px-3 text-xs font-semibold text-stone-600">
+                    已選取 {selectedTaskIds.size} 筆
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={deleteSelectedDrafts}
+                    className="h-9 rounded-full border-red-100 bg-red-50 px-3 text-xs text-red-700 hover:bg-red-100"
+                  >
+                    刪除選取
+                  </Button>
+                </>
+              )}
+              {savedDrafts.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={clearAllLocalDrafts}
+                  className="h-9 rounded-full bg-white px-3 text-xs"
+                >
+                  清除全部本機紀錄
+                </Button>
+              )}
+            </div>
           </div>
 
           {visibleDrafts.length === 0 ? (
             <div className="mt-5 rounded-[8px] border border-dashed border-stone-200 bg-[#fbf7f1] p-6 text-center text-sm text-stone-500">
-              目前沒有發文紀錄。
+              尚無發文紀錄。完成發布後，按「標記已發布」即可保留紀錄。
             </div>
           ) : (
             <div className="mt-5 divide-y divide-stone-100">
@@ -2645,33 +2709,45 @@ export default function AdminShopSocial() {
                 const summary = getTaskSummary(item);
                 const copy = getBusinessSuiteCopyForItem(item);
                 const isExpanded = expandedTaskId === item.id;
+                const isSelected = selectedTaskIds.has(item.id);
                 const statusLabel =
                   item.status === "published" &&
                   item.publishMethod === "meta_business_suite"
                     ? "已用 Meta Business Suite 發布"
                     : getStatusLabel(item.status);
+                const recordDate = item.publishedAt || item.updatedAt || item.createdAt;
 
                 return (
                   <article key={item.id} className="py-4 first:pt-0 last:pb-0">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="truncate text-base font-semibold text-stone-900">
-                            {summary}
-                          </h3>
-                          <span
-                            className={cn(
-                              "rounded-full px-2.5 py-1 text-xs font-semibold",
-                              getTaskStatusClasses(item.status)
-                            )}
-                          >
-                            {statusLabel}
-                          </span>
+                      <div className="flex min-w-0 gap-3">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleTaskSelection(item.id)}
+                          aria-label={`選取 ${summary}`}
+                          className="mt-1 size-4 shrink-0 accent-[#8b6f5b]"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="truncate text-base font-semibold text-stone-900">
+                              {summary}
+                            </h3>
+                            <span
+                              className={cn(
+                                "rounded-full px-2.5 py-1 text-xs font-semibold",
+                                getTaskStatusClasses(item.status)
+                              )}
+                            >
+                              {statusLabel}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs leading-5 text-stone-500">
+                            {formatDateTime(recordDate)} ·{" "}
+                            {item.platforms.join(" / ") || "未指定平台"} ·{" "}
+                            {getPublishMethodLabel(item)}
+                          </p>
                         </div>
-                        <p className="mt-1 text-xs leading-5 text-stone-500">
-                          {formatDateTime(item.createdAt)} ·{" "}
-                          {item.platforms.join(" / ") || "未指定平台"}
-                        </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Button

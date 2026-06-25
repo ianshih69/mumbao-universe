@@ -24,8 +24,10 @@ import AdminShopLogin from "./pages/AdminShopLogin";
 import AdminShopUsers from "./pages/AdminShopUsers";
 import AdminShopAuditLogs from "./pages/AdminShopAuditLogs";
 import AdminShopAccount from "./pages/AdminShopAccount";
+import AdminBookings from "./pages/AdminBookings";
 import AiChat from "./pages/AiChat";
 import Chat from "./pages/Chat";
+import Booking from "./pages/Booking";
 import Shop from "./pages/Shop";
 import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/Cart";
@@ -59,9 +61,11 @@ function Router() {
       <Route path={"/admin/shop/account"} component={AdminShopAccount} />
       <Route path={"/admin/shop/users"} component={AdminShopUsers} />
       <Route path={"/admin/shop/audit-logs"} component={AdminShopAuditLogs} />
+      <Route path={"/admin/bookings"} component={AdminBookings} />
       <Route path={"/about"} component={About} />
       <Route path={"/ai-chat"} component={AiChat} />
       <Route path={"/chat"} component={Chat} />
+      <Route path={"/booking"} component={Booking} />
       <Route path={"/shop"} component={Shop} />
       <Route path={"/shop/:slug"} component={ProductDetail} />
       <Route path={"/cart"} component={Cart} />

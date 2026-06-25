@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Calendar } from "lucide-react";
 import { motion } from "framer-motion";
+import { Link } from "wouter";
 
 export function BookingCTA() {
   return (
@@ -39,11 +40,14 @@ export function BookingCTA() {
           </p>
 
           <Button
+            asChild
             size="lg"
             className="bg-transparent border border-white text-white hover:bg-white hover:text-gray-900 transition-all duration-500 rounded-none px-12 py-8 text-sm tracking-[0.2em] uppercase mt-12 backdrop-blur-sm"
           >
-            <Calendar className="w-4 h-4 mr-3" />
-            Start Your Journey
+            <Link href="/booking">
+              <Calendar className="w-4 h-4 mr-3" />
+              Start Your Journey
+            </Link>
           </Button>
         </motion.div>
       </div>

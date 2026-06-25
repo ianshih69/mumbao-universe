@@ -54,7 +54,7 @@ export async function verifyCurrentSupabasePassword(email: string, password: str
       apikey: anonKey,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email: email.trim(), password: password.trim() }),
   });
   const data = await parseAuthResponse(response);
 
@@ -72,7 +72,7 @@ export async function updateCurrentSupabasePassword(accessToken: string, passwor
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ password: password.trim() }),
   });
   const data = await parseAuthResponse(response);
 

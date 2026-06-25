@@ -120,7 +120,12 @@ export default function AdminShopUsers() {
 
     setIsCreating(true);
     try {
-      const data = await createAdminUser(currentToken, form);
+      const data = await createAdminUser(currentToken, {
+        ...form,
+        display_name: form.display_name.trim(),
+        email: form.email.trim(),
+        password: form.password.trim(),
+      });
       if (!data.user?.id) {
         throw new Error("使用者建立回應不完整，請重新整理確認。");
       }
@@ -242,7 +247,8 @@ export default function AdminShopUsers() {
                   </button>
                   <button className="rounded-full border border-stone-200 bg-white px-3 py-2 text-sm" onClick={() => {
                     const password = window.prompt("請輸入新的臨時密碼");
-                    if (password) void patchUser(user.id, { password });
+                    const trimmedPassword = password?.trim() || "";
+                    if (trimmedPassword) void patchUser(user.id, { password: trimmedPassword });
                   }}>
                     重設密碼
                   </button>

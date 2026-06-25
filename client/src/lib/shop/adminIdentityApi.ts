@@ -72,7 +72,7 @@ export async function loginAdminAccount(email: string, password: string) {
   const response = await fetch("/api/admin-shop?action=admin-login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email: email.trim(), password: password.trim() }),
   });
   const data = await parseJson(response);
   if (!response.ok) throw new Error(data.error || "\u767b\u5165\u5931\u6557\uff0c\u8acb\u78ba\u8a8d Email \u8207\u5bc6\u78bc\u3002");
@@ -156,10 +156,16 @@ export async function bootstrapSuperAdmin(payload: {
   displayName: string;
   email: string;
 }) {
+  const nextPayload = {
+    ...payload,
+    adminPassword: payload.adminPassword.trim(),
+    displayName: payload.displayName.trim(),
+    email: payload.email.trim(),
+  };
   const response = await fetch("/api/admin-shop?action=admin-bootstrap-super", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(nextPayload),
   });
   const data = await parseJson(response);
   if (!response.ok) throw new Error(data.error || "Bootstrap super admin failed.");
@@ -190,10 +196,16 @@ export function createAdminUser(
     is_active: boolean;
   }
 ) {
+  const nextPayload = {
+    ...payload,
+    display_name: payload.display_name.trim(),
+    email: payload.email.trim(),
+    password: payload.password.trim(),
+  };
   return requestAdminIdentity<{ user: AdminUser }>(
     "/api/admin-shop?action=admin-users",
     token,
-    { method: "POST", body: JSON.stringify(payload) }
+    { method: "POST", body: JSON.stringify(nextPayload) }
   );
 }
 
@@ -207,10 +219,17 @@ export function updateAdminUser(
     is_active: boolean;
   }>
 ) {
+  const nextPayload = { ...payload };
+  if (typeof nextPayload.display_name === "string") {
+    nextPayload.display_name = nextPayload.display_name.trim();
+  }
+  if (typeof nextPayload.password === "string") {
+    nextPayload.password = nextPayload.password.trim();
+  }
   return requestAdminIdentity<{ user: AdminUser }>(
     `/api/admin-shop?action=admin-users&id=${encodeURIComponent(id)}`,
     token,
-    { method: "PATCH", body: JSON.stringify(payload) }
+    { method: "PATCH", body: JSON.stringify(nextPayload) }
   );
 }
 

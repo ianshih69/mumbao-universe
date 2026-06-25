@@ -64,7 +64,7 @@ export default function AdminShopLogin() {
     setMessage("");
     setIsSubmitting(true);
     try {
-      await loginAdminAccount(email.trim(), password);
+      await loginAdminAccount(email.trim(), password.trim());
       setPassword("");
       setLocation(redirectTo);
     } catch {
@@ -82,7 +82,7 @@ export default function AdminShopLogin() {
       await bootstrapSuperAdmin({
         displayName: bootstrapForm.displayName.trim(),
         email: bootstrapForm.email.trim(),
-        adminPassword: bootstrapForm.adminPassword,
+        adminPassword: bootstrapForm.adminPassword.trim(),
       });
       setEmail(bootstrapForm.email.trim());
       setPassword("");

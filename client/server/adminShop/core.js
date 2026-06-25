@@ -2798,7 +2798,7 @@ async function handleAdminLogin(req, res) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
   const body = await readBody(req);
   const email = cleanText(body?.email).toLowerCase();
-  const password = String(body?.password || "");
+  const password = String(body?.password || "").trim();
 
   if (!email || !password) {
     return sendJson(res, 400, { error: "Request failed." });
@@ -2929,7 +2929,7 @@ async function handleAdminBootstrapSuper(req, res) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
   assertBootstrapRateLimit(req);
   const body = await readBody(req);
-  const providedAdminPassword = String(body?.adminPassword || body?.password || "");
+  const providedAdminPassword = String(body?.adminPassword || body?.password || "").trim();
   const adminPassword = String(getServerEnv("ADMIN_PASSWORD") || "").trim();
 
   const existingProfiles = await supabaseRequest("/admin_profiles?select=id&limit=1");
@@ -3049,7 +3049,7 @@ async function handleAdminUsers(req, res, context) {
     const body = await readBody(req);
     const displayName = cleanText(body?.display_name || body?.displayName);
     const email = cleanText(body?.email).toLowerCase();
-    const password = String(body?.password || "");
+    const password = String(body?.password || "").trim();
     const roleCode = cleanText(body?.role_code || body?.roleCode) || "cleaner";
     const isActive = body?.is_active !== false;
 
@@ -3145,10 +3145,14 @@ async function handleAdminUsers(req, res, context) {
     await assertCanMutateAdminUser(context, before, next.role_code || before.role_code);
     await assertNotLastSuperAdmin(before, next);
 
-    if (body?.password) {
+    if (body?.password !== undefined) {
+      const nextPassword = String(body.password || "").trim();
+      if (!nextPassword) {
+        return sendJson(res, 400, { error: "Password is required." });
+      }
       await supabaseAuthRequest(`/auth/v1/admin/users/${before.auth_user_id}`, {
         method: "PUT",
-        body: JSON.stringify({ password: String(body.password) }),
+        body: JSON.stringify({ password: nextPassword }),
       });
     }
 

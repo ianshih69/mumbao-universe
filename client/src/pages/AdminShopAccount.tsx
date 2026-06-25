@@ -116,11 +116,14 @@ export default function AdminShopAccount() {
     event.preventDefault();
     setMessage("");
     setSuccess("");
+    const trimmedCurrentPassword = currentPassword.trim();
+    const trimmedNextPassword = nextPassword.trim();
+    const trimmedConfirmPassword = confirmPassword.trim();
 
     const validationError = getPasswordError({
-      currentPassword,
-      nextPassword,
-      confirmPassword,
+      currentPassword: trimmedCurrentPassword,
+      nextPassword: trimmedNextPassword,
+      confirmPassword: trimmedConfirmPassword,
     });
     if (validationError) {
       setMessage(validationError);
@@ -135,7 +138,7 @@ export default function AdminShopAccount() {
     setIsSaving(true);
     try {
       try {
-        await verifyCurrentSupabasePassword(email, currentPassword);
+        await verifyCurrentSupabasePassword(email.trim(), trimmedCurrentPassword);
       } catch (error) {
         if (isMissingSupabasePublicConfig(error)) {
           setMessage("尚未設定 Supabase 公開 Auth 設定，請設定 VITE_SUPABASE_URL 與 VITE_SUPABASE_ANON_KEY。");
@@ -145,7 +148,7 @@ export default function AdminShopAccount() {
         return;
       }
 
-      await updateCurrentSupabasePassword(token, nextPassword);
+      await updateCurrentSupabasePassword(token, trimmedNextPassword);
       setCurrentPassword("");
       setNextPassword("");
       setConfirmPassword("");

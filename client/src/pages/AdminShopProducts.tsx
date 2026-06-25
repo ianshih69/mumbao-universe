@@ -100,7 +100,7 @@ function StatusPill({
   }[tone];
 
   return (
-    <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-xs", toneClass)}>
+    <span className={cn("inline-flex w-fit rounded-full border px-2 py-0.5 text-[11px] font-medium", toneClass)}>
       {children}
     </span>
   );
@@ -571,13 +571,13 @@ export default function AdminShopProducts() {
 
       <AdminShopNav current="products" />
 
-      <div className="mx-auto grid w-full max-w-7xl gap-6 overflow-x-hidden px-4 py-6 xl:grid-cols-[minmax(0,1fr)_520px] md:px-8 md:py-8">
+      <div className="mx-auto grid w-full max-w-7xl gap-5 overflow-x-hidden px-4 py-6 xl:grid-cols-[minmax(0,1fr)_420px] md:px-8 md:py-8">
         <section className="min-w-0 max-w-full space-y-4 overflow-hidden">
           <form
             onSubmit={submitSearch}
             className="rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm"
           >
-            <div className="grid gap-3 md:grid-cols-[1fr_220px_auto] md:items-center">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-center">
               <label className="flex h-11 items-center gap-2 rounded-full border border-stone-200 bg-stone-50 px-4">
                 <Search className="h-4 w-4 text-stone-400" />
                 <input
@@ -684,9 +684,9 @@ export default function AdminShopProducts() {
             )}
           </div>
 
-          <div className="hidden overflow-x-auto rounded-[8px] border border-stone-200 bg-white shadow-sm md:block">
-            <div className="min-w-[860px]">
-              <div className="grid grid-cols-[76px_1.4fr_0.9fr_0.8fr_0.7fr_0.7fr_0.7fr_0.7fr_0.9fr] gap-3 border-b border-stone-100 bg-[#fbf7f1] px-4 py-3 text-xs font-medium text-stone-500">
+          <div className="hidden overflow-hidden rounded-[8px] border border-stone-200 bg-white shadow-sm md:block">
+            <div>
+              <div className="grid grid-cols-[60px_minmax(220px,1fr)_112px_118px_104px_132px] items-center gap-3 border-b border-stone-100 bg-[#fbf7f1] px-4 py-2.5 text-xs font-medium text-stone-500 [&>span:nth-child(3)]:hidden [&>span:nth-child(5)]:hidden [&>span:nth-child(8)]:hidden">
                 <span>主圖</span>
                 <span>商品</span>
                 <span>分類</span>
@@ -714,7 +714,7 @@ export default function AdminShopProducts() {
                       type="button"
                       onClick={() => loadProductDetail(product.id)}
                       className={cn(
-                        "grid w-full grid-cols-[76px_1.4fr_0.9fr_0.8fr_0.7fr_0.7fr_0.7fr_0.7fr_0.9fr] gap-3 border-b border-stone-100 px-4 py-3 text-left text-sm transition last:border-b-0",
+                        "grid w-full grid-cols-[60px_minmax(220px,1fr)_112px_118px_104px_132px] items-center gap-3 border-b border-stone-100 px-4 py-2.5 text-left text-sm transition last:border-b-0 [&>span:nth-child(3)]:hidden [&>span:nth-child(5)]:hidden [&>span:nth-child(8)]:hidden",
                         isSelected ? "bg-[#f4ece2]" : "bg-white hover:bg-stone-50"
                       )}
                     >
@@ -723,17 +723,25 @@ export default function AdminShopProducts() {
                           <img
                             src={product.cover_image_url}
                             alt={product.name}
-                            className="size-14 rounded-[6px] bg-[#f6f1ea] object-cover"
+                            className="size-11 rounded-[6px] bg-[#f6f1ea] object-cover"
                           />
                         ) : (
-                          <span className="flex size-14 items-center justify-center rounded-[6px] bg-[#f6f1ea] text-stone-300">
-                            <ImageOff className="h-5 w-5" />
+                          <span className="flex size-11 items-center justify-center rounded-[6px] bg-[#f6f1ea] text-stone-300">
+                            <ImageOff className="h-4 w-4" />
                           </span>
                         )}
                       </span>
                       <span className="min-w-0">
                         <span className="block truncate font-semibold text-stone-900">
                           {product.name}
+                        </span>
+                        <span className="mt-1 flex items-center gap-1.5 truncate text-xs text-stone-500">
+                          <span className="truncate">{product.category || "未分類"}</span>
+                          {product.featured ? (
+                            <span className="shrink-0 rounded-full border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                              精選
+                            </span>
+                          ) : null}
                         </span>
                         <span className="mt-1 block truncate text-xs text-stone-400">
                           {product.subtitle || "點擊編輯商品"}
@@ -749,11 +757,18 @@ export default function AdminShopProducts() {
                       <span className="font-medium text-stone-800">
                         {formatPrice(product.min_price)}
                       </span>
-                      <span className="flex flex-col items-start gap-1 text-stone-700">
-                        <span>{product.total_inventory}</span>
-                        <StatusPill tone={inventoryStatus.tone}>
+                      <span className="min-w-0 text-stone-700">
+                        <span className="font-semibold text-stone-900">{product.total_inventory}</span>
+                        <span
+                          className={cn(
+                            "ml-2 text-xs font-medium",
+                            inventoryStatus.tone === "red" && "text-red-600",
+                            inventoryStatus.tone === "pink" && "text-pink-700",
+                            inventoryStatus.tone === "green" && "text-emerald-700"
+                          )}
+                        >
                           {inventoryStatus.label}
-                        </StatusPill>
+                        </span>
                       </span>
                       <span className="text-stone-600">
                         {product.variant_count} / {product.image_count}

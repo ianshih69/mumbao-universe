@@ -571,7 +571,7 @@ export default function AdminShopProducts() {
 
       <AdminShopNav current="products" />
 
-      <div className="mx-auto grid w-full max-w-7xl gap-5 overflow-x-hidden px-4 py-6 xl:grid-cols-[minmax(0,1fr)_420px] md:px-8 md:py-8">
+      <div className="mx-auto grid w-[calc(100vw-2rem)] max-w-[1440px] grid-cols-1 gap-5 overflow-x-hidden py-6 md:w-[calc(100vw-3rem)] md:py-8 min-[1101px]:grid-cols-[minmax(640px,1fr)_clamp(320px,30vw,400px)]">
         <section className="min-w-0 max-w-full space-y-4 overflow-hidden">
           <form
             onSubmit={submitSearch}
@@ -795,7 +795,7 @@ export default function AdminShopProducts() {
           )}
         </section>
 
-        <aside className="h-fit min-w-0 max-w-full overflow-hidden rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm md:p-5">
+        <aside className="h-fit min-w-0 max-w-full overflow-hidden rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm md:p-5 min-[1101px]:sticky min-[1101px]:top-4 min-[1101px]:max-h-[calc(100vh-160px)] min-[1101px]:overflow-y-auto min-[1101px]:overscroll-contain">
           {isDetailLoading ? (
             <div className="py-12 text-center text-sm text-stone-400">商品明細載入中...</div>
           ) : selectedProduct ? (

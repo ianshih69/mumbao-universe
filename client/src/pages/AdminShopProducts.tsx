@@ -795,11 +795,11 @@ export default function AdminShopProducts() {
           )}
         </section>
 
-        <aside className="h-fit min-w-0 max-w-full overflow-hidden rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm md:p-5 min-[1101px]:sticky min-[1101px]:top-4 min-[1101px]:max-h-[calc(100vh-160px)] min-[1101px]:overflow-y-auto min-[1101px]:overscroll-contain">
+        <aside className="h-fit min-w-0 max-w-full overflow-hidden rounded-[8px] border border-stone-200 bg-white p-4 shadow-sm md:p-5 min-[1101px]:sticky min-[1101px]:top-4 min-[1101px]:max-h-[calc(100vh-160px)] min-[1101px]:overscroll-contain">
           {isDetailLoading ? (
             <div className="py-12 text-center text-sm text-stone-400">商品明細載入中...</div>
           ) : selectedProduct ? (
-            <div className="max-w-full space-y-6 overflow-hidden">
+            <div className="flex max-w-full flex-col overflow-hidden min-[1101px]:max-h-[calc(100vh-200px)]">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
@@ -813,20 +813,11 @@ export default function AdminShopProducts() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={saveProduct}
-                    disabled={isSaving}
-                    className="rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
-                  >
-                    <Save className="h-4 w-4" />
-                    儲存
-                  </Button>
                   <Boxes className="hidden h-6 w-6 text-[#b99aa2] sm:block" />
                 </div>
               </div>
 
+              <div className="mt-6 min-h-0 flex-1 space-y-6 overflow-y-auto pb-24 pr-1">
               <section className="max-w-full space-y-4 overflow-hidden rounded-[8px] border border-stone-100 bg-white p-4">
                 <div>
                   <h3 className="text-base font-semibold text-stone-900">商品基本資料</h3>
@@ -1433,7 +1424,12 @@ export default function AdminShopProducts() {
                 )}
               </section>
 
-              <div className="sticky bottom-4 hidden rounded-[8px] border border-stone-200 bg-white/95 p-3 shadow-lg shadow-stone-200/70 backdrop-blur md:block">
+              </div>
+
+              <div className="sticky bottom-0 hidden border-t border-stone-200 bg-white/95 p-3 shadow-[0_-10px_24px_rgba(120,113,108,0.12)] backdrop-blur md:block">
+                <p className="mb-2 text-center text-xs text-stone-500">
+                  {isSaving ? "儲存中..." : "確認內容後儲存商品"}
+                </p>
                 <Button
                   type="button"
                   onClick={saveProduct}

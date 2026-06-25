@@ -4,6 +4,13 @@ export type BookingAvailabilityResult = {
   checkOut: string;
 };
 
+export type BookingCalendarResult = {
+  from: string;
+  to: string;
+  maxDate: string;
+  unavailableDates: string[];
+};
+
 export type BookingRequestPayload = {
   guest_name: string;
   guest_email: string;
@@ -34,6 +41,11 @@ async function bookingRequest<T>(path: string, options: RequestInit = {}): Promi
 export function checkBookingAvailability(checkIn: string, checkOut: string) {
   const params = new URLSearchParams({ action: "availability", checkIn, checkOut });
   return bookingRequest<BookingAvailabilityResult & { ok: boolean }>(`?${params.toString()}`);
+}
+
+export function fetchBookingCalendar(from: string) {
+  const params = new URLSearchParams({ action: "calendar", from, months: "12" });
+  return bookingRequest<BookingCalendarResult & { ok: boolean }>(`?${params.toString()}`);
 }
 
 export function submitBookingRequest(payload: BookingRequestPayload) {

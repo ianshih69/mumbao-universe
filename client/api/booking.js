@@ -29,11 +29,40 @@ function normalizeDate(value) {
   return raw;
 }
 
+function todayText() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value || "";
+  const month = parts.find((part) => part.type === "month")?.value || "";
+  const day = parts.find((part) => part.type === "day")?.value || "";
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(dateText, days) {
+  const date = new Date(`${dateText}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function maxBookableDate() {
+  return addDays(todayText(), 365);
+}
+
 function validateDateRange(checkIn, checkOut) {
   const normalizedCheckIn = normalizeDate(checkIn);
   const normalizedCheckOut = normalizeDate(checkOut);
   if (!normalizedCheckIn || !normalizedCheckOut) {
     throw httpError(400, "請選擇正確的入住與退房日期。", "invalid_dates");
+  }
+  if (normalizedCheckIn < todayText()) {
+    throw httpError(400, "不可選擇今天以前的日期。", "date_in_past");
+  }
+  if (normalizedCheckOut > maxBookableDate()) {
+    throw httpError(400, "目前僅開放查詢一年內的日期。", "date_too_far");
   }
   if (normalizedCheckOut <= normalizedCheckIn) {
     throw httpError(400, "退房日期必須晚於入住日期。", "invalid_date_range");
@@ -41,11 +70,50 @@ function validateDateRange(checkIn, checkOut) {
   return { checkIn: normalizedCheckIn, checkOut: normalizedCheckOut };
 }
 
-async function findBlocks(checkIn, checkOut) {
-  const rows = await supabaseRequest(
-    `/booking_availability_blocks?status=eq.confirmed&check_in=lt.${encodeURIComponent(checkOut)}&check_out=gt.${encodeURIComponent(checkIn)}&select=id,check_in,check_out,source,block_type,title`
-  );
-  return Array.isArray(rows) ? rows : [];
+async function findUnavailableRanges(checkIn, checkOut) {
+  const [blocks, requests] = await Promise.all([
+    supabaseRequest(
+      `/booking_availability_blocks?status=eq.confirmed&check_in=lt.${encodeURIComponent(checkOut)}&check_out=gt.${encodeURIComponent(checkIn)}&select=id,check_in,check_out`
+    ),
+    supabaseRequest(
+      `/booking_requests?status=in.(pending_review,confirmed)&check_in=lt.${encodeURIComponent(checkOut)}&check_out=gt.${encodeURIComponent(checkIn)}&select=id,check_in,check_out`
+    ),
+  ]);
+
+  return [
+    ...(Array.isArray(blocks) ? blocks : []),
+    ...(Array.isArray(requests) ? requests : []),
+  ];
+}
+
+async function handleCalendar(req, res, requestId) {
+  const from = normalizeDate(firstQueryValue(req.query?.from)) || todayText();
+  const months = Math.min(Math.max(Number(firstQueryValue(req.query?.months)) || 12, 1), 12);
+  const safeFrom = from < todayText() ? todayText() : from;
+  const endDate = new Date(`${safeFrom}T00:00:00Z`);
+  endDate.setUTCMonth(endDate.getUTCMonth() + months);
+  const to = endDate.toISOString().slice(0, 10) > maxBookableDate()
+    ? maxBookableDate()
+    : endDate.toISOString().slice(0, 10);
+
+  const ranges = await findUnavailableRanges(safeFrom, to);
+  const unavailableDates = new Set();
+  for (const range of ranges) {
+    let current = range.check_in < safeFrom ? safeFrom : range.check_in;
+    while (current < range.check_out && current < to) {
+      unavailableDates.add(current);
+      current = addDays(current, 1);
+    }
+  }
+
+  sendJson(res, 200, {
+    ok: true,
+    requestId,
+    from: safeFrom,
+    to,
+    maxDate: maxBookableDate(),
+    unavailableDates: [...unavailableDates].sort(),
+  });
 }
 
 async function handleAvailability(req, res, requestId) {
@@ -53,11 +121,11 @@ async function handleAvailability(req, res, requestId) {
     firstQueryValue(req.query?.checkIn),
     firstQueryValue(req.query?.checkOut)
   );
-  const blocks = await findBlocks(checkIn, checkOut);
+  const unavailableRanges = await findUnavailableRanges(checkIn, checkOut);
   sendJson(res, 200, {
     ok: true,
     requestId,
-    available: blocks.length === 0,
+    available: unavailableRanges.length === 0,
     checkIn,
     checkOut,
   });
@@ -87,8 +155,8 @@ async function handleRequest(req, res, requestId) {
     throw httpError(400, "入住人數不正確。", "invalid_guest_count");
   }
 
-  const blocks = await findBlocks(checkIn, checkOut);
-  if (blocks.length > 0) {
+  const unavailableRanges = await findUnavailableRanges(checkIn, checkOut);
+  if (unavailableRanges.length > 0) {
     return sendJson(res, 409, {
       ok: false,
       requestId,
@@ -140,6 +208,7 @@ async function handleRequest(req, res, requestId) {
 
 async function dispatch(req, res, requestId) {
   const action = firstQueryValue(req.query?.action) || "availability";
+  if (req.method === "GET" && action === "calendar") return handleCalendar(req, res, requestId);
   if (req.method === "GET" && action === "availability") return handleAvailability(req, res, requestId);
   if (req.method === "POST" && action === "request") return handleRequest(req, res, requestId);
   throw httpError(404, "Unknown booking action.", "unknown_action");

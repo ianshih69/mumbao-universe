@@ -129,11 +129,7 @@ values
   ('booking', '線上訂房頁', 'page', 'published'),
   ('shop', '宇宙碎品頁', 'page', 'published'),
   ('press', '媒體報導', 'page', 'draft')
-on conflict (slug) do update
-set
-  title = excluded.title,
-  page_type = excluded.page_type,
-  updated_at = now();
+on conflict (slug) do nothing;
 
 insert into public.site_sections (page_id, section_key, section_type, title, subtitle, content_json, sort_order)
 select id, 'global.top_banner', 'top_banner', '全站上方公告', null,
@@ -256,11 +252,11 @@ insert into public.site_sections (page_id, section_key, section_type, title, sub
 select id, 'rooms.room_list', 'room_list', '五間房介紹', null,
   '{
     "rooms": [
-      { "name": "Blue Ocean", "title": "藍色主題房", "description": "留給海風與睡眠的一間房。", "image_url": "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?q=80&w=3000&auto=format&fit=crop", "alt_text": "藍色主題房" },
-      { "name": "Acacia", "title": "相思主題房", "description": "把樹影與日光收進窗邊。", "image_url": "https://images.unsplash.com/photo-1591088398332-8a7791972843?q=80&w=3000&auto=format&fit=crop", "alt_text": "相思主題房" },
-      { "name": "Moon Pond", "title": "月池主題房", "description": "適合把夜晚放慢的一間房。", "image_url": "https://images.unsplash.com/photo-1618773928121-c32242e63f39?q=80&w=3000&auto=format&fit=crop", "alt_text": "月池主題房" },
-      { "name": "Mist Valley", "title": "霧谷主題房", "description": "山色與清晨霧氣在這裡停留。", "image_url": "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?q=80&w=3000&auto=format&fit=crop", "alt_text": "霧谷主題房" },
-      { "name": "Starry Night", "title": "星夜主題房", "description": "把星光留給入睡前的片刻。", "image_url": "https://images.unsplash.com/photo-1505691938895-1758d7feb511?q=80&w=3000&auto=format&fit=crop", "alt_text": "星夜主題房" }
+      { "name": "Blue Ocean", "title": "藍色主題房", "description": "留給海風與睡眠的一間房。", "image_url": "", "alt_text": "藍色主題房" },
+      { "name": "Acacia", "title": "相思主題房", "description": "把樹影與日光收進窗邊。", "image_url": "", "alt_text": "相思主題房" },
+      { "name": "Moon Pond", "title": "月池主題房", "description": "適合把夜晚放慢的一間房。", "image_url": "", "alt_text": "月池主題房" },
+      { "name": "Mist Valley", "title": "霧谷主題房", "description": "山色與清晨霧氣在這裡停留。", "image_url": "", "alt_text": "霧谷主題房" },
+      { "name": "Starry Night", "title": "星夜主題房", "description": "把星光留給入睡前的片刻。", "image_url": "", "alt_text": "星夜主題房" }
     ]
   }'::jsonb,
   30

@@ -841,7 +841,7 @@ async function fetchSessionOnly(
   return fetchJsonWithTimeout<{
     session?: ChatSession;
   }>(
-    "/api/ai-chat-history",
+    "/api/ai-chat?action=history",
     {
       method: "POST",
       headers: {
@@ -865,7 +865,7 @@ async function fetchLatestHistory(
 ) {
   const startedAt = getTimingNow();
   logChatDebug("history fetch start", {
-    endpoint: "/api/ai-chat-history",
+    endpoint: "/api/ai-chat?action=history",
     visitorId,
     sessionId,
     hasLineIdentity: Boolean(identity?.lineIdentity),
@@ -878,7 +878,7 @@ async function fetchLatestHistory(
       messages?: ApiMessage[];
       has_more?: boolean;
     }>(
-      "/api/ai-chat-history",
+      "/api/ai-chat?action=history",
       {
         method: "POST",
         headers: {
@@ -896,7 +896,7 @@ async function fetchLatestHistory(
 
     logChatTiming("history fetch end", startedAt, {
       status: "success",
-      endpoint: "/api/ai-chat-history",
+      endpoint: "/api/ai-chat?action=history",
       visitorId,
       sessionId,
       responseSessionId: data.session?.id ? String(data.session.id) : "",
@@ -908,7 +908,7 @@ async function fetchLatestHistory(
   } catch (error) {
     logChatTiming("history fetch end", startedAt, {
       status: "error",
-      endpoint: "/api/ai-chat-history",
+      endpoint: "/api/ai-chat?action=history",
       visitorId,
       sessionId,
       message: error instanceof Error ? error.message : String(error),
@@ -1480,7 +1480,7 @@ export function MumbaoChat({
       const after = getNewestCreatedAt(messages);
 
       logChatDebug("polling tick", {
-        endpoint: "/api/ai-chat-history",
+        endpoint: "/api/ai-chat?action=history",
         visitorId,
         sessionId,
         after: after || "",
@@ -1491,7 +1491,7 @@ export function MumbaoChat({
         const data = await fetchJsonWithTimeout<{
           messages?: ApiMessage[];
         }>(
-          "/api/ai-chat-history",
+          "/api/ai-chat?action=history",
           {
             method: "POST",
             headers: {
@@ -1715,7 +1715,7 @@ export function MumbaoChat({
         messages?: ApiMessage[];
         has_more?: boolean;
       }>(
-        "/api/ai-chat-history",
+        "/api/ai-chat?action=history",
         {
           method: "POST",
           headers: {
@@ -1793,7 +1793,7 @@ export function MumbaoChat({
         answer?: string;
         humanTakeover?: boolean;
       }>(
-        "/api/ai-chat-message",
+        "/api/ai-chat?action=message",
         {
           method: "POST",
           headers: {

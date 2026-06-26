@@ -304,7 +304,7 @@ export default function AdminChats() {
           sessions?: AdminChatSession[];
           hasMore?: boolean;
           nextPage?: number | null;
-        }>(`/api/admin/chat-sessions?${params.toString()}`, token);
+        }>(`/api/admin-chat?action=sessions&${params.toString()}`, token);
         const nextSessions = data.sessions || [];
 
         setSessions((current) =>
@@ -350,11 +350,13 @@ export default function AdminChats() {
       }
 
       try {
-        const params = new URLSearchParams();
+        const params = new URLSearchParams({
+          action: "messages",
+          sessionId,
+        });
         if (since) params.set("since", since);
-        const query = params.toString() ? `?${params.toString()}` : "";
         const data = await fetchAdminJson<{ messages?: AdminChatMessage[] }>(
-          `/api/admin/chat-sessions/${encodeURIComponent(sessionId)}/messages${query}`,
+          `/api/admin-chat?${params.toString()}`,
           token
         );
         const incomingMessages = data.messages || [];
@@ -465,7 +467,7 @@ export default function AdminChats() {
 
     try {
       await fetchAdminJson(
-        `/api/admin/chat-sessions/${encodeURIComponent(selectedSessionId)}`,
+        `/api/admin-chat?action=session&sessionId=${encodeURIComponent(selectedSessionId)}`,
         token,
         {
           method: "PATCH",
@@ -487,7 +489,7 @@ export default function AdminChats() {
     setIsSending(true);
     try {
       const data = await fetchAdminJson<{ message?: AdminChatMessage }>(
-        `/api/admin/chat-sessions/${encodeURIComponent(selectedSessionId)}/messages`,
+        `/api/admin-chat?action=messages&sessionId=${encodeURIComponent(selectedSessionId)}`,
         token,
         {
           method: "POST",

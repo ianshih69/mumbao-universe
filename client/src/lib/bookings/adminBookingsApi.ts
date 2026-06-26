@@ -114,11 +114,21 @@ export function fetchBookingCalendar(token: string) {
       reservations: BookingReservation[];
       alerts: BookingAlert[];
     };
-  }>(token, "?action=calendar&months=12");
+  }>(token, "?action=calendar");
 }
 
 export function fetchBookingSettings(token: string) {
-  return adminBookingRequest<{ settings: BookingPlatformSetting[] }>(token, "?action=settings");
+  return adminBookingRequest<{
+    settings: BookingPlatformSetting[];
+    bookingSettings?: {
+      id: number;
+      booking_window_months: number;
+      allow_villa_booking: boolean;
+      allow_room_booking: boolean;
+      total_room_count: number;
+      allow_pets: boolean;
+    };
+  }>(token, "?action=settings");
 }
 
 export function fetchBookingAlerts(token: string) {

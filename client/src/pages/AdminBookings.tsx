@@ -323,22 +323,34 @@ export default function AdminBookings() {
     setIsLoading(true);
     setError("");
     try {
-      const [dashboardData, calendarData, settingsData, alertsData, reservationsData] = await Promise.all([
+      const [dashboardResult, calendarResult, settingsResult, alertsResult, reservationsResult] = await Promise.allSettled([
         fetchBookingDashboard(nextToken),
         fetchBookingCalendar(nextToken),
         fetchBookingSettings(nextToken),
         fetchBookingAlerts(nextToken),
         fetchBookingReservations(nextToken),
       ]);
-      setDashboard(dashboardData.dashboard);
-      setDays(calendarData.calendar.days);
-      setSettings(settingsData.settings);
-      setAlerts(alertsData.alerts);
-      setReservations(reservationsData.reservations);
+      const failures = [dashboardResult, calendarResult, settingsResult, alertsResult, reservationsResult].filter(
+        (result): result is PromiseRejectedResult => result.status === "rejected"
+      );
+      if (failures.some((failure) => isAdminAuthError(failure.reason))) {
+        setLocation("/admin/shop/login?redirect=/admin/bookings");
+        return;
+      }
+      if (dashboardResult.status === "fulfilled") setDashboard(dashboardResult.value.dashboard);
+      if (calendarResult.status === "fulfilled") setDays(calendarResult.value.calendar.days);
+      if (settingsResult.status === "fulfilled") setSettings(settingsResult.value.settings || []);
+      if (alertsResult.status === "fulfilled") setAlerts(alertsResult.value.alerts);
+      if (reservationsResult.status === "fulfilled") setReservations(reservationsResult.value.reservations);
       setMonthIndex(0);
-      const nextBookingSetting = settingsData.settings.find((setting) => setting.platform === "booking");
-      setIcalUrl(nextBookingSetting?.ical_url || "");
-      setIcalEnabled(nextBookingSetting?.enabled || false);
+      if (settingsResult.status === "fulfilled") {
+        const nextBookingSetting = settingsResult.value.settings.find((setting) => setting.platform === "booking");
+        setIcalUrl(nextBookingSetting?.ical_url || "");
+        setIcalEnabled(nextBookingSetting?.enabled || false);
+      }
+      if (failures.length > 0) {
+        setError("部分訂房資料讀取失敗，請重新整理或檢查設定。");
+      }
     } catch (loadError) {
       if (isAdminAuthError(loadError)) {
         setLocation("/admin/shop/login?redirect=/admin/bookings");

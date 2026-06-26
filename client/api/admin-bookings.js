@@ -8,6 +8,14 @@ import {
 
 const requestIdHeader = "x-request-id";
 const villaAliases = ["慢慢蒔光", "stime villa", "mumbao"];
+const defaultBookingSettings = {
+  id: 1,
+  booking_window_months: 6,
+  allow_villa_booking: true,
+  allow_room_booking: false,
+  total_room_count: 5,
+  allow_pets: true,
+};
 
 function makeRequestId() {
   return `booking-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -74,6 +82,63 @@ function validateDateRange(checkIn, checkOut) {
 function sanitizePayload(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {};
   return payload;
+}
+
+function normalizeBookingSettings(row) {
+  const monthValue = Number(row?.booking_window_months);
+  return {
+    id: 1,
+    booking_window_months:
+      Number.isInteger(monthValue) && monthValue >= 1 && monthValue <= 24
+        ? monthValue
+        : defaultBookingSettings.booking_window_months,
+    allow_villa_booking:
+      typeof row?.allow_villa_booking === "boolean"
+        ? row.allow_villa_booking
+        : defaultBookingSettings.allow_villa_booking,
+    allow_room_booking:
+      typeof row?.allow_room_booking === "boolean"
+        ? row.allow_room_booking
+        : defaultBookingSettings.allow_room_booking,
+    total_room_count: defaultBookingSettings.total_room_count,
+    allow_pets:
+      typeof row?.allow_pets === "boolean"
+        ? row.allow_pets
+        : defaultBookingSettings.allow_pets,
+    created_at: row?.created_at || null,
+    updated_at: row?.updated_at || null,
+  };
+}
+
+async function loadBookingSettingsSafe(requestId) {
+  try {
+    const rows = await supabaseRequest(
+      "/booking_settings?id=eq.1&select=id,booking_window_months,allow_villa_booking,allow_room_booking,total_room_count,allow_pets,created_at,updated_at&limit=1"
+    );
+    const row = Array.isArray(rows) ? rows[0] : null;
+    return normalizeBookingSettings(row);
+  } catch (error) {
+    console.warn("[admin-bookings] booking_settings fallback", {
+      requestId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return normalizeBookingSettings(null);
+  }
+}
+
+async function loadBookingPlatformSettingSafe(requestId) {
+  try {
+    const settings = await supabaseRequest(
+      "/booking_platform_settings?platform=eq.booking&select=platform,last_synced_at,last_error,enabled,ical_url,id&limit=1"
+    );
+    return Array.isArray(settings) ? settings[0] || null : null;
+  } catch (error) {
+    console.warn("[admin-bookings] booking_platform_settings fallback", {
+      requestId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
 }
 
 async function verifySupabaseAccessToken(accessToken) {
@@ -218,21 +283,23 @@ async function handleDashboard(req, res, requestId) {
   const from = todayText();
   const to = ninetyDaysLater.toISOString().slice(0, 10);
 
-  const [alerts, settings, pendingEmails] = await Promise.all([
+  const [alertsResult, platformSettingResult, pendingEmailsResult, calendarBlocksResult] = await Promise.allSettled([
     supabaseRequest("/booking_availability_alerts?status=eq.open&select=severity,alert_type,created_at"),
-    supabaseRequest("/booking_platform_settings?platform=eq.booking&select=platform,last_synced_at,last_error,enabled&limit=1"),
+    loadBookingPlatformSettingSafe(requestId),
     supabaseRequest("/booking_email_detections?status=eq.pending_review&select=id"),
+    supabaseRequest(
+      `/booking_availability_blocks?status=eq.confirmed&check_in=lt.${encodeURIComponent(to)}&check_out=gt.${encodeURIComponent(from)}&select=id`
+    ),
   ]);
 
-  const calendarBlocks = await supabaseRequest(
-    `/booking_availability_blocks?status=eq.confirmed&check_in=lt.${encodeURIComponent(to)}&check_out=gt.${encodeURIComponent(from)}&select=id`
-  );
-
+  const alerts = alertsResult.status === "fulfilled" ? alertsResult.value : [];
+  const pendingEmails = pendingEmailsResult.status === "fulfilled" ? pendingEmailsResult.value : [];
+  const calendarBlocks = calendarBlocksResult.status === "fulfilled" ? calendarBlocksResult.value : [];
+  const lastSetting = platformSettingResult.status === "fulfilled" ? platformSettingResult.value : null;
   const openAlerts = Array.isArray(alerts) ? alerts : [];
   const p0Count = openAlerts.filter((alert) => alert.severity === "P0").length;
   const p1Count = openAlerts.filter((alert) => alert.severity === "P1").length;
   const p2Count = openAlerts.filter((alert) => alert.severity === "P2").length;
-  const lastSetting = Array.isArray(settings) ? settings[0] : null;
 
   sendJson(res, 200, {
     ok: true,
@@ -254,7 +321,13 @@ async function handleDashboard(req, res, requestId) {
 async function handleCalendar(req, res, requestId) {
   await requireAdmin(req);
   const from = normalizeDate(firstQueryValue(req.query?.from)) || todayText();
-  const months = Math.min(Math.max(Number(firstQueryValue(req.query?.months)) || 12, 1), 12);
+  const bookingSettings = await loadBookingSettingsSafe(requestId);
+  const configuredMonths = bookingSettings.booking_window_months || defaultBookingSettings.booking_window_months;
+  const requestedMonths = Number(firstQueryValue(req.query?.months));
+  const months = Math.min(
+    Math.max(Number.isFinite(requestedMonths) && requestedMonths > 0 ? requestedMonths : configuredMonths, 1),
+    configuredMonths
+  );
   const endDate = new Date(`${from}T00:00:00Z`);
   endDate.setUTCMonth(endDate.getUTCMonth() + months);
   const to = endDate.toISOString().slice(0, 10);
@@ -547,8 +620,15 @@ async function handleEmailDetection(req, res, requestId) {
 
 async function handleSettingsGet(req, res, requestId) {
   await requireAdmin(req);
-  const settings = await supabaseRequest("/booking_platform_settings?select=*&order=platform.asc");
-  sendJson(res, 200, { ok: true, requestId, settings: settings || [] });
+  const bookingSettings = await loadBookingSettingsSafe(requestId);
+  const bookingPlatformSetting = await loadBookingPlatformSettingSafe(requestId);
+  sendJson(res, 200, {
+    ok: true,
+    requestId,
+    bookingSettings,
+    setting: bookingSettings,
+    settings: bookingPlatformSetting ? [bookingPlatformSetting] : [],
+  });
 }
 
 async function handleSettingsPost(req, res, requestId) {

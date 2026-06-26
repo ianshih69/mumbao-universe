@@ -2,9 +2,8 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CalendarDays,
-  CheckCircle2,
-  Clock3,
-  Home,
+  ChevronLeft,
+  ChevronRight,
   Inbox,
   RefreshCw,
   ShieldAlert,
@@ -44,6 +43,14 @@ type ManualReservationForm = {
   notes: string;
 };
 
+type ReservationFilters = {
+  source: string;
+  status: string;
+  from: string;
+  to: string;
+  query: string;
+};
+
 const emptyManualForm: ManualReservationForm = {
   source: "booking",
   reference_number: "",
@@ -55,6 +62,22 @@ const emptyManualForm: ManualReservationForm = {
   status: "confirmed",
   notes: "",
 };
+
+const sourceOptions = [
+  { value: "booking", label: "Booking" },
+  { value: "website", label: "官網" },
+  { value: "manual", label: "人工保留" },
+  { value: "maintenance", label: "維修" },
+  { value: "other", label: "其他" },
+];
+
+const statusOptions = [
+  { value: "confirmed", label: "confirmed" },
+  { value: "pending_review", label: "pending_review" },
+  { value: "cancelled", label: "cancelled" },
+];
+
+const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
 
 function fieldClassName() {
   return "h-11 rounded-[8px] border border-[#eadfce] bg-white px-3 text-sm text-stone-900 outline-none transition focus:border-[#b7957c] focus:ring-2 focus:ring-[#eadfce]";
@@ -84,6 +107,61 @@ function formatDateTime(value?: string | null) {
   }).format(date);
 }
 
+function formatMonthTitle(monthKey: string) {
+  const [year, month] = monthKey.split("-");
+  return `${year} 年 ${Number(month)} 月`;
+}
+
+function formatAmount(value?: number | null) {
+  if (typeof value !== "number") return "-";
+  return new Intl.NumberFormat("zh-TW", {
+    style: "currency",
+    currency: "TWD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function toDateKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function parseDateKey(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function addDays(value: string, days: number) {
+  const date = parseDateKey(value);
+  date.setUTCDate(date.getUTCDate() + days);
+  return toDateKey(date);
+}
+
+function listBlockedDateKeys(checkIn: string, checkOut: string) {
+  if (!checkIn || !checkOut || checkOut <= checkIn) return [];
+  const dates: string[] = [];
+  let cursor = checkIn;
+  for (let index = 0; index < 370 && cursor < checkOut; index += 1) {
+    dates.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return dates;
+}
+
+function getCalendarCells(monthKey: string, dayMap: Map<string, BookingCalendarDay>) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const firstDay = new Date(Date.UTC(year, month - 1, 1));
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const offset = firstDay.getUTCDay();
+  const cells: Array<BookingCalendarDay | null> = Array.from({ length: offset }, () => null);
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    cells.push(dayMap.get(dateKey) || { date: dateKey, status: "可預約", blockCount: 0, alertCount: 0 });
+  }
+
+  return cells;
+}
+
 function severityClass(severity: string) {
   if (severity === "P0") return "bg-red-100 text-red-700 border-red-200";
   if (severity === "P1") return "bg-orange-100 text-orange-700 border-orange-200";
@@ -91,11 +169,42 @@ function severityClass(severity: string) {
   return "bg-stone-100 text-stone-700 border-stone-200";
 }
 
-function statusClass(status: string) {
-  if (status.includes("撞期")) return "border-red-200 bg-red-50 text-red-700";
-  if (status.includes("待確認")) return "border-amber-200 bg-amber-50 text-amber-700";
-  if (status.includes("可預約")) return "border-emerald-100 bg-emerald-50 text-emerald-700";
-  return "border-stone-200 bg-white text-stone-700";
+function dayStatusClass(day: BookingCalendarDay) {
+  if (day.status.includes("撞期")) return "border-red-200 bg-red-50 text-red-700";
+  if (day.status.includes("待確認")) return "border-amber-200 bg-amber-50 text-amber-700";
+  if (day.status.includes("Booking")) return "border-[#d9c6b5] bg-[#f8efe7] text-[#7d5f49]";
+  if (day.status.includes("人工")) return "border-blue-100 bg-blue-50 text-blue-700";
+  if (day.status.includes("維修")) return "border-stone-300 bg-stone-100 text-stone-700";
+  if (day.status.includes("封鎖")) return "border-[#eadfce] bg-[#fbf7f1] text-[#8b6f5b]";
+  return "border-emerald-100 bg-emerald-50 text-emerald-700";
+}
+
+function sourceLabel(source?: string | null) {
+  return sourceOptions.find((option) => option.value === source)?.label || source || "-";
+}
+
+function statusLabel(status?: string | null) {
+  if (status === "confirmed") return "confirmed";
+  if (status === "pending_review") return "pending_review";
+  if (status === "cancelled") return "cancelled";
+  return status || "-";
+}
+
+function submitButtonLabel(source: string) {
+  if (source === "booking") return "建立 Booking 訂房並封鎖官網日期";
+  if (source === "manual") return "建立人工保留";
+  if (source === "maintenance") return "建立維修封鎖";
+  if (source === "website") return "建立官網訂房並封鎖日期";
+  return "建立外部訂房";
+}
+
+function groupDaysByMonth(days: BookingCalendarDay[]) {
+  return days.reduce<Record<string, BookingCalendarDay[]>>((groups, day) => {
+    const key = day.date.slice(0, 7);
+    groups[key] = groups[key] || [];
+    groups[key].push(day);
+    return groups;
+  }, {});
 }
 
 function DashboardCard({
@@ -120,28 +229,19 @@ function DashboardCard({
   }[tone];
 
   return (
-    <div className="rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm">
+    <div className="rounded-[12px] border border-stone-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm text-stone-500">{title}</p>
-          <p className="mt-3 text-2xl font-semibold text-stone-900">{value}</p>
+          <p className="mt-2 text-xl font-semibold text-stone-900">{value}</p>
         </div>
-        <div className={cn("flex size-10 items-center justify-center rounded-full", toneClass)}>
-          <Icon className="h-5 w-5" />
+        <div className={cn("flex size-9 items-center justify-center rounded-full", toneClass)}>
+          <Icon className="h-4 w-4" />
         </div>
       </div>
-      <p className="mt-3 text-xs leading-5 text-stone-500">{detail}</p>
+      <p className="mt-2 text-xs leading-5 text-stone-500">{detail}</p>
     </div>
   );
-}
-
-function groupDaysByMonth(days: BookingCalendarDay[]) {
-  return days.reduce<Record<string, BookingCalendarDay[]>>((groups, day) => {
-    const key = day.date.slice(0, 7);
-    groups[key] = groups[key] || [];
-    groups[key].push(day);
-    return groups;
-  }, {});
 }
 
 export default function AdminBookings() {
@@ -159,11 +259,58 @@ export default function AdminBookings() {
   const [icalEnabled, setIcalEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [monthIndex, setMonthIndex] = useState(0);
+  const [reservationFilters, setReservationFilters] = useState<ReservationFilters>({
+    source: "all",
+    status: "all",
+    from: "",
+    to: "",
+    query: "",
+  });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   const bookingSetting = settings.find((setting) => setting.platform === "booking");
   const groupedMonths = useMemo(() => groupDaysByMonth(days), [days]);
+  const calendarDayMap = useMemo(() => new Map(days.map((day) => [day.date, day])), [days]);
+  const monthKeys = useMemo(() => Object.keys(groupedMonths).sort(), [groupedMonths]);
+  const visibleMonths = monthKeys.slice(monthIndex, monthIndex + 2);
+  const blockedPreviewDates = useMemo(
+    () => listBlockedDateKeys(manualForm.check_in, manualForm.check_out),
+    [manualForm.check_in, manualForm.check_out]
+  );
+  const hasConfirmedOverlap = useMemo(
+    () =>
+      manualForm.status === "confirmed" &&
+      blockedPreviewDates.some((date) => {
+        const day = calendarDayMap.get(date);
+        return Boolean(day && day.blockCount > 0 && !day.status.includes("待確認"));
+      }),
+    [blockedPreviewDates, calendarDayMap, manualForm.status]
+  );
+  const filteredReservations = useMemo(() => {
+    const query = reservationFilters.query.trim().toLowerCase();
+    return reservations.filter((reservation) => {
+      if (reservationFilters.source !== "all" && reservation.source !== reservationFilters.source) return false;
+      if (reservationFilters.status !== "all" && reservation.status !== reservationFilters.status) return false;
+      if (reservationFilters.from && reservation.check_out < reservationFilters.from) return false;
+      if (reservationFilters.to && reservation.check_in > reservationFilters.to) return false;
+      if (query) {
+        const haystack = [
+          reservation.reference_number,
+          reservation.guest_name,
+          reservation.notes,
+          reservation.source,
+          reservation.status,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [reservationFilters, reservations]);
 
   const loadAll = useCallback(async () => {
     const nextToken = getAdminToken();
@@ -188,6 +335,7 @@ export default function AdminBookings() {
       setSettings(settingsData.settings);
       setAlerts(alertsData.alerts);
       setReservations(reservationsData.reservations);
+      setMonthIndex(0);
       const nextBookingSetting = settingsData.settings.find((setting) => setting.platform === "booking");
       setIcalUrl(nextBookingSetting?.ical_url || "");
       setIcalEnabled(nextBookingSetting?.enabled || false);
@@ -196,7 +344,11 @@ export default function AdminBookings() {
         setLocation("/admin/shop/login?redirect=/admin/bookings");
         return;
       }
-      setError(loadError instanceof Error ? loadError.message : "房況資料載入失敗。");
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "讀取訂房資料失敗，請確認 booking 資料表與 /api/admin-bookings 是否正常。"
+      );
     } finally {
       setIsLoading(false);
     }
@@ -205,6 +357,22 @@ export default function AdminBookings() {
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
+
+  function updateManualForm(field: keyof ManualReservationForm, value: string) {
+    setManualForm((form) => ({ ...form, [field]: value }));
+  }
+
+  function handleCalendarDayClick(date: string) {
+    setManualForm((form) => {
+      if (!form.check_in || form.check_out) {
+        return { ...form, check_in: date, check_out: addDays(date, 1) };
+      }
+      if (date > form.check_in) {
+        return { ...form, check_out: date };
+      }
+      return { ...form, check_in: date, check_out: addDays(date, 1) };
+    });
+  }
 
   async function submitManualReservation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -312,14 +480,14 @@ export default function AdminBookings() {
 
   return (
     <main className="min-h-screen bg-[#f7f1e9] px-4 py-8 text-stone-900 md:px-8">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <header className="rounded-[16px] border border-stone-200 bg-white p-6 shadow-sm">
+      <div className="mx-auto flex max-w-[1500px] flex-col gap-5">
+        <header className="rounded-[16px] border border-stone-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#b08d73]">STime Villa Booking</p>
               <h1 className="mt-3 text-3xl font-semibold text-stone-900">線上訂房 / 房況管理</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
-                第 1 版只管理官網房況、Booking 訂單信判斷與 iCal 手動同步；不爬 Booking 後台，也不自動操作平台關房。
+                管理官網房況、Booking 訂房與人工保留；不會自動操作 Booking 後台。
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -337,7 +505,7 @@ export default function AdminBookings() {
         {message && <div className="rounded-[8px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div>}
         {error && <div className="rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <DashboardCard
             title="今日房況安全"
             value={dashboard?.safetyStatus === "danger" ? "高風險" : dashboard?.safetyStatus === "warning" ? "需確認" : "安全"}
@@ -353,12 +521,12 @@ export default function AdminBookings() {
             tone={dashboard?.future90DaysHasIssues ? "amber" : "green"}
           />
           <DashboardCard
-            title="iCal 最後同步"
+            title="iCal 狀態"
             value={dashboard?.bookingIcalLastSyncedAt ? formatDateTime(dashboard.bookingIcalLastSyncedAt) : "尚未同步"}
             detail={dashboard?.bookingIcalLastError || "Booking iCal 手動同步狀態。"}
             icon={RefreshCw}
           />
-          <DashboardCard title="待人工確認 Email" value={String(dashboard?.pendingEmailCount || 0)} detail="取消、修改或低信心信件不自動關房。" icon={Inbox} tone="amber" />
+          <DashboardCard title="待人工確認" value={String(dashboard?.pendingEmailCount || 0)} detail="低信心、取消或修改信件需人工看過。" icon={Inbox} tone="amber" />
           <DashboardCard
             title="P0 / P1 / P2"
             value={`${dashboard?.p0Count || 0} / ${dashboard?.p1Count || 0} / ${dashboard?.p2Count || 0}`}
@@ -368,181 +536,344 @@ export default function AdminBookings() {
           />
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-          <div className="rounded-[16px] border border-stone-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
+        <section className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)]">
+          <form className="order-1 rounded-[16px] border border-stone-200 bg-white p-5 shadow-sm xl:order-2" onSubmit={submitManualReservation}>
+            <div>
+              <h2 className="text-xl font-semibold text-stone-900">快速新增外部訂房</h2>
+              <p className="mt-1 text-sm text-stone-500">常用於 Booking 訂單、人工保留或維修封鎖。</p>
+            </div>
+
+            <div className="mt-5 space-y-5">
+              <section>
+                <p className="text-sm font-semibold text-stone-800">必要資料</p>
+                <div className="mt-3 grid gap-3">
+                  <select className={fieldClassName()} value={manualForm.source} onChange={(event) => updateManualForm("source", event.target.value)}>
+                    {sourceOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input className={fieldClassName()} placeholder="外部訂單編號" value={manualForm.reference_number} onChange={(event) => updateManualForm("reference_number", event.target.value)} />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="grid gap-1 text-xs font-medium text-stone-500">
+                      入住日期
+                      <input className={fieldClassName()} type="date" value={manualForm.check_in} onChange={(event) => updateManualForm("check_in", event.target.value)} />
+                    </label>
+                    <label className="grid gap-1 text-xs font-medium text-stone-500">
+                      退房日期
+                      <input className={fieldClassName()} type="date" value={manualForm.check_out} onChange={(event) => updateManualForm("check_out", event.target.value)} />
+                    </label>
+                  </div>
+                  <select className={fieldClassName()} value={manualForm.status} onChange={(event) => updateManualForm("status", event.target.value)}>
+                    {statusOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </section>
+
+              <section className={cn("rounded-[12px] border p-4", hasConfirmedOverlap ? "border-red-200 bg-red-50" : "border-[#eadfce] bg-[#fbf7f1]")}>
+                <p className={cn("text-sm font-semibold", hasConfirmedOverlap ? "text-red-700" : "text-stone-800")}>封鎖日期預覽</p>
+                {manualForm.check_in && manualForm.check_out && manualForm.check_out > manualForm.check_in ? (
+                  <div className="mt-2 space-y-2 text-sm leading-6">
+                    <p className={hasConfirmedOverlap ? "text-red-700" : "text-stone-700"}>
+                      將封鎖官網日期：{formatDate(manualForm.check_in)} ～ {formatDate(addDays(manualForm.check_out, -1))}
+                    </p>
+                    <p className="text-xs text-stone-500">
+                      實際封鎖：{blockedPreviewDates.map((date) => formatDate(date)).join("、")}。退房日 {formatDate(manualForm.check_out)} 不封鎖，可讓下一組入住。
+                    </p>
+                    {hasConfirmedOverlap && (
+                      <p className="rounded-[8px] border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700">
+                        此區間已有訂房或封鎖，不能建立 confirmed 外部訂房。
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm leading-6 text-stone-500">選擇入住與退房日期後，這裡會顯示實際封鎖日期。</p>
+                )}
+              </section>
+
+              <details className="rounded-[12px] border border-stone-200 bg-white">
+                <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-stone-800">更多資料（選填）</summary>
+                <div className="grid gap-3 border-t border-stone-100 p-4">
+                  <input className={fieldClassName()} placeholder="客人姓名（可選）" value={manualForm.guest_name} onChange={(event) => updateManualForm("guest_name", event.target.value)} />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <input className={fieldClassName()} placeholder="人數（可選）" value={manualForm.guest_count} onChange={(event) => updateManualForm("guest_count", event.target.value)} />
+                    <input className={fieldClassName()} placeholder="金額（可選）" value={manualForm.amount} onChange={(event) => updateManualForm("amount", event.target.value)} />
+                  </div>
+                  <textarea className={textareaClassName()} placeholder="備註" value={manualForm.notes} onChange={(event) => updateManualForm("notes", event.target.value)} />
+                </div>
+              </details>
+
+              <Button className="w-full bg-[#8b6f5b] hover:bg-[#765d4a]" disabled={isSubmitting || hasConfirmedOverlap}>
+                {submitButtonLabel(manualForm.source)}
+              </Button>
+            </div>
+          </form>
+
+          <div className="order-2 rounded-[16px] border border-stone-200 bg-white p-5 shadow-sm xl:order-1">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
                 <h2 className="text-xl font-semibold text-stone-900">房況日曆</h2>
-                <p className="mt-1 text-sm text-stone-500">支援未來 12 個月，包棟 villa 同一天不可有兩組 confirmed booking。</p>
+                <p className="mt-1 text-sm text-stone-500">後台可看來源；點日期可帶入右側快速新增表單。</p>
               </div>
-              {isLoading && <span className="text-sm text-stone-500">載入中...</span>}
-            </div>
-            <div className="mt-5 max-h-[620px] space-y-6 overflow-y-auto pr-1">
-              {Object.entries(groupedMonths).map(([month, monthDays]) => (
-                <div key={month}>
-                  <h3 className="mb-3 text-sm font-semibold text-stone-700">{month}</h3>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7">
-                    {monthDays.map((day) => (
-                      <div key={day.date} className={cn("rounded-[8px] border p-2 text-xs", statusClass(day.status))}>
-                        <p className="font-semibold">{formatDate(day.date)}</p>
-                        <p className="mt-1">{day.status}</p>
-                        {(day.blockCount > 0 || day.alertCount > 0) && (
-                          <p className="mt-1 text-[11px] opacity-80">
-                            {day.blockCount} block / {day.alertCount} alert
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <form className="rounded-[16px] border border-stone-200 bg-white p-5 shadow-sm" onSubmit={submitManualReservation}>
-              <h2 className="text-xl font-semibold text-stone-900">手動新增外部訂房</h2>
-              <p className="mt-1 text-sm text-stone-500">Confirmed 訂房會自動封鎖官網日期；若重疊會改成 P0 撞期提醒。</p>
-              <div className="mt-4 grid gap-3">
-                <select className={fieldClassName()} value={manualForm.source} onChange={(event) => setManualForm((form) => ({ ...form, source: event.target.value }))}>
-                  <option value="booking">Booking</option>
-                  <option value="website">官網</option>
-                  <option value="manual">人工</option>
-                  <option value="maintenance">維修</option>
-                  <option value="other">其他</option>
-                </select>
-                <input className={fieldClassName()} placeholder="外部訂單編號" value={manualForm.reference_number} onChange={(event) => setManualForm((form) => ({ ...form, reference_number: event.target.value }))} />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <input className={fieldClassName()} type="date" value={manualForm.check_in} onChange={(event) => setManualForm((form) => ({ ...form, check_in: event.target.value }))} />
-                  <input className={fieldClassName()} type="date" value={manualForm.check_out} onChange={(event) => setManualForm((form) => ({ ...form, check_out: event.target.value }))} />
-                </div>
-                <input className={fieldClassName()} placeholder="客人姓名（可選）" value={manualForm.guest_name} onChange={(event) => setManualForm((form) => ({ ...form, guest_name: event.target.value }))} />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <input className={fieldClassName()} placeholder="人數（可選）" value={manualForm.guest_count} onChange={(event) => setManualForm((form) => ({ ...form, guest_count: event.target.value }))} />
-                  <input className={fieldClassName()} placeholder="金額（可選）" value={manualForm.amount} onChange={(event) => setManualForm((form) => ({ ...form, amount: event.target.value }))} />
-                </div>
-                <select className={fieldClassName()} value={manualForm.status} onChange={(event) => setManualForm((form) => ({ ...form, status: event.target.value }))}>
-                  <option value="confirmed">confirmed</option>
-                  <option value="pending_review">pending_review</option>
-                  <option value="cancelled">cancelled</option>
-                </select>
-                <textarea className={textareaClassName()} placeholder="備註" value={manualForm.notes} onChange={(event) => setManualForm((form) => ({ ...form, notes: event.target.value }))} />
-                <Button className="bg-[#8b6f5b] hover:bg-[#765d4a]" disabled={isSubmitting}>
-                  建立外部訂房
+              <div className="flex items-center gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => setMonthIndex((index) => Math.max(0, index - 1))} disabled={monthIndex === 0}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setMonthIndex((index) => Math.min(Math.max(monthKeys.length - 2, 0), index + 1))}
+                  disabled={monthIndex >= Math.max(monthKeys.length - 2, 0)}
+                >
+                  <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
-            </form>
+            </div>
 
-            <form className="rounded-[16px] border border-stone-200 bg-white p-5 shadow-sm" onSubmit={submitSettings}>
-              <h2 className="text-xl font-semibold text-stone-900">Booking iCal</h2>
-              <p className="mt-1 text-sm text-stone-500">第一版只做手動同步，不自動登入 Booking，也不自動關 Booking 房。</p>
-              <div className="mt-4 grid gap-3">
-                <input className={fieldClassName()} placeholder="Booking iCal URL" value={icalUrl} onChange={(event) => setIcalUrl(event.target.value)} />
-                <label className="flex items-center gap-2 text-sm text-stone-700">
-                  <input type="checkbox" checked={icalEnabled} onChange={(event) => setIcalEnabled(event.target.checked)} />
-                  啟用 Booking iCal 同步
-                </label>
-                <div className="rounded-[8px] bg-[#fbf7f1] p-3 text-xs leading-5 text-stone-600">
-                  最後同步：{formatDateTime(bookingSetting?.last_synced_at)}；錯誤：{bookingSetting?.last_error || "無"}
+            <div className="mt-4 flex flex-wrap gap-2 text-xs text-stone-600">
+              {["可預約", "Booking 已訂", "人工保留", "維修", "待確認", "撞期風險"].map((status) => (
+                <span key={status} className={cn("rounded-full border px-2 py-1", dayStatusClass({ date: "", status, blockCount: status === "可預約" ? 0 : 1, alertCount: 0 }))}>
+                  {status}
+                </span>
+              ))}
+            </div>
+
+            <div className="mt-5 grid gap-5 lg:grid-cols-2">
+              {visibleMonths.length === 0 ? (
+                <div className="rounded-[12px] border border-[#eadfce] bg-[#fbf7f1] p-5 text-sm text-stone-600 lg:col-span-2">
+                  目前沒有封鎖或訂房紀錄。房況資料載入後仍會顯示月曆。
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button className="bg-[#8b6f5b] hover:bg-[#765d4a]" disabled={isSubmitting}>儲存 iCal 設定</Button>
-                  <Button type="button" variant="outline" onClick={() => void handleSyncIcal()} disabled={isSubmitting || !icalEnabled || !icalUrl}>
-                    同步 Booking iCal
-                  </Button>
-                </div>
-              </div>
-            </form>
+              ) : (
+                visibleMonths.map((month) => (
+                  <div key={month} className="rounded-[12px] border border-[#eadfce] bg-[#fbf7f1] p-3">
+                    <h3 className="mb-3 text-sm font-semibold text-stone-800">{formatMonthTitle(month)}</h3>
+                    <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-stone-400">
+                      {weekdayLabels.map((weekday) => (
+                        <span key={weekday}>{weekday}</span>
+                      ))}
+                    </div>
+                    <div className="mt-1 grid grid-cols-7 gap-1">
+                      {getCalendarCells(month, calendarDayMap).map((day, index) =>
+                        day ? (
+                          <button
+                            key={day.date}
+                            type="button"
+                            className={cn(
+                              "min-h-16 rounded-[8px] border p-1.5 text-left text-[11px] transition hover:-translate-y-0.5 hover:shadow-sm",
+                              dayStatusClass(day),
+                              manualForm.check_in === day.date || manualForm.check_out === day.date ? "ring-2 ring-[#b7957c]" : ""
+                            )}
+                            onClick={() => handleCalendarDayClick(day.date)}
+                          >
+                            <span className="text-sm font-semibold">{Number(day.date.slice(-2))}</span>
+                            <span className="mt-1 block leading-4">{day.status}</span>
+                            {(day.blockCount > 0 || day.alertCount > 0) && (
+                              <span className="mt-1 block text-[10px] opacity-75">
+                                {day.blockCount} block / {day.alertCount} alert
+                              </span>
+                            )}
+                          </button>
+                        ) : (
+                          <div key={`empty-${month}-${index}`} />
+                        )
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            {days.length > 0 && days.every((day) => day.blockCount === 0 && day.alertCount === 0) && (
+              <p className="mt-4 rounded-[8px] border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                目前沒有封鎖或訂房紀錄。
+              </p>
+            )}
           </div>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-          <form className="rounded-[16px] border border-stone-200 bg-white p-5 shadow-sm" onSubmit={submitEmailDetection}>
-            <h2 className="text-xl font-semibold text-stone-900">Booking Email 手動解析器</h2>
-            <p className="mt-1 text-sm text-stone-500">貼上 Booking 訂單信內容。高信心新訂房才會自動封鎖官網日期；取消與修改一律待人工確認。</p>
-            <div className="mt-4 grid gap-3">
-              <input className={fieldClassName()} placeholder="寄件者" value={emailForm.sender} onChange={(event) => setEmailForm((form) => ({ ...form, sender: event.target.value }))} />
-              <input className={fieldClassName()} placeholder="主旨" value={emailForm.subject} onChange={(event) => setEmailForm((form) => ({ ...form, subject: event.target.value }))} />
-              <textarea className="min-h-56 rounded-[8px] border border-[#eadfce] bg-white px-3 py-2 text-sm outline-none focus:border-[#b7957c] focus:ring-2 focus:ring-[#eadfce]" placeholder="Email 原文" value={emailForm.raw_email} onChange={(event) => setEmailForm((form) => ({ ...form, raw_email: event.target.value }))} />
-              <Button className="bg-[#8b6f5b] hover:bg-[#765d4a]" disabled={isSubmitting}>解析信件</Button>
+        <section className="rounded-[16px] border border-stone-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-stone-900">待處理提醒 / 風險警告</h2>
+              <p className="mt-1 text-sm text-stone-500">P0 需要立即處理；Review 是信件或預約申請待人工確認。</p>
             </div>
-            {emailResult && (
-              <div className="mt-4 rounded-[8px] border border-stone-200 bg-[#fbf7f1] p-4 text-sm leading-6 text-stone-700">
-                <p>疑似 Booking：{emailResult.isBookingLike ? "是" : "否"}</p>
-                <p>信心分數：{emailResult.confidence}</p>
-                <p>類型：{emailResult.detectionType}</p>
-                <p>訂單編號：{emailResult.referenceNumber || "-"}</p>
-                <p>入住/退房：{emailResult.checkIn || "-"} → {emailResult.checkOut || "-"}</p>
-                <p>建議自動封鎖：{emailResult.suggestedAutoBlock ? "是" : "否"}</p>
+            <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-600">{alerts.length} 筆</span>
+          </div>
+          <div className="mt-4">
+            {alerts.length === 0 ? (
+              <div className="rounded-[8px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                目前沒有未處理提醒。
               </div>
-            )}
-          </form>
-
-          <div className="rounded-[16px] border border-stone-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-semibold text-stone-900">提醒與警告</h2>
-                <p className="mt-1 text-sm text-stone-500">P0 紅色需立即處理；Review 是信件或預約申請待人工確認。</p>
-              </div>
-              <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-600">{alerts.length} 筆</span>
-            </div>
-            <div className="mt-4 max-h-[520px] space-y-3 overflow-y-auto pr-1">
-              {alerts.length === 0 ? (
-                <div className="rounded-[8px] border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-700">
-                  目前沒有未處理提醒。
-                </div>
-              ) : (
-                alerts.map((alert) => (
-                  <div key={alert.id} className="rounded-[8px] border border-stone-200 p-4">
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {alerts.map((alert) => (
+                  <div key={alert.id} className="rounded-[10px] border border-stone-200 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold", severityClass(alert.severity))}>
-                          {alert.severity}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold", severityClass(alert.severity))}>
+                            {alert.severity}
+                          </span>
+                          <span className="text-xs text-stone-500">{alert.source || "system"}</span>
+                        </div>
                         <h3 className="mt-2 font-semibold text-stone-900">{alert.title}</h3>
                         <p className="mt-1 text-sm leading-6 text-stone-600">{alert.description || "-"}</p>
-                        <p className="mt-1 text-xs text-stone-500">{alert.check_in || "-"} → {alert.check_out || "-"} / {formatDateTime(alert.created_at)}</p>
+                        <p className="mt-1 text-xs text-stone-500">
+                          {alert.check_in || "-"} → {alert.check_out || "-"} / {formatDateTime(alert.created_at)}
+                        </p>
                       </div>
                       <Button size="sm" variant="outline" onClick={() => void markAlertHandled(alert)} disabled={isSubmitting}>
                         標記已處理
                       </Button>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
 
         <section className="rounded-[16px] border border-stone-200 bg-white p-5 shadow-sm">
-          <h2 className="text-xl font-semibold text-stone-900">外部訂房紀錄</h2>
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-stone-900">外部訂房紀錄</h2>
+              <p className="mt-1 text-sm text-stone-500">查 Booking、官網申請、人工保留與維修封鎖。</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              <select className={fieldClassName()} value={reservationFilters.source} onChange={(event) => setReservationFilters((filters) => ({ ...filters, source: event.target.value }))}>
+                <option value="all">全部來源</option>
+                {sourceOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <select className={fieldClassName()} value={reservationFilters.status} onChange={(event) => setReservationFilters((filters) => ({ ...filters, status: event.target.value }))}>
+                <option value="all">全部狀態</option>
+                {statusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <input className={fieldClassName()} type="date" value={reservationFilters.from} onChange={(event) => setReservationFilters((filters) => ({ ...filters, from: event.target.value }))} />
+              <input className={fieldClassName()} type="date" value={reservationFilters.to} onChange={(event) => setReservationFilters((filters) => ({ ...filters, to: event.target.value }))} />
+              <input className={fieldClassName()} placeholder="搜尋編號 / 客人" value={reservationFilters.query} onChange={(event) => setReservationFilters((filters) => ({ ...filters, query: event.target.value }))} />
+            </div>
+          </div>
+
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead className="border-b border-stone-200 text-xs text-stone-500">
                 <tr>
                   <th className="py-2 pr-4">來源</th>
-                  <th className="py-2 pr-4">編號</th>
+                  <th className="py-2 pr-4">訂單編號</th>
                   <th className="py-2 pr-4">日期</th>
                   <th className="py-2 pr-4">狀態</th>
                   <th className="py-2 pr-4">客人</th>
-                  <th className="py-2 pr-4">信心</th>
+                  <th className="py-2 pr-4">金額</th>
+                  <th className="py-2 pr-4">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {reservations.map((reservation) => (
+                {filteredReservations.map((reservation) => (
                   <tr key={reservation.id}>
-                    <td className="py-3 pr-4">{reservation.source}</td>
+                    <td className="py-3 pr-4">{sourceLabel(reservation.source)}</td>
                     <td className="py-3 pr-4">{reservation.reference_number || "-"}</td>
                     <td className="py-3 pr-4">{reservation.check_in} → {reservation.check_out}</td>
-                    <td className="py-3 pr-4">{reservation.status}</td>
+                    <td className="py-3 pr-4">
+                      <span className="rounded-full bg-[#fbf7f1] px-2 py-1 text-xs text-[#7d5f49]">{statusLabel(reservation.status)}</span>
+                    </td>
                     <td className="py-3 pr-4">{reservation.guest_name || "-"}</td>
-                    <td className="py-3 pr-4">{reservation.confidence ?? "-"}</td>
+                    <td className="py-3 pr-4">{formatAmount(reservation.amount)}</td>
+                    <td className="py-3 pr-4">
+                      <details className="min-w-36">
+                        <summary className="cursor-pointer text-xs font-semibold text-[#8b6f5b]">查看詳情</summary>
+                        <div className="mt-2 rounded-[8px] border border-stone-200 bg-[#fbf7f1] p-3 text-xs leading-5 text-stone-600">
+                          <p>ID：{reservation.id}</p>
+                          <p>人數：{reservation.guest_count ?? "-"}</p>
+                          <p>信心：{reservation.confidence ?? "-"}</p>
+                          <p>備註：{reservation.notes || "-"}</p>
+                        </div>
+                      </details>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {reservations.length === 0 && <p className="py-6 text-center text-sm text-stone-500">尚無外部訂房紀錄。</p>}
+            {filteredReservations.length === 0 && (
+              <p className="py-8 text-center text-sm text-stone-500">目前沒有外部訂房紀錄。你可以先在右側建立 Booking 或人工保留。</p>
+            )}
           </div>
+        </section>
+
+        <section className="grid gap-4 xl:grid-cols-2">
+          <details className="rounded-[16px] border border-stone-200 bg-white p-5 shadow-sm">
+            <summary className="cursor-pointer list-none">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-stone-900">Booking iCal 同步</h2>
+                  <p className="mt-1 text-sm text-stone-500">
+                    {bookingSetting?.ical_url ? "已設定 iCal，可展開調整或手動同步。" : "尚未設定 Booking iCal。你可以先手動新增外部訂房，iCal 之後再設定。"}
+                  </p>
+                </div>
+                <span className={cn("rounded-full px-3 py-1 text-xs font-medium", bookingSetting?.last_error ? "bg-red-50 text-red-700" : icalEnabled ? "bg-emerald-50 text-emerald-700" : "bg-stone-100 text-stone-600")}>
+                  {bookingSetting?.last_error ? "同步失敗" : icalEnabled ? "已啟用" : "未設定"}
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-stone-500">最後同步：{formatDateTime(bookingSetting?.last_synced_at)}</p>
+            </summary>
+            <form className="mt-4 grid gap-3 border-t border-stone-100 pt-4" onSubmit={submitSettings}>
+              <input className={fieldClassName()} placeholder="Booking iCal URL" value={icalUrl} onChange={(event) => setIcalUrl(event.target.value)} />
+              <label className="flex items-center gap-2 text-sm text-stone-700">
+                <input type="checkbox" checked={icalEnabled} onChange={(event) => setIcalEnabled(event.target.checked)} />
+                啟用 Booking iCal 同步
+              </label>
+              <div className="rounded-[8px] bg-[#fbf7f1] p-3 text-xs leading-5 text-stone-600">
+                錯誤：{bookingSetting?.last_error || "無"}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button className="bg-[#8b6f5b] hover:bg-[#765d4a]" disabled={isSubmitting}>
+                  儲存 iCal 設定
+                </Button>
+                <Button type="button" variant="outline" onClick={() => void handleSyncIcal()} disabled={isSubmitting || !icalEnabled || !icalUrl}>
+                  同步 Booking iCal
+                </Button>
+              </div>
+            </form>
+          </details>
+
+          <details className="rounded-[16px] border border-stone-200 bg-white p-5 shadow-sm">
+            <summary className="cursor-pointer list-none">
+              <h2 className="text-lg font-semibold text-stone-900">Booking Email 手動解析器</h2>
+              <p className="mt-1 text-sm text-stone-500">貼上 Booking 訂單信內容，系統會嘗試判斷是否為新訂房。高信心才會建立待處理資料。</p>
+            </summary>
+            <form className="mt-4 grid gap-3 border-t border-stone-100 pt-4" onSubmit={submitEmailDetection}>
+              <input className={fieldClassName()} placeholder="寄件者" value={emailForm.sender} onChange={(event) => setEmailForm((form) => ({ ...form, sender: event.target.value }))} />
+              <input className={fieldClassName()} placeholder="主旨" value={emailForm.subject} onChange={(event) => setEmailForm((form) => ({ ...form, subject: event.target.value }))} />
+              <textarea className="min-h-48 rounded-[8px] border border-[#eadfce] bg-white px-3 py-2 text-sm outline-none focus:border-[#b7957c] focus:ring-2 focus:ring-[#eadfce]" placeholder="Email 原文" value={emailForm.raw_email} onChange={(event) => setEmailForm((form) => ({ ...form, raw_email: event.target.value }))} />
+              <Button className="bg-[#8b6f5b] hover:bg-[#765d4a]" disabled={isSubmitting}>
+                解析信件
+              </Button>
+            </form>
+            {emailResult && (
+              <div className="mt-4 rounded-[10px] border border-stone-200 bg-[#fbf7f1] p-4 text-sm leading-6 text-stone-700">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-[#7d5f49]">信心 {emailResult.confidence}</span>
+                  <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-[#7d5f49]">{emailResult.detectionType || "unknown"}</span>
+                </div>
+                <p className="mt-3">疑似 Booking：{emailResult.isBookingLike ? "是" : "否"}</p>
+                <p>訂單編號：{emailResult.referenceNumber || "-"}</p>
+                <p>入住 / 退房：{emailResult.checkIn || "-"} → {emailResult.checkOut || "-"}</p>
+                <p>建議封鎖官網：{emailResult.suggestedAutoBlock ? "是" : "否"}</p>
+              </div>
+            )}
+          </details>
         </section>
       </div>
     </main>

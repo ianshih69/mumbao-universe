@@ -106,6 +106,169 @@ function textareaClassName() {
   return "min-h-28 rounded-[8px] border border-[#eadfce] bg-white px-3 py-2 text-sm text-stone-900 outline-none transition focus:border-[#b7957c] focus:ring-2 focus:ring-[#eadfce]";
 }
 
+type SectionFrontendMeta = {
+  position: string;
+  note?: string;
+  viewHref?: string;
+  viewLabel?: string;
+};
+
+const sectionFrontendMeta: Record<string, SectionFrontendMeta> = {
+  "global.top_banner": {
+    position: "全站頂部公告",
+    note: "此區塊會影響官網頂部公告。若文字留空或關閉顯示，前台會使用預設內容或不顯示公告。",
+    viewHref: "/",
+    viewLabel: "首頁",
+  },
+  "global.navigation": {
+    position: "前台主選單",
+    note: "此區塊會影響前台 Header 選單。若項目留空，前台會保留預設導覽。",
+    viewHref: "/",
+    viewLabel: "首頁",
+  },
+  "home.hero": {
+    position: "首頁第一屏主視覺",
+    note: "此區塊會影響首頁第一屏主視覺。若欄位留空，前台會使用預設內容。",
+    viewHref: "/",
+    viewLabel: "首頁",
+  },
+  "home.booking_cta": {
+    position: "首頁預約導引",
+    viewHref: "/",
+    viewLabel: "首頁",
+  },
+  "booking.hero": {
+    position: "線上訂房頁頁首",
+    viewHref: "/booking",
+    viewLabel: "線上訂房頁",
+  },
+  "booking.instructions": {
+    position: "線上訂房頁預約說明",
+    viewHref: "/booking",
+    viewLabel: "線上訂房頁",
+  },
+  "booking.pet_note": {
+    position: "線上訂房頁寵物友善說明",
+    viewHref: "/booking",
+    viewLabel: "線上訂房頁",
+  },
+  "booking.success_message": {
+    position: "線上訂房頁送出成功文案",
+    viewHref: "/booking",
+    viewLabel: "線上訂房頁",
+  },
+  "rooms.hero": {
+    position: "首頁房型介紹標題區",
+    viewHref: "/#rooms",
+    viewLabel: "房型介紹",
+  },
+  "rooms.villa_intro": {
+    position: "房型介紹整棟 Villa 文案",
+    viewHref: "/#rooms",
+    viewLabel: "房型介紹",
+  },
+  "rooms.room_list": {
+    position: "房型介紹五間房卡片",
+    note: "此區塊目前支援 5 間房。圖片 URL 留空時，前台會使用站內預設圖片，避免破圖或顯示外部假圖。",
+    viewHref: "/#rooms",
+    viewLabel: "房型介紹",
+  },
+  "shop.hero": {
+    position: "宇宙碎品頁頁首",
+    viewHref: "/shop",
+    viewLabel: "宇宙碎品",
+  },
+};
+
+function isMeaningfulValue(value: unknown): boolean {
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "number" || typeof value === "boolean") return true;
+  if (Array.isArray(value)) return value.some(isMeaningfulValue);
+  if (value && typeof value === "object") return Object.values(value as JsonRecord).some(isMeaningfulValue);
+  return false;
+}
+
+function hasSectionContent(section: CmsSection) {
+  return isMeaningfulValue(sectionContent(section));
+}
+
+function getEmptyFallbackFields(sectionKey: string, content: JsonRecord) {
+  const missing: string[] = [];
+  const requireText = (key: string, label: string) => {
+    if (!getText(content, key).trim()) missing.push(label);
+  };
+
+  if (["home.hero", "booking.hero", "rooms.hero", "shop.hero"].includes(sectionKey)) {
+    requireText("eyebrow", "小標");
+    requireText("title", "標題");
+    requireText("subtitle", "副標");
+  }
+
+  if (sectionKey === "home.hero") {
+    requireText("body", "內文");
+    requireText("desktop_image_url", "桌機圖片");
+  }
+
+  if (sectionKey === "global.top_banner") {
+    requireText("text", "公告文字");
+  }
+
+  if (sectionKey === "booking.instructions") {
+    const items = getList<string>(content, "items");
+    if (items.length < 3 || items.some((item) => !String(item || "").trim())) missing.push("預約說明");
+  }
+
+  if (["booking.pet_note", "booking.success_message", "rooms.villa_intro"].includes(sectionKey)) {
+    requireText("text", "文字");
+  }
+
+  if (sectionKey === "rooms.room_list") {
+    const rooms = getList<JsonRecord>(content, "rooms");
+    if (rooms.length < 5) missing.push("五間房資料");
+    if (rooms.some((room) => !getText(room, "title") || !getText(room, "description"))) missing.push("房型文字");
+    if (rooms.some((room) => !getText(room, "image_url"))) missing.push("房型圖片");
+  }
+
+  return missing;
+}
+
+function getFrontendStatus(section: CmsSection) {
+  const content = sectionContent(section);
+  if (!section.id || section.status !== "published" || !section.is_visible || !hasSectionContent(section)) {
+    return {
+      label: "使用預設 fallback",
+      className: "border-[#eadfce] bg-[#fbf7f1] text-stone-600",
+      detail: "前台會使用程式內建的預設內容。",
+    };
+  }
+
+  const missing = getEmptyFallbackFields(section.section_key, content);
+  if (missing.length > 0) {
+    return {
+      label: "已套用 CMS，部分欄位使用預設 fallback",
+      className: "border-amber-200 bg-amber-50 text-amber-800",
+      detail: `${Array.from(new Set(missing)).join("、")} 留空時會由前台預設內容補上。`,
+    };
+  }
+
+  return {
+    label: "已套用 CMS",
+    className: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    detail: "前台會優先顯示此區塊內容。",
+  };
+}
+
+function getSectionDisplayName(section: CmsSection) {
+  return sectionFrontendMeta[section.section_key]?.position || section.title || section.section_key;
+}
+
+function getSectionSaveMessage(section: CmsSection) {
+  const meta = sectionFrontendMeta[section.section_key];
+  const name = getSectionDisplayName(section);
+  if (meta?.viewLabel) return `${name}已發布。你可以前往${meta.viewLabel}查看更新。`;
+  return `${name}已發布。`;
+}
+
 function SectionCard({
   section,
   token,
@@ -122,6 +285,12 @@ function SectionCard({
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const draftSection = useMemo<CmsSection>(
+    () => ({ ...section, title, subtitle, content_json: content, is_visible: isVisible }),
+    [content, isVisible, section, subtitle, title],
+  );
+  const meta = sectionFrontendMeta[section.section_key];
+  const frontendStatus = getFrontendStatus(draftSection);
 
   useEffect(() => {
     setTitle(section.title || "");
@@ -154,7 +323,7 @@ function SectionCard({
         status: "published",
       });
       onSaved(result.section);
-      setMessage("已儲存並發布。");
+      setMessage(getSectionSaveMessage(result.section));
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "儲存失敗，請稍後再試。");
     } finally {
@@ -358,6 +527,23 @@ function SectionCard({
           <p className="text-xs uppercase tracking-[0.18em] text-[#9f7868]">{section.section_key}</p>
           <h3 className="mt-1 font-serif text-2xl text-stone-900">{section.title || section.section_key}</h3>
           <p className="mt-1 text-xs text-stone-500">更新時間：{formatDateTime(section.updated_at)}</p>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            <span className={cn("rounded-full border px-3 py-1 font-medium", frontendStatus.className)}>
+              前台狀態：{frontendStatus.label}
+            </span>
+            <span className="rounded-full border border-[#eadfce] bg-white px-3 py-1 text-stone-600">
+              區塊位置：{meta?.position || "尚未接入前台"}
+            </span>
+            <span className="rounded-full border border-[#eadfce] bg-white px-3 py-1 text-stone-600">
+              {isVisible ? "前台顯示" : "前台隱藏"}
+            </span>
+          </div>
+          <p className="mt-2 text-xs leading-5 text-stone-500">{frontendStatus.detail}</p>
+          {meta?.note && (
+            <p className="mt-2 rounded-[8px] border border-[#eadfce] bg-[#fbf7f1] px-3 py-2 text-xs leading-5 text-stone-600">
+              {meta.note}
+            </p>
+          )}
         </div>
         <label className="inline-flex items-center gap-2 text-sm text-stone-600">
           <input type="checkbox" checked={isVisible} onChange={(event) => setIsVisible(event.target.checked)} />
@@ -369,7 +555,22 @@ function SectionCard({
         {renderEditor()}
       </div>
 
-      {message && <p className="mt-4 text-sm text-emerald-700">{message}</p>}
+      {message && (
+        <div className="mt-4 flex flex-col gap-2 rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 sm:flex-row sm:items-center sm:justify-between">
+          <span>{message}</span>
+          {meta?.viewHref && (
+            <a
+              href={meta.viewHref}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 font-medium text-emerald-900 underline underline-offset-4"
+            >
+              前往查看
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          )}
+        </div>
+      )}
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
       <div className="mt-5 flex flex-col gap-3 border-t border-[#eadfce] pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -393,6 +594,9 @@ function ImageUrlFields({
   const imageUrl = getText(content, "desktop_image_url");
   return (
     <div className="grid gap-4">
+      <p className="rounded-[8px] border border-[#eadfce] bg-[#fbf7f1] px-3 py-2 text-xs leading-5 text-stone-600">
+        目前第一版使用圖片 URL。之後可接 R2 圖片上傳。
+      </p>
       <div className="grid gap-4 md:grid-cols-2">
         <label className="grid gap-1.5 text-sm font-medium text-stone-700">
           桌機圖片 URL

@@ -20,12 +20,14 @@ type RoomItem = {
   alt: string;
 };
 
+const fallbackRoomImage = "/images/Hero.webp";
+
 const fallbackRooms: RoomItem[] = [
   {
     id: "blue-ocean",
     name: "Blue Ocean",
     title: "藍色主題房",
-    image: "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?q=80&w=3000&auto=format&fit=crop",
+    image: fallbackRoomImage,
     description: "留給海風與睡眠的一間房。",
     alt: "藍色主題房",
   },
@@ -33,7 +35,7 @@ const fallbackRooms: RoomItem[] = [
     id: "acacia",
     name: "Acacia",
     title: "相思主題房",
-    image: "https://images.unsplash.com/photo-1591088398332-8a7791972843?q=80&w=3000&auto=format&fit=crop",
+    image: fallbackRoomImage,
     description: "把樹影與日光收進窗邊。",
     alt: "相思主題房",
   },
@@ -41,7 +43,7 @@ const fallbackRooms: RoomItem[] = [
     id: "moon-pond",
     name: "Moon Pond",
     title: "月池主題房",
-    image: "https://images.unsplash.com/photo-1618773928121-c32242e63f39?q=80&w=3000&auto=format&fit=crop",
+    image: fallbackRoomImage,
     description: "適合把夜晚放慢的一間房。",
     alt: "月池主題房",
   },
@@ -49,7 +51,7 @@ const fallbackRooms: RoomItem[] = [
     id: "mist-valley",
     name: "Mist Valley",
     title: "霧谷主題房",
-    image: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?q=80&w=3000&auto=format&fit=crop",
+    image: fallbackRoomImage,
     description: "山色與清晨霧氣在這裡停留。",
     alt: "霧谷主題房",
   },
@@ -57,7 +59,7 @@ const fallbackRooms: RoomItem[] = [
     id: "starry-night",
     name: "Starry Night",
     title: "星夜主題房",
-    image: "https://images.unsplash.com/photo-1505691938895-1758d7feb511?q=80&w=3000&auto=format&fit=crop",
+    image: fallbackRoomImage,
     description: "把星光留給入睡前的片刻。",
     alt: "星夜主題房",
   },
@@ -165,7 +167,7 @@ export function Rooms() {
                         alt={room.alt}
                         className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                         onError={(event) => {
-                          event.currentTarget.src = fallbackRooms[0].image;
+                          event.currentTarget.src = fallbackRoomImage;
                         }}
                       />
                     </div>

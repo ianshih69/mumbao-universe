@@ -176,11 +176,11 @@ insert into public.site_sections (page_id, section_key, section_type, title, sub
 select id, 'home.hero', 'hero', '首頁主視覺', null,
   '{
     "eyebrow": "慢下來，回到有光的地方",
-    "title": "慢慢蒔光 STime Villa",
+    "title": "慢慢蒔光\nSTime Villa",
     "subtitle": "宜蘭員山包棟 villa，一天只接待一組客人。",
     "body": "在山與田之間，留一段安靜給自己、家人與毛孩。",
-    "button_text": "查看線上訂房",
-    "button_href": "/booking",
+    "button_text": "",
+    "button_href": "",
     "desktop_image_url": "/images/Hero.webp",
     "mobile_image_url": "/images/Hero.webp",
     "alt_text": "慢慢蒔光 villa 主視覺"

@@ -1,10 +1,20 @@
 export type StayType = "villa" | "room";
 export type PetType = "dog" | "cat" | "other";
 
+export type BookingPublicSettings = {
+  bookingWindowMonths: number;
+  bookingWindowLabel: string;
+  allowVillaBooking: boolean;
+  allowRoomBooking: boolean;
+  totalRoomCount: number;
+  allowPets: boolean;
+};
+
 export type BookingAvailabilityResult = {
   available: boolean;
   checkIn: string;
   checkOut: string;
+  settings?: BookingPublicSettings;
 };
 
 export type BookingCalendarResult = {
@@ -12,6 +22,7 @@ export type BookingCalendarResult = {
   to: string;
   maxDate: string;
   unavailableDates: string[];
+  settings: BookingPublicSettings;
 };
 
 export type BookingRequestPayload = {
@@ -54,7 +65,7 @@ export function checkBookingAvailability(checkIn: string, checkOut: string) {
 }
 
 export function fetchBookingCalendar(from: string) {
-  const params = new URLSearchParams({ action: "calendar", from, months: "12" });
+  const params = new URLSearchParams({ action: "calendar", from });
   return bookingRequest<BookingCalendarResult & { ok: boolean }>(`?${params.toString()}`);
 }
 

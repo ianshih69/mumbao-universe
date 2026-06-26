@@ -35,14 +35,17 @@ export default function AdminShopHeaderLinks({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setIsMobileMenuOpen(false);
     };
-    const previousOverflow = document.body.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
 
     document.addEventListener("keydown", handleKeyDown);
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
     };
   }, [isMobileMenuOpen]);
 
@@ -83,8 +86,14 @@ export default function AdminShopHeaderLinks({
             className="fixed inset-0 z-[999] bg-stone-950/35"
             onClick={closeMobileMenu}
           />
-          <div className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-[1000] max-h-[calc(100svh-6rem)] overflow-y-auto rounded-3xl border border-stone-200 bg-white p-3 shadow-2xl shadow-stone-950/30">
-            <div className="mb-2 flex items-center justify-between gap-3 px-2">
+          <div
+            className="fixed inset-x-0 bottom-0 z-[1000] flex flex-col overflow-hidden rounded-t-[24px] border border-stone-200 bg-white shadow-2xl shadow-stone-950/30"
+            style={{
+              maxHeight: "min(80vh, calc(100vh - 80px))",
+              paddingBottom: "env(safe-area-inset-bottom)",
+            }}
+          >
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-stone-100 px-5 py-4">
               <p className="text-sm font-semibold text-stone-900">管理選單</p>
               <button
                 type="button"
@@ -95,44 +104,46 @@ export default function AdminShopHeaderLinks({
               </button>
             </div>
 
-            <Link href="/account" className={mobileMenuItemClassName} onClick={closeMobileMenu}>
-              管理入口
-            </Link>
-            <Link href={secondaryLink.href} className={mobileMenuItemClassName} onClick={closeMobileMenu}>
-              {secondaryLink.label}
-            </Link>
+            <div className="overflow-y-auto px-3 py-3" style={{ WebkitOverflowScrolling: "touch" }}>
+              <Link href="/account" className={mobileMenuItemClassName} onClick={closeMobileMenu}>
+                管理入口
+              </Link>
+              <Link href={secondaryLink.href} className={mobileMenuItemClassName} onClick={closeMobileMenu}>
+                {secondaryLink.label}
+              </Link>
 
-            <div className="mt-2 border-t border-stone-100 pt-2">
-              <p className="px-3 pb-1 text-xs font-semibold text-stone-400">前台預覽</p>
-              {frontendPreviewLinks.map((link) => (
-                <Link key={link.href} href={link.href} className={mobileMenuItemClassName} onClick={closeMobileMenu}>
-                  {link.label}
-                </Link>
-              ))}
-            </div>
-
-            {(onRefresh || showLogout) && (
               <div className="mt-2 border-t border-stone-100 pt-2">
-                {onRefresh && (
-                  <button
-                    type="button"
-                    className={mobileMenuItemClassName}
-                    disabled={isRefreshing}
-                    onClick={() => {
-                      closeMobileMenu();
-                      void onRefresh();
-                    }}
-                  >
-                    {isRefreshing ? "重新整理中..." : "重新整理"}
-                  </button>
-                )}
-                {showLogout && (
-                  <button type="button" className={mobileMenuItemClassName} onClick={logout}>
-                    登出
-                  </button>
-                )}
+                <p className="px-3 pb-1 text-xs font-semibold text-stone-400">前台預覽</p>
+                {frontendPreviewLinks.map((link) => (
+                  <Link key={link.href} href={link.href} className={mobileMenuItemClassName} onClick={closeMobileMenu}>
+                    {link.label}
+                  </Link>
+                ))}
               </div>
-            )}
+
+              {(onRefresh || showLogout) && (
+                <div className="mt-2 border-t border-stone-100 pt-2">
+                  {onRefresh && (
+                    <button
+                      type="button"
+                      className={mobileMenuItemClassName}
+                      disabled={isRefreshing}
+                      onClick={() => {
+                        closeMobileMenu();
+                        void onRefresh();
+                      }}
+                    >
+                      {isRefreshing ? "重新整理中..." : "重新整理"}
+                    </button>
+                  )}
+                  {showLogout && (
+                    <button type="button" className={mobileMenuItemClassName} onClick={logout}>
+                      登出
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

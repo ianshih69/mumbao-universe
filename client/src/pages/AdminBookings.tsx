@@ -16,6 +16,7 @@ import {
   fetchBookingAlerts,
   fetchBookingCalendar,
   fetchBookingDashboard,
+  fetchBookingRequests,
   fetchBookingReservations,
   fetchBookingSettings,
   handleBookingAlert,
@@ -27,6 +28,7 @@ import {
   type BookingDashboard,
   type BookingEmailResult,
   type BookingPlatformSetting,
+  type BookingRequest,
   type BookingReservation,
 } from "@/lib/bookings/adminBookingsApi";
 import { cn } from "@/lib/utils";
@@ -171,6 +173,7 @@ function severityClass(severity: string) {
 
 function dayStatusClass(day: BookingCalendarDay) {
   if (day.status.includes("撞期")) return "border-red-200 bg-red-50 text-red-700";
+  if (day.status.includes("官網申請")) return "border-amber-200 bg-amber-50 text-amber-700";
   if (day.status.includes("待確認")) return "border-amber-200 bg-amber-50 text-amber-700";
   if (day.status.includes("Booking")) return "border-[#d9c6b5] bg-[#f8efe7] text-[#7d5f49]";
   if (day.status.includes("人工")) return "border-blue-100 bg-blue-50 text-blue-700";
@@ -188,6 +191,25 @@ function statusLabel(status?: string | null) {
   if (status === "pending_review") return "pending_review";
   if (status === "cancelled") return "cancelled";
   return status || "-";
+}
+
+function stayTypeLabel(request: BookingRequest) {
+  if (request.stay_type === "villa") return "包棟 villa";
+  return `${request.room_count || 1} 間客房`;
+}
+
+function guestSummary(request: BookingRequest) {
+  return `${request.adults || 0} 位成人・${request.children || 0} 位孩童`;
+}
+
+function petSummary(request: BookingRequest) {
+  if (!request.has_pets) return "不攜帶寵物";
+  const petTypeLabel = request.pet_type === "cat" ? "貓" : request.pet_type === "other" ? "其他" : "狗";
+  return `攜帶 ${request.pet_count || 1} 隻${petTypeLabel}`;
+}
+
+function requestOverlapsDate(request: BookingRequest, date: string) {
+  return request.check_in <= date && date < request.check_out;
 }
 
 function submitButtonLabel(source: string) {
@@ -250,6 +272,7 @@ export default function AdminBookings() {
   const [dashboard, setDashboard] = useState<BookingDashboard | null>(null);
   const [days, setDays] = useState<BookingCalendarDay[]>([]);
   const [reservations, setReservations] = useState<BookingReservation[]>([]);
+  const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>([]);
   const [alerts, setAlerts] = useState<BookingAlert[]>([]);
   const [settings, setSettings] = useState<BookingPlatformSetting[]>([]);
   const [manualForm, setManualForm] = useState<ManualReservationForm>(emptyManualForm);
@@ -311,6 +334,20 @@ export default function AdminBookings() {
       return true;
     });
   }, [reservationFilters, reservations]);
+  const pendingWebsiteRequests = useMemo(
+    () => bookingRequests.filter((request) => request.status === "pending_review"),
+    [bookingRequests]
+  );
+  const websiteRequestAlerts = useMemo(
+    () => alerts.filter((alert) => alert.status === "open" && alert.alert_type === "website_booking_request"),
+    [alerts]
+  );
+  const riskAlerts = useMemo(
+    () => alerts.filter((alert) => alert.status === "open" && ["P0", "P1", "P2"].includes(alert.severity)),
+    [alerts]
+  );
+  const pendingReviewCount =
+    (dashboard?.pendingEmailCount || 0) + Math.max(pendingWebsiteRequests.length, websiteRequestAlerts.length);
 
   const loadAll = useCallback(async () => {
     const nextToken = getAdminToken();
@@ -323,14 +360,15 @@ export default function AdminBookings() {
     setIsLoading(true);
     setError("");
     try {
-      const [dashboardResult, calendarResult, settingsResult, alertsResult, reservationsResult] = await Promise.allSettled([
+      const [dashboardResult, calendarResult, settingsResult, alertsResult, reservationsResult, requestsResult] = await Promise.allSettled([
         fetchBookingDashboard(nextToken),
         fetchBookingCalendar(nextToken),
         fetchBookingSettings(nextToken),
         fetchBookingAlerts(nextToken),
         fetchBookingReservations(nextToken),
+        fetchBookingRequests(nextToken),
       ]);
-      const failures = [dashboardResult, calendarResult, settingsResult, alertsResult, reservationsResult].filter(
+      const failures = [dashboardResult, calendarResult, settingsResult, alertsResult, reservationsResult, requestsResult].filter(
         (result): result is PromiseRejectedResult => result.status === "rejected"
       );
       if (failures.some((failure) => isAdminAuthError(failure.reason))) {
@@ -342,6 +380,7 @@ export default function AdminBookings() {
       if (settingsResult.status === "fulfilled") setSettings(settingsResult.value.settings || []);
       if (alertsResult.status === "fulfilled") setAlerts(alertsResult.value.alerts);
       if (reservationsResult.status === "fulfilled") setReservations(reservationsResult.value.reservations);
+      if (requestsResult.status === "fulfilled") setBookingRequests(requestsResult.value.requests || []);
       setMonthIndex(0);
       if (settingsResult.status === "fulfilled") {
         const nextBookingSetting = settingsResult.value.settings.find((setting) => setting.platform === "booking");
@@ -541,7 +580,13 @@ export default function AdminBookings() {
             detail={dashboard?.bookingIcalLastError || "Booking iCal 手動同步狀態。"}
             icon={RefreshCw}
           />
-          <DashboardCard title="待人工確認" value={String(dashboard?.pendingEmailCount || 0)} detail="低信心、取消或修改信件需人工看過。" icon={Inbox} tone="amber" />
+          <DashboardCard
+            title="待確認申請"
+            value={String(pendingReviewCount)}
+            detail="包含官網預約申請與信件人工確認。"
+            icon={Inbox}
+            tone="amber"
+          />
           <DashboardCard
             title="P0 / P1 / P2"
             value={`${dashboard?.p0Count || 0} / ${dashboard?.p1Count || 0} / ${dashboard?.p2Count || 0}`}
@@ -652,7 +697,7 @@ export default function AdminBookings() {
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2 text-xs text-stone-600">
-              {["可預約", "Booking 已訂", "人工保留", "維修", "待確認", "撞期風險"].map((status) => (
+              {["可預約", "Booking 已訂", "官網申請", "人工保留", "維修", "撞期風險"].map((status) => (
                 <span key={status} className={cn("rounded-full border px-2 py-1", dayStatusClass({ date: "", status, blockCount: status === "可預約" ? 0 : 1, alertCount: 0 }))}>
                   {status}
                 </span>
@@ -674,30 +719,33 @@ export default function AdminBookings() {
                       ))}
                     </div>
                     <div className="mt-1 grid grid-cols-7 gap-1">
-                      {getCalendarCells(month, calendarDayMap).map((day, index) =>
-                        day ? (
+                      {getCalendarCells(month, calendarDayMap).map((day, index) => {
+                        if (!day) return <div key={`empty-${month}-${index}`} />;
+                        const hasWebsiteRequest = pendingWebsiteRequests.some((request) => requestOverlapsDate(request, day.date));
+                        const displayDay = hasWebsiteRequest && !day.status.includes("撞期")
+                          ? { ...day, status: "官網申請" }
+                          : day;
+                        return (
                           <button
                             key={day.date}
                             type="button"
                             className={cn(
                               "min-h-16 rounded-[8px] border p-1.5 text-left text-[11px] transition hover:-translate-y-0.5 hover:shadow-sm",
-                              dayStatusClass(day),
+                              dayStatusClass(displayDay),
                               manualForm.check_in === day.date || manualForm.check_out === day.date ? "ring-2 ring-[#b7957c]" : ""
                             )}
                             onClick={() => handleCalendarDayClick(day.date)}
                           >
                             <span className="text-sm font-semibold">{Number(day.date.slice(-2))}</span>
-                            <span className="mt-1 block leading-4">{day.status}</span>
-                            {(day.blockCount > 0 || day.alertCount > 0) && (
+                            <span className="mt-1 block leading-4">{displayDay.status}</span>
+                            {!hasWebsiteRequest && (day.blockCount > 0 || day.alertCount > 0) && (
                               <span className="mt-1 block text-[10px] opacity-75">
                                 {day.blockCount} block / {day.alertCount} alert
                               </span>
                             )}
                           </button>
-                        ) : (
-                          <div key={`empty-${month}-${index}`} />
-                        )
-                      )}
+                        );
+                      })}
                     </div>
                   </div>
                 ))
@@ -711,22 +759,88 @@ export default function AdminBookings() {
           </div>
         </section>
 
+        <section className="rounded-[16px] border border-amber-100 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-stone-900">官網預約申請待確認</h2>
+              <p className="mt-1 text-sm text-stone-500">
+                這裡只列出前台 /booking 送出的 pending_review 申請，尚未代表訂房成立。
+              </p>
+            </div>
+            <span className="w-fit rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+              {pendingWebsiteRequests.length} 筆待確認
+            </span>
+          </div>
+
+          {pendingWebsiteRequests.length === 0 ? (
+            <div className="mt-4 rounded-[8px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              目前沒有待確認的官網預約申請。
+            </div>
+          ) : (
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              {pendingWebsiteRequests.map((request) => (
+                <article key={request.id} className="rounded-[12px] border border-[#eadfce] bg-[#fbf7f1] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-stone-900">
+                        {request.check_in} → {request.check_out}
+                      </p>
+                      <p className="mt-1 text-xs text-stone-500">建立時間：{formatDateTime(request.created_at)}</p>
+                    </div>
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-amber-700">
+                      待確認
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 text-sm text-stone-700 sm:grid-cols-2">
+                    <p>住宿方式：{stayTypeLabel(request)}</p>
+                    <p>人數：{guestSummary(request)}</p>
+                    <p>寵物：{petSummary(request)}</p>
+                    <p>姓名：{request.guest_name || "-"}</p>
+                    <p>電話：{request.guest_phone || "-"}</p>
+                    <p>Email：{request.guest_email || "-"}</p>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <details>
+                      <summary className="inline-flex h-9 cursor-pointer items-center rounded-full border border-stone-200 bg-white px-3 text-sm font-medium text-stone-700 hover:bg-stone-50">
+                        查看申請
+                      </summary>
+                      <div className="mt-2 rounded-[8px] border border-stone-200 bg-white p-3 text-xs leading-5 text-stone-600">
+                        <p>ID：{request.id}</p>
+                        <p>備註：{request.notes || "-"}</p>
+                        <p>寵物備註：{request.pet_notes || "-"}</p>
+                      </div>
+                    </details>
+                    <Button type="button" size="sm" variant="outline" disabled title="需要新增確認成訂 API 後才能啟用">
+                      確認成訂
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" disabled title="需要新增婉拒 API 後才能啟用">
+                      婉拒
+                    </Button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
         <section className="rounded-[16px] border border-stone-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-xl font-semibold text-stone-900">待處理提醒 / 風險警告</h2>
-              <p className="mt-1 text-sm text-stone-500">P0 需要立即處理；Review 是信件或預約申請待人工確認。</p>
+              <h2 className="text-xl font-semibold text-stone-900">風險警告</h2>
+              <p className="mt-1 text-sm text-stone-500">只顯示 P0/P1/P2 風險；一般官網預約申請已移到上方待確認區。</p>
             </div>
-            <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-600">{alerts.length} 筆</span>
+            <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-600">{riskAlerts.length} 筆</span>
           </div>
           <div className="mt-4">
-            {alerts.length === 0 ? (
+            {riskAlerts.length === 0 ? (
               <div className="rounded-[8px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                 目前沒有未處理提醒。
               </div>
             ) : (
               <div className="grid gap-3 lg:grid-cols-2">
-                {alerts.map((alert) => (
+                {riskAlerts.map((alert) => (
                   <div key={alert.id} className="rounded-[10px] border border-stone-200 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>

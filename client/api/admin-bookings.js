@@ -954,6 +954,14 @@ async function handleReservations(req, res, requestId) {
   sendJson(res, 200, { ok: true, requestId, reservations: reservations || [] });
 }
 
+async function handleRequests(req, res, requestId) {
+  await requireAdmin(req);
+  const requests = await supabaseRequest(
+    "/booking_requests?status=eq.pending_review&select=*&order=created_at.desc&limit=100"
+  );
+  sendJson(res, 200, { ok: true, requestId, requests: requests || [] });
+}
+
 async function dispatch(req, res, requestId) {
   const action = firstQueryValue(req.query?.action) || "dashboard";
   if (req.method === "GET" && action === "dashboard") return handleDashboard(req, res, requestId);
@@ -961,6 +969,7 @@ async function dispatch(req, res, requestId) {
   if (req.method === "GET" && action === "settings") return handleSettingsGet(req, res, requestId);
   if (req.method === "GET" && action === "alerts") return handleAlerts(req, res, requestId);
   if (req.method === "GET" && action === "reservations") return handleReservations(req, res, requestId);
+  if (req.method === "GET" && action === "requests") return handleRequests(req, res, requestId);
   if (req.method === "POST" && action === "external-reservation") return handleExternalReservation(req, res, requestId);
   if (req.method === "POST" && action === "email-detection") return handleEmailDetection(req, res, requestId);
   if (req.method === "POST" && action === "settings") return handleSettingsPost(req, res, requestId);

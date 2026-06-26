@@ -43,6 +43,29 @@ export type BookingReservation = {
   notes?: string | null;
 };
 
+export type BookingRequest = {
+  id: string;
+  status: "pending_review" | "confirmed" | "cancelled";
+  check_in: string;
+  check_out: string;
+  stay_type: "villa" | "room";
+  adults: number;
+  children: number;
+  room_count?: number | null;
+  has_pets: boolean;
+  pet_count?: number | null;
+  pet_type?: string | null;
+  pet_notes?: string | null;
+  guest_name: string;
+  guest_email?: string | null;
+  guest_phone?: string | null;
+  guest_count?: number | null;
+  notes?: string | null;
+  source?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+};
+
 export type BookingAlert = {
   id: string;
   severity: BookingSeverity;
@@ -137,6 +160,10 @@ export function fetchBookingAlerts(token: string) {
 
 export function fetchBookingReservations(token: string) {
   return adminBookingRequest<{ reservations: BookingReservation[] }>(token, "?action=reservations");
+}
+
+export function fetchBookingRequests(token: string) {
+  return adminBookingRequest<{ requests: BookingRequest[] }>(token, "?action=requests");
 }
 
 export function createExternalReservation(token: string, payload: Record<string, unknown>) {

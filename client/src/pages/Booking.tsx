@@ -25,6 +25,7 @@ import {
   type StayType,
 } from "@/lib/bookings/bookingApi";
 import { cn } from "@/lib/utils";
+import { asArray, asString, fetchSitePageContent } from "@/lib/site/siteContentApi";
 
 type BookingForm = {
   guest_name: string;
@@ -41,6 +42,28 @@ type BookingForm = {
   pet_type: PetType;
   pet_notes: string;
   notes: string;
+};
+
+type BookingCmsCopy = {
+  eyebrow: string;
+  title: string;
+  subtitleTemplate: string;
+  instructions: string[];
+  petNote: string;
+  successMessage: string;
+};
+
+const fallbackBookingCopy: BookingCmsCopy = {
+  eyebrow: "STime Villa Booking",
+  title: "預約・歸零",
+  subtitleTemplate: "請先選擇入住與退房日期。目前開放未來 {bookingWindowLabel} 內預約，實際可預約日期以房況日曆為準。",
+  instructions: [
+    "此頁為預約申請，送出後由我們人工確認。",
+    "可預約範圍、包棟或單間開放狀態，依後台設定顯示。",
+    "若日期已被訂房、保留或維修封鎖，將無法送出申請。",
+  ],
+  petNote: "慢慢蒔光為寵物友善 villa，實際入住規範與清潔注意事項，將於人工確認時一併說明。",
+  successMessage: "已收到您的預約申請。我們會先確認房況，再與您聯繫付款與訂房細節。此申請尚未代表訂房成立。",
 };
 
 const emptyForm: BookingForm = {
@@ -249,6 +272,7 @@ function Stepper({
 export default function Booking() {
   const [form, setForm] = useState<BookingForm>(emptyForm);
   const [settings, setSettings] = useState<PublicBookingSettings>(() => ({ ...DEFAULT_BOOKING_SETTINGS }));
+  const [bookingCopy, setBookingCopy] = useState<BookingCmsCopy>(fallbackBookingCopy);
   const [visibleMonth, setVisibleMonth] = useState(() => monthStart(todayText()));
   const [unavailableDates, setUnavailableDates] = useState<Set<string>>(new Set());
   const [maxDate, setMaxDate] = useState(() => addMonthsToDate(todayText(), DEFAULT_BOOKING_SETTINGS.bookingWindowMonths));
@@ -272,6 +296,7 @@ export default function Booking() {
   }`;
   const canShowStayOptions = bookingIsOpen && selectedIsAvailable && !submittedRequestId;
   const canShowContactForm = canShowStayOptions;
+  const heroSubtitle = bookingCopy.subtitleTemplate.replace("{bookingWindowLabel}", settings.bookingWindowLabel);
 
   useEffect(() => {
     let isCurrent = true;
@@ -298,6 +323,32 @@ export default function Booking() {
       isCurrent = false;
     };
   }, [minDate]);
+
+  useEffect(() => {
+    let isCurrent = true;
+    fetchSitePageContent("booking")
+      .then((content) => {
+        if (!isCurrent) return;
+        const hero = content.sections["booking.hero"]?.content;
+        const instructions = content.sections["booking.instructions"]?.content;
+        const petNote = content.sections["booking.pet_note"]?.content;
+        const successMessage = content.sections["booking.success_message"]?.content;
+        const instructionItems = asArray<string>(instructions?.items).filter(Boolean).slice(0, 3);
+        setBookingCopy({
+          eyebrow: asString(hero?.eyebrow, fallbackBookingCopy.eyebrow),
+          title: asString(hero?.title, fallbackBookingCopy.title),
+          subtitleTemplate: asString(hero?.subtitle, fallbackBookingCopy.subtitleTemplate),
+          instructions: instructionItems.length ? instructionItems : fallbackBookingCopy.instructions,
+          petNote: asString(petNote?.text, fallbackBookingCopy.petNote),
+          successMessage: asString(successMessage?.text, fallbackBookingCopy.successMessage),
+        });
+      })
+      .catch(() => setBookingCopy(fallbackBookingCopy));
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   function updateField<K extends keyof BookingForm>(field: K, value: BookingForm[K]) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -387,7 +438,7 @@ export default function Booking() {
       };
       const result = await submitBookingRequest(payload);
       setSubmittedRequestId(result.request.id);
-      setMessage("已收到您的預約申請。我們會先確認房況，再與您聯繫付款與訂房細節。此申請尚未代表訂房成立。");
+      setMessage(bookingCopy.successMessage);
       setUnavailableDates((current) => {
         const next = new Set(current);
         let date = form.check_in;
@@ -460,6 +511,25 @@ export default function Booking() {
       <main className="px-4 pb-16 pt-32 md:px-8 md:pt-40">
         <section className="mx-auto max-w-6xl">
           <div className="rounded-[24px] border border-[#eadfce] bg-white/90 p-6 shadow-sm md:p-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#b08d73]">
+              {bookingCopy.eyebrow}
+            </p>
+            <div className="mt-4 grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
+              <div>
+                <h1 className="font-serif text-4xl font-light tracking-wide text-stone-900 md:text-5xl">
+                  {bookingCopy.title}
+                </h1>
+                <p className="mt-5 text-base leading-8 text-stone-600">{heroSubtitle}</p>
+              </div>
+              <div className="rounded-[16px] bg-[#f7f1e9] p-4 text-sm leading-7 text-stone-600">
+                {bookingCopy.instructions.map((item) => (
+                  <p key={item}>・{item}</p>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="hidden rounded-[24px] border border-[#eadfce] bg-white/90 p-6 shadow-sm md:p-8">
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#b08d73]">STime Villa Booking</p>
             <div className="mt-4 grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
               <div>
@@ -627,7 +697,7 @@ export default function Booking() {
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
                       <p className="font-semibold text-stone-900">是否攜帶寵物？</p>
-                      <p className="mt-1 text-sm leading-6 text-stone-500">慢慢蒔光為寵物友善 villa，實際入住規範與清潔注意事項，將於人工確認時一併說明。</p>
+                      <p className="mt-1 text-sm leading-6 text-stone-500">{bookingCopy.petNote}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <Button

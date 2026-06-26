@@ -9,59 +9,110 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { asArray, asString, fetchSitePageContent } from "@/lib/site/siteContentApi";
 
-const rooms = [
+type RoomItem = {
+  id: string;
+  name: string;
+  title: string;
+  image: string;
+  description: string;
+  alt: string;
+};
+
+const fallbackRooms: RoomItem[] = [
   {
-    id: 1,
+    id: "blue-ocean",
     name: "Blue Ocean",
-    zhName: "藍海 · 雙人房",
+    title: "藍色主題房",
     image: "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?q=80&w=3000&auto=format&fit=crop",
-    desc: "Private pool with ocean view",
-    poetry: "與海浪共眠的溫柔時刻",
-    tags: ["22 Ping", "Sea View", "King Bed"]
+    description: "留給海風與睡眠的一間房。",
+    alt: "藍色主題房",
   },
   {
-    id: 2,
+    id: "acacia",
     name: "Acacia",
-    zhName: "相思 · 雙人房",
+    title: "相思主題房",
     image: "https://images.unsplash.com/photo-1591088398332-8a7791972843?q=80&w=3000&auto=format&fit=crop",
-    desc: "Surrounded by acacia trees",
-    poetry: "微風吹拂，樹影搖曳的午後",
-    tags: ["18 Ping", "Forest View", "Bathtub"]
+    description: "把樹影與日光收進窗邊。",
+    alt: "相思主題房",
   },
   {
-    id: 3,
+    id: "moon-pond",
     name: "Moon Pond",
-    zhName: "月池 · 雙人房",
+    title: "月池主題房",
     image: "https://images.unsplash.com/photo-1618773928121-c32242e63f39?q=80&w=3000&auto=format&fit=crop",
-    desc: "Reflecting the moonlight",
-    poetry: "月光灑落，倒映心靈的寧靜",
-    tags: ["20 Ping", "Garden View", "Tatami"]
+    description: "適合把夜晚放慢的一間房。",
+    alt: "月池主題房",
   },
   {
-    id: 4,
+    id: "mist-valley",
     name: "Mist Valley",
-    zhName: "霧谷 · 雙人房",
+    title: "霧谷主題房",
     image: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?q=80&w=3000&auto=format&fit=crop",
-    desc: "Embrace the mountain mist",
-    poetry: "山嵐繚繞，如詩如畫的仙境",
-    tags: ["24 Ping", "Mountain View", "Balcony"]
+    description: "山色與清晨霧氣在這裡停留。",
+    alt: "霧谷主題房",
   },
   {
-    id: 5,
+    id: "starry-night",
     name: "Starry Night",
-    zhName: "星空 · 四人房",
+    title: "星夜主題房",
     image: "https://images.unsplash.com/photo-1505691938895-1758d7feb511?q=80&w=3000&auto=format&fit=crop",
-    desc: "Watch the stars from your bed",
-    poetry: "仰望星空，許下最美的願望",
-    tags: ["30 Ping", "Sky View", "Family"]
-  }
+    description: "把星光留給入睡前的片刻。",
+    alt: "星夜主題房",
+  },
 ];
 
 export function Rooms() {
   const [api, setApi] = React.useState<CarouselApi>();
   const [current, setCurrent] = React.useState(0);
   const [count, setCount] = React.useState(0);
+  const [heading, setHeading] = React.useState({
+    eyebrow: "The Sanctuaries",
+    title: "房型介紹",
+    subtitle: "五間主題房，留給一組客人的完整時光。",
+  });
+  const [rooms, setRooms] = React.useState<RoomItem[]>(fallbackRooms);
+
+  React.useEffect(() => {
+    let isCurrent = true;
+    fetchSitePageContent("rooms")
+      .then((content) => {
+        if (!isCurrent) return;
+        const hero = content.sections["rooms.hero"]?.content;
+        const roomList = content.sections["rooms.room_list"]?.content;
+        setHeading({
+          eyebrow: asString(hero?.eyebrow, "The Sanctuaries"),
+          title: asString(hero?.title, "房型介紹"),
+          subtitle: asString(hero?.subtitle, "五間主題房，留給一組客人的完整時光。"),
+        });
+
+        const nextRooms = asArray<Record<string, unknown>>(roomList?.rooms)
+          .map((room, index) => ({
+            id: asString(room.name, `room-${index + 1}`).toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+            name: asString(room.name, `Room ${index + 1}`),
+            title: asString(room.title, `主題房 ${index + 1}`),
+            image: asString(room.image_url, fallbackRooms[index]?.image || fallbackRooms[0].image),
+            description: asString(room.description, fallbackRooms[index]?.description || ""),
+            alt: asString(room.alt_text, asString(room.title, `主題房 ${index + 1}`)),
+          }))
+          .filter((room) => room.title && room.image)
+          .slice(0, 5);
+        if (nextRooms.length) setRooms(nextRooms);
+      })
+      .catch(() => {
+        if (!isCurrent) return;
+        setHeading({
+          eyebrow: "The Sanctuaries",
+          title: "房型介紹",
+          subtitle: "五間主題房，留給一組客人的完整時光。",
+        });
+        setRooms(fallbackRooms);
+      });
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   React.useEffect(() => {
     if (!api) return;
@@ -75,29 +126,26 @@ export function Rooms() {
   }, [api]);
 
   return (
-    <section className="py-24 bg-white">
-      <div className="container mx-auto px-4 md:px-8 relative">
-
-        {/* Header */}
+    <section className="bg-white py-24" id="rooms">
+      <div className="container relative mx-auto px-4 md:px-8">
         <motion.div
-          className="flex flex-col items-center text-center mb-16 space-y-4"
+          className="mb-16 flex flex-col items-center space-y-4 text-center"
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: "easeOut" }}
           viewport={{ once: true }}
         >
-          <span className="text-gray-400 text-xs tracking-[0.3em] uppercase font-medium">
-            The Sanctuaries
+          <span className="text-xs font-medium uppercase tracking-[0.3em] text-gray-400">
+            {heading.eyebrow}
           </span>
-          <h2 className="font-serif text-4xl md:text-5xl text-gray-900">
-            空間 · 棲息
+          <h2 className="font-serif text-4xl text-gray-900 md:text-5xl">
+            {heading.title}
           </h2>
-          <p className="text-gray-500 font-serif text-sm md:text-base tracking-wide mt-2 opacity-80">
-            在流動的時間裡，找到一個安放靈魂的角落。
+          <p className="mt-2 font-serif text-sm tracking-wide text-gray-500 opacity-80 md:text-base">
+            {heading.subtitle}
           </p>
         </motion.div>
 
-        {/* Carousel */}
         <div className="relative md:px-14">
           <Carousel
             setApi={setApi}
@@ -108,38 +156,32 @@ export function Rooms() {
             className="w-full"
           >
             <CarouselContent className="-ml-4 md:-ml-8">
-              {/* 
-                  CHANGE LOG: 
-                  - Removed Tags loop.
-                  - Adjusted h3 tracking-wide.
-                  - Cleaned up layout for minimalist textual look.
-                  - Added "View Room" link.
-               */}
               {rooms.map((room) => (
-                <CarouselItem key={room.id} className="pl-4 md:pl-8 basis-[85%] md:basis-1/2 lg:basis-1/3">
+                <CarouselItem key={room.id} className="basis-[85%] pl-4 md:basis-1/2 md:pl-8 lg:basis-1/3">
                   <div className="group cursor-pointer">
-                    {/* Image Container */}
-                    <div className="aspect-[4/3] overflow-hidden mb-6 bg-gray-100 rounded-none relative">
+                    <div className="relative mb-6 aspect-[4/3] overflow-hidden bg-gray-100">
                       <img
                         src={room.image}
-                        alt={room.name}
-                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                        alt={room.alt}
+                        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                        onError={(event) => {
+                          event.currentTarget.src = fallbackRooms[0].image;
+                        }}
                       />
                     </div>
 
-                    {/* Content Container (Below Image) */}
-                    <div className="text-left space-y-2 px-1">
-                      <h3 className="font-serif text-2xl text-gray-900 group-hover:text-gray-600 transition-colors tracking-wide">
-                        {room.zhName}
+                    <div className="space-y-2 px-1 text-left">
+                      <h3 className="font-serif text-2xl tracking-wide text-gray-900 transition-colors group-hover:text-gray-600">
+                        {room.title}
                       </h3>
 
-                      <p className="text-gray-500 text-sm font-serif tracking-in-widest italic opacity-80 decoration-gray-300">
-                        "{room.poetry}"
+                      <p className="font-serif text-sm italic tracking-wide text-gray-500 opacity-80 decoration-gray-300">
+                        "{room.description}"
                       </p>
 
                       <div className="pt-2">
-                        <span className="text-[10px] tracking-[0.2em] uppercase text-gray-400 group-hover:text-black transition-colors flex items-center gap-2">
-                          View Room <ArrowRight className="w-3 h-3" />
+                        <span className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-gray-400 transition-colors group-hover:text-black">
+                          View Room <ArrowRight className="h-3 w-3" />
                         </span>
                       </div>
                     </div>
@@ -149,37 +191,33 @@ export function Rooms() {
             </CarouselContent>
           </Carousel>
 
-          {/* Navigation Buttons (Desktop Only) */}
           <div className="hidden md:block">
             <Button
               variant="outline"
               size="icon"
-              className="absolute top-[35%] left-0 rounded-full w-12 h-12 border border-gray-200 bg-white/50 backdrop-blur-sm hover:bg-black hover:text-white hover:border-black transition-all duration-300"
+              className="absolute left-0 top-[35%] h-12 w-12 rounded-full border border-gray-200 bg-white/50 backdrop-blur-sm transition-all duration-300 hover:border-black hover:bg-black hover:text-white"
               onClick={() => api?.scrollPrev()}
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="h-4 w-4" />
             </Button>
             <Button
               variant="outline"
               size="icon"
-              className="absolute top-[35%] right-0 rounded-full w-12 h-12 border border-gray-200 bg-white/50 backdrop-blur-sm hover:bg-black hover:text-white hover:border-black transition-all duration-300"
+              className="absolute right-0 top-[35%] h-12 w-12 rounded-full border border-gray-200 bg-white/50 backdrop-blur-sm transition-all duration-300 hover:border-black hover:bg-black hover:text-white"
               onClick={() => api?.scrollNext()}
             >
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
-        {/* Pagination Dots */}
-        <div className="flex justify-center gap-2 mt-12 md:mt-16">
+        <div className="mt-12 flex justify-center gap-2 md:mt-16">
           {Array.from({ length: count }).map((_, index) => (
             <button
               key={index}
               className={cn(
-                "w-2 h-2 rounded-full transition-all duration-300",
-                current === index + 1
-                  ? "bg-gray-800 w-6"
-                  : "bg-gray-300 hover:bg-gray-400"
+                "h-2 rounded-full transition-all duration-300",
+                current === index + 1 ? "w-6 bg-gray-800" : "w-2 bg-gray-300 hover:bg-gray-400",
               )}
               onClick={() => api?.scrollTo(index)}
               aria-label={`Go to slide ${index + 1}`}
@@ -187,9 +225,11 @@ export function Rooms() {
           ))}
         </div>
 
-        {/* Bottom Action */}
-        <div className="text-center mt-12 md:mt-16">
-          <Button variant="outline" className="rounded-none px-12 py-6 uppercase tracking-widest text-xs border-gray-300 text-gray-600 hover:bg-gray-900 hover:text-white transition-all duration-500">
+        <div className="mt-12 text-center md:mt-16">
+          <Button
+            variant="outline"
+            className="rounded-none border-gray-300 px-12 py-6 text-xs uppercase tracking-widest text-gray-600 transition-all duration-500 hover:bg-gray-900 hover:text-white"
+          >
             View All Rooms
           </Button>
         </div>

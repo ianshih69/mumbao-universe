@@ -17,9 +17,18 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { asArray, asBoolean, asString, fetchSiteGlobalContent } from "@/lib/site/siteContentApi";
+
+type MenuItem = {
+  label: string;
+  href: string;
+  internal: boolean;
+  sort_order?: number;
+};
 
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
+  const [cmsMenuItems, setCmsMenuItems] = useState<MenuItem[] | null>(null);
   const [location, setLocation] = useLocation();
   const { isAuthenticated, isLoading, user, signOut } = useCustomerAuth();
 
@@ -44,7 +53,7 @@ export function Header() {
   const localeMatch = location.match(/^\/(zh-TW|en|ja|ko)(?=\/|$)/);
   const localePrefix = localeMatch ? `/${localeMatch[1]}` : "";
 
-  const menuItems = [
+  const fallbackMenuItems: MenuItem[] = [
     { label: "關於我們", href: "/about", internal: true },
     { label: "最新消息", href: "/#news", internal: false },
     { label: "認識慢寶", href: `${localePrefix}/about-mumbao`, internal: true },
@@ -53,6 +62,39 @@ export function Header() {
     { label: "宇宙碎品", href: "/shop", internal: true },
     { label: "媒體報導", href: "/#news", internal: false },
   ];
+  const menuItems = cmsMenuItems?.length ? cmsMenuItems : fallbackMenuItems;
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    fetchSiteGlobalContent()
+      .then((content) => {
+        if (!isCurrent) return;
+        const navigation = content.sections["global.navigation"]?.content;
+        const nextItems = asArray<Record<string, unknown>>(navigation?.items)
+          .filter((item) => asBoolean(item.is_visible, true))
+          .map((item) => {
+            const href = asString(item.href, "/");
+            return {
+              label: asString(item.label, ""),
+              href,
+              internal: typeof item.internal === "boolean" ? item.internal : href.startsWith("/"),
+              sort_order: Number(item.sort_order || 0),
+            };
+          })
+          .filter((item) => item.label && item.href)
+          .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
+          .slice(0, 12);
+        setCmsMenuItems(nextItems.length ? nextItems : null);
+      })
+      .catch(() => {
+        if (isCurrent) setCmsMenuItems(null);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   const languages = ["繁體中文", "日本語", "韓語", "English"];
   const isShopPage = location === "/shop" || location.startsWith("/shop/");

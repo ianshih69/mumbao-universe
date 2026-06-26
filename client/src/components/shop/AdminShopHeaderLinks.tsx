@@ -10,7 +10,7 @@ const mobileMenuItemClassName =
   "flex min-h-11 w-full items-center rounded-xl px-3 py-2.5 text-left text-sm font-medium text-stone-700 transition hover:bg-[#f7f1e9]";
 
 type AdminShopHeaderLinksProps = {
-  context?: "shop" | "bookings";
+  context?: "shop" | "bookings" | "site";
   onRefresh?: () => void | Promise<void>;
   isRefreshing?: boolean;
   showLogout?: boolean;
@@ -24,10 +24,21 @@ export default function AdminShopHeaderLinks({
 }: AdminShopHeaderLinksProps) {
   const [, setLocation] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const secondaryLink =
+  const secondaryLinks =
     context === "bookings"
-      ? { label: "文創商城後台", href: "/admin/shop" }
-      : { label: "房況管理", href: "/admin/bookings" };
+      ? [
+          { label: "文創商城後台", href: "/admin/shop" },
+          { label: "官網內容管理", href: "/admin/site" },
+        ]
+      : context === "site"
+        ? [
+            { label: "文創商城後台", href: "/admin/shop" },
+            { label: "房況管理", href: "/admin/bookings" },
+          ]
+        : [
+            { label: "房況管理", href: "/admin/bookings" },
+            { label: "官網內容管理", href: "/admin/site" },
+          ];
 
   useEffect(() => {
     if (!isMobileMenuOpen) return;
@@ -63,9 +74,11 @@ export default function AdminShopHeaderLinks({
         <Link href="/account" className={adminHeaderLinkClassName}>
           管理入口
         </Link>
-        <Link href={secondaryLink.href} className={adminHeaderLinkClassName}>
-          {secondaryLink.label}
-        </Link>
+        {secondaryLinks.map((link) => (
+          <Link key={link.href} href={link.href} className={adminHeaderLinkClassName}>
+            {link.label}
+          </Link>
+        ))}
         <FrontendPreviewMenu />
       </span>
 
@@ -108,9 +121,11 @@ export default function AdminShopHeaderLinks({
               <Link href="/account" className={mobileMenuItemClassName} onClick={closeMobileMenu}>
                 管理入口
               </Link>
-              <Link href={secondaryLink.href} className={mobileMenuItemClassName} onClick={closeMobileMenu}>
-                {secondaryLink.label}
-              </Link>
+              {secondaryLinks.map((link) => (
+                <Link key={link.href} href={link.href} className={mobileMenuItemClassName} onClick={closeMobileMenu}>
+                  {link.label}
+                </Link>
+              ))}
 
               <div className="mt-2 border-t border-stone-100 pt-2">
                 <p className="px-3 pb-1 text-xs font-semibold text-stone-400">前台預覽</p>

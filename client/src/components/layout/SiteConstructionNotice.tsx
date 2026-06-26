@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
+import { asBoolean, asString, fetchSiteGlobalContent } from "@/lib/site/siteContentApi";
 
 const ENABLE_CONSTRUCTION_NOTICE = true;
 const NOTICE_STORAGE_KEY = "mumbao_site_notice_seen";
+const FALLBACK_BANNER_TEXT = "官網建置中｜預計 2026 年 7～9 月試營運／正式營業";
 
 export function SiteConstructionNotice() {
   const [shouldShowModal, setShouldShowModal] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [bannerText, setBannerText] = useState(FALLBACK_BANNER_TEXT);
+  const [isBannerVisible, setIsBannerVisible] = useState(true);
 
   useEffect(() => {
     if (!ENABLE_CONSTRUCTION_NOTICE) {
@@ -19,6 +23,25 @@ export function SiteConstructionNotice() {
     } finally {
       setIsReady(true);
     }
+  }, []);
+
+  useEffect(() => {
+    let isCurrent = true;
+    fetchSiteGlobalContent()
+      .then((content) => {
+        if (!isCurrent) return;
+        const topBanner = content.sections["global.top_banner"]?.content;
+        setBannerText(asString(topBanner?.text, FALLBACK_BANNER_TEXT));
+        setIsBannerVisible(asBoolean(topBanner?.is_visible, true));
+      })
+      .catch(() => {
+        if (!isCurrent) return;
+        setBannerText(FALLBACK_BANNER_TEXT);
+        setIsBannerVisible(true);
+      });
+    return () => {
+      isCurrent = false;
+    };
   }, []);
 
   if (!ENABLE_CONSTRUCTION_NOTICE) {
@@ -37,13 +60,15 @@ export function SiteConstructionNotice() {
 
   return (
     <>
-      <div
-        className="pointer-events-none fixed left-0 right-0 top-0 z-[60] bg-[#8b6f5b]/95 px-4 py-2 text-center text-xs font-medium tracking-wide text-white shadow-sm sm:text-sm"
-        role="status"
-        aria-live="polite"
-      >
-        官網建置中｜預計 2026 年 7～9 月試營運／正式營業
-      </div>
+      {isBannerVisible && (
+        <div
+          className="pointer-events-none fixed left-0 right-0 top-0 z-[60] bg-[#8b6f5b]/95 px-4 py-2 text-center text-xs font-medium tracking-wide text-white shadow-sm sm:text-sm"
+          role="status"
+          aria-live="polite"
+        >
+          {bannerText}
+        </div>
+      )}
 
       {isReady && shouldShowModal && (
         <div

@@ -718,17 +718,17 @@ export default function AdminShopOrders() {
             </h1>
           </div>
           <div className="flex flex-wrap gap-3">
-            <AdminShopHeaderLinks />
+            <AdminShopHeaderLinks onRefresh={() => loadOrders({ nextPage: 0 })} isRefreshing={isLoading} />
             <Button
               variant="outline"
-              className="rounded-full bg-white"
+              className="hidden rounded-full bg-white md:inline-flex"
               onClick={() => loadOrders({ nextPage: 0 })}
               disabled={isLoading}
             >
               <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
               重新整理
             </Button>
-            <Button variant="ghost" className="rounded-full" onClick={logout}>
+            <Button variant="ghost" className="hidden rounded-full md:inline-flex" onClick={logout}>
               <LogOut className="h-4 w-4" />
               登出
             </Button>

@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 
-const previewLinks = [
+export const frontendPreviewLinks = [
   { label: "官網首頁", href: "/" },
   { label: "線上訂房", href: "/booking" },
   { label: "宇宙碎品", href: "/shop" },
@@ -13,7 +13,7 @@ export default function FrontendPreviewMenu() {
         前台預覽
       </summary>
       <div className="absolute right-0 z-30 mt-2 w-48 overflow-hidden rounded-2xl border border-stone-200 bg-white py-2 text-sm shadow-lg shadow-stone-200/60">
-        {previewLinks.map((link) => (
+        {frontendPreviewLinks.map((link) => (
           <Link
             key={link.href}
             href={link.href}

@@ -215,7 +215,7 @@ export default function AdminShopAccount() {
           </div>
           <div className="flex flex-wrap gap-3">
             <AdminShopHeaderLinks />
-            <Button variant="ghost" className="rounded-full" onClick={logout}>
+            <Button variant="ghost" className="hidden rounded-full md:inline-flex" onClick={logout}>
               <LogOut className="h-4 w-4" />
               登出
             </Button>

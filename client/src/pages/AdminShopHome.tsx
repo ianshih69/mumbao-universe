@@ -357,18 +357,18 @@ export default function AdminShopHome() {
             )}
           </div>
           <div className="flex flex-wrap gap-3">
-            <AdminShopHeaderLinks />
+            <AdminShopHeaderLinks onRefresh={() => loadDashboard()} isRefreshing={isDashboardLoading} />
             <Button
               type="button"
               variant="outline"
-              className="rounded-full bg-white"
+              className="hidden rounded-full bg-white md:inline-flex"
               onClick={() => loadDashboard()}
               disabled={isDashboardLoading}
             >
               <RefreshCw className={cn("h-4 w-4", isDashboardLoading && "animate-spin")} />
               重新整理
             </Button>
-            <Button variant="ghost" className="rounded-full" onClick={logout}>
+            <Button variant="ghost" className="hidden rounded-full md:inline-flex" onClick={logout}>
               <LogOut className="h-4 w-4" />
               登出
             </Button>

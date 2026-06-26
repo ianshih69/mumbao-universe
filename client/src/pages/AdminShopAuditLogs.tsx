@@ -229,7 +229,7 @@ export default function AdminShopAuditLogs() {
             <p className="mt-2 text-sm text-stone-600">記錄重要寫入操作，不包含密碼、token 或 secret。</p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <AdminShopHeaderLinks />
+            <AdminShopHeaderLinks onRefresh={() => void load(token, page)} />
           </div>
         </div>
 

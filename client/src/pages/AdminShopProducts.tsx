@@ -539,7 +539,7 @@ export default function AdminShopProducts() {
             </h1>
           </div>
           <div className="flex flex-wrap gap-3">
-            <AdminShopHeaderLinks />
+            <AdminShopHeaderLinks onRefresh={() => loadProducts({ nextPage: 0 })} isRefreshing={isLoading} />
             <a
               href="/admin/shop/orders"
               className="inline-flex h-10 items-center rounded-full border border-stone-200 bg-white px-4 text-sm text-stone-700 hover:bg-stone-50"
@@ -556,14 +556,14 @@ export default function AdminShopProducts() {
             </Button>
             <Button
               variant="outline"
-              className="rounded-full bg-white"
+              className="hidden rounded-full bg-white md:inline-flex"
               onClick={() => loadProducts({ nextPage: 0 })}
               disabled={isLoading}
             >
               <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
               重新整理
             </Button>
-            <Button variant="ghost" className="rounded-full" onClick={logout}>
+            <Button variant="ghost" className="hidden rounded-full md:inline-flex" onClick={logout}>
               <LogOut className="h-4 w-4" />
               登出
             </Button>

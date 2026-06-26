@@ -173,9 +173,9 @@ export default function AdminShopUsers() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <AdminShopHeaderLinks />
+            <AdminShopHeaderLinks onRefresh={() => void load()} />
             <button
-              className="rounded-full border border-stone-200 bg-white px-4 py-2 text-sm text-stone-600"
+              className="hidden rounded-full border border-stone-200 bg-white px-4 py-2 text-sm text-stone-600 md:inline-flex"
               onClick={() => void load()}
             >
               重新整理

@@ -339,7 +339,7 @@ export default function AdminShopScan() {
             >
               商品管理
             </a>
-            <Button variant="ghost" className="rounded-full" onClick={logout}>
+            <Button variant="ghost" className="hidden rounded-full md:inline-flex" onClick={logout}>
               <LogOut className="h-4 w-4" />
               登出
             </Button>

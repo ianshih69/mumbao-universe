@@ -560,9 +560,9 @@ export default function AdminShopWarehouse() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <AdminShopHeaderLinks />
+            <AdminShopHeaderLinks onRefresh={() => void loadAll()} isRefreshing={isLoading} />
             <button
-              className="rounded-full border border-stone-200 bg-white px-4 py-2 text-sm text-stone-600 hover:bg-stone-50"
+              className="hidden rounded-full border border-stone-200 bg-white px-4 py-2 text-sm text-stone-600 hover:bg-stone-50 md:inline-flex"
               onClick={() => {
                 clearAdminToken();
                 setAuthStatus("loggedOut");

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import FrontendPreviewMenu from "@/components/shop/FrontendPreviewMenu";
+import AdminShopHeaderLinks from "@/components/shop/AdminShopHeaderLinks";
 import { getAdminToken, isAdminAuthError } from "@/lib/shop/adminAuth";
 import {
   createExternalReservation,
@@ -543,14 +543,8 @@ export default function AdminBookings() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" asChild>
-                <Link href="/account">管理入口</Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/admin/shop">文創商城後台</Link>
-              </Button>
-              <FrontendPreviewMenu />
-              <Button className="bg-[#8b6f5b] hover:bg-[#765d4a]" onClick={() => void loadAll()} disabled={isLoading}>
+              <AdminShopHeaderLinks context="bookings" onRefresh={() => void loadAll()} isRefreshing={isLoading} />
+              <Button className="hidden bg-[#8b6f5b] hover:bg-[#765d4a] md:inline-flex" onClick={() => void loadAll()} disabled={isLoading}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 重新整理
               </Button>

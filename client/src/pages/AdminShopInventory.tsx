@@ -532,7 +532,13 @@ export default function AdminShopInventory() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <AdminShopHeaderLinks />
+            <AdminShopHeaderLinks
+              onRefresh={() => {
+                loadProducts();
+                loadMovements({ nextPage: 0 });
+              }}
+              isRefreshing={isProductsLoading || isMovementsLoading}
+            />
             <a
               href="/admin/shop/pos"
               className="inline-flex h-10 items-center rounded-full border border-stone-200 bg-white px-4 text-sm text-stone-700 hover:bg-stone-50"
@@ -559,7 +565,7 @@ export default function AdminShopInventory() {
             </a>
             <Button
               variant="outline"
-              className="rounded-full bg-white"
+              className="hidden rounded-full bg-white md:inline-flex"
               onClick={() => {
                 loadProducts();
                 loadMovements({ nextPage: 0 });
@@ -574,7 +580,7 @@ export default function AdminShopInventory() {
               />
               重新整理
             </Button>
-            <Button variant="ghost" className="rounded-full" onClick={logout}>
+            <Button variant="ghost" className="hidden rounded-full md:inline-flex" onClick={logout}>
               <LogOut className="h-4 w-4" />
               登出
             </Button>

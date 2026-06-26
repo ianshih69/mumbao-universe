@@ -25,7 +25,7 @@ const mumbaoImages = {
   },
   back: {
     src: "/images/mumbao/m2.jpg",
-    alt: "慢寶背面素描設定圖",
+    alt: "慢寶背面的星情光輪素描圖",
   },
 };
 
@@ -69,10 +69,11 @@ const storyParagraphs = [
   "慢寶降落地球的第一步，踩在蒔光雲上。從那一刻起，他便開始守護每一顆疲憊的心，陪伴每一個還在努力生活的人。",
 ];
 
-const backParagraphs = [
-  "慢寶的背影，是一種很安靜的守護。",
-  "他不會催促你，不會要求你立刻變好。他只是靜靜地陪著你，像一朵雲、一盞小小的光，提醒你可以慢下來，可以休息，也可以不用那麼用力。",
-  "當慢寶冥想時，蒔光雲會飄浮在他的頭上。他安靜地接收宇宙智慧，也把溫柔的能量送給每一位來到這裡的旅人。",
+const starrySoulParagraphs = [
+  "慢寶背後的星星，不只是裝飾。它有一個可愛的小名，叫做「星星屁」；真正的名字，是星情光輪。",
+  "當慢寶從第七次元降臨地球時，宇宙在他身上留下這枚光之印記。它是慢寶存在的證明，也是情緒能量的核心。",
+  "星情光輪承載著愛與情緒的頻率。即使慢寶安靜不說話，它也會持續溫柔發光，提醒你：你不是偶然來到這個世界，你本來就帶著屬於自己的光。",
+  "即使慢慢來，即使什麼都不做，你依然值得被愛與守護。",
 ];
 
 const quotes = [
@@ -281,26 +282,23 @@ export default function Mumbao() {
               variants={fadeInUp}
             >
               <div className="space-y-4">
-                <SectionLabel>Quiet Guardian</SectionLabel>
+                <SectionLabel>STARRY SOUL MARK</SectionLabel>
                 <h2 className="text-3xl font-semibold tracking-[0.03em] text-[#3F352F] md:text-4xl">
-                  慢寶的背影
+                  星情光輪
                 </h2>
               </div>
 
               <div className="space-y-5 text-base leading-[1.9] tracking-[0.03em] text-[#5F5148] md:text-lg">
-                {backParagraphs.map((paragraph, index) => (
+                {starrySoulParagraphs.map((paragraph, index) => (
                   <p key={index}>{paragraph}</p>
                 ))}
               </div>
 
               <div className="rounded-[24px] border border-[#E8B6B6]/45 bg-white/65 px-6 py-6 shadow-[0_18px_45px_rgba(90,65,45,0.08)]">
-                <p className="mb-4 text-[#8A7B72]">如果你累了，慢寶想讓你知道：</p>
                 <p className="text-xl font-semibold leading-[1.8] tracking-[0.03em] text-[#3F352F] md:text-2xl">
-                  你不需要證明什麼。
+                  那不是一顆星，
                   <br />
-                  你不需要改變，才值得被愛。
-                  <br />
-                  你本來就是宇宙裡獨一無二的一道光。
+                  是宇宙替你保留下來的一段光。
                 </p>
               </div>
             </motion.div>

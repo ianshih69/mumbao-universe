@@ -134,7 +134,7 @@ export async function ensureFreshAdminSession(currentToken: string) {
   return refreshed.accessToken;
 }
 
-export async function fetchAdminSession(token: string) {
+export async function fetchAdminSession(token: string, expiresAt?: string | null, refreshToken?: string) {
   const data = await requestAdminIdentity<{
     authMode: "account";
     user: AdminIdentity;
@@ -142,6 +142,8 @@ export async function fetchAdminSession(token: string) {
   }>("/api/admin-shop?action=admin-session", token);
   setAdminSession({
     accessToken: token,
+    refreshToken,
+    expiresAt,
     user: {
       ...data.user,
       permissions: data.permissions || data.user?.permissions || [],

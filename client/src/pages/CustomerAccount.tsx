@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import { fetchAdminSession } from "@/lib/shop/adminIdentityApi";
 import {
   fetchCustomerOrderDetail,
   fetchCustomerOrders,
@@ -94,6 +95,7 @@ export default function CustomerAccount() {
   const [isOrderDetailLoading, setIsOrderDetailLoading] = useState(false);
   const [orderDetailError, setOrderDetailError] = useState("");
   const [adminAccess, setAdminAccess] = useState<CustomerAdminAccess | null>(null);
+  const [adminBridgeTarget, setAdminBridgeTarget] = useState("");
 
   useEffect(() => {
     setForm(getProfileFormState(profile));
@@ -136,6 +138,26 @@ export default function CustomerAccount() {
   async function handleSignOut() {
     await signOut();
     setLocation("/shop");
+  }
+
+  async function openAdminLink(href: string) {
+    if (!session?.access_token) {
+      setLocation(`/admin/shop/login?redirect=${encodeURIComponent(href)}`);
+      return;
+    }
+
+    setAdminBridgeTarget(href);
+    try {
+      const expiresAt = session.expires_at
+        ? new Date(session.expires_at * 1000).toISOString()
+        : null;
+      await fetchAdminSession(session.access_token, expiresAt, session.refresh_token);
+      window.location.href = href;
+    } catch {
+      window.location.href = `/admin/shop/login?redirect=${encodeURIComponent(href)}`;
+    } finally {
+      setAdminBridgeTarget("");
+    }
   }
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
@@ -301,14 +323,16 @@ export default function CustomerAccount() {
                   {adminAccess.adminLinks.length > 0 ? (
                     <div className="mt-3 grid gap-2">
                       {adminAccess.adminLinks.map((link) => (
-                        <a
+                        <button
                           key={link.href}
-                          href={link.href}
-                          className="inline-flex items-center justify-between gap-2 rounded-full bg-white px-3 py-2 text-xs font-medium text-[#765d4a] transition hover:bg-[#f3eadf]"
+                          type="button"
+                          disabled={adminBridgeTarget === link.href}
+                          onClick={() => void openAdminLink(link.href)}
+                          className="inline-flex items-center justify-between gap-2 rounded-full bg-white px-3 py-2 text-left text-xs font-medium text-[#765d4a] transition hover:bg-[#f3eadf] disabled:cursor-wait disabled:opacity-60"
                         >
-                          <span>{link.label}</span>
+                          <span>{adminBridgeTarget === link.href ? "正在進入..." : link.label}</span>
                           <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
+                        </button>
                       ))}
                     </div>
                   ) : (

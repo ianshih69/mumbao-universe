@@ -13,6 +13,27 @@ const CUSTOMER_ORDER_SELECT =
 const CUSTOMER_ORDER_DETAIL_SELECT =
   "id,order_number,created_at,order_source,customer_name,customer_phone,customer_email,shipping_address,subtotal,shipping_fee,total,payment_status,order_status,shipping_carrier,tracking_number";
 const ORDER_NUMBER_PATTERN = /^[A-Za-z0-9_-]{3,64}$/;
+const ADMIN_LINKS_BY_ROLE = {
+  super_admin: [
+    { label: "商店後台", href: "/admin/shop" },
+    { label: "房況管理", href: "/admin/bookings" },
+    { label: "使用者管理", href: "/admin/shop/users" },
+    { label: "操作紀錄", href: "/admin/shop/audit-logs" },
+  ],
+  admin: [
+    { label: "商店後台", href: "/admin/shop" },
+    { label: "房況管理", href: "/admin/bookings" },
+    { label: "倉儲與資產", href: "/admin/shop/warehouse" },
+    { label: "操作紀錄", href: "/admin/shop/audit-logs" },
+  ],
+  manager: [
+    { label: "房況管理", href: "/admin/bookings" },
+    { label: "訂單管理", href: "/admin/shop/orders" },
+    { label: "倉儲與資產", href: "/admin/shop/warehouse" },
+  ],
+  housekeeper: [{ label: "倉儲與資產", href: "/admin/shop/warehouse" }],
+  cleaner: [],
+};
 
 const PROFILE_FIELDS = new Set([
   "name",
@@ -178,6 +199,15 @@ async function findProfileByAuthUserId(authUserId) {
   return Array.isArray(rows) && rows.length ? rows[0] : null;
 }
 
+async function findActiveAdminProfileByAuthUserId(authUserId) {
+  const rows = await supabaseRequest(
+    `/admin_profiles?auth_user_id=eq.${encodeURIComponent(
+      authUserId,
+    )}&is_active=eq.true&select=role_code&limit=1`,
+  );
+  return Array.isArray(rows) && rows.length ? rows[0] : null;
+}
+
 function isUniqueConflict(error) {
   const message = String(error?.message || "");
   return (
@@ -300,6 +330,32 @@ async function handleProfile(req, res, requestId) {
   }
 
   return sendJson(res, 405, { error: "method_not_allowed", requestId });
+}
+
+async function handleAdminLinks(req, res, requestId) {
+  if (req.method !== "GET") {
+    return sendJson(res, 405, { error: "method_not_allowed", requestId });
+  }
+
+  const accessToken = getBearerToken(req);
+  const user = await getCustomerAuthUser(accessToken);
+  const adminProfile = await findActiveAdminProfileByAuthUserId(user.id);
+
+  if (!adminProfile?.role_code) {
+    return sendJson(res, 200, {
+      isStaff: false,
+      role: null,
+      adminLinks: [],
+      requestId,
+    });
+  }
+
+  return sendJson(res, 200, {
+    isStaff: true,
+    role: adminProfile.role_code,
+    adminLinks: ADMIN_LINKS_BY_ROLE[adminProfile.role_code] || [],
+    requestId,
+  });
 }
 
 function getPositiveIntegerQuery(value, fallback, max) {
@@ -485,6 +541,10 @@ export default async function handler(req, res) {
   try {
     if (action === "profile") {
       return await handleProfile(req, res, requestId);
+    }
+
+    if (action === "admin-links") {
+      return await handleAdminLinks(req, res, requestId);
     }
 
     if (action === "orders") {

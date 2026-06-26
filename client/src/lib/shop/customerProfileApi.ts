@@ -22,6 +22,17 @@ export type CustomerProfileUpdatePayload = {
   default_address?: string;
 };
 
+export type CustomerAdminLink = {
+  label: string;
+  href: string;
+};
+
+export type CustomerAdminAccess = {
+  isStaff: boolean;
+  role: string | null;
+  adminLinks: CustomerAdminLink[];
+};
+
 export class CustomerProfileApiError extends Error {
   status: number;
   code?: string;
@@ -36,6 +47,11 @@ export class CustomerProfileApiError extends Error {
 
 type CustomerProfileResponse = {
   profile?: CustomerProfile;
+  error?: string;
+  code?: string;
+};
+
+type CustomerAdminAccessResponse = CustomerAdminAccess & {
   error?: string;
   code?: string;
 };
@@ -102,4 +118,34 @@ export async function updateCustomerProfile(accessToken: string, payload: Custom
   });
 
   return parseCustomerProfileResponse(response);
+}
+
+export async function fetchCustomerAdminAccess(accessToken: string) {
+  const response = await fetch("/api/customer?action=admin-links", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  let data: CustomerAdminAccessResponse | null = null;
+  try {
+    data = (await response.json()) as CustomerAdminAccessResponse;
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    throw new CustomerProfileApiError(
+      getCustomerProfileErrorMessage(response.status, data?.error),
+      response.status,
+      data?.code,
+    );
+  }
+
+  return {
+    isStaff: Boolean(data?.isStaff),
+    role: data?.role || null,
+    adminLinks: Array.isArray(data?.adminLinks) ? data.adminLinks : [],
+  };
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { LogOut, PackageSearch, RotateCcw, UserRound } from "lucide-react";
+import { ExternalLink, LogOut, PackageSearch, RotateCcw, ShieldCheck, UserRound } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -11,7 +11,11 @@ import {
   type CustomerOrderDetail,
   type CustomerOrdersPage,
 } from "@/lib/shop/customerOrdersApi";
-import type { CustomerProfileUpdatePayload } from "@/lib/shop/customerProfileApi";
+import {
+  fetchCustomerAdminAccess,
+  type CustomerAdminAccess,
+  type CustomerProfileUpdatePayload,
+} from "@/lib/shop/customerProfileApi";
 import { getOrderStatusLabel, getPaymentStatusLabel } from "@/lib/shop/labels";
 
 type AccountTab = "profile" | "address" | "orders";
@@ -89,10 +93,36 @@ export default function CustomerAccount() {
   const [selectedOrderNumber, setSelectedOrderNumber] = useState("");
   const [isOrderDetailLoading, setIsOrderDetailLoading] = useState(false);
   const [orderDetailError, setOrderDetailError] = useState("");
+  const [adminAccess, setAdminAccess] = useState<CustomerAdminAccess | null>(null);
 
   useEffect(() => {
     setForm(getProfileFormState(profile));
   }, [profile]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    if (!isAuthenticated || !session?.access_token) {
+      setAdminAccess(null);
+      return () => {
+        isCurrent = false;
+      };
+    }
+
+    fetchCustomerAdminAccess(session.access_token)
+      .then((nextAccess) => {
+        if (!isCurrent) return;
+        setAdminAccess(nextAccess.isStaff ? nextAccess : null);
+      })
+      .catch(() => {
+        if (!isCurrent) return;
+        setAdminAccess(null);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [isAuthenticated, session?.access_token]);
 
   const readonlyEmail = useMemo(() => profile?.email || user?.email || "", [profile?.email, user?.email]);
   const isAccountDisabled = profileError === DISABLED_ACCOUNT_MESSAGE;
@@ -253,6 +283,41 @@ export default function CustomerAccount() {
                   </button>
                 ))}
               </nav>
+
+              {adminAccess?.isStaff && (
+                <div className="mt-5 rounded-[8px] border border-[#d8c5b4] bg-[#f8efe4] p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#8b6f5b]">
+                      <ShieldCheck className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-stone-900">管理入口</p>
+                      <p className="mt-1 text-xs leading-5 text-stone-600">
+                        你目前具有後台管理權限，可前往管理系統。
+                      </p>
+                    </div>
+                  </div>
+
+                  {adminAccess.adminLinks.length > 0 ? (
+                    <div className="mt-3 grid gap-2">
+                      {adminAccess.adminLinks.map((link) => (
+                        <a
+                          key={link.href}
+                          href={link.href}
+                          className="inline-flex items-center justify-between gap-2 rounded-full bg-white px-3 py-2 text-xs font-medium text-[#765d4a] transition hover:bg-[#f3eadf]"
+                        >
+                          <span>{link.label}</span>
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 rounded-[8px] bg-white/75 px-3 py-2 text-xs leading-5 text-stone-500">
+                      此角色的專屬後台入口尚未開放。
+                    </p>
+                  )}
+                </div>
+              )}
 
               <Button
                 variant="outline"

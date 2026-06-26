@@ -2,8 +2,7 @@ import { Link } from "wouter";
 
 const previewLinks = [
   { label: "官網首頁", href: "/" },
-  { label: "線上訂房頁", href: "/booking" },
-  { label: "會員中心", href: "/account" },
+  { label: "線上訂房", href: "/booking" },
   { label: "宇宙碎品", href: "/shop" },
 ];
 

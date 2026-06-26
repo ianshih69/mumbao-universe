@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import AdminShopHeaderLinks from "@/components/shop/AdminShopHeaderLinks";
 import AdminShopNav from "@/components/shop/AdminShopNav";
 import {
   adminAuthExpiredMessage,
@@ -221,10 +222,15 @@ export default function AdminShopAuditLogs() {
     <main className="min-h-screen bg-[#f7f1e9]">
       <AdminShopNav current="audit" />
       <div className="mx-auto max-w-7xl px-4 py-8 md:px-8">
-        <div>
-          <p className="text-xs uppercase tracking-[0.28em] text-[#b08d73]">AUDIT LOGS</p>
-          <h1 className="mt-2 text-3xl font-semibold text-stone-900">操作紀錄</h1>
-          <p className="mt-2 text-sm text-stone-600">記錄重要寫入操作，不包含密碼、token 或 secret。</p>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.28em] text-[#b08d73]">AUDIT LOGS</p>
+            <h1 className="mt-2 text-3xl font-semibold text-stone-900">操作紀錄</h1>
+            <p className="mt-2 text-sm text-stone-600">記錄重要寫入操作，不包含密碼、token 或 secret。</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <AdminShopHeaderLinks />
+          </div>
         </div>
 
         <section className="mt-6 rounded-[24px] border border-stone-200 bg-white/90 p-5 shadow-sm">

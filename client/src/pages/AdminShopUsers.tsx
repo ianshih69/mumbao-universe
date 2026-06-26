@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import AdminShopHeaderLinks from "@/components/shop/AdminShopHeaderLinks";
 import AdminShopNav from "@/components/shop/AdminShopNav";
 import {
   adminAuthExpiredMessage,
@@ -171,12 +172,15 @@ export default function AdminShopUsers() {
               目前登入：{identity?.display_name || "後台使用者"}，角色：{identity?.role_name || identity?.role_code || "管理員"}
             </p>
           </div>
-          <button
-            className="rounded-full border border-stone-200 bg-white px-4 py-2 text-sm text-stone-600"
-            onClick={() => void load()}
-          >
-            重新整理
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <AdminShopHeaderLinks />
+            <button
+              className="rounded-full border border-stone-200 bg-white px-4 py-2 text-sm text-stone-600"
+              onClick={() => void load()}
+            >
+              重新整理
+            </button>
+          </div>
         </div>
 
         {notice ? <div className="mt-5 rounded-2xl bg-white px-4 py-3 text-sm text-stone-700 shadow-sm">{notice}</div> : null}

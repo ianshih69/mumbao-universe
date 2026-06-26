@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import AdminShopHeaderLinks from "@/components/shop/AdminShopHeaderLinks";
 import AdminShopNav from "@/components/shop/AdminShopNav";
 import OrderPrintView from "@/components/shop/OrderPrintView";
 import {
@@ -717,6 +718,7 @@ export default function AdminShopOrders() {
             </h1>
           </div>
           <div className="flex flex-wrap gap-3">
+            <AdminShopHeaderLinks />
             <Button
               variant="outline"
               className="rounded-full bg-white"

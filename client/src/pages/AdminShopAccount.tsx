@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Eye, EyeOff, KeyRound, LogOut, ShieldCheck } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import AdminShopHeaderLinks from "@/components/shop/AdminShopHeaderLinks";
 import AdminShopNav from "@/components/shop/AdminShopNav";
 import { Button } from "@/components/ui/button";
 import {
@@ -212,10 +213,13 @@ export default function AdminShopAccount() {
               修改目前登入帳號的 Supabase Auth 密碼。系統會先用目前密碼重新驗證一次。
             </p>
           </div>
-          <Button variant="ghost" className="rounded-full" onClick={logout}>
-            <LogOut className="h-4 w-4" />
-            登出
-          </Button>
+          <div className="flex flex-wrap gap-3">
+            <AdminShopHeaderLinks />
+            <Button variant="ghost" className="rounded-full" onClick={logout}>
+              <LogOut className="h-4 w-4" />
+              登出
+            </Button>
+          </div>
         </div>
       </header>
 

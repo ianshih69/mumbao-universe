@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import QRCode from "qrcode";
+import AdminShopHeaderLinks from "@/components/shop/AdminShopHeaderLinks";
 import AdminShopNav from "@/components/shop/AdminShopNav";
 import {
   adminAuthExpiredMessage,
@@ -558,15 +559,18 @@ export default function AdminShopWarehouse() {
               {identity?.role_name ? `｜${identity.role_name}` : ""}
             </p>
           </div>
-          <button
-            className="rounded-full border border-stone-200 bg-white px-4 py-2 text-sm text-stone-600 hover:bg-stone-50"
-            onClick={() => {
-              clearAdminToken();
-              setAuthStatus("loggedOut");
-            }}
-          >
-            登出
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <AdminShopHeaderLinks />
+            <button
+              className="rounded-full border border-stone-200 bg-white px-4 py-2 text-sm text-stone-600 hover:bg-stone-50"
+              onClick={() => {
+                clearAdminToken();
+                setAuthStatus("loggedOut");
+              }}
+            >
+              登出
+            </button>
+          </div>
         </div>
 
         {notice && (

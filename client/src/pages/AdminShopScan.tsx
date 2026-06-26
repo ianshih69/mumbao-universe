@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import AdminShopHeaderLinks from "@/components/shop/AdminShopHeaderLinks";
 import AdminShopNav from "@/components/shop/AdminShopNav";
 import {
   type AdminInventoryLookup,
@@ -325,6 +326,7 @@ export default function AdminShopScan() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
+            <AdminShopHeaderLinks />
             <a
               href="/admin/shop/inventory"
               className="inline-flex h-10 items-center rounded-full border border-stone-200 bg-white px-4 text-sm text-stone-700 hover:bg-stone-50"

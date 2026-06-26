@@ -8,6 +8,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import AdminShopHeaderLinks from "@/components/shop/AdminShopHeaderLinks";
 import AdminShopNav from "@/components/shop/AdminShopNav";
 import {
   type AdminAuthStatus,
@@ -356,6 +357,7 @@ export default function AdminShopHome() {
             )}
           </div>
           <div className="flex flex-wrap gap-3">
+            <AdminShopHeaderLinks />
             <Button
               type="button"
               variant="outline"

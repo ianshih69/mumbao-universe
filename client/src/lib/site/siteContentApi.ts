@@ -27,6 +27,17 @@ export type PublicSiteContent = {
   sections: Record<string, SiteSection>;
 };
 
+function isCmsOverrideEnabled(section: SiteSection) {
+  return section.content?.enable_cms_override === true;
+}
+
+function filterFrontendSections(sections: unknown) {
+  if (!sections || typeof sections !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(sections as Record<string, SiteSection>).filter(([, section]) => isCmsOverrideEnabled(section)),
+  );
+}
+
 async function fetchSiteContent(url: string): Promise<PublicSiteContent> {
   const response = await fetch(url, { method: "GET" });
   const data = (await response.json().catch(() => ({}))) as Partial<PublicSiteContent>;
@@ -36,7 +47,7 @@ async function fetchSiteContent(url: string): Promise<PublicSiteContent> {
   return {
     ok: Boolean(data.ok),
     page: data.page || null,
-    sections: data.sections && typeof data.sections === "object" ? data.sections : {},
+    sections: filterFrontendSections(data.sections),
   };
 }
 

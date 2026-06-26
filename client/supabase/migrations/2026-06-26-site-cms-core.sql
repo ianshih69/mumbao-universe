@@ -134,6 +134,7 @@ on conflict (slug) do nothing;
 insert into public.site_sections (page_id, section_key, section_type, title, subtitle, content_json, sort_order)
 select id, 'global.top_banner', 'top_banner', '全站上方公告', null,
   '{
+    "enable_cms_override": false,
     "text": "官網建置中｜預計 2026 年 7～9 月試營運／正式營業",
     "is_visible": true
   }'::jsonb,
@@ -144,6 +145,7 @@ on conflict (page_id, section_key) do nothing;
 insert into public.site_sections (page_id, section_key, section_type, title, subtitle, content_json, sort_order)
 select id, 'global.navigation', 'navigation', '前台導覽選單', null,
   '{
+    "enable_cms_override": false,
     "items": [
       { "label": "關於我們", "href": "/about", "internal": true, "is_visible": true, "sort_order": 10 },
       { "label": "最新消息", "href": "/#news", "internal": false, "is_visible": true, "sort_order": 20 },
@@ -160,14 +162,14 @@ on conflict (page_id, section_key) do nothing;
 
 insert into public.site_sections (page_id, section_key, section_type, title, subtitle, content_json, sort_order)
 select id, 'global.footer', 'footer', 'Footer', null,
-  '{"note": "慢慢蒔光 STime Villa"}'::jsonb,
+  '{"enable_cms_override": false, "note": "慢慢蒔光 STime Villa"}'::jsonb,
   30
 from public.site_pages where slug = 'global'
 on conflict (page_id, section_key) do nothing;
 
 insert into public.site_sections (page_id, section_key, section_type, title, subtitle, content_json, sort_order)
 select id, 'global.seo', 'seo', '全站 SEO', null,
-  '{"site_name": "慢慢蒔光 STime Villa", "description": "宜蘭員山包棟 villa"}'::jsonb,
+  '{"enable_cms_override": false, "site_name": "慢慢蒔光 STime Villa", "description": "宜蘭員山包棟 villa"}'::jsonb,
   40
 from public.site_pages where slug = 'global'
 on conflict (page_id, section_key) do nothing;
@@ -175,6 +177,7 @@ on conflict (page_id, section_key) do nothing;
 insert into public.site_sections (page_id, section_key, section_type, title, subtitle, content_json, sort_order)
 select id, 'home.hero', 'hero', '首頁主視覺', null,
   '{
+    "enable_cms_override": false,
     "eyebrow": "慢下來，回到有光的地方",
     "title": "慢慢蒔光\nSTime Villa",
     "subtitle": "宜蘭員山包棟 villa，一天只接待一組客人。",
@@ -191,7 +194,7 @@ on conflict (page_id, section_key) do nothing;
 
 insert into public.site_sections (page_id, section_key, section_type, title, subtitle, content_json, sort_order)
 select id, 'home.booking_cta', 'cta', '首頁預約導引', null,
-  '{"title": "預約一段慢下來的時間", "button_text": "前往線上訂房", "button_href": "/booking"}'::jsonb,
+  '{"enable_cms_override": false, "title": "預約一段慢下來的時間", "button_text": "前往線上訂房", "button_href": "/booking"}'::jsonb,
   50
 from public.site_pages where slug = 'home'
 on conflict (page_id, section_key) do nothing;
@@ -199,6 +202,7 @@ on conflict (page_id, section_key) do nothing;
 insert into public.site_sections (page_id, section_key, section_type, title, subtitle, content_json, sort_order)
 select id, 'booking.hero', 'hero', '訂房頁主視覺', null,
   '{
+    "enable_cms_override": false,
     "eyebrow": "STime Villa Booking",
     "title": "預約・歸零",
     "subtitle": "請先選擇入住與退房日期。目前開放未來 {bookingWindowLabel} 內預約，實際可預約日期以房況日曆為準。"
@@ -210,6 +214,7 @@ on conflict (page_id, section_key) do nothing;
 insert into public.site_sections (page_id, section_key, section_type, title, subtitle, content_json, sort_order)
 select id, 'booking.instructions', 'instructions', '預約說明', null,
   '{
+    "enable_cms_override": false,
     "items": [
       "此頁為預約申請，送出後由我們人工確認。",
       "可預約範圍、包棟或單間開放狀態，依後台設定顯示。",
@@ -222,28 +227,28 @@ on conflict (page_id, section_key) do nothing;
 
 insert into public.site_sections (page_id, section_key, section_type, title, subtitle, content_json, sort_order)
 select id, 'booking.pet_note', 'note', '寵物友善說明', null,
-  '{"text": "慢慢蒔光為寵物友善 villa，實際入住規範與清潔注意事項，將於人工確認時一併說明。"}'::jsonb,
+  '{"enable_cms_override": false, "text": "慢慢蒔光為寵物友善 villa，實際入住規範與清潔注意事項，將於人工確認時一併說明。"}'::jsonb,
   30
 from public.site_pages where slug = 'booking'
 on conflict (page_id, section_key) do nothing;
 
 insert into public.site_sections (page_id, section_key, section_type, title, subtitle, content_json, sort_order)
 select id, 'booking.success_message', 'message', '送出成功文案', null,
-  '{"text": "已收到您的預約申請。我們會先確認房況，再與您聯繫付款與訂房細節。此申請尚未代表訂房成立。"}'::jsonb,
+  '{"enable_cms_override": false, "text": "已收到您的預約申請。我們會先確認房況，再與您聯繫付款與訂房細節。此申請尚未代表訂房成立。"}'::jsonb,
   40
 from public.site_pages where slug = 'booking'
 on conflict (page_id, section_key) do nothing;
 
 insert into public.site_sections (page_id, section_key, section_type, title, subtitle, content_json, sort_order)
 select id, 'rooms.hero', 'hero', '房型介紹主視覺', null,
-  '{"eyebrow": "The Sanctuaries", "title": "房型介紹", "subtitle": "五間主題房，留給一組客人的完整時光。"}'::jsonb,
+  '{"enable_cms_override": false, "eyebrow": "The Sanctuaries", "title": "房型介紹", "subtitle": "五間主題房，留給一組客人的完整時光。"}'::jsonb,
   10
 from public.site_pages where slug = 'rooms'
 on conflict (page_id, section_key) do nothing;
 
 insert into public.site_sections (page_id, section_key, section_type, title, subtitle, content_json, sort_order)
 select id, 'rooms.villa_intro', 'text', '整棟 Villa 介紹', null,
-  '{"text": "慢慢蒔光目前共有 5 間主題房，包棟入住時整棟 villa 只接待同一組客人。"}'::jsonb,
+  '{"enable_cms_override": false, "text": "慢慢蒔光目前共有 5 間主題房，包棟入住時整棟 villa 只接待同一組客人。"}'::jsonb,
   20
 from public.site_pages where slug = 'rooms'
 on conflict (page_id, section_key) do nothing;
@@ -251,6 +256,7 @@ on conflict (page_id, section_key) do nothing;
 insert into public.site_sections (page_id, section_key, section_type, title, subtitle, content_json, sort_order)
 select id, 'rooms.room_list', 'room_list', '五間房介紹', null,
   '{
+    "enable_cms_override": false,
     "rooms": [
       { "name": "Blue Ocean", "title": "藍色主題房", "description": "留給海風與睡眠的一間房。", "image_url": "", "alt_text": "藍色主題房" },
       { "name": "Acacia", "title": "相思主題房", "description": "把樹影與日光收進窗邊。", "image_url": "", "alt_text": "相思主題房" },
@@ -265,7 +271,7 @@ on conflict (page_id, section_key) do nothing;
 
 insert into public.site_sections (page_id, section_key, section_type, title, subtitle, content_json, sort_order)
 select id, 'shop.hero', 'hero', '宇宙碎品頁主視覺', null,
-  '{"title": "宇宙碎品", "subtitle": "慢慢蒔光的文創小物與生活選品。"}'::jsonb,
+  '{"enable_cms_override": false, "title": "宇宙碎品", "subtitle": "慢慢蒔光的文創小物與生活選品。"}'::jsonb,
   10
 from public.site_pages where slug = 'shop'
 on conflict (page_id, section_key) do nothing;

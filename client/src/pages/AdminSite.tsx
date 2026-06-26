@@ -80,6 +80,10 @@ function getBool(content: JsonRecord, key: string, fallback = false) {
   return typeof value === "boolean" ? value : fallback;
 }
 
+function isCmsOverrideEnabled(content: JsonRecord) {
+  return getBool(content, "enable_cms_override", false);
+}
+
 function getList<T = unknown>(content: JsonRecord, key: string) {
   const value = content[key];
   return Array.isArray(value) ? (value as T[]) : [];
@@ -189,7 +193,8 @@ function isMeaningfulValue(value: unknown): boolean {
 }
 
 function hasSectionContent(section: CmsSection) {
-  return isMeaningfulValue(sectionContent(section));
+  const { enable_cms_override: _enableCmsOverride, ...frontendContent } = sectionContent(section);
+  return isMeaningfulValue(frontendContent);
 }
 
 function getEmptyFallbackFields(sectionKey: string, content: JsonRecord) {
@@ -234,27 +239,35 @@ function getEmptyFallbackFields(sectionKey: string, content: JsonRecord) {
 
 function getFrontendStatus(section: CmsSection) {
   const content = sectionContent(section);
+  if (!isCmsOverrideEnabled(content)) {
+    return {
+      label: "尚未接管前台",
+      className: "border-[#eadfce] bg-[#fbf7f1] text-stone-600",
+      detail: "目前前台仍使用程式內建的預設內容；勾選接管並儲存後才會套用 CMS。",
+    };
+  }
+
   if (!section.id || section.status !== "published" || !section.is_visible || !hasSectionContent(section)) {
     return {
-      label: "使用預設 fallback",
+      label: "尚未接管前台",
       className: "border-[#eadfce] bg-[#fbf7f1] text-stone-600",
-      detail: "前台會使用程式內建的預設內容。",
+      detail: "區塊未發布、已隱藏或內容不足，前台仍會使用預設 fallback。",
     };
   }
 
   const missing = getEmptyFallbackFields(section.section_key, content);
   if (missing.length > 0) {
     return {
-      label: "已套用 CMS，部分欄位使用預設 fallback",
+      label: "已啟用 CMS 接管，部分欄位使用預設 fallback",
       className: "border-amber-200 bg-amber-50 text-amber-800",
       detail: `${Array.from(new Set(missing)).join("、")} 留空時會由前台預設內容補上。`,
     };
   }
 
   return {
-    label: "已套用 CMS",
+    label: "已啟用 CMS 接管",
     className: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    detail: "前台會優先顯示此區塊內容。",
+    detail: "前台會顯示此 CMS 區塊內容。",
   };
 }
 
@@ -265,6 +278,7 @@ function getSectionDisplayName(section: CmsSection) {
 function getSectionSaveMessage(section: CmsSection) {
   const meta = sectionFrontendMeta[section.section_key];
   const name = getSectionDisplayName(section);
+  if (!isCmsOverrideEnabled(sectionContent(section))) return `${name}已儲存，但尚未接管前台顯示。`;
   if (meta?.viewLabel) return `${name}已發布。你可以前往${meta.viewLabel}查看更新。`;
   return `${name}已發布。`;
 }
@@ -548,6 +562,23 @@ function SectionCard({
         <label className="inline-flex items-center gap-2 text-sm text-stone-600">
           <input type="checkbox" checked={isVisible} onChange={(event) => setIsVisible(event.target.checked)} />
           前台顯示
+        </label>
+      </div>
+
+      <div className="mt-4 rounded-[10px] border border-[#eadfce] bg-white px-4 py-3">
+        <label className="inline-flex items-start gap-3 text-sm font-medium text-stone-800">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={isCmsOverrideEnabled(content)}
+            onChange={(event) => updateContent("enable_cms_override", event.target.checked)}
+          />
+          <span>
+            啟用此區塊接管前台顯示
+            <span className="mt-1 block text-xs font-normal leading-5 text-stone-500">
+              未勾選時，CMS 內容只會保存在後台，不會覆蓋正式前台。勾選並儲存後，前台才會讀取此區塊。
+            </span>
+          </span>
         </label>
       </div>
 

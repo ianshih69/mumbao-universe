@@ -496,13 +496,16 @@ export default function AdminBookings() {
         <header className="rounded-[16px] border border-stone-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#b08d73]">STime Villa Booking</p>
+              <p className="text-xs font-semibold text-[#b08d73]">管理中心 / 線上訂房 / 房況管理</p>
               <h1 className="mt-3 text-3xl font-semibold text-stone-900">線上訂房 / 房況管理</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
                 管理官網房況、Booking 訂房與人工保留；不會自動操作 Booking 後台。
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button variant="outline" asChild>
+                <Link href="/account">管理入口</Link>
+              </Button>
               <Button variant="outline" asChild>
                 <Link href="/admin/shop">文創商城後台</Link>
               </Button>

@@ -1,3 +1,6 @@
+export type StayType = "villa" | "room";
+export type PetType = "dog" | "cat" | "other";
+
 export type BookingAvailabilityResult = {
   available: boolean;
   checkIn: string;
@@ -13,11 +16,18 @@ export type BookingCalendarResult = {
 
 export type BookingRequestPayload = {
   guest_name: string;
-  guest_email: string;
-  guest_phone: string;
+  email: string;
+  phone: string;
   check_in: string;
   check_out: string;
-  guest_count: string;
+  stay_type: StayType;
+  adults: number;
+  children: number;
+  room_count: number;
+  has_pets: boolean;
+  pet_count: number;
+  pet_type: PetType;
+  pet_notes: string;
   notes: string;
 };
 

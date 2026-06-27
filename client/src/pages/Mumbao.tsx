@@ -176,7 +176,7 @@ export default function Mumbao() {
               </div>
 
               <div className="max-w-xl rounded-[22px] border border-[#E8B6B6]/45 bg-white/75 px-5 py-4 text-sm leading-relaxed tracking-[0.03em] text-[#6E5E54] shadow-[0_16px_38px_rgba(90,65,45,0.07)] backdrop-blur md:px-6 md:text-base">
-                <p>首次公開日：2026年6月18日</p>
+                <p>首次公開日：2026年6月26日</p>
                 <p>著作者：X.Y.</p>
                 <p>© 2026 X.Y. / MUMBAO. All Rights Reserved.</p>
               </div>

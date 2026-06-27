@@ -175,8 +175,14 @@ export default function Mumbao() {
                 </div>
               </div>
 
+              <div className="max-w-xl rounded-[22px] border border-[#E8B6B6]/45 bg-white/75 px-5 py-4 text-sm leading-relaxed tracking-[0.03em] text-[#6E5E54] shadow-[0_16px_38px_rgba(90,65,45,0.07)] backdrop-blur md:px-6 md:text-base">
+                <p>首次公開日：2026年6月18日</p>
+                <p>著作者：X.Y.</p>
+                <p>© 2026 X.Y. / MUMBAO. All Rights Reserved.</p>
+              </div>
+
               <blockquote className="rounded-[24px] border border-[#E8B6B6]/50 bg-white/70 px-6 py-5 text-2xl font-semibold leading-relaxed tracking-[0.03em] text-[#3F352F] shadow-[0_18px_45px_rgba(90,65,45,0.08)] backdrop-blur md:text-3xl">
-                「什麼都不做，也值得被愛。」
+                什麼都不做，也值得被愛。
               </blockquote>
 
               <div className="space-y-4 text-base leading-[1.9] tracking-[0.03em] text-[#5F5148] md:text-lg">

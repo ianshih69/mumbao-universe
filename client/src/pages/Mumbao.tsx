@@ -373,6 +373,19 @@ export default function Mumbao() {
                 <p>來自台灣的療癒之光，用「慢」的哲學擁抱世界。</p>
               </div>
             </motion.div>
+
+            <motion.div
+              className="mx-auto mt-6 max-w-3xl rounded-[24px] border border-[#E7D9C8]/70 bg-[#F8EFE6]/70 px-5 py-5 text-center text-xs leading-relaxed tracking-[0.03em] text-[#8A7B72] md:text-sm"
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.25 }}
+              variants={fadeInUp}
+            >
+              <p className="break-words">© 2026 X.Y. / MUMBAO. All Rights Reserved.</p>
+              <p className="mt-2 break-words">
+                未經授權，禁止重製、改作、散布、商業使用或用於人工智慧訓練。
+              </p>
+            </motion.div>
           </div>
         </section>
       </main>

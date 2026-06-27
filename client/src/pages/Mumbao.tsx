@@ -108,11 +108,13 @@ function StoryImage({
   src,
   alt,
   className = "",
+  imageClassName = "h-full w-full rounded-[22px] object-contain",
   loading = "lazy",
 }: {
   src: string;
   alt: string;
   className?: string;
+  imageClassName?: string;
   loading?: "eager" | "lazy";
 }) {
   return (
@@ -127,7 +129,7 @@ function StoryImage({
         src={src}
         alt={alt}
         loading={loading}
-        className="h-full w-full rounded-[22px] object-contain"
+        className={imageClassName}
       />
     </motion.figure>
   );
@@ -196,7 +198,8 @@ export default function Mumbao() {
               src={mumbaoImages.hero.src}
               alt={mumbaoImages.hero.alt}
               loading="eager"
-              className="mx-auto aspect-[4/5] w-full max-w-[460px] bg-[rgba(255,255,255,0.78)] md:max-w-[500px]"
+              className="mx-auto flex h-auto min-h-0 w-full max-w-[460px] items-center justify-center self-center bg-[rgba(255,255,255,0.78)] p-3 md:max-w-[500px] md:p-4"
+              imageClassName="block h-auto w-full rounded-[22px] object-contain"
             />
           </div>
         </section>

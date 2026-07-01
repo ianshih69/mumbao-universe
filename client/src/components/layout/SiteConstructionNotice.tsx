@@ -3,7 +3,7 @@ import { asBoolean, asString, fetchSiteGlobalContent } from "@/lib/site/siteCont
 
 const ENABLE_CONSTRUCTION_NOTICE = true;
 const NOTICE_STORAGE_KEY = "mumbao_site_notice_seen";
-const FALLBACK_BANNER_TEXT = "官網建置中｜預計 2026 年 7～9 月試營運／正式營業";
+const FALLBACK_BANNER_TEXT = "官網建置中｜預計 2026 年 7–9 月試營運";
 
 export function SiteConstructionNotice() {
   const [shouldShowModal, setShouldShowModal] = useState(false);
@@ -62,7 +62,7 @@ export function SiteConstructionNotice() {
     <>
       {isBannerVisible && (
         <div
-          className="pointer-events-none fixed left-0 right-0 top-0 z-[60] bg-[#8b6f5b]/95 px-4 py-2 text-center text-xs font-medium tracking-wide text-white shadow-sm sm:text-sm"
+          className="pointer-events-none fixed left-0 right-0 top-0 z-[60] bg-[#8b6f5b]/75 px-3 py-1.5 text-center text-[11px] font-medium tracking-wide text-white/90 shadow-[0_4px_16px_rgba(66,48,36,0.12)] backdrop-blur-md sm:text-xs"
           role="status"
           aria-live="polite"
         >

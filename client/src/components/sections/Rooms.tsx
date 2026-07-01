@@ -20,14 +20,34 @@ type RoomItem = {
   alt: string;
 };
 
+const fallbackRoomImages = [
+  "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?q=80&w=3000&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1591088398332-8a7791972843?q=80&w=3000&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1618773928121-c32242e63f39?q=80&w=3000&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?q=80&w=3000&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1505691938895-1758d7feb511?q=80&w=3000&auto=format&fit=crop",
+];
 const fallbackRoomImage = "/images/Hero.webp";
+
+function resolveRoomImage(room: Record<string, unknown>, index: number) {
+  return asString(
+    room.image_url,
+    asString(
+      room.imageUrl,
+      asString(
+        room.image,
+        fallbackRoomImages[index % fallbackRoomImages.length] || fallbackRoomImage,
+      ),
+    ),
+  );
+}
 
 const fallbackRooms: RoomItem[] = [
   {
     id: "blue-ocean",
     name: "Blue Ocean",
     title: "藍色主題房",
-    image: fallbackRoomImage,
+    image: fallbackRoomImages[0] || fallbackRoomImage,
     description: "留給海風與睡眠的一間房。",
     alt: "藍色主題房",
   },
@@ -35,7 +55,7 @@ const fallbackRooms: RoomItem[] = [
     id: "acacia",
     name: "Acacia",
     title: "相思主題房",
-    image: fallbackRoomImage,
+    image: fallbackRoomImages[1] || fallbackRoomImage,
     description: "把樹影與日光收進窗邊。",
     alt: "相思主題房",
   },
@@ -43,7 +63,7 @@ const fallbackRooms: RoomItem[] = [
     id: "moon-pond",
     name: "Moon Pond",
     title: "月池主題房",
-    image: fallbackRoomImage,
+    image: fallbackRoomImages[2] || fallbackRoomImage,
     description: "適合把夜晚放慢的一間房。",
     alt: "月池主題房",
   },
@@ -51,7 +71,7 @@ const fallbackRooms: RoomItem[] = [
     id: "mist-valley",
     name: "Mist Valley",
     title: "霧谷主題房",
-    image: fallbackRoomImage,
+    image: fallbackRoomImages[3] || fallbackRoomImage,
     description: "山色與清晨霧氣在這裡停留。",
     alt: "霧谷主題房",
   },
@@ -59,7 +79,7 @@ const fallbackRooms: RoomItem[] = [
     id: "starry-night",
     name: "Starry Night",
     title: "星夜主題房",
-    image: fallbackRoomImage,
+    image: fallbackRoomImages[4] || fallbackRoomImage,
     description: "把星光留給入睡前的片刻。",
     alt: "星夜主題房",
   },
@@ -94,7 +114,7 @@ export function Rooms() {
             id: asString(room.name, `room-${index + 1}`).toLowerCase().replace(/[^a-z0-9]+/g, "-"),
             name: asString(room.name, `Room ${index + 1}`),
             title: asString(room.title, `主題房 ${index + 1}`),
-            image: asString(room.image_url, fallbackRooms[index]?.image || fallbackRooms[0].image),
+            image: resolveRoomImage(room, index),
             description: asString(room.description, fallbackRooms[index]?.description || ""),
             alt: asString(room.alt_text, asString(room.title, `主題房 ${index + 1}`)),
           }))

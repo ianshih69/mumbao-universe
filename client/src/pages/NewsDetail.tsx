@@ -66,7 +66,7 @@ export default function NewsDetail() {
 
       <main className="pt-28 md:pt-36">
         <article className="px-5 pb-20 pt-14 md:px-8 md:pb-28 md:pt-20">
-          <header className="mx-auto max-w-4xl text-center">
+          <header className="mx-auto flex max-w-5xl flex-col items-center text-center">
             <span className="block text-xs font-medium uppercase tracking-[0.32em] text-[#a57652]">
               LATEST NEWS
             </span>
@@ -75,37 +75,35 @@ export default function NewsDetail() {
               <span className="h-px w-8 bg-[#ded1c1]" />
               <span>{news.date}</span>
             </div>
-            <h1 className="mt-6 text-4xl font-light leading-relaxed tracking-wide text-[#3d332b] md:text-5xl">
+            <h1 className="mx-auto mt-6 max-w-[940px] text-center text-[32px] font-light leading-[1.42] tracking-wide text-[#3d332b] md:text-5xl md:leading-[1.4]">
               {news.title}
             </h1>
           </header>
 
-          <div className="mx-auto mt-14 grid max-w-6xl gap-10 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)] lg:items-start lg:gap-16">
-            <div className="overflow-hidden rounded-[12px] bg-[#efe7dc] shadow-[0_22px_60px_rgba(90,70,50,0.12)]">
-              <img
-                src={news.image}
-                alt={news.alt}
-                className="aspect-[4/5] w-full object-cover md:aspect-[5/4] lg:aspect-[4/5]"
-              />
-            </div>
+          <div className="mx-auto mt-14 flex aspect-[4/3] w-full max-w-[900px] items-center justify-center overflow-hidden rounded-[14px] bg-[#fbf7f1] p-2 shadow-[0_16px_44px_rgba(90,70,50,0.08)] md:mt-16">
+            <img
+              src={news.image}
+              alt={news.alt}
+              className="block h-full w-full rounded-[10px] object-contain"
+            />
+          </div>
 
-            <div className="space-y-8">
-              <h2 className="text-2xl font-light leading-relaxed text-[#3d332b] md:text-3xl">
-                {news.detailTitle}
-              </h2>
-              <div className="space-y-6 text-base leading-[2.05] text-[#75685d] md:text-lg md:leading-[2.15]">
-                {news.content.map((paragraph) => (
-                  <p key={paragraph}>{paragraph}</p>
-                ))}
-              </div>
-              <Link
-                href="/news"
-                className="inline-flex items-center gap-2 pt-4 text-sm font-medium tracking-[0.08em] text-[#a57652] transition hover:text-[#c58a54]"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to News / 回最新消息
-              </Link>
+          <div className="mx-auto mt-14 max-w-3xl space-y-8 md:mt-16">
+            <h2 className="text-2xl font-light leading-relaxed text-[#3d332b] md:text-3xl">
+              {news.detailTitle}
+            </h2>
+            <div className="space-y-6 text-base leading-[2.05] text-[#75685d] md:text-lg md:leading-[2.15]">
+              {news.content.map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
             </div>
+            <Link
+              href="/news"
+              className="inline-flex items-center gap-2 pt-4 text-sm font-medium tracking-[0.08em] text-[#a57652] transition hover:text-[#c58a54] md:pt-6"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to News / 回最新消息
+            </Link>
           </div>
         </article>
       </main>

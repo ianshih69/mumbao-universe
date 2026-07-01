@@ -11,9 +11,9 @@ export function News() {
 
   return (
     <section className="py-24 bg-white overflow-hidden">
-      <div className="container mx-auto px-4 md:px-8">
+      <div className="mx-auto max-w-[1120px] px-5 md:px-6">
         {/* Section Header */}
-        <div className="flex justify-between items-end mb-8 md:mb-16">
+        <div className="mb-8 flex flex-col items-start gap-6 sm:flex-row sm:items-end sm:justify-between md:mb-16">
           <div className="space-y-2">
             <span className="text-[#E8A0BF] text-xs tracking-[0.2em] uppercase font-bold block">
               Latest News
@@ -31,31 +31,58 @@ export function News() {
           </Button>
         </div>
 
-        {/* --- Mobile: Horizontal Scroll (Unchanged) --- */}
-        <div className="flex overflow-x-auto snap-x snap-mandatory pb-8 -mx-4 px-4 md:hidden scrollbar-hide">
-          {newsItems.map((item, idx) => (
+        {/* --- Mobile: Stacked List --- */}
+        <div className="space-y-6 pb-8 lg:hidden">
+          <motion.div
+            className="group cursor-pointer"
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+          >
+            <Link href={`/news/${newsItems[0].slug}`} className="block">
+              <div className="relative mb-4 flex aspect-video items-center justify-center overflow-hidden rounded-none border border-[rgba(120,95,70,0.08)] bg-[#fbf7f1]">
+                <img
+                  src={newsItems[0].image}
+                  alt={newsItems[0].alt}
+                  className="block h-full w-full object-contain transition-transform duration-700"
+                />
+                <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-2 py-1 text-[10px] uppercase tracking-wider rounded-sm font-medium">
+                  {newsItems[0].category}
+                </div>
+              </div>
+              <div className="space-y-2 px-1">
+                <span className="text-xs text-gray-400 tracking-wider font-mono block">
+                  {newsItems[0].date}
+                </span>
+                <h3 className="font-serif text-lg text-primary group-hover:text-[#E8A0BF] transition-colors duration-300 leading-snug line-clamp-2">
+                  {newsItems[0].title}
+                </h3>
+              </div>
+            </Link>
+          </motion.div>
+
+          <div className="space-y-4">
+            {sideNews.map((item, idx) => (
             <motion.div
               key={item.id}
-              className="flex-shrink-0 w-[80vw] mr-4 last:mr-0 snap-center group cursor-pointer"
+              className="group cursor-pointer border-b border-gray-100 pb-4 last:border-0 last:pb-0"
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ duration: 0.6, delay: idx * 0.1 }}
+              transition={{ duration: 0.6, delay: (idx + 1) * 0.1 }}
             >
-              <Link href={`/news/${item.slug}`} className="block">
-                <div className="relative overflow-hidden aspect-[4/3] mb-4 bg-gray-100 rounded-none">
+              <Link href={`/news/${item.slug}`} className="flex gap-4">
+                <div className="flex aspect-video w-32 flex-shrink-0 items-center justify-center overflow-hidden rounded-none border border-[rgba(120,95,70,0.08)] bg-[#fbf7f1]">
                   <img
                     src={item.image}
                     alt={item.alt}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    className="block h-full w-full object-contain transition-transform duration-700"
                   />
-                  <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-2 py-1 text-[10px] uppercase tracking-wider rounded-sm font-medium">
-                    {item.category}
-                  </div>
                 </div>
-                <div className="space-y-2 px-1">
+                <div className="flex min-w-0 flex-col justify-center space-y-2">
                   <span className="text-xs text-gray-400 tracking-wider font-mono block">
-                    {item.date}
+                    {item.date} • {item.category}
                   </span>
                   <h3 className="font-serif text-lg text-primary group-hover:text-[#E8A0BF] transition-colors duration-300 leading-snug line-clamp-2">
                     {item.title}
@@ -63,13 +90,14 @@ export function News() {
                 </div>
               </Link>
             </motion.div>
-          ))}
+            ))}
+          </div>
         </div>
 
         {/* --- Desktop: Asymmetrical Grid (Interactive) --- */}
-        <div className="hidden md:grid grid-cols-12 gap-8">
+        <div className="hidden lg:grid lg:grid-cols-[minmax(0,500px)_minmax(400px,1fr)] lg:gap-10 xl:grid-cols-[minmax(0,560px)_minmax(440px,1fr)] xl:gap-14">
           {/* Left: Featured Post (Displays activeNews) */}
-          <div className="col-span-8 relative min-h-[500px]">
+          <div className="relative w-full max-w-[560px]">
             {/* AnimatePresence for smooth transitions between active items */}
             <AnimatePresence mode="wait">
               <motion.div
@@ -81,22 +109,21 @@ export function News() {
                 transition={{ duration: 0.4 }}
               >
                 <Link href={`/news/${activeNews.slug}`} className="block h-full">
-                  <div className="relative overflow-hidden aspect-video rounded-none mb-6 bg-gray-100">
+                  <div className="relative mb-6 flex aspect-video w-full max-w-[560px] items-center justify-center overflow-hidden rounded-none border border-[rgba(120,95,70,0.08)] bg-[#fbf7f1]">
                     <img
                       src={activeNews.image}
                       alt={activeNews.alt}
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      className="block h-full w-full object-contain transition-transform duration-700"
                     />
                     <div className="absolute top-6 left-6 bg-white/90 backdrop-blur px-3 py-1 text-xs uppercase tracking-widest rounded-sm font-medium">
                       {activeNews.category}
                     </div>
                   </div>
-                  <div className="space-y-4 pr-12">
-                    <div className="flex items-center gap-4 text-sm text-gray-400 font-mono tracking-wider">
+                  <div className="max-w-[560px] space-y-4">
+                    <div className="flex items-center gap-3 text-sm text-gray-400 font-mono tracking-wider">
                       <span>{activeNews.date}</span>
-                      <span className="w-8 h-[1px] bg-gray-300" />
-                      {/* Show 'Featured' only if it's the first item, otherwise 'Preview' or similar? kept simple for now */}
-                      <span>{activeNews.id === 1 ? 'Featured' : 'Preview'}</span>
+                      <span className="text-gray-300">——</span>
+                      <span>{activeNews.category}</span>
                     </div>
                     <h3 className="font-serif text-3xl font-medium text-primary group-hover:text-[#E8A0BF] transition-colors duration-300 leading-tight">
                       {activeNews.title}
@@ -112,7 +139,7 @@ export function News() {
 
           {/* Right: Side List (Interactive Triggers) */}
           <div
-            className="col-span-4 flex flex-col gap-6"
+            className="flex w-full min-w-0 flex-col gap-6"
             onMouseLeave={() => setActiveNews(newsItems[0])} // Reset on leave
           >
             {sideNews.map((item, idx) => {
@@ -120,20 +147,20 @@ export function News() {
               return (
                 <motion.div
                   key={item.id}
-                  className={`flex gap-4 group cursor-pointer border-b border-gray-100 pb-6 last:border-0 last:pb-0 transition-all duration-300 ${isActive ? 'pl-4 border-l-4 border-l-[#E8A0BF] border-b-gray-100' : 'pl-0 border-l-0'}`}
+                  className={`flex gap-5 group cursor-pointer border-b border-[rgba(120,95,70,0.08)] pb-8 last:border-0 last:pb-0 transition-all duration-300 ${isActive ? 'pl-4 border-l-4 border-l-[#E8A0BF] border-b-[rgba(120,95,70,0.08)]' : 'pl-0 border-l-0'}`}
                   initial={{ opacity: 0, x: 20 }}
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
                   transition={{ duration: 0.6, delay: idx * 0.1 }}
                   onMouseEnter={() => setActiveNews(item)} // Trigger preview
                 >
-                  <Link href={`/news/${item.slug}`} className="flex w-full gap-4">
+                  <Link href={`/news/${item.slug}`} className="flex w-full gap-5 xl:gap-6">
                     {/* Thumbnail */}
-                    <div className="w-24 h-24 flex-shrink-0 overflow-hidden rounded-none bg-gray-100">
+                    <div className="flex aspect-video w-44 flex-shrink-0 items-center justify-center overflow-hidden rounded-none border border-[rgba(120,95,70,0.08)] bg-[#fbf7f1]">
                       <img
                         src={item.image}
                         alt={item.alt}
-                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                        className="w-full h-full object-contain transition-transform duration-700"
                       />
                     </div>
                     {/* Info */}

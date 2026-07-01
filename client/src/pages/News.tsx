@@ -33,6 +33,15 @@ export default function NewsPage() {
 
       <main className="pt-28 md:pt-36">
         <section className="px-5 pb-20 pt-16 md:px-8 md:pb-28 md:pt-20">
+          <div className="mx-auto mb-8 max-w-6xl text-left">
+            <a
+              href="/#news"
+              className="text-[13px] leading-6 text-[#75685d] transition hover:text-[#B77C4B] md:text-sm"
+            >
+              ← Back Home / 回首頁
+            </a>
+          </div>
+
           <div className="mx-auto max-w-5xl text-center">
             <span className="block text-xs font-medium uppercase tracking-[0.32em] text-[#a57652]">
               LATEST NEWS
@@ -50,11 +59,11 @@ export default function NewsPage() {
                 className="group block"
               >
                 <article className="h-full overflow-hidden rounded-[12px] bg-[#fffdf8] shadow-[0_18px_50px_rgba(90,70,50,0.08)] transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_22px_60px_rgba(90,70,50,0.12)]">
-                  <div className="aspect-[4/3] overflow-hidden bg-[#efe7dc]">
+                  <div className="bg-[#efe7dc] p-2">
                     <img
                       src={item.image}
                       alt={item.alt}
-                      className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
+                      className="block h-auto w-full object-contain transition duration-700"
                       loading="lazy"
                     />
                   </div>

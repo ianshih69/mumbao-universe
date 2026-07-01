@@ -10,6 +10,7 @@ import { MumbaoChatLauncher } from "./components/ai/MumbaoChatLauncher";
 import { SiteConstructionNotice } from "./components/layout/SiteConstructionNotice";
 import Home from "./pages/Home";
 import About from "./pages/About";
+import Breakfast from "./pages/Breakfast";
 import NewsPage from "./pages/News";
 import NewsDetail from "./pages/NewsDetail";
 import Mumbao from "./pages/Mumbao";
@@ -67,6 +68,7 @@ function Router() {
       <Route path={"/admin/bookings"} component={AdminBookings} />
       <Route path={"/admin/site"} component={AdminSite} />
       <Route path={"/about"} component={About} />
+      <Route path={"/experience/breakfast"} component={Breakfast} />
       <Route path={"/news/:slug"} component={NewsDetail} />
       <Route path={"/news"} component={NewsPage} />
       <Route path={"/ai-chat"} component={AiChat} />

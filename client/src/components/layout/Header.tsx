@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Menu, Globe, X, LogOut, UserRound } from "lucide-react";
+import { Globe, X, LogOut, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import {
@@ -28,6 +28,7 @@ type MenuItem = {
 
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [cmsMenuItems, setCmsMenuItems] = useState<MenuItem[] | null>(null);
   const [location, setLocation] = useLocation();
   const { isAuthenticated, isLoading, user, signOut } = useCustomerAuth();
@@ -115,6 +116,23 @@ export function Header() {
       ? "bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
       : "bg-white/90 text-[#8b6f5b] hover:bg-white"
   );
+  const hamburgerLineClass = cn(
+    "block h-[1.5px] w-6 rounded-full transition-colors duration-200",
+    useDarkControls
+      ? "bg-[#8b6f5b]/90 group-hover:bg-[#C58A54] group-active:bg-[#C58A54]"
+      : "bg-[rgba(255,255,255,0.88)] group-hover:bg-[#C58A54] group-active:bg-[#C58A54]"
+  );
+  const menuLinkClass =
+    "font-serif text-[24px] font-normal leading-none tracking-[0.08em] text-[#3D332B] transition duration-[230ms] ease-out hover:translate-x-1 hover:text-[#C58A54] motion-safe:animate-[mumbao-menu-item-in_300ms_ease-out_both] md:text-[28px]";
+  const memberLinkClass =
+    "inline-flex items-center gap-2.5 text-left font-serif text-[18px] font-normal leading-none tracking-[0.06em] text-[rgba(61,51,43,0.78)] transition duration-[230ms] ease-out hover:translate-x-1 hover:text-[#C58A54] md:text-[20px]";
+
+  const isMenuItemActive = (item: MenuItem) => {
+    if (!item.internal) return false;
+    const path = item.href.split("#")[0];
+    if (!path || path === "/") return location === path;
+    return location === path || location.startsWith(`${path}/`);
+  };
 
   const handleCustomerSignOut = async () => {
     await signOut();
@@ -132,89 +150,105 @@ export function Header() {
     >
       <div className="container mx-auto px-4 md:px-8 flex items-center justify-between">
         {/* Left: Menu + Menu Image */}
-        <Sheet>
+        <Sheet open={isMenuOpen} onOpenChange={setIsMenuOpen}>
           <SheetTrigger asChild>
-            <div className="flex items-center gap-2 group cursor-pointer">
-              <div
-                className={cn(
-                  "p-2 rounded-full transition-colors",
-                  useDarkControls ? "hover:bg-[#f3eadf]" : "hover:bg-white/15"
-                )}
-              >
-                <Menu
-                  className={cn(
-                    "w-6 h-6",
-                    useDarkControls ? "text-[#8b6f5b]" : "text-white"
-                  )}
-                />
-              </div>
+            <button
+              type="button"
+              aria-label="開啟導覽選單"
+              className={cn(
+                "group flex min-h-11 items-center gap-4 bg-transparent p-0 transition-opacity duration-200",
+                isMenuOpen && "pointer-events-none opacity-0"
+              )}
+            >
+              <span className="flex h-11 w-11 flex-col items-center justify-center gap-[5.5px] rounded-full">
+                <span className={hamburgerLineClass} />
+                <span className={hamburgerLineClass} />
+                <span className={hamburgerLineClass} />
+              </span>
               <img
                 src="/images/menu.webp"
                 alt="Menu"
                 className="h-12 md:h-16 object-contain"
               />
-            </div>
+            </button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-full md:w-[400px] bg-white/95 backdrop-blur-xl border-none p-0">
+          <SheetContent
+            side="left"
+            overlayClassName="!bg-[rgba(28,22,18,0.48)] backdrop-blur-[2px] data-[state=open]:duration-[260ms] data-[state=closed]:duration-[240ms]"
+            className="!w-[84vw] !max-w-[420px] gap-0 border-r border-[rgba(120,95,70,0.12)] !bg-[rgba(248,243,235,0.92)] p-0 !shadow-[18px_0_60px_rgba(60,45,32,0.16)] backdrop-blur-[18px] data-[state=open]:duration-[300ms] data-[state=closed]:duration-[260ms] sm:!w-[360px] sm:!max-w-[420px] md:!w-[400px] lg:!w-[420px]"
+          >
             <SheetTitle asChild>
               <VisuallyHidden>Navigation Menu</VisuallyHidden>
             </SheetTitle>
-            <div className="flex flex-col h-full p-12">
-              <div className="flex justify-end mb-12">
-                <SheetClose className="p-2 hover:bg-black/5 rounded-full transition-colors">
-                  <X className="w-6 h-6 text-primary" />
-                </SheetClose>
-              </div>
-              <nav className="flex flex-col gap-8">
-                {menuItems.map((item) => {
-                  const className =
-                    "font-serif text-2xl md:text-3xl text-primary hover:text-[#E8A0BF] transition-colors tracking-wider";
+            <SheetClose
+              aria-label="關閉導覽選單"
+              className="group absolute right-5 top-6 flex h-11 w-11 items-center justify-center rounded-full border border-[rgba(120,95,70,0.18)] bg-[rgba(255,250,242,0.72)] text-[#3D332B] transition duration-200 hover:bg-[#fff0df] hover:text-[#C58A54]"
+            >
+              <X className="h-5 w-5 transition-transform duration-200 group-hover:rotate-90" />
+            </SheetClose>
+            <div className="flex h-full flex-col px-8 pb-10 pt-24 sm:px-12 sm:pt-28 md:px-14 md:pt-[116px]">
+              <nav className="flex flex-1 flex-col">
+                <div className="flex flex-col gap-8">
+                  {menuItems.map((item, index) => {
+                    const className = cn(
+                      menuLinkClass,
+                      isMenuItemActive(item) && "!text-[#B77C4B]"
+                    );
 
-                  return (
-                    <SheetClose asChild key={item.label}>
-                      {item.internal ? (
-                        <Link href={item.href} className={className}>
-                          {item.label}
-                        </Link>
-                      ) : (
-                        <a href={item.href} className={className}>
-                          {item.label}
-                        </a>
-                      )}
-                    </SheetClose>
-                  );
-                })}
-                <div className="mt-2 border-t border-[#eadfce] pt-8">
+                    return (
+                      <SheetClose asChild key={item.label}>
+                        {item.internal ? (
+                          <Link
+                            href={item.href}
+                            className={className}
+                            style={{ animationDelay: `${80 + index * 30}ms` }}
+                          >
+                            {item.label}
+                          </Link>
+                        ) : (
+                          <a
+                            href={item.href}
+                            className={className}
+                            style={{ animationDelay: `${80 + index * 30}ms` }}
+                          >
+                            {item.label}
+                          </a>
+                        )}
+                      </SheetClose>
+                    );
+                  })}
+                </div>
+                <div className="mt-10 border-t border-[rgba(120,95,70,0.16)] pt-7">
                   {isLoading ? (
-                    <p className="text-sm text-stone-400">會員狀態確認中...</p>
+                    <p className="text-sm text-[rgba(61,51,43,0.58)]">會員狀態確認中...</p>
                   ) : isAuthenticated ? (
-                    <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-5">
                       <SheetClose asChild>
                         <Link
                           href="/account"
-                          className="inline-flex items-center gap-2 font-serif text-2xl text-primary hover:text-[#E8A0BF]"
+                          className={memberLinkClass}
                         >
-                          <UserRound className="h-5 w-5" />
+                          <UserRound className="h-4 w-4" />
                           會員中心
                         </Link>
                       </SheetClose>
                       <SheetClose asChild>
                         <button
-                          className="inline-flex items-center gap-2 text-left font-serif text-2xl text-primary hover:text-[#E8A0BF]"
+                          className={memberLinkClass}
                           type="button"
                           onClick={() => void handleCustomerSignOut()}
                         >
-                          <LogOut className="h-5 w-5" />
+                          <LogOut className="h-4 w-4" />
                           登出
                         </button>
                       </SheetClose>
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-5">
                       <SheetClose asChild>
                         <Link
                           href="/account/login"
-                          className="font-serif text-2xl text-primary hover:text-[#E8A0BF]"
+                          className={memberLinkClass}
                         >
                           登入
                         </Link>
@@ -222,7 +256,7 @@ export function Header() {
                       <SheetClose asChild>
                         <Link
                           href="/account/register"
-                          className="font-serif text-2xl text-primary hover:text-[#E8A0BF]"
+                          className={memberLinkClass}
                         >
                           註冊
                         </Link>

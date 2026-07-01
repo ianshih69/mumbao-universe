@@ -5,6 +5,7 @@ import React, { useEffect, useRef } from "react";
 type MeteorShowerProps = {
     intensity?: number; // 生成間隔 (ms)；數字越小越密集
     showBackground?: boolean; // 是否顯示夜空漸層背景
+    opacity?: number;
 };
 
 type Meteor = {
@@ -20,7 +21,7 @@ type Meteor = {
     hue: number; // 預先計算的色調，避免每次繪製時重新計算
 };
 
-export default function MeteorShower({ intensity = 200, showBackground = true }: MeteorShowerProps) {
+export default function MeteorShower({ intensity = 200, showBackground = true, opacity = 1 }: MeteorShowerProps) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const rafRef = useRef<number | null>(null);
     const meteorsRef = useRef<Meteor[]>([]);
@@ -379,6 +380,7 @@ export default function MeteorShower({ intensity = 200, showBackground = true }:
                 height: "100vh",
                 // 讓流星跑在整個網站內容上面，但還是在抹布下面
                 zIndex: 0,
+                opacity,
                 pointerEvents: "none",
                 willChange: "contents", // GPU 加速
                 transform: "translateZ(0)", // 強制 GPU 加速

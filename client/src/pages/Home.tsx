@@ -55,7 +55,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen-safe bg-background font-sans selection:bg-[#E8A0BF] selection:text-white">
-      <MeteorShower intensity={300} showBackground={false} />
+      <MeteorShower intensity={300} showBackground={false} opacity={0.14} />
       {enableCruisingMascot && <FlyingMascot />}
       <Header />
 
@@ -63,8 +63,8 @@ export default function Home() {
         <div id="about">
           <Hero />
         </div>
-        <section className="bg-[#fbf7f1] px-5 py-10 md:px-8 md:py-14">
-          <div className="mx-auto max-w-4xl text-center">
+        <section className="relative z-10 bg-[#fbf7f1] px-5 pb-8 pt-14 md:px-8 md:pb-8 md:pt-16">
+          <div className="relative z-10 mx-auto max-w-4xl text-center">
             <p className="text-[12px] font-medium uppercase tracking-[0.32em] text-[#B77C4B] md:text-[13px]">
               MUMBAO UNIVERSE STAY
             </p>
@@ -74,8 +74,8 @@ export default function Home() {
             <p className="mt-5 text-[15px] leading-[1.9] text-[#8A7667] md:text-[16px]">
               宜蘭包棟住宿｜寵物友善｜慢寶宇宙主題民宿
             </p>
-            <p className="mx-auto mt-6 max-w-[820px] text-base leading-[2.1] text-[#75685d] md:text-[17px] md:leading-[2.12]">
-              慢慢蒔光 STime Villa 以包棟住宿、療癒空間與慢寶 MUMBAO 原創 IP 為核心，為家庭、朋友與毛孩同行的旅人，留一段安靜自在的停留。從公共空間、房型設計到文創商品，讓慢寶的柔軟、溫暖與陪伴，安靜地出現在每一次住宿裡。
+            <p className="mx-auto mt-6 max-w-[820px] text-base leading-[2.2] text-[#75685d] md:text-[17px] md:leading-[2.18]">
+              慢慢蒔光 STime Villa 是位於宜蘭員山的包棟民宿，以療癒空間、寵物友善與慢寶 MUMBAO 原創 IP 為核心，為家庭、朋友與毛孩同行的旅人，留一段安靜自在的停留。從公共空間、房型設計到文創商品，讓慢寶的柔軟、溫暖與陪伴，安靜地出現在每一次住宿裡。
             </p>
           </div>
         </section>

@@ -53,18 +53,20 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-[12px] leading-6 text-[#8a7a6d] md:text-[13px]">
+        <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[12px] leading-6 text-[#8a7a6d] md:text-[13px]">
           <span className="basis-full sm:basis-auto">
             © 2026 慢慢蒔光 STime Villa. All Rights Reserved.
           </span>
           {policyLinks.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              className="transition-colors duration-200 hover:text-[#B77C4B]"
-            >
-              {link.label}
-            </a>
+            <span key={link.href} className="inline-flex items-center gap-x-2">
+              <span className="text-[#cdbfad]">｜</span>
+              <a
+                href={link.href}
+                className="transition-colors duration-200 hover:text-[#B77C4B]"
+              >
+                {link.label}
+              </a>
+            </span>
           ))}
         </div>
       </div>

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 export function MumbaoChatLauncher() {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(() => shouldAutoOpenChat(location));
+  const [isFooterMode, setIsFooterMode] = useState(false);
 
   useEffect(() => {
     if (shouldAutoOpenChat(location)) {
@@ -14,12 +15,42 @@ export function MumbaoChatLauncher() {
     }
   }, [location]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !("IntersectionObserver" in window)) {
+      return;
+    }
+
+    const footer = document.querySelector("footer");
+    if (!footer) {
+      setIsFooterMode(false);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsFooterMode(entry.isIntersecting);
+      },
+      { rootMargin: "0px 0px -12% 0px", threshold: 0.05 }
+    );
+
+    observer.observe(footer);
+
+    return () => observer.disconnect();
+  }, [location]);
+
   if (location === "/ai-chat") {
     return null;
   }
 
   return (
-    <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom,0px)_+_0.875rem)] left-[max(0.75rem,env(safe-area-inset-left,0px))] right-[max(0.75rem,env(safe-area-inset-right,0px))] z-[80] flex flex-col items-end gap-3 sm:left-auto sm:bottom-6 sm:right-6">
+    <div
+      className={cn(
+        "pointer-events-none fixed left-[max(0.75rem,env(safe-area-inset-left,0px))] right-[max(0.75rem,env(safe-area-inset-right,0px))] z-[80] flex flex-col items-end gap-3 transition-[bottom] duration-300 sm:left-auto sm:right-6",
+        isFooterMode
+          ? "footer-mode bottom-[calc(env(safe-area-inset-bottom,0px)_+_5rem)] sm:bottom-24"
+          : "bottom-[calc(env(safe-area-inset-bottom,0px)_+_0.875rem)] sm:bottom-6"
+      )}
+    >
       <div
         className={cn(
           "pointer-events-auto h-[min(620px,calc(100dvh_-_7.5rem_-_env(safe-area-inset-bottom,0px)))] w-full max-w-[390px] md:h-auto md:w-auto md:max-w-none",

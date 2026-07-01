@@ -1,141 +1,133 @@
-import { Facebook, Instagram, Phone, MapPin, MessageCircle } from "lucide-react";
+import { Facebook, Instagram, MapPin, MessageCircle, Phone } from "lucide-react";
+
+const footerLinks = [
+  { href: "/about", label: "About / 關於慢慢蒔光" },
+  { href: "/#experience", label: "Experience / 慢食慢遊" },
+  { href: "/#rooms", label: "Rooms / 房型介紹" },
+  { href: "/#news", label: "News / 最新消息" },
+];
+
+const policyLinks = [
+  { href: "/privacy", label: "隱私權政策" },
+  { href: "/terms", label: "服務條款" },
+  { href: "/data-deletion", label: "資料刪除說明" },
+];
 
 export function Footer() {
   return (
-    <footer className="bg-[#F9F8F6] py-12 md:py-16 text-gray-800 border-t border-stone-200">
-      <div className="container mx-auto px-6 md:px-8 max-w-6xl">
-        {/* Main Grid: 12 Columns on Desktop */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-10 md:gap-8 items-start mb-10 md:mb-12">
-
-          {/* Column 1: Brand Identity (Desktop: col-span-4) */}
-          <div className="md:col-span-4 space-y-4 text-left">
-            <h2 className="font-serif text-4xl md:text-5xl tracking-[0.05em] text-[#1c1c1c] font-medium leading-none">
+    <footer className="relative z-10 border-t border-[#e7ded2] bg-[#F9F8F6] pb-24 pt-20 text-[#3D332B] md:pb-16 md:pt-[88px]">
+      <div className="mx-auto max-w-[1160px] px-6 sm:px-8 lg:px-10">
+        <div className="grid grid-cols-1 items-start gap-y-12 md:grid-cols-2 md:gap-x-12 lg:grid-cols-[1.45fr_1fr_1.15fr_136px] lg:gap-x-14">
+          <div className="space-y-5">
+            <h2 className="font-serif text-[42px] font-medium leading-none tracking-[0.05em] text-[#3D332B] md:text-[46px]">
               MUMBAO
             </h2>
-            <p className="text-base md:text-lg text-stone-600 tracking-wide font-serif italic">
-              “什麼都不做，也值得被愛”
+            <p className="font-serif text-[16px] italic leading-[1.9] text-[#6F6258] md:text-[17px]">
+              「什麼都不做，也值得被愛。」
             </p>
-            <div className="space-y-2 rounded-[8px] border border-stone-200 bg-white/60 p-4 text-sm leading-6 text-stone-700">
-              <p className="font-semibold text-stone-900">
-                慢慢蒔光 STime Villa 官方網站
+            <div className="space-y-2 bg-white/35 py-1 font-serif text-[15px] leading-[1.9] text-[#75685d] md:text-base">
+              <p className="font-medium text-[#4A3A30]">
+                慢慢蒔光 STime Villa
               </p>
-              <p>宜蘭包棟民宿｜寵物友善住宿｜慢寶宇宙主題民宿</p>
               <p>
-                官方網址：
-                <a
-                  href="https://www.mumbao.tw"
-                  className="break-all text-[#8b6f5b] underline-offset-4 hover:underline"
-                >
-                  https://www.mumbao.tw
-                </a>
+                宜蘭員山包棟民宿｜寵物友善住宿｜慢寶 MUMBAO 原創 IP
               </p>
             </div>
           </div>
 
-          {/* Column 2: Navigation (Desktop: col-span-4) */}
-          <div className="md:col-span-4 space-y-4 text-left">
-            <h3 className="font-serif text-sm tracking-[0.15em] font-semibold text-stone-900 uppercase mb-4 border-b border-stone-200 pb-3 block">
+          <nav aria-label="Footer navigation" className="space-y-5">
+            <h3 className="border-b border-[#ded2c4] pb-3 font-serif text-[13px] font-semibold uppercase tracking-[0.18em] text-[#4A3A30]">
               EXPLORE
             </h3>
-            {/* Mobile: Vertical list, Desktop: 1-Col Stack */}
-            <ul className="flex flex-col gap-4 text-base tracking-wide text-stone-800 font-serif leading-relaxed">
-              <li>
-                <a href="/#about" className="group flex items-baseline justify-start gap-2 hover:text-[#000] transition-colors">
-                  <span className="block font-normal">About Us</span>
-                  <span className="block text-sm text-stone-500">/ 關於慢寶</span>
-                </a>
-              </li>
-              <li>
-                <a href="/#experience" className="group flex items-baseline justify-start gap-2 hover:text-[#000] transition-colors">
-                  <span className="block font-normal">Experience</span>
-                  <span className="block text-sm text-stone-500">/ 慢食慢遊</span>
-                </a>
-              </li>
-              <li>
-                <a href="/#rooms" className="group flex items-baseline justify-start gap-2 hover:text-[#000] transition-colors">
-                  <span className="block font-normal">Rooms</span>
-                  <span className="block text-sm text-stone-500">/ 空間棲息</span>
-                </a>
-              </li>
-              <li>
-                <a href="/#news" className="group flex items-baseline justify-start gap-2 hover:text-[#000] transition-colors">
-                  <span className="block font-normal">News</span>
-                  <span className="block text-sm text-stone-500">/ 最新消息</span>
-                </a>
-              </li>
+            <ul className="flex flex-col gap-4 font-serif text-base leading-relaxed text-[#5f5147]">
+              {footerLinks.map((link) => (
+                <li key={link.href}>
+                  <a
+                    href={link.href}
+                    className="transition-colors duration-200 hover:text-[#B77C4B]"
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              ))}
             </ul>
-          </div>
+          </nav>
 
-          {/* Column 3: Contact & Social (Desktop: col-span-4) */}
-          <div className="md:col-span-4 space-y-4 text-left">
-            <h3 className="font-serif text-sm tracking-[0.15em] font-semibold text-stone-900 uppercase mb-4 border-b border-stone-200 pb-3 block">
+          <div className="space-y-5">
+            <h3 className="border-b border-[#ded2c4] pb-3 font-serif text-[13px] font-semibold uppercase tracking-[0.18em] text-[#4A3A30]">
               CONTACT
             </h3>
-
-            <div className="flex flex-row items-start justify-between gap-4">
-              {/* Left (Text Info) */}
-              <div className="space-y-3 text-base tracking-wide text-stone-700 font-serif leading-snug flex-1">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-start gap-2.5">
-                    <MapPin className="w-4 h-4 text-stone-800 shrink-0" strokeWidth={1.5} />
-                    <span className="text-sm md:text-base whitespace-nowrap text-stone-800">宜蘭縣員山鄉深洲二路158號</span>
-                  </div>
-                  <a href="tel:+886987274888" className="flex items-center justify-start gap-2.5 hover:text-black transition-colors">
-                    <Phone className="w-4 h-4 text-stone-800 shrink-0" strokeWidth={1.5} />
-                    <span className="text-sm md:text-base text-stone-800">+886 987-274-888</span>
-                  </a>
-                  <div className="pl-[26px] text-sm md:text-base text-stone-800">
-                    統編：12345678
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-start gap-4 pt-3 pl-1">
-                  <a href="#" className="text-stone-800 hover:text-black transition-colors duration-300">
-                    <Facebook className="w-5 h-5" strokeWidth={1.5} />
-                  </a>
-                  <a href="#" className="text-stone-800 hover:text-black transition-colors duration-300">
-                    <Instagram className="w-5 h-5" strokeWidth={1.5} />
-                  </a>
-                  <a href="#" className="text-stone-800 hover:text-[#00C300] transition-colors duration-300" title="LINE">
-                    <MessageCircle className="w-5 h-5" strokeWidth={1.5} />
-                  </a>
-                </div>
+            <div className="space-y-3.5 font-serif text-[15px] leading-relaxed text-[#5f5147] md:text-base">
+              <div className="flex items-center gap-3">
+                <MapPin className="h-5 w-5 shrink-0 text-[#8b6f5b]" strokeWidth={1.5} />
+                <span>宜蘭縣員山鄉深洲二路158號</span>
               </div>
+              <a
+                href="tel:+886987274888"
+                className="flex items-center gap-3 transition-colors duration-200 hover:text-[#B77C4B]"
+              >
+                <Phone className="h-5 w-5 shrink-0 text-[#8b6f5b]" strokeWidth={1.5} />
+                <span>+886 987-274-888</span>
+              </a>
+              {/* TODO: 統編確認正式資料後再顯示，避免露出測試資料。 */}
+            </div>
 
-              {/* Right (QR Code) */}
-              <div className="flex flex-col items-center gap-2 shrink-0">
-                <div className="w-28 h-28 bg-white p-1 border border-stone-200">
-                  <img
-                    src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://line.me/ti/p/@mumbao"
-                    alt="LINE QR Code"
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-                <span className="text-[11px] text-stone-900 tracking-wider font-serif text-center">LINE 預約</span>
-              </div>
+            <div className="flex items-center gap-4 pt-2">
+              <a
+                href="#"
+                aria-label="Facebook"
+                className="text-[#5f5147] transition-colors duration-200 hover:text-[#B77C4B]"
+              >
+                <Facebook className="h-[21px] w-[21px]" strokeWidth={1.5} />
+              </a>
+              <a
+                href="#"
+                aria-label="Instagram"
+                className="text-[#5f5147] transition-colors duration-200 hover:text-[#B77C4B]"
+              >
+                <Instagram className="h-[21px] w-[21px]" strokeWidth={1.5} />
+              </a>
+              <a
+                href="#"
+                aria-label="LINE"
+                className="text-[#5f5147] transition-colors duration-200 hover:text-[#B77C4B]"
+              >
+                <MessageCircle className="h-[21px] w-[21px]" strokeWidth={1.5} />
+              </a>
             </div>
           </div>
 
+          <div className="flex w-[136px] flex-col items-center gap-3 md:mt-10 lg:mt-0">
+            <div className="h-28 w-28 bg-white/75 shadow-[0_12px_30px_rgba(79,64,54,0.08)]">
+              <img
+                src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://line.me/ti/p/@mumbao"
+                alt="慢慢蒔光 LINE 洽詢 QR Code"
+                className="h-full w-full object-contain"
+                width={112}
+                height={112}
+                loading="lazy"
+              />
+            </div>
+            <span className="text-center font-serif text-[13px] tracking-wide text-[#6F6258]">
+              LINE 洽詢
+            </span>
+          </div>
         </div>
 
-        {/* Bottom Bar */}
-        <div className="border-t border-stone-200 pt-8 flex flex-col items-start gap-3 md:gap-4 font-serif text-stone-600">
-          <p className="text-sm tracking-wide">© 2026 The Mumbao Studio. All rights reserved.</p>
-          <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-2 text-xs tracking-wide text-stone-500 md:text-sm">
-            <a href="/privacy" className="hover:text-stone-800 transition-colors">
-              隱私權政策
-            </a>
-            <span className="text-stone-300" aria-hidden="true">|</span>
-            <a href="/terms" className="hover:text-stone-800 transition-colors">
-              服務條款
-            </a>
-            <span className="text-stone-300" aria-hidden="true">|</span>
-            <a
-              href="/data-deletion"
-              className="hover:text-stone-800 transition-colors"
-            >
-              資料刪除說明
-            </a>
+        <div className="mt-11 flex flex-col items-center gap-4 border-t border-[#ded2c4] pt-7 font-serif text-[13px] leading-relaxed text-[#75685d] md:flex-row md:justify-between md:text-sm">
+          <p>© 2026 The Mumbao Studio. All Rights Reserved.</p>
+          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-2">
+            {policyLinks.map((link, index) => (
+              <span key={link.href} className="inline-flex items-center gap-x-2">
+                {index > 0 && <span className="text-[#cdbfad]">｜</span>}
+                <a
+                  href={link.href}
+                  className="transition-colors duration-200 hover:text-[#B77C4B]"
+                >
+                  {link.label}
+                </a>
+              </span>
+            ))}
           </div>
         </div>
       </div>

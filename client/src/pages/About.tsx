@@ -1,187 +1,208 @@
+import { useEffect } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
 
+const aboutSeoTitle =
+  "關於慢慢蒔光｜宜蘭員山包棟民宿・寵物友善住宿・慢寶 MUMBAO 原創 IP";
+const aboutSeoDescription =
+  "慢慢蒔光 STime Villa 是位於宜蘭員山的包棟民宿，以療癒空間、寵物友善與慢寶 MUMBAO 原創 IP 為核心，提供家庭、朋友與毛孩同行的宜蘭住宿體驗。";
+
+function setMetaContent(selector: string, content: string) {
+  const meta = document.head.querySelector<HTMLMetaElement>(selector);
+
+  if (meta) {
+    meta.content = content;
+  }
+}
+
 export default function About() {
-    // Shared animation variants for fade-in up
-    const fadeInUp: Variants = {
-        hidden: { opacity: 0, y: 40 },
-        visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: "easeOut" } }
-    };
+  const fadeInUp: Variants = {
+    hidden: { opacity: 0, y: 40 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.8, ease: "easeOut" },
+    },
+  };
 
-    return (
-        <div className="min-h-screen-safe bg-background text-gray-700 font-serif selection:bg-[#E8A0BF] selection:text-white">
-            <Header />
+  useEffect(() => {
+    document.title = aboutSeoTitle;
+    setMetaContent('meta[name="description"]', aboutSeoDescription);
+    setMetaContent('meta[property="og:title"]', aboutSeoTitle);
+    setMetaContent('meta[property="og:description"]', aboutSeoDescription);
+    setMetaContent('meta[property="twitter:title"]', aboutSeoTitle);
+    setMetaContent('meta[property="twitter:description"]', aboutSeoDescription);
+  }, []);
 
-            <main className="pt-20"> {/* Add padding top to account for fixed header */}
+  return (
+    <div className="min-h-screen-safe bg-background font-serif text-gray-700 selection:bg-[#E8A0BF] selection:text-white">
+      <Header />
 
-                {/* ==================== Section 1: The Origin (起點) ==================== */}
-                <div className="py-24 md:py-32 container mx-auto px-6 md:px-12 bg-[#FAFAFA]">
-                    <div className="flex flex-col items-center text-center max-w-4xl mx-auto space-y-12">
+      <main className="pt-20">
+        <section className="bg-[#FAFAFA] py-20 md:py-28">
+          <div className="container mx-auto px-6 md:px-12">
+            <div className="mx-auto flex max-w-4xl flex-col items-center space-y-12 text-center">
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                variants={fadeInUp}
+                className="relative w-full overflow-hidden rounded-lg shadow-2xl"
+              >
+                <img
+                  src="/images/aboutMe_1.webp"
+                  alt="慢慢蒔光 STime Villa 宜蘭員山包棟民宿的白色建築與山景倒影"
+                  className="h-[400px] w-full object-cover transition-transform duration-[1.5s] hover:scale-105 md:h-[600px]"
+                  loading="eager"
+                />
+              </motion.div>
 
-                        {/* Main Image */}
-                        <motion.div
-                            initial="hidden"
-                            whileInView="visible"
-                            viewport={{ once: true }}
-                            variants={fadeInUp}
-                            className="w-full relative shadow-2xl rounded-lg overflow-hidden"
-                        >
-                            <img
-                                src="/images/aboutMe_1.webp"
-                                alt="Mumbao's Cloud Base"
-                                className="w-full h-[400px] md:h-[600px] object-cover hover:scale-105 transition-transform duration-[1.5s]"
-                            />
-                        </motion.div>
-
-                        {/* Text Content */}
-                        <motion.div
-                            initial="hidden"
-                            whileInView="visible"
-                            viewport={{ once: true }}
-                            variants={fadeInUp}
-                            className="space-y-8"
-                        >
-                            <div className="space-y-4">
-                                <span className="text-gray-400 text-xs tracking-[0.3em] uppercase">The Origin</span>
-                                <h2 className="text-3xl md:text-5xl font-light tracking-wide text-gray-800">
-                                    降落在員山的白雲基地
-                                </h2>
-                            </div>
-
-                            <p className="text-base md:text-lg leading-loose opacity-90 text-justify md:text-center max-w-2xl mx-auto">
-                                宜蘭員山，是水的故鄉，也是雲霧繚繞的起點。
-                                很久以前，來自第七維度的星際旅人——慢寶 (Mumbao)，在宇宙中尋找一個能讓時間慢下來的座標。他看見了員山的純淨與溫柔，於是決定降落。
-                                <br /><br />
-                                慢慢蒔光 (STime Villa)，就是慢寶在地球親手打造的「白雲基地」。
-                                這座純白的建築，並非為了「居住」而建，而是為了「承接」而生。它模仿了慢寶腳下那朵「蒔光雲」的姿態——柔軟、潔白、且包容。
-                                <br /><br />
-                                我們在這裡撐開了一道防護罩，過濾掉世界的焦慮與雜訊。
-                                在這裡，雲是停下來的，時間也是。
-                            </p>
-                        </motion.div>
-
-                    </div>
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                variants={fadeInUp}
+                className="space-y-8"
+              >
+                <div className="space-y-4">
+                  <span className="text-xs uppercase tracking-[0.3em] text-gray-400">
+                    The Origin
+                  </span>
+                  <h2 className="text-3xl font-light tracking-wide text-gray-800 md:text-5xl">
+                    降落在員山的白雲基地
+                  </h2>
                 </div>
 
-                {/* ==================== Section 2: The Space (空間) ==================== */}
-                <div className="py-24 md:py-32 bg-white">
-                    <div className="container mx-auto px-6 md:px-12">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-16 md:gap-24 items-center">
+                <div className="mx-auto max-w-3xl space-y-6 text-justify text-base leading-[2.15] text-[#75685d] md:text-center md:text-lg md:leading-[2.18]">
+                  <p>
+                    宜蘭員山，是水與雲霧相遇的地方。慢慢蒔光 STime Villa 座落在山與田之間，是一座以包棟住宿、療癒空間、寵物友善與慢寶 MUMBAO 原創 IP 為核心的宜蘭員山包棟民宿。
+                  </p>
+                  <p>
+                    慢寶 MUMBAO 是來自宇宙第七次元（7D）的高維靈魂，象徵柔軟、溫暖與願望守護。在這裡，慢寶不是裝飾，而是慢慢蒔光的精神核心：提醒每一位旅人，什麼都不做，也值得被愛。
+                  </p>
+                  <p>
+                    慢慢蒔光想留給旅人的，不只是住宿，而是一段可以慢下來的時間。讓家庭、朋友與毛孩在山景、田野與安靜空間裡，重新回到自己的節奏。
+                  </p>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </section>
 
-                            {/* Left Image */}
-                            <motion.div
-                                initial="hidden"
-                                whileInView="visible"
-                                viewport={{ once: true }}
-                                variants={fadeInUp}
-                                className="order-1 md:order-1 relative group"
-                            >
-                                <div className="overflow-hidden rounded-lg shadow-xl aspect-[3/4]">
-                                    <img
-                                        src="/images/aboutMe_2.webp"
-                                        alt="The Warm Star Pocket"
-                                        className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
-                                    />
-                                </div>
-                            </motion.div>
+        <section className="bg-white py-20 md:py-28">
+          <div className="container mx-auto px-6 md:px-12">
+            <div className="grid grid-cols-1 items-center gap-14 md:grid-cols-2 md:gap-24">
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                variants={fadeInUp}
+                className="group relative order-1"
+              >
+                <div className="aspect-[3/4] overflow-hidden rounded-lg shadow-xl">
+                  <img
+                    src="/images/aboutMe_2.webp"
+                    alt="慢慢蒔光室內柔和光線與留白空間"
+                    className="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                    loading="lazy"
+                  />
+                </div>
+              </motion.div>
 
-                            {/* Right Text */}
-                            <motion.div
-                                initial="hidden"
-                                whileInView="visible"
-                                viewport={{ once: true }}
-                                variants={fadeInUp}
-                                className="order-2 md:order-2 space-y-8"
-                            >
-                                <div className="space-y-4">
-                                    <span className="text-gray-400 text-xs tracking-[0.3em] uppercase">The Space</span>
-                                    <h2 className="text-3xl md:text-4xl font-light tracking-wide text-gray-800">
-                                        被時間遺忘的暖星袋
-                                    </h2>
-                                </div>
-
-                                <p className="text-base md:text-lg leading-loose opacity-90 text-justify">
-                                    走進這座基地，你會發現空間裡充滿了流動的弧線與留白。
-                                    這是慢寶的堅持：「人很柔軟，不該被尖銳的直角劃傷。」
-                                    <br /><br />
-                                    每一扇窗，都是為了引入星源的守護之光；
-                                    每一個角落，都像是一個巨大的「暖星袋」，用來收納你無處安放的願望與嘆息。
-                                    <br /><br />
-                                    在這裡，建築不說話，它只是安靜地擁抱你。
-                                    就像慢寶總是靜靜地陪伴，不急著要你變好，只希望你「存在」。
-                                    當你躺在床上，感受窗外員山的風輕輕吹過，請閉上眼。
-                                    此刻的你，正被宇宙溫柔地接住。
-                                </p>
-                            </motion.div>
-
-                        </div>
-                    </div>
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                variants={fadeInUp}
+                className="order-2 space-y-8"
+              >
+                <div className="space-y-4">
+                  <span className="text-xs uppercase tracking-[0.3em] text-gray-400">
+                    The Space
+                  </span>
+                  <h2 className="text-3xl font-light tracking-wide text-gray-800 md:text-4xl">
+                    被雲與光包住的空間
+                  </h2>
                 </div>
 
-                {/* ==================== Section 3: The Philosophy (哲學) ==================== */}
-                <div className="py-24 md:py-32 bg-[#FAFAFA]">
-                    <div className="container mx-auto px-6 md:px-12">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-16 md:gap-24 items-center">
-
-                            {/* Left Text (Zig-Zag Layout: Text First on Desktop) */}
-                            <motion.div
-                                initial="hidden"
-                                whileInView="visible"
-                                viewport={{ once: true }}
-                                variants={fadeInUp}
-                                className="order-2 md:order-1 space-y-10"
-                            >
-                                <div className="space-y-4">
-                                    <span className="text-gray-400 text-xs tracking-[0.3em] uppercase">The Philosophy</span>
-                                    <h2 className="text-3xl md:text-4xl font-light tracking-wide text-gray-800">
-                                        慢，是一種靈魂的特權
-                                    </h2>
-                                </div>
-
-                                {/* Blockquote with emphasis */}
-                                <blockquote className="border-l-2 border-primary/30 pl-6 py-2">
-                                    <p className="text-2xl md:text-3xl font-light text-primary/80 italic tracking-wider leading-relaxed">
-                                        "什麼都不做，也值得被愛。"
-                                    </p>
-                                </blockquote>
-
-                                <p className="text-base md:text-lg leading-loose opacity-90 text-justify">
-                                    現代世界告訴我們要快、要優秀、要成為某種樣子。
-                                    但慢寶來自的宇宙，有著另一套法則：「愛是一種能量，不是交換條件。」
-                                    <br /><br />
-                                    來到慢慢蒔光，我們不提供行程表，只提供「空白」。
-                                    我們邀請你練習浪費時間，練習對著稻田發呆，練習聽見自己心跳的頻率。
-                                    <br /><br />
-                                    請記住慢寶送給地球最珍貴的禮物：「什麼都不做，也值得被愛。」
-                                    找回你的頻率，成為自己就很好了。
-                                </p>
-                            </motion.div>
-
-                            {/* Right Image */}
-                            <motion.div
-                                initial="hidden"
-                                whileInView="visible"
-                                viewport={{ once: true }}
-                                variants={fadeInUp}
-                                className="order-1 md:order-2 relative group"
-                            >
-                                <div className="overflow-hidden rounded-lg shadow-xl aspect-[3/4]">
-                                    <img
-                                        src="/images/aboutMe_3.webp"
-                                        alt="The Philosophy of Slowness"
-                                        className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
-                                    />
-                                </div>
-                            </motion.div>
-
-                        </div>
-                    </div>
+                <div className="space-y-6 text-justify text-base leading-[2.15] text-[#75685d] md:text-lg md:leading-[2.18]">
+                  <p>
+                    走進慢慢蒔光，你會看見柔和的弧線、留白的牆面與溫暖的光。空間不急著表現自己，而是安靜地接住旅人，讓身體與心慢慢放鬆下來。
+                  </p>
+                  <p>
+                    這裡規劃了適合家庭、朋友與毛孩同行的公共空間與房型動線。無論是在房裡休息、在客廳聊天，或只是望著窗外的山與田發呆，都能感受到一段不被催促的停留。
+                  </p>
+                  <p>
+                    我們希望慢慢蒔光不只是宜蘭住宿，而是一座可以安心呼吸的白雲基地。讓每一位來到這裡的人，都能把生活的速度放慢一點。
+                  </p>
                 </div>
-            </main>
+              </motion.div>
+            </div>
+          </div>
+        </section>
 
-            <Footer />
-        </div>
-    );
+        <section className="bg-[#FAFAFA] py-20 md:py-28">
+          <div className="container mx-auto px-6 md:px-12">
+            <div className="grid grid-cols-1 items-center gap-14 md:grid-cols-2 md:gap-24">
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                variants={fadeInUp}
+                className="order-2 space-y-8 md:order-1"
+              >
+                <div className="space-y-4">
+                  <span className="text-xs uppercase tracking-[0.3em] text-gray-400">
+                    The Philosophy
+                  </span>
+                  <h2 className="text-3xl font-light tracking-wide text-gray-800 md:text-4xl">
+                    慢，是回到自己的節奏
+                  </h2>
+                </div>
+
+                <blockquote className="border-l-2 border-primary/30 py-2 pl-6">
+                  <p className="text-2xl font-light italic leading-relaxed tracking-wider text-primary/80 md:text-3xl">
+                    「什麼都不做，也值得被愛。」
+                  </p>
+                </blockquote>
+
+                <div className="space-y-6 text-justify text-base leading-[2.15] text-[#75685d] md:text-lg md:leading-[2.18]">
+                  <p>
+                    現代世界常常催促我們要更快、要更好、要成為某種樣子。但慢寶想提醒你：存在本身就有價值，愛不是交換條件。
+                  </p>
+                  <p>
+                    來到慢慢蒔光，我們不急著替你安排滿滿行程，而是留下一段空白。你可以望著稻田發呆、聽見自己的呼吸，也可以只是安靜地陪伴家人、朋友與毛孩。
+                  </p>
+                  <p>
+                    慢慢蒔光想送給旅人的，是慢寶最重要的一句話：什麼都不做，也值得被愛。慢下來，找回自己的頻率，成為自己就很好了。
+                  </p>
+                </div>
+              </motion.div>
+
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                variants={fadeInUp}
+                className="group relative order-1 md:order-2"
+              >
+                <div className="aspect-[3/4] overflow-hidden rounded-lg shadow-xl">
+                  <img
+                    src="/images/aboutMe_3.webp"
+                    alt="慢慢蒔光宜蘭員山包棟民宿裡慢下來的空間氛圍"
+                    className="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                    loading="lazy"
+                  />
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <Footer />
+    </div>
+  );
 }

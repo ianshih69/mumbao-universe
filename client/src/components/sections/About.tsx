@@ -37,8 +37,8 @@ export function About() {
             viewport={{ once: true }}
           >
             <div>
-              <span className="text-[12px] font-medium uppercase tracking-[0.32em] text-[#B77C4B] md:text-[13px]">
-                ABOUT STIME VILLA
+              <span className="text-[12px] font-medium tracking-[0.32em] text-[#B77C4B] md:text-[13px]">
+                About STime Villa
               </span>
               <h2 className="mt-4 font-serif text-3xl leading-[1.35] text-[#3D332B] md:text-4xl lg:text-5xl">
                 降落在員山的<br />

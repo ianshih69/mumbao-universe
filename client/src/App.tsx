@@ -11,6 +11,8 @@ import { SiteConstructionNotice } from "./components/layout/SiteConstructionNoti
 import Home from "./pages/Home";
 import About from "./pages/About";
 import Breakfast from "./pages/Breakfast";
+import RoomsPage from "./pages/Rooms";
+import RoomDetail from "./pages/RoomDetail";
 import NewsPage from "./pages/News";
 import NewsDetail from "./pages/NewsDetail";
 import Mumbao from "./pages/Mumbao";
@@ -69,6 +71,8 @@ function Router() {
       <Route path={"/admin/site"} component={AdminSite} />
       <Route path={"/about"} component={About} />
       <Route path={"/experience/breakfast"} component={Breakfast} />
+      <Route path={"/rooms/:slug"} component={RoomDetail} />
+      <Route path={"/rooms"} component={RoomsPage} />
       <Route path={"/news/:slug"} component={NewsDetail} />
       <Route path={"/news"} component={NewsPage} />
       <Route path={"/ai-chat"} component={AiChat} />

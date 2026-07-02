@@ -9,146 +9,78 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { asArray, asString, fetchSitePageContent } from "@/lib/site/siteContentApi";
+import { Link } from "wouter";
+import { rooms } from "@/data/rooms";
 
-type RoomItem = {
-  id: string;
-  name: string;
-  title: string;
-  image: string;
-  description: string;
-  alt: string;
-};
-
-const fallbackRoomImages = [
-  "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?q=80&w=3000&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1591088398332-8a7791972843?q=80&w=3000&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1618773928121-c32242e63f39?q=80&w=3000&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?q=80&w=3000&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1505691938895-1758d7feb511?q=80&w=3000&auto=format&fit=crop",
-];
-const fallbackRoomImage = "/images/Hero.webp";
-
-function resolveRoomImage(room: Record<string, unknown>, index: number) {
-  return asString(
-    room.image_url,
-    asString(
-      room.imageUrl,
-      asString(
-        room.image,
-        fallbackRoomImages[index % fallbackRoomImages.length] || fallbackRoomImage,
-      ),
-    ),
-  );
+function getVisibleRoomCount() {
+  if (typeof window === "undefined") return 1;
+  if (window.matchMedia("(min-width: 1024px)").matches) return 3;
+  if (window.matchMedia("(min-width: 768px)").matches) return 2;
+  return 1;
 }
-
-const fallbackRooms: RoomItem[] = [
-  {
-    id: "blue-ocean",
-    name: "Blue Ocean",
-    title: "藍色主題房",
-    image: fallbackRoomImages[0] || fallbackRoomImage,
-    description: "留給海風與睡眠的一間房。",
-    alt: "藍色主題房",
-  },
-  {
-    id: "acacia",
-    name: "Acacia",
-    title: "相思主題房",
-    image: fallbackRoomImages[1] || fallbackRoomImage,
-    description: "把樹影與日光收進窗邊。",
-    alt: "相思主題房",
-  },
-  {
-    id: "moon-pond",
-    name: "Moon Pond",
-    title: "月池主題房",
-    image: fallbackRoomImages[2] || fallbackRoomImage,
-    description: "適合把夜晚放慢的一間房。",
-    alt: "月池主題房",
-  },
-  {
-    id: "mist-valley",
-    name: "Mist Valley",
-    title: "霧谷主題房",
-    image: fallbackRoomImages[3] || fallbackRoomImage,
-    description: "山色與清晨霧氣在這裡停留。",
-    alt: "霧谷主題房",
-  },
-  {
-    id: "starry-night",
-    name: "Starry Night",
-    title: "星夜主題房",
-    image: fallbackRoomImages[4] || fallbackRoomImage,
-    description: "把星光留給入睡前的片刻。",
-    alt: "星夜主題房",
-  },
-];
 
 export function Rooms() {
   const [api, setApi] = React.useState<CarouselApi>();
   const [current, setCurrent] = React.useState(0);
-  const [count, setCount] = React.useState(0);
-  const [heading, setHeading] = React.useState({
-    eyebrow: "The Sanctuaries",
-    title: "房型介紹",
-    subtitle: "五間主題房，留給一組客人的完整時光。",
-  });
-  const [rooms, setRooms] = React.useState<RoomItem[]>(fallbackRooms);
+  const [visibleCount, setVisibleCount] = React.useState(getVisibleRoomCount);
+  const maxStartIndex = Math.max(rooms.length - visibleCount, 0);
+  const pageCount = maxStartIndex + 1;
+  const canScrollPrev = current > 0;
+  const canScrollNext = current < maxStartIndex;
 
   React.useEffect(() => {
-    let isCurrent = true;
-    fetchSitePageContent("rooms")
-      .then((content) => {
-        if (!isCurrent) return;
-        const hero = content.sections["rooms.hero"]?.content;
-        const roomList = content.sections["rooms.room_list"]?.content;
-        setHeading({
-          eyebrow: asString(hero?.eyebrow, "The Sanctuaries"),
-          title: asString(hero?.title, "房型介紹"),
-          subtitle: asString(hero?.subtitle, "五間主題房，留給一組客人的完整時光。"),
-        });
+    const updateVisibleCount = () => {
+      setVisibleCount(getVisibleRoomCount());
+    };
 
-        const nextRooms = asArray<Record<string, unknown>>(roomList?.rooms)
-          .map((room, index) => ({
-            id: asString(room.name, `room-${index + 1}`).toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-            name: asString(room.name, `Room ${index + 1}`),
-            title: asString(room.title, `主題房 ${index + 1}`),
-            image: resolveRoomImage(room, index),
-            description: asString(room.description, fallbackRooms[index]?.description || ""),
-            alt: asString(room.alt_text, asString(room.title, `主題房 ${index + 1}`)),
-          }))
-          .filter((room) => room.title && room.image)
-          .slice(0, 5);
-        if (nextRooms.length) setRooms(nextRooms);
-      })
-      .catch(() => {
-        if (!isCurrent) return;
-        setHeading({
-          eyebrow: "The Sanctuaries",
-          title: "房型介紹",
-          subtitle: "五間主題房，留給一組客人的完整時光。",
-        });
-        setRooms(fallbackRooms);
-      });
+    updateVisibleCount();
+    window.addEventListener("resize", updateVisibleCount);
+
     return () => {
-      isCurrent = false;
+      window.removeEventListener("resize", updateVisibleCount);
     };
   }, []);
 
   React.useEffect(() => {
+    setCurrent((index) => {
+      const nextIndex = Math.min(index, maxStartIndex);
+      if (api && nextIndex !== index) {
+        api.scrollTo(nextIndex);
+      }
+      return nextIndex;
+    });
+  }, [api, maxStartIndex]);
+
+  React.useEffect(() => {
     if (!api) return;
 
-    setCount(api.scrollSnapList().length);
-    setCurrent(api.selectedScrollSnap() + 1);
+    const syncCurrent = () => {
+      const selectedIndex = api.selectedScrollSnap();
+      const nextIndex = Math.min(selectedIndex, maxStartIndex);
+      setCurrent(nextIndex);
+      if (selectedIndex > maxStartIndex) {
+        api.scrollTo(maxStartIndex);
+      }
+    };
 
-    api.on("select", () => {
-      setCurrent(api.selectedScrollSnap() + 1);
-    });
-  }, [api]);
+    syncCurrent();
+    api.on("select", syncCurrent);
+    api.on("reInit", syncCurrent);
+
+    return () => {
+      api.off("select", syncCurrent);
+      api.off("reInit", syncCurrent);
+    };
+  }, [api, maxStartIndex]);
+
+  const scrollToRoom = (index: number) => {
+    const nextIndex = Math.max(0, Math.min(index, maxStartIndex));
+    setCurrent(nextIndex);
+    api?.scrollTo(nextIndex);
+  };
 
   return (
-    <section className="bg-white py-24" id="rooms">
+    <section className="scroll-mt-28 bg-white py-24 md:scroll-mt-32" id="rooms">
       <div className="container relative mx-auto px-4 md:px-8">
         <motion.div
           className="mb-16 flex flex-col items-center space-y-4 text-center"
@@ -158,13 +90,13 @@ export function Rooms() {
           viewport={{ once: true }}
         >
           <span className="text-xs font-medium uppercase tracking-[0.3em] text-gray-400">
-            {heading.eyebrow}
+            The Sanctuaries
           </span>
           <h2 className="font-serif text-4xl text-gray-900 md:text-5xl">
-            {heading.title}
+            房型介紹
           </h2>
           <p className="mt-2 font-serif text-sm tracking-wide text-gray-500 opacity-80 md:text-base">
-            {heading.subtitle}
+            五間公開主題房，一間留給宇宙的隱藏星房。
           </p>
         </motion.div>
 
@@ -173,32 +105,35 @@ export function Rooms() {
             setApi={setApi}
             opts={{
               align: "start",
-              loop: true,
+              loop: false,
             }}
             className="w-full"
           >
             <CarouselContent className="-ml-4 md:-ml-8">
               {rooms.map((room) => (
                 <CarouselItem key={room.id} className="basis-[85%] pl-4 md:basis-1/2 md:pl-8 lg:basis-1/3">
-                  <div className="group cursor-pointer">
+                  <Link href={`/rooms/${room.slug}`} className="group block cursor-pointer">
                     <div className="relative mb-6 aspect-[4/3] overflow-hidden bg-gray-100">
                       <img
                         src={room.image}
                         alt={room.alt}
                         className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                        onError={(event) => {
-                          event.currentTarget.src = fallbackRoomImage;
-                        }}
                       />
                     </div>
 
                     <div className="space-y-2 px-1 text-left">
-                      <h3 className="font-serif text-2xl tracking-wide text-gray-900 transition-colors group-hover:text-gray-600">
-                        {room.title}
+                      <span className="block text-[10px] uppercase tracking-[0.24em] text-gray-400">
+                        ROOM {room.roomNumber}
+                      </span>
+                      <h3 className="font-serif text-[26px] leading-tight tracking-wide text-gray-900 transition-colors group-hover:text-gray-600 md:text-[28px]">
+                        {room.name}主題房
                       </h3>
+                      <p className="text-sm tracking-[0.12em] text-gray-500">
+                        守護星座｜{room.stars}
+                      </p>
 
-                      <p className="font-serif text-sm italic tracking-wide text-gray-500 opacity-80 decoration-gray-300">
-                        "{room.description}"
+                      <p className="font-serif text-sm leading-relaxed tracking-wide text-gray-600 decoration-gray-300">
+                        {room.tagline}
                       </p>
 
                       <div className="pt-2">
@@ -207,41 +142,45 @@ export function Rooms() {
                         </span>
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 </CarouselItem>
               ))}
             </CarouselContent>
           </Carousel>
 
           <div className="hidden md:block">
-            <Button
-              variant="outline"
-              size="icon"
-              className="absolute left-0 top-[35%] h-12 w-12 rounded-full border border-gray-200 bg-white/50 backdrop-blur-sm transition-all duration-300 hover:border-black hover:bg-black hover:text-white"
-              onClick={() => api?.scrollPrev()}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              className="absolute right-0 top-[35%] h-12 w-12 rounded-full border border-gray-200 bg-white/50 backdrop-blur-sm transition-all duration-300 hover:border-black hover:bg-black hover:text-white"
-              onClick={() => api?.scrollNext()}
-            >
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+            {canScrollPrev && (
+              <Button
+                variant="outline"
+                size="icon"
+                className="absolute left-0 top-[35%] h-12 w-12 rounded-full border border-gray-200 bg-white/50 backdrop-blur-sm transition-all duration-300 hover:border-black hover:bg-black hover:text-white"
+                onClick={() => scrollToRoom(current - 1)}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            )}
+            {canScrollNext && (
+              <Button
+                variant="outline"
+                size="icon"
+                className="absolute right-0 top-[35%] h-12 w-12 rounded-full border border-gray-200 bg-white/50 backdrop-blur-sm transition-all duration-300 hover:border-black hover:bg-black hover:text-white"
+                onClick={() => scrollToRoom(current + 1)}
+              >
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
 
         <div className="mt-12 flex justify-center gap-2 md:mt-16">
-          {Array.from({ length: count }).map((_, index) => (
+          {Array.from({ length: pageCount }).map((_, index) => (
             <button
               key={index}
               className={cn(
                 "h-2 rounded-full transition-all duration-300",
-                current === index + 1 ? "w-6 bg-gray-800" : "w-2 bg-gray-300 hover:bg-gray-400",
+                current === index ? "w-6 bg-gray-800" : "w-2 bg-gray-300 hover:bg-gray-400",
               )}
-              onClick={() => api?.scrollTo(index)}
+              onClick={() => scrollToRoom(index)}
               aria-label={`Go to slide ${index + 1}`}
             />
           ))}
@@ -249,10 +188,11 @@ export function Rooms() {
 
         <div className="mt-12 text-center md:mt-16">
           <Button
+            asChild
             variant="outline"
             className="rounded-none border-gray-300 px-12 py-6 text-xs uppercase tracking-widest text-gray-600 transition-all duration-500 hover:bg-gray-900 hover:text-white"
           >
-            View All Rooms
+            <Link href="/rooms">View All Rooms</Link>
           </Button>
         </div>
       </div>

@@ -14,9 +14,9 @@ const socialLinks = [
 
 export function Footer() {
   return (
-    <footer className="relative z-10 border-t border-[#eee5da] bg-[#fbf8f2] px-5 pb-[120px] pt-10 text-center font-serif text-[#75685d] md:pb-7 md:pt-8">
-      <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 md:gap-3">
-        <div className="flex flex-col items-center justify-center gap-y-2 text-[14px] leading-[1.8] tracking-[0.04em] md:flex-row md:flex-wrap md:gap-x-7 md:gap-y-1 md:text-sm md:leading-6 md:tracking-normal">
+    <footer className="relative z-10 border-t border-[#eee5da] bg-[#fbf8f2] px-5 pb-[100px] pt-8 text-center font-serif text-[#75685d] md:pb-7 md:pt-8">
+      <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 md:gap-3">
+        <div className="flex flex-col items-center justify-center gap-y-1.5 text-[13px] leading-[1.65] tracking-[0.04em] md:flex-row md:flex-wrap md:gap-x-7 md:gap-y-1 md:text-sm md:leading-6 md:tracking-normal">
           <span className="order-3 md:order-1">宜蘭縣民宿3148號</span>
           <a
             href="tel:+886988098367"
@@ -35,9 +35,9 @@ export function Footer() {
           </span>
         </div>
 
-        <div className="mt-3 flex flex-col items-center justify-center gap-3 text-sm leading-6 md:mt-0 md:flex-row md:gap-x-4 md:gap-y-1 md:text-[13px]">
+        <div className="mt-3.5 flex flex-row items-center justify-center gap-4 text-[13px] leading-6 md:mt-0 md:gap-x-4 md:gap-y-1">
           <span>Follow us on :</span>
-          <div className="flex items-center justify-center gap-6 md:gap-4">
+          <div className="flex items-center justify-center gap-4">
             {socialLinks.map(({ href, label, Icon }) => (
               <a
                 key={label}
@@ -45,13 +45,13 @@ export function Footer() {
                 aria-label={label}
                 className="text-[#5f5147] transition-colors duration-200 hover:text-[#B77C4B]"
               >
-                <Icon className="h-[21px] w-[21px] md:h-[18px] md:w-[18px]" strokeWidth={1.5} />
+                <Icon className="h-[19px] w-[19px] md:h-[18px] md:w-[18px]" strokeWidth={1.5} />
               </a>
             ))}
           </div>
         </div>
 
-        <div className="mt-3 flex flex-col items-center justify-center gap-y-2 text-[13px] leading-[1.8] text-[#8a7a6d] md:mt-0 md:flex-row md:flex-wrap md:gap-x-2 md:gap-y-1 md:leading-6">
+        <div className="mt-5 flex flex-col items-center justify-center gap-y-1.5 text-[13px] leading-[1.7] text-[#8a7a6d] md:mt-0 md:flex-row md:flex-wrap md:gap-x-2 md:gap-y-1 md:leading-6">
           <span>
             © 2026 慢慢蒔光 STime Villa. All Rights Reserved.
           </span>

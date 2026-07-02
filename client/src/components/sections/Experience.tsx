@@ -1,9 +1,12 @@
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Plus, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 
 export function Experience() {
+  const [, navigate] = useLocation();
+  const openBreakfast = () => navigate("/experience/breakfast");
+
   return (
     <section id="experience" className="scroll-mt-[120px] py-24 bg-[#F5F5F5]">
       <div className="container mx-auto px-4 md:px-8">
@@ -11,7 +14,16 @@ export function Experience() {
 
           {/* Card 1: Breakfast Service */}
           <motion.div
-            className="group relative overflow-hidden w-full aspect-[4/3] md:aspect-auto md:h-[600px] bg-white shadow-lg hover:shadow-2xl transition-shadow duration-500"
+            className="group relative overflow-hidden w-full aspect-[4/3] md:aspect-auto md:h-[600px] bg-white shadow-lg hover:shadow-2xl transition-shadow duration-500 cursor-pointer"
+            role="link"
+            tabIndex={0}
+            onClick={openBreakfast}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openBreakfast();
+              }
+            }}
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: "easeOut" }}

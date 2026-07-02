@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 type MeteorShowerProps = {
     intensity?: number; // 生成間隔 (ms)；數字越小越密集
@@ -21,11 +21,31 @@ type Meteor = {
     hue: number; // 預先計算的色調，避免每次繪製時重新計算
 };
 
+function getResponsiveMinimumOpacity() {
+    if (typeof window === "undefined") return 0.32;
+    return window.innerWidth < 1024 || window.matchMedia("(pointer: coarse)").matches ? 0.26 : 0.32;
+}
+
 export default function MeteorShower({ intensity = 200, showBackground = true, opacity = 1 }: MeteorShowerProps) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const rafRef = useRef<number | null>(null);
     const meteorsRef = useRef<Meteor[]>([]);
     const lastSpawnRef = useRef<number>(0);
+    const [minimumOpacity, setMinimumOpacity] = useState(getResponsiveMinimumOpacity);
+    const effectiveOpacity = Math.min(0.45, Math.max(opacity, minimumOpacity));
+
+    useEffect(() => {
+        const updateMinimumOpacity = () => {
+            setMinimumOpacity(getResponsiveMinimumOpacity());
+        };
+
+        updateMinimumOpacity();
+        window.addEventListener("resize", updateMinimumOpacity);
+
+        return () => {
+            window.removeEventListener("resize", updateMinimumOpacity);
+        };
+    }, []);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -380,7 +400,7 @@ export default function MeteorShower({ intensity = 200, showBackground = true, o
                 height: "100vh",
                 // 讓流星跑在整個網站內容上面，但還是在抹布下面
                 zIndex: 0,
-                opacity,
+                opacity: effectiveOpacity,
                 pointerEvents: "none",
                 willChange: "contents", // GPU 加速
                 transform: "translateZ(0)", // 強制 GPU 加速

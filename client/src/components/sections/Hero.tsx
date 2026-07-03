@@ -25,12 +25,10 @@ function resolveMobileHeroImage(path: string) {
 }
 
 const heroCopy = {
-  eyebrow: "慢下來，回到有光的地方",
+  eyebrow: "走進慢寶宇宙繪本裡，體驗全台首創的原創繪本沉浸宇宙",
   title: "慢慢蒔光",
   titleEn: "STime Villa",
   quote: "什麼都不做，也值得被愛。",
-  location: "宜蘭員山包棟民宿",
-  body: "在山與田之間，留一段安靜的停留。",
 };
 
 export function Hero() {
@@ -88,7 +86,7 @@ export function Hero() {
 
       <div className="relative z-10 flex h-full flex-col items-center justify-center px-4 text-center text-white">
         <motion.div
-          className="mx-auto max-w-5xl space-y-8 md:space-y-10"
+          className="mx-auto max-w-5xl space-y-8 md:space-y-9"
           initial={{ opacity: 0, translateY: 30 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{
@@ -97,31 +95,23 @@ export function Hero() {
             delay: 0.5,
           }}
         >
-          <p className="text-xs tracking-[0.28em] text-white/85 md:text-sm">
+          <p className="mx-auto max-w-[330px] text-[15px] leading-[1.85] tracking-[0.06em] text-white/90 drop-shadow-[0_2px_10px_rgba(0,0,0,0.28)] [text-wrap:balance] md:max-w-[740px] md:text-[21px] md:leading-[1.78] md:tracking-[0.095em]">
             {heroCopy.eyebrow}
           </p>
 
           <h1 className="font-serif font-light leading-none tracking-[0.16em] text-white">
-            <span className="block text-5xl sm:text-6xl md:text-7xl lg:text-8xl">
+            <span className="block text-[48px] sm:text-[52px] md:text-[82px] lg:text-[88px]">
               {heroCopy.title}
             </span>
-            <span className="mt-4 block text-2xl tracking-[0.18em] text-white/82 sm:text-3xl md:text-6xl lg:text-7xl">
+            <span className="mt-4 block text-[36px] tracking-[0.18em] text-white/82 sm:text-[40px] md:text-[60px] lg:text-[68px]">
               {heroCopy.titleEn}
             </span>
           </h1>
 
-          <p className="mx-auto max-w-2xl font-serif text-base font-light leading-relaxed tracking-[0.08em] text-white/90 md:text-xl lg:text-2xl">
+          <p className="mx-auto mt-2 max-w-2xl font-serif text-base font-light leading-relaxed tracking-[0.08em] text-white/92 drop-shadow-[0_2px_10px_rgba(0,0,0,0.25)] md:mt-3 md:text-xl lg:text-2xl">
             {heroCopy.quote}
           </p>
 
-          <div className="space-y-4 text-white/84">
-            <p className="text-sm font-medium tracking-[0.24em] md:text-base">
-              {heroCopy.location}
-            </p>
-            <p className="mx-auto max-w-2xl text-sm leading-7 tracking-[0.08em] md:text-base md:leading-8">
-              {heroCopy.body}
-            </p>
-          </div>
         </motion.div>
       </div>
     </section>

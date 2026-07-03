@@ -1,5 +1,6 @@
 import historyHandler from "../server/aiChat/history.js";
 import messageHandler from "../server/aiChat/message.js";
+import deleteSessionHandler from "../server/aiChat/deleteSession.js";
 
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
@@ -24,6 +25,10 @@ export default async function handler(req, res) {
 
   if (action === "message") {
     return messageHandler(req, res);
+  }
+
+  if (action === "delete-session") {
+    return deleteSessionHandler(req, res);
   }
 
   return sendJson(res, 400, {

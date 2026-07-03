@@ -64,6 +64,10 @@ type ChatSession = {
   line_user_id?: string;
   line_display_name?: string;
   line_picture_url?: string;
+  auth_user_id?: string;
+  customer_profile_id?: string;
+  customer_email?: string;
+  deleted_at?: string | null;
 };
 
 type SessionRequestIdentity = {
@@ -785,6 +789,13 @@ function buildLineRequestPayload(identity?: SessionRequestIdentity) {
   };
 }
 
+function buildJsonHeaders(accessToken = "") {
+  return {
+    "Content-Type": "application/json",
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+  };
+}
+
 async function bindLineSession(
   identity: LineIdentity,
   visitorId: string,
@@ -837,17 +848,17 @@ async function bindLineSession(
 async function fetchSessionOnly(
   visitorId: string,
   forceNewSession = false,
-  identity?: SessionRequestIdentity
+  identity?: SessionRequestIdentity,
+  accessToken = ""
 ) {
   return fetchJsonWithTimeout<{
     session?: ChatSession;
+    sessions?: ChatSession[];
   }>(
     "/api/ai-chat?action=history",
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: buildJsonHeaders(accessToken),
       body: JSON.stringify({
         visitor_id: visitorId,
         session_only: true,
@@ -862,7 +873,8 @@ async function fetchSessionOnly(
 async function fetchLatestHistory(
   visitorId: string,
   sessionId: string,
-  identity?: SessionRequestIdentity
+  identity?: SessionRequestIdentity,
+  accessToken = ""
 ) {
   const startedAt = getTimingNow();
   logChatDebug("history fetch start", {
@@ -882,9 +894,7 @@ async function fetchLatestHistory(
       "/api/ai-chat?action=history",
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: buildJsonHeaders(accessToken),
         body: JSON.stringify({
           visitor_id: visitorId,
           session_id: sessionId,
@@ -955,6 +965,7 @@ export function MumbaoChat({
   const [isLoading, setIsLoading] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [isInitialHistoryLoading, setIsInitialHistoryLoading] = useState(false);
+  const [isSessionActionLoading, setIsSessionActionLoading] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [isDesktopResizable, setIsDesktopResizable] = useState(false);
   const [windowSize, setWindowSize] = useState<ChatWindowSize>(() =>
@@ -969,6 +980,7 @@ export function MumbaoChat({
   const previousIsOpenRef = useRef(isOpen);
   const bootStartedAtRef = useRef(getTimingNow());
   const firstMessagesRenderLoggedRef = useRef(false);
+  const lastCustomerAccessTokenRef = useRef("");
   const shouldAutoScrollRef = useRef(true);
   const pendingScrollRestoreRef = useRef<{
     scrollHeight: number;
@@ -1138,7 +1150,12 @@ export function MumbaoChat({
       }
 
       try {
-        const data = await fetchSessionOnly(nextVisitorId);
+        const data = await fetchSessionOnly(
+          nextVisitorId,
+          false,
+          undefined,
+          customerAccessToken
+        );
         const recoveredSessionId = data.session?.id
           ? String(data.session.id)
           : "";
@@ -1236,7 +1253,8 @@ export function MumbaoChat({
             {
               lineIdentity: identity,
               anonymousVisitorId: nextVisitorId,
-            }
+            },
+            customerAccessToken
           );
           const historyMessages = (historyData.messages || [])
             .map(normalizeMessage)
@@ -1300,6 +1318,7 @@ export function MumbaoChat({
       targetSessionId = sessionId,
       targetLineIdentity = lineIdentity,
       targetAnonymousVisitorId = anonymousVisitorId,
+      targetAccessToken = customerAccessToken,
     } = {}) => {
       if (!targetVisitorId || !targetSessionId) {
         logChatDebug("history refresh skipped: missing identity", {
@@ -1331,7 +1350,7 @@ export function MumbaoChat({
         const data = await fetchLatestHistory(targetVisitorId, targetSessionId, {
           lineIdentity: targetLineIdentity,
           anonymousVisitorId: targetAnonymousVisitorId,
-        });
+        }, targetAccessToken);
 
         if (historyFetchIdRef.current !== fetchId) return;
 
@@ -1399,8 +1418,64 @@ export function MumbaoChat({
         }
       }
     },
-    [anonymousVisitorId, lineIdentity, sessionId, visitorId]
+    [anonymousVisitorId, customerAccessToken, lineIdentity, sessionId, visitorId]
   );
+
+  useEffect(() => {
+    if (!isOpen || !visitorId || !customerAccessToken) return;
+    if (lastCustomerAccessTokenRef.current === customerAccessToken) return;
+
+    lastCustomerAccessTokenRef.current = customerAccessToken;
+    let isCancelled = false;
+
+    async function bindCustomerSession() {
+      try {
+        const data = await fetchSessionOnly(
+          visitorId,
+          false,
+          {
+            lineIdentity,
+            anonymousVisitorId,
+          },
+          customerAccessToken
+        );
+
+        if (isCancelled || !data.session?.id) return;
+
+        const nextSessionId = String(data.session.id);
+        const nextVisitorId = data.session.visitor_id
+          ? String(data.session.visitor_id)
+          : visitorId;
+
+        setVisitorId(nextVisitorId);
+        setSessionId(nextSessionId);
+        saveSessionId(nextSessionId, nextVisitorId);
+        await refreshCurrentSessionHistory({
+          showLoading: true,
+          targetVisitorId: nextVisitorId,
+          targetSessionId: nextSessionId,
+          targetLineIdentity: lineIdentity,
+          targetAnonymousVisitorId: anonymousVisitorId,
+          targetAccessToken: customerAccessToken,
+        });
+      } catch (error) {
+        console.warn("Mumbao chat customer session bind unavailable:", error);
+      }
+    }
+
+    bindCustomerSession();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    anonymousVisitorId,
+    customerAccessToken,
+    isOpen,
+    lineIdentity,
+    refreshCurrentSessionHistory,
+    visitorId,
+  ]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -1497,9 +1572,7 @@ export function MumbaoChat({
           "/api/ai-chat?action=history",
           {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: buildJsonHeaders(customerAccessToken),
             body: JSON.stringify({
               visitor_id: visitorId,
               session_id: sessionId,
@@ -1557,7 +1630,15 @@ export function MumbaoChat({
       window.clearInterval(timer);
       logChatDebug("polling stopped", { visitorId, sessionId });
     };
-  }, [anonymousVisitorId, isOpen, lineIdentity, messages, sessionId, visitorId]);
+  }, [
+    anonymousVisitorId,
+    customerAccessToken,
+    isOpen,
+    lineIdentity,
+    messages,
+    sessionId,
+    visitorId,
+  ]);
 
   useEffect(() => {
     if (!shouldAutoScrollRef.current || pendingScrollRestoreRef.current) {
@@ -1713,17 +1794,16 @@ export function MumbaoChat({
 
     try {
       const before = getOldestCreatedAt(messages);
-      const data = await fetchJsonWithTimeout<{
-        session?: ChatSession;
-        messages?: ApiMessage[];
-        has_more?: boolean;
+    const data = await fetchJsonWithTimeout<{
+      session?: ChatSession;
+      sessions?: ChatSession[];
+      messages?: ApiMessage[];
+      has_more?: boolean;
       }>(
         "/api/ai-chat?action=history",
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: buildJsonHeaders(customerAccessToken),
           body: JSON.stringify({
             visitor_id: visitorId,
             session_id: sessionId || undefined,
@@ -1772,6 +1852,107 @@ export function MumbaoChat({
     }
   };
 
+  const handleStartNewSession = async () => {
+    if (!visitorId || isSessionActionLoading) return;
+
+    setIsSessionActionLoading(true);
+    shouldAutoScrollRef.current = true;
+
+    try {
+      const data = await fetchSessionOnly(
+        visitorId,
+        true,
+        {
+          lineIdentity,
+          anonymousVisitorId,
+        },
+        customerAccessToken
+      );
+      const nextSessionId = data.session?.id ? String(data.session.id) : "";
+      const nextVisitorId = data.session?.visitor_id
+        ? String(data.session.visitor_id)
+        : visitorId;
+
+      if (nextSessionId) {
+        setVisitorId(nextVisitorId);
+        setSessionId(nextSessionId);
+        saveSessionId(nextSessionId, nextVisitorId);
+      }
+
+      setMessages([createWelcomeMessage()]);
+      setHasMoreHistory(false);
+    } catch (error) {
+      console.warn("Mumbao chat new session unavailable:", error);
+      setMessages((current) => [
+        ...current.filter((message) => isRealChatMessage(message)),
+        createMessage("assistant", "慢寶暫時無法開始新對話，請稍後再試。"),
+      ]);
+    } finally {
+      setIsSessionActionLoading(false);
+    }
+  };
+
+  const handleDeleteSession = async () => {
+    if (!visitorId || !sessionId || isSessionActionLoading) return;
+
+    const confirmed = window.confirm(
+      "刪除後，此段對話將不再顯示，慢寶也不會再用它接續回答。"
+    );
+    if (!confirmed) return;
+
+    setIsSessionActionLoading(true);
+
+    try {
+      await fetchJsonWithTimeout<{ deleted_at?: string }>(
+        "/api/ai-chat?action=delete-session",
+        {
+          method: "POST",
+          headers: buildJsonHeaders(customerAccessToken),
+          body: JSON.stringify({
+            visitor_id: visitorId,
+            session_id: sessionId,
+          }),
+        },
+        8000
+      );
+
+      messagesCacheRef.current.delete(sessionId);
+      clearCachedMessages("session deleted", { sessionId });
+      clearSessionId();
+      setMessages([createWelcomeMessage()]);
+      setHasMoreHistory(false);
+      setSessionId("");
+
+      const data = await fetchSessionOnly(
+        visitorId,
+        true,
+        {
+          lineIdentity,
+          anonymousVisitorId,
+        },
+        customerAccessToken
+      );
+      const nextSessionId = data.session?.id ? String(data.session.id) : "";
+      const nextVisitorId = data.session?.visitor_id
+        ? String(data.session.visitor_id)
+        : visitorId;
+
+      if (nextSessionId) {
+        setVisitorId(nextVisitorId);
+        setSessionId(nextSessionId);
+        saveSessionId(nextSessionId, nextVisitorId);
+      }
+    } catch (error) {
+      console.warn("Mumbao chat delete session unavailable:", error);
+      setMessages((current) => [
+        ...current.filter((message) => isRealChatMessage(message)),
+        createMessage("assistant", "慢寶暫時無法刪除這段對話，請稍後再試。"),
+      ]);
+    } finally {
+      setIsSessionActionLoading(false);
+    }
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -1799,12 +1980,7 @@ export function MumbaoChat({
         "/api/ai-chat?action=message",
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(customerAccessToken
-              ? { Authorization: `Bearer ${customerAccessToken}` }
-              : {}),
-          },
+          headers: buildJsonHeaders(customerAccessToken),
           body: JSON.stringify({
             visitor_id: visitorId,
             session_id: sessionId || undefined,
@@ -1931,6 +2107,32 @@ export function MumbaoChat({
               沒有更早紀錄
             </span>
           )}
+        </div>
+
+        <div className="rounded-2xl border border-[#f0e3d4] bg-white/80 px-4 py-3 text-xs leading-5 text-[#8a796a] shadow-sm">
+          <p>
+            {customerAccessToken
+              ? "已登入，慢寶會保留你的對話紀錄，方便下次接續。"
+              : "登入後可保留對話紀錄。"}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleStartNewSession}
+              disabled={isSessionActionLoading || isLoading || !visitorId}
+              className="rounded-full border border-[#ead8c6] bg-[#fffaf2] px-3 py-1.5 text-[11px] font-medium text-[#7a6758] transition hover:bg-[#f8efe3] disabled:cursor-wait disabled:opacity-60"
+            >
+              新對話
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteSession}
+              disabled={isSessionActionLoading || isLoading || !sessionId}
+              className="rounded-full border border-[#ead8c6] bg-white px-3 py-1.5 text-[11px] font-medium text-[#9a6a55] transition hover:bg-[#fff3e8] disabled:cursor-wait disabled:opacity-60"
+            >
+              刪除此段
+            </button>
+          </div>
         </div>
 
         {isInitialHistoryLoading && realMessageCount === 0 && (

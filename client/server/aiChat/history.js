@@ -1,3 +1,9 @@
+import {
+  buildCustomerSessionPatch,
+  isSessionOwnedByCustomer,
+  resolveCustomerIdentity,
+} from "./customerIdentity.js";
+
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
@@ -313,7 +319,7 @@ async function loadBestLineSession(lineUserId) {
   const activeSessions = await supabaseRequest(
     `/chat_sessions?line_user_id=eq.${encodeURIComponent(
       lineUserId
-    )}&status=in.(ai_active,human_takeover)&select=*&order=updated_at.desc&limit=20`
+    )}&deleted_at=is.null&status=in.(ai_active,human_takeover)&select=*&order=updated_at.desc&limit=20`
   );
 
   const sessions = activeSessions?.length
@@ -321,7 +327,7 @@ async function loadBestLineSession(lineUserId) {
     : await supabaseRequest(
         `/chat_sessions?line_user_id=eq.${encodeURIComponent(
           lineUserId
-        )}&select=*&order=updated_at.desc&limit=20`
+        )}&deleted_at=is.null&select=*&order=updated_at.desc&limit=20`
       ).then((items) =>
         (items || []).filter((session) => session?.status !== "closed")
       );
@@ -340,13 +346,83 @@ async function loadBestLineSession(lineUserId) {
   return selectBestLineSession(entries) || null;
 }
 
-async function getOrCreateSession(visitorId) {
+function buildCreateSessionPayload(visitorId, customerIdentity) {
+  return {
+    visitor_id: visitorId,
+    ...buildCustomerSessionPatch(customerIdentity),
+  };
+}
+
+async function linkSessionToCustomer(session, customerIdentity) {
+  if (!session?.id || !customerIdentity?.authUserId) {
+    return session;
+  }
+
+  if (session.auth_user_id && !isSessionOwnedByCustomer(session, customerIdentity)) {
+    throw createHttpError(
+      "session_id does not belong to customer.",
+      403,
+      "session customer mismatch"
+    );
+  }
+
+  const patch = buildCustomerSessionPatch(customerIdentity, session);
+  if (!Object.keys(patch).length) {
+    return session;
+  }
+
+  const updatedSessions = await supabaseRequest(
+    `/chat_sessions?id=eq.${encodeURIComponent(session.id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        ...patch,
+        updated_at: new Date().toISOString(),
+      }),
+    }
+  );
+
+  return updatedSessions?.[0] || session;
+}
+
+async function getLatestCustomerSession(customerIdentity) {
+  if (!customerIdentity?.authUserId) {
+    return null;
+  }
+
+  const sessions = await supabaseRequest(
+    `/chat_sessions?auth_user_id=eq.${encodeURIComponent(
+      customerIdentity.authUserId
+    )}&deleted_at=is.null&select=*&order=latest_message_at.desc.nullslast,updated_at.desc&limit=1`
+  );
+
+  return sessions?.[0] || null;
+}
+
+async function loadCustomerSessions(customerIdentity) {
+  if (!customerIdentity?.authUserId) {
+    return [];
+  }
+
+  return supabaseRequest(
+    `/chat_sessions?auth_user_id=eq.${encodeURIComponent(
+      customerIdentity.authUserId
+    )}&deleted_at=is.null&select=id,visitor_id,last_message,latest_message_at,last_message_at,title,created_at,updated_at&order=latest_message_at.desc.nullslast,updated_at.desc&limit=8`
+  );
+}
+
+async function getOrCreateSession(visitorId, customerIdentity) {
+  const latestCustomerSession = await getLatestCustomerSession(customerIdentity);
+  if (latestCustomerSession) {
+    return latestCustomerSession;
+  }
+
   const encodedVisitorId = encodeURIComponent(visitorId);
   let sessions;
 
   try {
     sessions = await supabaseRequest(
-      `/chat_sessions?visitor_id=eq.${encodedVisitorId}&select=*&order=updated_at.desc&limit=1`
+      `/chat_sessions?visitor_id=eq.${encodedVisitorId}&auth_user_id=is.null&deleted_at=is.null&select=*&order=updated_at.desc&limit=1`
     );
   } catch (error) {
     error.reason = error.reason || "supabase create session failed";
@@ -354,7 +430,7 @@ async function getOrCreateSession(visitorId) {
   }
 
   if (sessions?.[0]) {
-    return sessions[0];
+    return linkSessionToCustomer(sessions[0], customerIdentity);
   }
 
   let createdSessions;
@@ -362,7 +438,7 @@ async function getOrCreateSession(visitorId) {
   try {
     createdSessions = await supabaseRequest("/chat_sessions", {
       method: "POST",
-      body: JSON.stringify({ visitor_id: visitorId }),
+      body: JSON.stringify(buildCreateSessionPayload(visitorId, customerIdentity)),
     });
   } catch (error) {
     error.reason = error.reason || "supabase create session failed";
@@ -372,10 +448,10 @@ async function getOrCreateSession(visitorId) {
   return createdSessions[0];
 }
 
-async function createSession(visitorId) {
+async function createSession(visitorId, customerIdentity) {
   const createdSessions = await supabaseRequest("/chat_sessions", {
     method: "POST",
-    body: JSON.stringify({ visitor_id: visitorId }),
+    body: JSON.stringify(buildCreateSessionPayload(visitorId, customerIdentity)),
   });
 
   return createdSessions[0];
@@ -395,7 +471,7 @@ function normalizeLimit(value) {
   return Math.min(parsedLimit, maxHistoryLimit);
 }
 
-async function getSession({ visitorId, sessionId, lineProfile }) {
+async function getSession({ visitorId, sessionId, lineProfile, customerIdentity }) {
   if (!visitorId) {
     throw createHttpError(
       "visitor_id is required.",
@@ -412,23 +488,33 @@ async function getSession({ visitorId, sessionId, lineProfile }) {
         reason: "line_user_id match",
         selectedSessionHasMessageCount: existingLineSession.messageCount,
       });
-      return existingLineSession.session;
+      return linkSessionToCustomer(existingLineSession.session, customerIdentity);
     }
   }
 
   if (sessionId) {
-    const sessionFilters = [
-      `id=eq.${encodeURIComponent(sessionId)}`,
-      `visitor_id=eq.${encodeURIComponent(visitorId)}`,
-    ]
-      .filter(Boolean)
-      .join("&");
+    const sessionFilters = customerIdentity?.authUserId
+      ? `id=eq.${encodeURIComponent(sessionId)}&deleted_at=is.null`
+      : `id=eq.${encodeURIComponent(sessionId)}&visitor_id=eq.${encodeURIComponent(
+          visitorId
+        )}&auth_user_id=is.null&deleted_at=is.null`;
     const sessions = await supabaseRequest(
       `/chat_sessions?${sessionFilters}&select=*&limit=1`
     );
 
-    if (sessions?.[0]) {
-      return sessions[0];
+    const session = sessions?.[0];
+    if (session) {
+      if (customerIdentity?.authUserId) {
+        const canUseSession =
+          isSessionOwnedByCustomer(session, customerIdentity) ||
+          (!session.auth_user_id && session.visitor_id === visitorId);
+
+        if (canUseSession) {
+          return linkSessionToCustomer(session, customerIdentity);
+        }
+      } else {
+        return session;
+      }
     }
 
     throw createHttpError(
@@ -438,7 +524,7 @@ async function getSession({ visitorId, sessionId, lineProfile }) {
     );
   }
 
-  return getOrCreateSession(visitorId);
+  return getOrCreateSession(visitorId, customerIdentity);
 }
 
 function getCreatedTime(message) {
@@ -472,7 +558,7 @@ async function resolveBeforeCreatedAt(sessionId, before) {
   const cursorMessages = await supabaseRequest(
     `/chat_messages?session_id=eq.${encodeURIComponent(
       sessionId
-    )}&id=eq.${encodeURIComponent(normalizedBefore)}&select=created_at&limit=1`
+    )}&deleted_at=is.null&id=eq.${encodeURIComponent(normalizedBefore)}&select=created_at&limit=1`
   );
 
   return cursorMessages?.[0]?.created_at || null;
@@ -492,7 +578,7 @@ async function loadMessagesPage({ sessionId, limit, before }) {
   return supabaseRequest(
     `/chat_messages?session_id=eq.${encodeURIComponent(
       sessionId
-    )}${beforeFilter}&select=id,sender,message,provider_used,created_at&order=created_at.desc&limit=${limit}`
+    )}&deleted_at=is.null${beforeFilter}&select=id,sender,message,provider_used,created_at&order=created_at.desc&limit=${limit}`
   );
 }
 
@@ -506,7 +592,7 @@ async function loadMessagesAfter({ sessionId, limit, after }) {
   return supabaseRequest(
     `/chat_messages?session_id=eq.${encodeURIComponent(
       sessionId
-    )}${afterFilter}&select=id,sender,message,provider_used,created_at&order=created_at.asc&limit=${limit}`
+    )}&deleted_at=is.null${afterFilter}&select=id,sender,message,provider_used,created_at&order=created_at.asc&limit=${limit}`
   );
 }
 
@@ -551,9 +637,11 @@ export default async function handler(req, res) {
       lineIdToken,
       lineAccessToken,
     });
+    const customerIdentity = await resolveCustomerIdentity(req);
     logApiTiming("identity resolve end", identityStartedAt, {
       hasLineProfile: Boolean(identity.lineProfile?.line_user_id),
       resolvedVisitorId: identity.visitorId,
+      hasCustomer: Boolean(customerIdentity?.authUserId),
     });
     const visitorId = identity.visitorId;
     const sessionId = String(
@@ -579,11 +667,12 @@ export default async function handler(req, res) {
 
     const sessionStartedAt = getTimingNow();
     let session = forceNewSession
-      ? await createSession(visitorId)
+      ? await createSession(visitorId, customerIdentity)
       : await getSession({
           visitorId,
           sessionId,
           lineProfile: identity.lineProfile,
+          customerIdentity,
         });
 
     session =
@@ -597,12 +686,14 @@ export default async function handler(req, res) {
     });
 
     if (sessionOnly) {
+      const customerSessions = await loadCustomerSessions(customerIdentity);
       logApiTiming("request end", requestStartedAt, {
         sessionOnly: true,
         sessionId: session.id,
       });
       return sendJson(res, 200, {
         session,
+        sessions: customerSessions,
         messages: [],
         limit,
         before: null,
@@ -637,6 +728,7 @@ export default async function handler(req, res) {
       throw error;
     }
     const sortedMessages = sortMessagesByCreatedAt(messages);
+    const customerSessions = await loadCustomerSessions(customerIdentity);
 
     logApiTiming("request end", requestStartedAt, {
       sessionOnly: false,
@@ -648,6 +740,7 @@ export default async function handler(req, res) {
 
     return sendJson(res, 200, {
       session,
+      sessions: customerSessions,
       messages: sortedMessages,
       limit,
       before: before || null,

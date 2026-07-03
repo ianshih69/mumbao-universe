@@ -17,7 +17,7 @@ export function About() {
           >
             <div className="relative aspect-square overflow-hidden rounded-lg shadow-xl transition-shadow duration-500 hover:shadow-2xl md:aspect-[4/5]">
               <img
-                src="/images/aboutMe_1.webp"
+                src="/images/mumbao/living.JPG"
                 alt="慢慢蒔光 STime Villa 宜蘭員山包棟民宿的白色建築與山景倒影"
                 width={900}
                 height={1125}

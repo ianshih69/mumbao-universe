@@ -69,7 +69,7 @@ export const defaultAdminContent: AdminContent = {
     {
       id: "image-hero",
       title: "首頁主視覺",
-      path: "/images/Hero.webp",
+      path: "/images/mumbao/STime.JPG",
       alt: "慢慢蒔光主視覺",
       category: "首頁",
     },
@@ -176,7 +176,7 @@ export function getHomeHeroImage(content = readAdminContent()) {
     content.images.find((item) => item.category.includes("首頁"));
 
   return {
-    src: getImagePath(image, "/images/Hero.webp"),
+    src: getImagePath(image, "/images/mumbao/STime.JPG"),
     alt: image?.alt?.trim() || "慢慢蒔光主視覺",
   };
 }

@@ -52,7 +52,7 @@ export default function About() {
                 className="relative w-full overflow-hidden rounded-lg shadow-2xl"
               >
                 <img
-                  src="/images/aboutMe_1.webp"
+                  src="/images/mumbao/living.JPG"
                   alt="慢慢蒔光 STime Villa 宜蘭員山包棟民宿的白色建築與山景倒影"
                   className="h-[400px] w-full object-cover transition-transform duration-[1.5s] hover:scale-105 md:h-[600px]"
                   loading="eager"

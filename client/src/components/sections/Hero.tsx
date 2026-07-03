@@ -9,6 +9,15 @@ type CmsHeroContent = {
   altText: string;
 };
 
+const defaultHeroImage = "/images/mumbao/STime.JPG";
+const legacyHeroImage = "/images/Hero.webp";
+
+function resolveHeroImage(path: string) {
+  const value = path.trim();
+  if (!value || value === legacyHeroImage) return defaultHeroImage;
+  return value;
+}
+
 const heroCopy = {
   eyebrow: "慢下來，回到有光的地方",
   title: "慢慢蒔光",
@@ -42,7 +51,7 @@ export function Hero() {
     };
   }, [heroImage.alt, heroImage.src]);
 
-  const backgroundImage = cmsHero?.desktopImageUrl || heroImage.src;
+  const backgroundImage = resolveHeroImage(cmsHero?.desktopImageUrl || heroImage.src);
   const backgroundAlt = cmsHero?.altText || heroImage.alt;
 
   return (
@@ -61,7 +70,7 @@ export function Hero() {
           alt={backgroundAlt}
           className="h-full w-full object-cover"
           onError={(event) => {
-            event.currentTarget.src = "/images/Hero.webp";
+            event.currentTarget.src = defaultHeroImage;
           }}
         />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(43,36,31,0.22)_0%,rgba(48,39,33,0.16)_42%,rgba(35,29,25,0.30)_100%)]" />

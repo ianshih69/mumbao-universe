@@ -12,6 +12,7 @@ import { ScrollToTop } from "./components/layout/ScrollToTop";
 import Home from "./pages/Home";
 import About from "./pages/About";
 import Breakfast from "./pages/Breakfast";
+import SlowGuide from "./pages/SlowGuide";
 import RoomsPage from "./pages/Rooms";
 import RoomDetail from "./pages/RoomDetail";
 import NewsPage from "./pages/News";
@@ -72,6 +73,7 @@ function Router() {
       <Route path={"/admin/site"} component={AdminSite} />
       <Route path={"/about"} component={About} />
       <Route path={"/experience/breakfast"} component={Breakfast} />
+      <Route path={"/experience/slow-guide"} component={SlowGuide} />
       <Route path={"/rooms/:slug"} component={RoomDetail} />
       <Route path={"/rooms"} component={RoomsPage} />
       <Route path={"/news/:slug"} component={NewsDetail} />

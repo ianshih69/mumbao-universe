@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 export function Experience() {
   const [, navigate] = useLocation();
   const openBreakfast = () => navigate("/experience/breakfast");
+  const openSlowGuide = () => navigate("/experience/slow-guide");
 
   return (
     <section id="experience" className="scroll-mt-[120px] py-24 bg-[#F5F5F5]">
@@ -62,9 +63,18 @@ export function Experience() {
             </div>
           </motion.div>
 
-          {/* Card 2: Slow Living (慢遊 · 提案) */}
+          {/* Card 2: Slow Guide (慢遊・私選) */}
           <motion.div
-            className="group relative overflow-hidden w-full aspect-[4/3] md:aspect-auto md:h-[600px] bg-white shadow-lg hover:shadow-2xl transition-shadow duration-500"
+            className="group relative overflow-hidden w-full aspect-[4/3] md:aspect-auto md:h-[600px] bg-white shadow-lg hover:shadow-2xl transition-shadow duration-500 cursor-pointer"
+            role="link"
+            tabIndex={0}
+            onClick={openSlowGuide}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openSlowGuide();
+              }
+            }}
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
@@ -73,7 +83,7 @@ export function Experience() {
             <div className="absolute inset-0">
               <img
                 src="https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?q=80&w=3000&auto=format&fit=crop"
-                alt="Slow Living"
+                alt="SLOW GUIDE"
                 className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
               />
               <div className="absolute inset-0 bg-black/40 group-hover:bg-black/60 transition-colors duration-500" />
@@ -84,12 +94,14 @@ export function Experience() {
                 Local Depth
               </span>
               <h3 className="font-serif text-3xl md:text-5xl mb-3 md:mb-6">
-                Slow Living <br /> <span className="text-2xl md:text-3xl mt-3 block">慢遊 · 提案</span>
+                SLOW GUIDE <br /> <span className="text-2xl md:text-3xl mt-3 block">慢遊・私選</span>
               </h3>
               <p className="text-sm md:text-base tracking-wider opacity-90 max-w-md mb-6 md:mb-8 transform translate-y-4 group-hover:translate-y-0 transition-all duration-500 delay-100 leading-relaxed px-4 md:px-0">
-                避開人潮，走進在地人的私房路徑。
+                屋主走過也喜歡的宜蘭日常。
                 <br />
-                無論是田間散步或是職人手作，讓我們帶你找回生活的節奏。
+                從散步風景、在地小吃到午後小食，
+                <br />
+                留給想慢慢走的旅人。
               </p>
 
               <Button

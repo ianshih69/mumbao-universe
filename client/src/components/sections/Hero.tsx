@@ -10,12 +10,18 @@ type CmsHeroContent = {
 };
 
 const defaultHeroImage = "/images/mumbao/STime.JPG";
+const defaultHeroMobileImage = "/images/mumbao/STime-mobile.JPG";
 const legacyHeroImage = "/images/Hero.webp";
 
 function resolveHeroImage(path: string) {
   const value = path.trim();
   if (!value || value === legacyHeroImage) return defaultHeroImage;
   return value;
+}
+
+function resolveMobileHeroImage(path: string) {
+  const resolved = resolveHeroImage(path);
+  return resolved === defaultHeroImage ? defaultHeroMobileImage : resolved;
 }
 
 const heroCopy = {
@@ -52,6 +58,7 @@ export function Hero() {
   }, [heroImage.alt, heroImage.src]);
 
   const backgroundImage = resolveHeroImage(cmsHero?.desktopImageUrl || heroImage.src);
+  const mobileBackgroundImage = resolveMobileHeroImage(cmsHero?.desktopImageUrl || heroImage.src);
   const backgroundAlt = cmsHero?.altText || heroImage.alt;
 
   return (
@@ -65,14 +72,17 @@ export function Hero() {
         animate={{ opacity: 1 }}
         transition={{ duration: 1, ease: "easeOut" }}
       >
-        <img
-          src={backgroundImage}
-          alt={backgroundAlt}
-          className="h-full w-full object-cover"
-          onError={(event) => {
-            event.currentTarget.src = defaultHeroImage;
-          }}
-        />
+        <picture className="block h-full w-full">
+          <source media="(min-width: 768px)" srcSet={backgroundImage} />
+          <img
+            src={mobileBackgroundImage}
+            alt={backgroundAlt}
+            className="h-full w-full object-cover object-center"
+            onError={(event) => {
+              event.currentTarget.src = defaultHeroImage;
+            }}
+          />
+        </picture>
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(43,36,31,0.22)_0%,rgba(48,39,33,0.16)_42%,rgba(35,29,25,0.30)_100%)]" />
       </motion.div>
 

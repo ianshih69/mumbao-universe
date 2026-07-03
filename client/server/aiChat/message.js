@@ -1,3 +1,5 @@
+import { enforceAiChatRateLimit } from "./rateLimit.js";
+
 const systemPrompt = `你是「慢慢蒔光｜白雲基地」的 AI 客服小幫手。
 回答要溫柔、清楚、簡短，使用繁體中文。
 你要幫客人理解包棟、訂房、入住、退房、設施、寵物友善、白雲基地與慢寶 MUMBAO 相關問題。
@@ -328,6 +330,10 @@ function getDeepSeekConfig() {
     baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
     model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
   };
+}
+
+function getDeepSeekModelName() {
+  return process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
 }
 
 function getTaipeiDateInfo() {
@@ -1052,12 +1058,12 @@ export default async function handler(req, res) {
       recentMessagesCount: recentMessages.length,
     });
 
-    const userMessage = await insertMessage(session.id, "user", message, null);
-    session = await updateSessionAfterMessage(session, userMessage, {
-      incrementUnread: true,
-    });
-
     if (shouldSkipAiReply(session)) {
+      const userMessage = await insertMessage(session.id, "user", message, null);
+      session = await updateSessionAfterMessage(session, userMessage, {
+        incrementUnread: true,
+      });
+
       logChatDebug("human takeover active, skip ai reply");
       return sendJson(res, 200, {
         session,
@@ -1069,6 +1075,11 @@ export default async function handler(req, res) {
     }
 
     if (!isContextScopeAllowed) {
+      const userMessage = await insertMessage(session.id, "user", message, null);
+      session = await updateSessionAfterMessage(session, userMessage, {
+        incrementUnread: true,
+      });
+
       logChatDebug("scope=blocked");
       const aiMessage = await insertMessage(
         session.id,
@@ -1089,6 +1100,26 @@ export default async function handler(req, res) {
     logChatDebug(
       isCurrentScopeAllowed ? "scope=allowed" : "scope=allowed by context"
     );
+    const rateLimit = await enforceAiChatRateLimit(req, {
+      visitorId,
+      sessionId: session.id,
+      action: "message",
+      provider: "deepseek",
+      model: getDeepSeekModelName(),
+    });
+
+    if (!rateLimit.allowed) {
+      return sendJson(res, rateLimit.status || 429, {
+        error: rateLimit.message,
+        reason: rateLimit.reason,
+      });
+    }
+
+    const userMessage = await insertMessage(session.id, "user", message, null);
+    session = await updateSessionAfterMessage(session, userMessage, {
+      incrementUnread: true,
+    });
+
     const aiAnswer = await callDeepSeek(message, recentMessages, dateInfo);
     const aiMessage = await insertMessage(session.id, "ai", aiAnswer, "deepseek");
     session = await updateSessionAfterMessage(session, aiMessage);

@@ -13,6 +13,7 @@ import {
 } from "react";
 import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { cn } from "@/lib/utils";
 
 type ChatRole = "assistant" | "user" | "human" | "system";
@@ -941,6 +942,8 @@ export function MumbaoChat({
   compact = false,
   isOpen = true,
 }: MumbaoChatProps) {
+  const { session: customerSession } = useCustomerAuth();
+  const customerAccessToken = customerSession?.access_token || "";
   const [visitorId, setVisitorId] = useState("");
   const [anonymousVisitorId, setAnonymousVisitorId] = useState("");
   const [lineIdentity, setLineIdentity] = useState<LineIdentity | null>(null);
@@ -1798,6 +1801,9 @@ export function MumbaoChat({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            ...(customerAccessToken
+              ? { Authorization: `Bearer ${customerAccessToken}` }
+              : {}),
           },
           body: JSON.stringify({
             visitor_id: visitorId,

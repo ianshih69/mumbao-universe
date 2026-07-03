@@ -22,8 +22,11 @@ import {
   type AdminTrackingFilter,
   type AdminShopOrderDetail,
   type AdminShopOrderItemExportRow,
+  type AdminShopOrderShipment,
   type AdminShopOrderSummary,
+  createAdminShopOrderShipment,
   fetchAdminShopOrder,
+  fetchAdminShopOrderShipments,
   fetchAdminShopOrderItemsForExport,
   fetchAdminShopOrders,
   fetchAdminShopOrdersForExport,
@@ -40,6 +43,7 @@ import {
 import {
   adminAuthExpiredMessage,
   clearAdminToken as clearStoredAdminToken,
+  getAdminIdentity,
   getAdminToken,
   isAdminAuthError,
 } from "@/lib/shop/adminAuth";
@@ -52,6 +56,16 @@ const orderStatusLabels: Record<AdminOrderStatus, string> = ORDER_STATUS_LABELS;
 const paymentStatusLabels: Record<AdminPaymentStatus, string> = PAYMENT_STATUS_LABELS;
 
 const orderSourceLabels: Record<AdminOrderSource, string> = ORDER_SOURCE_LABELS;
+
+const roleLabels: Record<string, string> = {
+  super_admin: "Super Admin",
+  admin: "Admin",
+  manager: "Manager",
+  housekeeper: "Housekeeper",
+  cleaner: "Cleaner",
+};
+
+const shipmentCarrierOptions = ["黑貓", "郵局", "7-11", "全家", "自取", "其他"];
 
 const orderStatusOptions: Array<{ value: "" | AdminOrderStatus; label: string }> = [
   { value: "", label: "全部狀態" },
@@ -356,8 +370,15 @@ export default function AdminShopOrders() {
   const [draftShippingCarrier, setDraftShippingCarrier] = useState("");
   const [draftTrackingNumber, setDraftTrackingNumber] = useState("");
   const [draftInternalNote, setDraftInternalNote] = useState("");
+  const [shipmentCarrier, setShipmentCarrier] = useState("黑貓");
+  const [shipmentTrackingNumber, setShipmentTrackingNumber] = useState("");
+  const [shipmentNote, setShipmentNote] = useState("");
+  const [shipments, setShipments] = useState<AdminShopOrderShipment[]>([]);
+  const [isShipmentsLoading, setIsShipmentsLoading] = useState(false);
+  const [isCreatingShipment, setIsCreatingShipment] = useState(false);
   const [isShippingSaving, setIsShippingSaving] = useState(false);
   const [shippingSaveMessage, setShippingSaveMessage] = useState("");
+  const [shipmentMessage, setShipmentMessage] = useState("");
 
   const handleAuthFailure = useCallback(() => {
     clearAdminToken();
@@ -369,6 +390,7 @@ export default function AdminShopOrders() {
     () => orders.find((order) => order.order_number === selectedOrderNumber),
     [orders, selectedOrderNumber]
   );
+  const adminIdentity = useMemo(() => getAdminIdentity(), [token]);
 
   const loadOrders = useCallback(
     async ({ nextPage = 0, append = false }: { nextPage?: number; append?: boolean } = {}) => {
@@ -423,15 +445,22 @@ export default function AdminShopOrders() {
 
       setSelectedOrderNumber(orderNumber);
       setIsDetailLoading(true);
+      setIsShipmentsLoading(true);
       try {
         const detail = await fetchAdminShopOrder(token, orderNumber);
+        const orderShipments = await fetchAdminShopOrderShipments(token, detail.id);
         setSelectedOrder(detail);
+        setShipments(orderShipments);
         setDraftOrderStatus(detail.order_status);
         setDraftPaymentStatus(detail.payment_status);
         setDraftShippingCarrier(detail.shipping_carrier || "");
         setDraftTrackingNumber(detail.tracking_number || "");
         setDraftInternalNote(detail.internal_note || "");
+        setShipmentCarrier(detail.shipping_carrier || "黑貓");
+        setShipmentTrackingNumber(detail.tracking_number || "");
+        setShipmentNote("");
         setShippingSaveMessage("");
+        setShipmentMessage("");
         setIsPrintOpen(false);
         setQuickActionMessage("");
         setError("");
@@ -443,6 +472,7 @@ export default function AdminShopOrders() {
         setError(loadError instanceof Error ? loadError.message : "訂單明細載入失敗。");
       } finally {
         setIsDetailLoading(false);
+        setIsShipmentsLoading(false);
       }
     },
     [handleAuthFailure, token]
@@ -479,6 +509,7 @@ export default function AdminShopOrders() {
     setOrders([]);
     setSelectedOrderNumber("");
     setSelectedOrder(null);
+    setShipments([]);
     setIsPrintOpen(false);
     setQuickActionMessage("");
   };
@@ -487,6 +518,7 @@ export default function AdminShopOrders() {
     event.preventDefault();
     setSelectedOrderNumber("");
     setSelectedOrder(null);
+    setShipments([]);
     setIsPrintOpen(false);
     setQuickActionMessage("");
     loadOrders({ nextPage: 0 });
@@ -502,6 +534,7 @@ export default function AdminShopOrders() {
     setTrackingFilter("");
     setSelectedOrderNumber("");
     setSelectedOrder(null);
+    setShipments([]);
     setIsPrintOpen(false);
     setQuickActionMessage("");
   };
@@ -594,6 +627,63 @@ export default function AdminShopOrders() {
     }
   };
 
+  const createShipment = async () => {
+    if (!token || !selectedOrder) return;
+
+    const confirmed = window.confirm(
+      "確認後，系統會記錄此訂單已出貨，並保存目前登入者作為經手人。"
+    );
+    if (!confirmed) return;
+
+    setIsCreatingShipment(true);
+    setShipmentMessage("");
+    try {
+      const result = await createAdminShopOrderShipment({
+        token,
+        orderId: selectedOrder.id,
+        carrier: shipmentCarrier,
+        tracking_number: shipmentTrackingNumber,
+        note: shipmentNote,
+      });
+      const nextShipments = await fetchAdminShopOrderShipments(token, selectedOrder.id);
+      setShipments(nextShipments.length ? nextShipments : [result.shipment]);
+
+      if (result.order) {
+        setSelectedOrder(result.order);
+        setDraftOrderStatus(result.order.order_status);
+        setDraftPaymentStatus(result.order.payment_status);
+        setDraftShippingCarrier(result.order.shipping_carrier || "");
+        setDraftTrackingNumber(result.order.tracking_number || "");
+        setDraftInternalNote(result.order.internal_note || "");
+        setOrders((current) =>
+          current.map((order) =>
+            order.order_number === result.order?.order_number
+              ? {
+                  ...order,
+                  order_status: result.order.order_status,
+                  shipping_carrier: result.order.shipping_carrier,
+                  tracking_number: result.order.tracking_number,
+                  updated_at: result.order.updated_at,
+                }
+              : order
+          )
+        );
+      }
+
+      setShipmentMessage("出貨紀錄已建立。");
+      setShipmentNote("");
+      setError("");
+    } catch (shipmentError) {
+      if (isAdminAuthError(shipmentError)) {
+        handleAuthFailure();
+        return;
+      }
+      setError(shipmentError instanceof Error ? shipmentError.message : "出貨紀錄建立失敗。");
+    } finally {
+      setIsCreatingShipment(false);
+    }
+  };
+
   const exportOrdersCsv = async () => {
     if (!token) return;
 
@@ -676,6 +766,19 @@ export default function AdminShopOrders() {
   const isCancelledOrder =
     isSelectedOnlineOrder && selectedOrder?.order_status === "cancelled";
   const canCancelOrder = Boolean(isWaitingForPayment || isPaidOrder || isShippingOrder);
+  const activeShipments = shipments.filter((shipment) => shipment.shipment_status === "shipped");
+  const latestShipment = activeShipments[0] || null;
+  const hasShipment = Boolean(latestShipment);
+  const canCreateShipment =
+    Boolean(selectedOrder) &&
+    isSelectedOnlineOrder &&
+    selectedOrder?.order_status !== "cancelled" &&
+    !hasShipment;
+  const currentAdminName = adminIdentity?.display_name || adminIdentity?.email || "-";
+  const currentAdminRole = adminIdentity?.role_code || "";
+  const currentAdminRoleLabel =
+    adminIdentity?.role_name || roleLabels[currentAdminRole] || currentAdminRole || "-";
+  const canCurrentAdminShip = ["super_admin", "admin", "manager"].includes(currentAdminRole);
 
   if (!token) {
     return (
@@ -1191,6 +1294,169 @@ export default function AdminShopOrders() {
                   <Save className="h-4 w-4" />
                   {isSaving ? "儲存中..." : "儲存狀態"}
                 </Button>
+              </div>
+
+              <div className="rounded-[8px] border border-[#eadfd2] bg-[#fbf7f1] p-4 text-sm text-stone-600">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
+                      Shipment Log
+                    </p>
+                    <h3 className="mt-1 text-base font-semibold text-stone-900">
+                      出貨處理
+                    </h3>
+                  </div>
+                  <span className="inline-flex w-fit rounded-full bg-white px-3 py-1 text-xs font-medium text-[#765d4a]">
+                    {hasShipment
+                      ? "已出貨"
+                      : selectedOrder.tracking_number
+                        ? "有追蹤碼"
+                        : "未出貨"}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-2 leading-6">
+                  <p>
+                    <span className="font-medium text-stone-900">最近一次出貨時間：</span>
+                    {latestShipment?.shipped_at ? formatDateTime(latestShipment.shipped_at) : "-"}
+                  </p>
+                  <p>
+                    <span className="font-medium text-stone-900">最近一次經手人：</span>
+                    {latestShipment?.shipped_by_name || "-"}
+                  </p>
+                  <p>
+                    <span className="font-medium text-stone-900">物流：</span>
+                    {latestShipment?.carrier || selectedOrder.shipping_carrier || "-"}
+                  </p>
+                  <p>
+                    <span className="font-medium text-stone-900">追蹤碼：</span>
+                    {latestShipment?.tracking_number || selectedOrder.tracking_number || "-"}
+                  </p>
+                </div>
+
+                {isShipmentsLoading ? (
+                  <div className="mt-4 rounded-[8px] bg-white px-3 py-2 text-sm text-stone-500">
+                    正在讀取出貨紀錄...
+                  </div>
+                ) : shipments.length ? (
+                  <div className="mt-4 space-y-3">
+                    <p className="text-xs font-medium uppercase tracking-[0.16em] text-stone-400">
+                      出貨紀錄
+                    </p>
+                    {shipments.map((shipment) => (
+                      <div
+                        key={shipment.id}
+                        className="rounded-[8px] border border-stone-100 bg-white p-3"
+                      >
+                        <div className="grid gap-1.5 text-sm leading-6 text-stone-600">
+                          <p>
+                            <span className="font-medium text-stone-900">出貨時間：</span>
+                            {shipment.shipped_at ? formatDateTime(shipment.shipped_at) : "-"}
+                          </p>
+                          <p>
+                            <span className="font-medium text-stone-900">物流：</span>
+                            {shipment.carrier || "-"}
+                          </p>
+                          <p>
+                            <span className="font-medium text-stone-900">追蹤碼：</span>
+                            {shipment.tracking_number || "-"}
+                          </p>
+                          <p>
+                            <span className="font-medium text-stone-900">經手人：</span>
+                            {shipment.shipped_by_name || "-"}
+                            {shipment.shipped_by_email ? `（${shipment.shipped_by_email}）` : ""}
+                          </p>
+                          <p>
+                            <span className="font-medium text-stone-900">角色：</span>
+                            {roleLabels[shipment.shipped_by_role || ""] ||
+                              shipment.shipped_by_role ||
+                              "-"}
+                          </p>
+                          {shipment.note && (
+                            <p>
+                              <span className="font-medium text-stone-900">備註：</span>
+                              {shipment.note}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {shipmentMessage && (
+                  <div className="mt-4 rounded-[8px] border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                    {shipmentMessage}
+                  </div>
+                )}
+
+                {!hasShipment && isSelectedOnlineOrder && selectedOrder.order_status === "cancelled" && (
+                  <div className="mt-4 rounded-[8px] border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">
+                    已取消訂單不可建立出貨紀錄。
+                  </div>
+                )}
+
+                {!hasShipment && !isSelectedOnlineOrder && (
+                  <div className="mt-4 rounded-[8px] bg-white px-3 py-2 text-sm text-stone-500">
+                    現場銷售訂單不需要出貨處理。
+                  </div>
+                )}
+
+                {canCreateShipment && (
+                  <div className="mt-4 grid gap-3 border-t border-stone-100 pt-4">
+                    <div className="rounded-[8px] bg-white px-3 py-2 text-sm text-stone-600">
+                      目前登入者：{currentAdminName}（{currentAdminRoleLabel}）
+                    </div>
+                    {!canCurrentAdminShip && (
+                      <div className="rounded-[8px] border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">
+                        此角色目前沒有出貨權限。
+                      </div>
+                    )}
+                    <label className="space-y-1.5 text-sm">
+                      <span className="font-medium text-stone-900">物流方式</span>
+                      <select
+                        value={shipmentCarrier}
+                        onChange={(event) => setShipmentCarrier(event.target.value)}
+                        className="h-10 w-full rounded-[8px] border border-stone-200 bg-white px-3 text-sm outline-none focus:border-[#8b6f5b]"
+                      >
+                        {shipmentCarrierOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1.5 text-sm">
+                      <span className="font-medium text-stone-900">追蹤碼</span>
+                      <input
+                        type="text"
+                        value={shipmentTrackingNumber}
+                        onChange={(event) => setShipmentTrackingNumber(event.target.value)}
+                        placeholder="可留空，例如自取或現場交付"
+                        className="h-10 w-full rounded-[8px] border border-stone-200 bg-white px-3 text-sm outline-none focus:border-[#8b6f5b]"
+                      />
+                    </label>
+                    <label className="space-y-1.5 text-sm">
+                      <span className="font-medium text-stone-900">備註</span>
+                      <textarea
+                        value={shipmentNote}
+                        onChange={(event) => setShipmentNote(event.target.value)}
+                        rows={3}
+                        placeholder="可填寫出貨備註，留空也可以"
+                        className="w-full resize-none rounded-[8px] border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#8b6f5b]"
+                      />
+                    </label>
+                    <Button
+                      type="button"
+                      onClick={createShipment}
+                      disabled={isCreatingShipment || !canCurrentAdminShip}
+                      className="rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
+                    >
+                      <PackageSearch className="h-4 w-4" />
+                      {isCreatingShipment ? "建立中..." : "確認出貨"}
+                    </Button>
+                  </div>
+                )}
               </div>
 
               <div className="grid gap-3 rounded-[8px] bg-[#fbf7f1] p-4">

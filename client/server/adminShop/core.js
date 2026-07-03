@@ -52,6 +52,7 @@ const knownSupplyQuantityErrors = new Map([
 ]);
 const duplicateAdminEmailMessage = "此 Email 已存在，請使用其他 Email。";
 const validPosPaymentMethods = new Set(["cash", "transfer", "other"]);
+const shipmentAllowedRoles = new Set(["super_admin", "admin", "manager"]);
 const knownManualSaleErrors = new Map([
   ["SALE_ITEMS_REQUIRED", "Sale items are required."],
   ["INVALID_PAYMENT_METHOD", "Invalid payment method."],
@@ -59,6 +60,13 @@ const knownManualSaleErrors = new Map([
   ["VARIANT_NOT_FOUND", "Product variant not found or is not active."],
   ["PRODUCT_NOT_FOUND", "Product not found."],
   ["INSUFFICIENT_INVENTORY", "Inventory is not enough for this sale."],
+]);
+const knownShipmentErrors = new Map([
+  ["ORDER_ID_REQUIRED", { status: 400, message: "order_id is required." }],
+  ["ORDER_NOT_FOUND", { status: 404, message: "Order not found." }],
+  ["ORDER_CANCELLED", { status: 400, message: "已取消訂單不可建立出貨紀錄。" }],
+  ["POS_ORDER_SHIPMENT_UNSUPPORTED", { status: 400, message: "現場銷售訂單不支援建立出貨紀錄。" }],
+  ["ORDER_ALREADY_SHIPPED", { status: 409, message: "此訂單已有出貨紀錄。" }],
 ]);
 const instagramRequiredScopes = [
   "pages_show_list",
@@ -177,6 +185,7 @@ function getRoleName(roleCode) {
   const names = {
     super_admin: "Super Admin",
     admin: "Admin",
+    manager: "Manager",
     housekeeper: "Housekeeper",
     cleaner: "Cleaner",
   };
@@ -346,6 +355,21 @@ const auditFieldAllowLists = {
     "internal_note",
     "items",
     "restock_movements",
+  ],
+  shipment: [
+    "id",
+    "order_id",
+    "order_number",
+    "shipment_id",
+    "shipment_status",
+    "carrier",
+    "tracking_number",
+    "shipped_at",
+    "shipped_by_admin_id",
+    "shipped_by_name",
+    "shipped_by_email",
+    "shipped_by_role",
+    "note",
   ],
   inventory_movement: [
     "id",
@@ -3430,6 +3454,15 @@ function getKnownManualSaleErrorMessage(error) {
   return matchedKey ? knownManualSaleErrors.get(matchedKey) : "";
 }
 
+function getKnownShipmentError(error) {
+  const message = String(error?.details?.message || error?.message || "");
+  const matchedKey = Array.from(knownShipmentErrors.keys()).find((key) =>
+    message.includes(key)
+  );
+
+  return matchedKey ? knownShipmentErrors.get(matchedKey) : null;
+}
+
 function getNumberOrNull(value) {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
@@ -4025,6 +4058,128 @@ async function loadOrder(orderNumber) {
   );
 
   return normalizeOrder(order, items || []);
+}
+
+function normalizeShipment(shipment) {
+  return {
+    id: shipment.id || "",
+    order_id: shipment.order_id || "",
+    shipment_status: shipment.shipment_status || "shipped",
+    carrier: shipment.carrier || "",
+    tracking_number: shipment.tracking_number || "",
+    shipped_at: shipment.shipped_at || "",
+    shipped_by_admin_id: shipment.shipped_by_admin_id || "",
+    shipped_by_name: shipment.shipped_by_name || "",
+    shipped_by_email: shipment.shipped_by_email || "",
+    shipped_by_role: shipment.shipped_by_role || "",
+    note: shipment.note || "",
+    created_at: shipment.created_at || "",
+    updated_at: shipment.updated_at || "",
+  };
+}
+
+async function loadOrderShipmentsByOrderId(orderId) {
+  if (!uuidPattern.test(orderId)) {
+    const error = new Error("Invalid order_id.");
+    error.status = 400;
+    throw error;
+  }
+
+  const rows = await supabaseRequest(
+    `/shop_order_shipments?order_id=eq.${encodeURIComponent(
+      orderId
+    )}&select=id,order_id,shipment_status,carrier,tracking_number,shipped_at,shipped_by_admin_id,shipped_by_name,shipped_by_email,shipped_by_role,note,created_at,updated_at&order=shipped_at.desc`
+  );
+
+  return Array.isArray(rows) ? rows.map(normalizeShipment) : [];
+}
+
+async function handleOrderShipments(req, res) {
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
+    return sendJson(res, 405, { error: "Method not allowed." });
+  }
+
+  const orderId = cleanText(firstQueryValue(req.query?.order_id));
+  if (!orderId) {
+    return sendJson(res, 400, { error: "order_id is required." });
+  }
+
+  const shipments = await loadOrderShipmentsByOrderId(orderId);
+  return sendJson(res, 200, { shipments });
+}
+
+function assertCanCreateShipment(context) {
+  if (shipmentAllowedRoles.has(context?.roleCode)) return;
+  throw createHttpError(403, "此角色目前沒有出貨權限");
+}
+
+async function handleCreateShipment(req, res, context) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return sendJson(res, 405, { error: "Method not allowed." });
+  }
+
+  assertCanCreateShipment(context);
+
+  const body = await readBody(req);
+  const orderId = cleanText(body?.order_id);
+  if (!uuidPattern.test(orderId)) {
+    return sendJson(res, 400, { error: "Invalid order_id." });
+  }
+
+  const payload = {
+    order_id: orderId,
+    carrier: nullableText(body?.carrier),
+    tracking_number: nullableText(body?.tracking_number),
+    note: nullableText(body?.note),
+    shipped_by_admin_id: context?.profile?.id || null,
+    shipped_by_name: context?.actorName || context?.actorEmail || null,
+    shipped_by_email: context?.actorEmail || null,
+    shipped_by_role: context?.roleCode || null,
+  };
+
+  try {
+    const result = await supabaseRpc("create_shop_order_shipment", {
+      shipment_payload: payload,
+    });
+    const shipment = normalizeShipment(result?.shipment || {});
+    const orderNumber = result?.order_number || "";
+    const order = orderNumber ? await loadOrder(orderNumber) : null;
+
+    await writeAdminActivityLog({
+      req,
+      context,
+      action: "orders.shipment_create",
+      module: "orders",
+      targetType: "shipment",
+      targetId: shipment.id,
+      description: `訂單 ${orderNumber || orderId} 已確認出貨，物流：${payload.carrier || "未填"}，追蹤碼：${payload.tracking_number || "未填"}，經手人：${payload.shipped_by_name || "-"}`,
+      afterData: {
+        order_id: orderId,
+        order_number: orderNumber,
+        shipment_id: shipment.id,
+        shipment_status: shipment.shipment_status,
+        carrier: shipment.carrier,
+        tracking_number: shipment.tracking_number,
+        shipped_by_admin_id: shipment.shipped_by_admin_id,
+        shipped_by_name: shipment.shipped_by_name,
+        shipped_by_email: shipment.shipped_by_email,
+        shipped_by_role: shipment.shipped_by_role,
+        shipped_at: shipment.shipped_at,
+        note: shipment.note,
+      },
+    });
+
+    return sendJson(res, 201, { shipment, order });
+  } catch (shipmentError) {
+    const knownError = getKnownShipmentError(shipmentError);
+    if (knownError) {
+      return sendJson(res, knownError.status, { error: knownError.message });
+    }
+
+    throw shipmentError;
+  }
 }
 
 function validateStatusPatch(body) {
@@ -5955,6 +6110,14 @@ export default async function handler(req, res) {
 
     if (action === "order") {
       return await handleOrderAction(req, res, adminContext);
+    }
+
+    if (action === "order-shipments") {
+      return await handleOrderShipments(req, res);
+    }
+
+    if (action === "create-shipment") {
+      return await handleCreateShipment(req, res, adminContext);
     }
 
     if (req.method === "GET" && action === "products") {

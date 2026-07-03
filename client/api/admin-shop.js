@@ -16,6 +16,8 @@ const ROUTES = {
   orders: loadFallback,
   "order-items-export": loadFallback,
   order: loadFallback,
+  "order-shipments": loadFallback,
+  "create-shipment": loadFallback,
   products: loadFallback,
   product: loadFallback,
   "inventory-movements": loadFallback,

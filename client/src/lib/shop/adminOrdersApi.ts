@@ -73,6 +73,22 @@ export type AdminShopOrderItemExportRow = {
   internal_note?: string;
 };
 
+export type AdminShopOrderShipment = {
+  id: string;
+  order_id: string;
+  shipment_status: "shipped" | "voided";
+  carrier?: string;
+  tracking_number?: string;
+  shipped_at?: string;
+  shipped_by_admin_id?: string;
+  shipped_by_name?: string;
+  shipped_by_email?: string;
+  shipped_by_role?: string;
+  note?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type AdminShopOrderDetail = AdminShopOrderSummary & {
   shipping_address: string;
   note?: string;
@@ -241,6 +257,51 @@ export async function fetchAdminShopOrder(token: string, orderNumber: string) {
   }
 
   return data.order;
+}
+
+export async function fetchAdminShopOrderShipments(token: string, orderId: string) {
+  const data = await fetchAdminJson<{ shipments?: AdminShopOrderShipment[] }>(
+    `/api/admin-shop?action=order-shipments&order_id=${encodeURIComponent(orderId)}`,
+    token
+  );
+
+  return data.shipments || [];
+}
+
+export async function createAdminShopOrderShipment({
+  token,
+  orderId,
+  carrier,
+  tracking_number,
+  note,
+}: {
+  token: string;
+  orderId: string;
+  carrier?: string;
+  tracking_number?: string;
+  note?: string;
+}) {
+  const data = await fetchAdminJson<{
+    shipment?: AdminShopOrderShipment;
+    order?: AdminShopOrderDetail | null;
+  }>("/api/admin-shop?action=create-shipment", token, {
+    method: "POST",
+    body: JSON.stringify({
+      order_id: orderId,
+      carrier: carrier ?? "",
+      tracking_number: tracking_number ?? "",
+      note: note ?? "",
+    }),
+  });
+
+  if (!data.shipment) {
+    throw new Error("出貨紀錄建立失敗。");
+  }
+
+  return {
+    shipment: data.shipment,
+    order: data.order || null,
+  };
 }
 
 export async function updateAdminShopOrderStatus({

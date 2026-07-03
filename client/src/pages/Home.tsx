@@ -53,18 +53,6 @@ export default function Home() {
     setCanonicalUrl(homeCanonicalUrl);
   }, []);
 
-  useEffect(() => {
-    const hash = window.location.hash.replace("#", "");
-
-    if (!hash) return;
-
-    requestAnimationFrame(() => {
-      document
-        .getElementById(hash)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  }, []);
-
   return (
     <div className="min-h-screen-safe bg-background font-sans selection:bg-[#E8A0BF] selection:text-white">
       <MeteorShower intensity={300} showBackground={false} opacity={0.14} />
@@ -92,11 +80,11 @@ export default function Home() {
           </div>
         </section>
         <About />
-        <div id="news">
+        <div id="news" className="scroll-mt-[120px]">
           <News />
         </div>
         <Experience />
-        <div id="rooms">
+        <div id="rooms" className="scroll-mt-[120px]">
           <Rooms />
         </div>
         <div id="booking">

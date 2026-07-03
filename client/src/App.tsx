@@ -8,6 +8,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { CustomerAuthProvider } from "./contexts/CustomerAuthContext";
 import { MumbaoChatLauncher } from "./components/ai/MumbaoChatLauncher";
 import { SiteConstructionNotice } from "./components/layout/SiteConstructionNotice";
+import { ScrollToTop } from "./components/layout/ScrollToTop";
 import Home from "./pages/Home";
 import About from "./pages/About";
 import Breakfast from "./pages/Breakfast";
@@ -127,6 +128,7 @@ function App() {
           <CustomerAuthProvider>
             <Toaster />
             {showFrontendNotice && <SiteConstructionNotice />}
+            <ScrollToTop />
             <Router />
             {!isAdminRoute && <MumbaoChatLauncher />}
           </CustomerAuthProvider>

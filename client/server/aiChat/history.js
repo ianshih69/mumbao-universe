@@ -346,11 +346,38 @@ async function loadBestLineSession(lineUserId) {
   return selectBestLineSession(entries) || null;
 }
 
-function buildCreateSessionPayload(visitorId, customerIdentity) {
+function normalizeEntrySource(value) {
+  const source = String(value || "").trim().toLowerCase();
+  return source === "line_liff" || source === "line" || source === "liff"
+    ? "line_liff"
+    : "";
+}
+
+function buildCreateSessionPayload(visitorId, customerIdentity, entrySource = "") {
   return {
     visitor_id: visitorId,
+    ...(entrySource ? { source: entrySource } : {}),
     ...buildCustomerSessionPatch(customerIdentity),
   };
+}
+
+async function linkSessionToEntrySource(session, entrySource) {
+  if (!session?.id || !entrySource || session.source === entrySource) {
+    return session;
+  }
+
+  const updatedSessions = await supabaseRequest(
+    `/chat_sessions?id=eq.${encodeURIComponent(session.id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        source: entrySource,
+        updated_at: new Date().toISOString(),
+      }),
+    }
+  );
+
+  return updatedSessions?.[0] || session;
 }
 
 async function linkSessionToCustomer(session, customerIdentity) {
@@ -411,10 +438,10 @@ async function loadCustomerSessions(customerIdentity) {
   );
 }
 
-async function getOrCreateSession(visitorId, customerIdentity) {
+async function getOrCreateSession(visitorId, customerIdentity, entrySource = "") {
   const latestCustomerSession = await getLatestCustomerSession(customerIdentity);
   if (latestCustomerSession) {
-    return latestCustomerSession;
+    return linkSessionToEntrySource(latestCustomerSession, entrySource);
   }
 
   const encodedVisitorId = encodeURIComponent(visitorId);
@@ -430,7 +457,8 @@ async function getOrCreateSession(visitorId, customerIdentity) {
   }
 
   if (sessions?.[0]) {
-    return linkSessionToCustomer(sessions[0], customerIdentity);
+    const customerSession = await linkSessionToCustomer(sessions[0], customerIdentity);
+    return linkSessionToEntrySource(customerSession, entrySource);
   }
 
   let createdSessions;
@@ -438,7 +466,9 @@ async function getOrCreateSession(visitorId, customerIdentity) {
   try {
     createdSessions = await supabaseRequest("/chat_sessions", {
       method: "POST",
-      body: JSON.stringify(buildCreateSessionPayload(visitorId, customerIdentity)),
+      body: JSON.stringify(
+        buildCreateSessionPayload(visitorId, customerIdentity, entrySource)
+      ),
     });
   } catch (error) {
     error.reason = error.reason || "supabase create session failed";
@@ -448,10 +478,12 @@ async function getOrCreateSession(visitorId, customerIdentity) {
   return createdSessions[0];
 }
 
-async function createSession(visitorId, customerIdentity) {
+async function createSession(visitorId, customerIdentity, entrySource = "") {
   const createdSessions = await supabaseRequest("/chat_sessions", {
     method: "POST",
-    body: JSON.stringify(buildCreateSessionPayload(visitorId, customerIdentity)),
+    body: JSON.stringify(
+      buildCreateSessionPayload(visitorId, customerIdentity, entrySource)
+    ),
   });
 
   return createdSessions[0];
@@ -471,7 +503,13 @@ function normalizeLimit(value) {
   return Math.min(parsedLimit, maxHistoryLimit);
 }
 
-async function getSession({ visitorId, sessionId, lineProfile, customerIdentity }) {
+async function getSession({
+  visitorId,
+  sessionId,
+  lineProfile,
+  customerIdentity,
+  entrySource = "",
+}) {
   if (!visitorId) {
     throw createHttpError(
       "visitor_id is required.",
@@ -488,7 +526,11 @@ async function getSession({ visitorId, sessionId, lineProfile, customerIdentity 
         reason: "line_user_id match",
         selectedSessionHasMessageCount: existingLineSession.messageCount,
       });
-      return linkSessionToCustomer(existingLineSession.session, customerIdentity);
+      const customerSession = await linkSessionToCustomer(
+        existingLineSession.session,
+        customerIdentity
+      );
+      return linkSessionToEntrySource(customerSession, entrySource);
     }
   }
 
@@ -510,10 +552,14 @@ async function getSession({ visitorId, sessionId, lineProfile, customerIdentity 
           (!session.auth_user_id && session.visitor_id === visitorId);
 
         if (canUseSession) {
-          return linkSessionToCustomer(session, customerIdentity);
+          const customerSession = await linkSessionToCustomer(
+            session,
+            customerIdentity
+          );
+          return linkSessionToEntrySource(customerSession, entrySource);
         }
       } else {
-        return session;
+        return linkSessionToEntrySource(session, entrySource);
       }
     }
 
@@ -524,7 +570,7 @@ async function getSession({ visitorId, sessionId, lineProfile, customerIdentity 
     );
   }
 
-  return getOrCreateSession(visitorId, customerIdentity);
+  return getOrCreateSession(visitorId, customerIdentity, entrySource);
 }
 
 function getCreatedTime(message) {
@@ -623,12 +669,19 @@ export default async function handler(req, res) {
     const lineAccessToken = String(
       body.line_access_token || firstQueryValue(req.query?.line_access_token) || ""
     ).trim();
+    const entrySource = normalizeEntrySource(
+      body.source ||
+        body.entry_source ||
+        firstQueryValue(req.query?.source) ||
+        firstQueryValue(req.query?.entry_source)
+    );
     logApiDebug("request start", {
       method: req.method,
       hasVisitorId: Boolean(requestedVisitorId),
       hasSessionId: Boolean(body.session_id || firstQueryValue(req.query?.session_id)),
       hasLineIdToken: Boolean(lineIdToken),
       hasLineAccessToken: Boolean(lineAccessToken),
+      entrySource,
     });
     const identityStartedAt = getTimingNow();
     const identity = await resolveVisitorIdentity({
@@ -667,12 +720,13 @@ export default async function handler(req, res) {
 
     const sessionStartedAt = getTimingNow();
     let session = forceNewSession
-      ? await createSession(visitorId, customerIdentity)
+      ? await createSession(visitorId, customerIdentity, entrySource)
       : await getSession({
           visitorId,
           sessionId,
           lineProfile: identity.lineProfile,
           customerIdentity,
+          entrySource,
         });
 
     session =

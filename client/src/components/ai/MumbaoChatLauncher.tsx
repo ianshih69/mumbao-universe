@@ -131,8 +131,13 @@ function shouldAutoOpenChat(location: string) {
     return false;
   }
 
+  const params = new URLSearchParams(window.location.search);
+
   return (
+    window.location.pathname === "/chat" ||
     location === "/chat" ||
-    new URLSearchParams(window.location.search).get("openChat") === "1"
+    params.get("openChat") === "1" ||
+    params.get("liff") === "1" ||
+    params.get("fromLine") === "1"
   );
 }

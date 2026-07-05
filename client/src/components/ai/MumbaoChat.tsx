@@ -73,6 +73,7 @@ type ChatSession = {
 type SessionRequestIdentity = {
   lineIdentity?: LineIdentity | null;
   anonymousVisitorId?: string;
+  entrySource?: "line_liff" | "";
 };
 
 type ChatWindowSize = {
@@ -89,7 +90,7 @@ const visitorCookieKey = "mumbao_chat_visitor_id";
 const recentChatStorageKey = "mumbao_chat_recent_messages";
 const chatWindowSizeStorageKey = "mumbao-chat-window-size";
 const lineLiffSdkUrl = "https://static.line-scdn.net/liff/edge/2/sdk.js";
-const lineLoginRedirectUri = "https://www.mumbao.tw/chat";
+const lineLoginRedirectUri = "https://www.mumbao.tw/chat?liff=1";
 const historyPageSize = 7;
 const initialHistoryPageSize = 100;
 const localCacheMessageLimit = 50;
@@ -679,8 +680,7 @@ function shouldRequestLineLogin(liff: LiffSdk) {
   const params = new URLSearchParams(window.location.search);
   const isLineLiffRedirect =
     params.has("liff.state") || document.referrer.includes("liff.line.me");
-  const isExplicitLineEntry =
-    params.get("liff") === "1" || params.get("fromLine") === "1";
+  const isExplicitLineEntry = getChatEntrySource() === "line_liff";
 
   return Boolean(
     liff.isInClient?.() || isLineLiffRedirect || isExplicitLineEntry
@@ -778,15 +778,25 @@ type MumbaoChatProps = {
 };
 
 function buildLineRequestPayload(identity?: SessionRequestIdentity) {
-  if (!identity?.lineIdentity) {
-    return {};
-  }
+  const source = identity?.entrySource || getChatEntrySource();
 
   return {
-    anonymous_visitor_id: identity.anonymousVisitorId || undefined,
-    line_id_token: identity.lineIdentity.idToken || undefined,
-    line_access_token: identity.lineIdentity.accessToken || undefined,
+    source: source || undefined,
+    anonymous_visitor_id: identity?.anonymousVisitorId || undefined,
+    line_id_token: identity?.lineIdentity?.idToken || undefined,
+    line_access_token: identity?.lineIdentity?.accessToken || undefined,
   };
+}
+
+function getChatEntrySource(): "line_liff" | "" {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  return params.get("liff") === "1" || params.get("fromLine") === "1"
+    ? "line_liff"
+    : "";
 }
 
 function buildJsonHeaders(accessToken = "") {

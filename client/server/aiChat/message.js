@@ -890,11 +890,38 @@ async function callDeepSeek(userMessage, recentMessages, dateInfo) {
   }
 }
 
-function buildCreateSessionPayload(visitorId, customerIdentity) {
+function normalizeEntrySource(value) {
+  const source = String(value || "").trim().toLowerCase();
+  return source === "line_liff" || source === "line" || source === "liff"
+    ? "line_liff"
+    : "";
+}
+
+function buildCreateSessionPayload(visitorId, customerIdentity, entrySource = "") {
   return {
     visitor_id: visitorId,
+    ...(entrySource ? { source: entrySource } : {}),
     ...buildCustomerSessionPatch(customerIdentity),
   };
+}
+
+async function linkSessionToEntrySource(session, entrySource) {
+  if (!session?.id || !entrySource || session.source === entrySource) {
+    return session;
+  }
+
+  const updatedSessions = await supabaseRequest(
+    `/chat_sessions?id=eq.${encodeURIComponent(session.id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        source: entrySource,
+        updated_at: new Date().toISOString(),
+      }),
+    }
+  );
+
+  return updatedSessions?.[0] || session;
 }
 
 async function linkSessionToCustomer(session, customerIdentity) {
@@ -943,10 +970,10 @@ async function getLatestCustomerSession(customerIdentity) {
   return sessions?.[0] || null;
 }
 
-async function getOrCreateSession(visitorId, customerIdentity) {
+async function getOrCreateSession(visitorId, customerIdentity, entrySource = "") {
   const latestCustomerSession = await getLatestCustomerSession(customerIdentity);
   if (latestCustomerSession) {
-    return latestCustomerSession;
+    return linkSessionToEntrySource(latestCustomerSession, entrySource);
   }
 
   const encodedVisitorId = encodeURIComponent(visitorId);
@@ -955,18 +982,27 @@ async function getOrCreateSession(visitorId, customerIdentity) {
   );
 
   if (sessions?.[0]) {
-    return linkSessionToCustomer(sessions[0], customerIdentity);
+    const customerSession = await linkSessionToCustomer(sessions[0], customerIdentity);
+    return linkSessionToEntrySource(customerSession, entrySource);
   }
 
   const createdSessions = await supabaseRequest("/chat_sessions", {
     method: "POST",
-    body: JSON.stringify(buildCreateSessionPayload(visitorId, customerIdentity)),
+    body: JSON.stringify(
+      buildCreateSessionPayload(visitorId, customerIdentity, entrySource)
+    ),
   });
 
   return createdSessions[0];
 }
 
-async function getSessionForMessage(visitorId, sessionId, lineProfile, customerIdentity) {
+async function getSessionForMessage(
+  visitorId,
+  sessionId,
+  lineProfile,
+  customerIdentity,
+  entrySource = ""
+) {
   const normalizedSessionId = String(sessionId || "").trim();
 
   if (lineProfile?.line_user_id) {
@@ -977,7 +1013,11 @@ async function getSessionForMessage(visitorId, sessionId, lineProfile, customerI
         reason: "line_user_id match",
         selectedSessionHasMessageCount: existingLineSession.messageCount,
       });
-      return linkSessionToCustomer(existingLineSession.session, customerIdentity);
+      const customerSession = await linkSessionToCustomer(
+        existingLineSession.session,
+        customerIdentity
+      );
+      return linkSessionToEntrySource(customerSession, entrySource);
     }
   }
 
@@ -1003,10 +1043,14 @@ async function getSessionForMessage(visitorId, sessionId, lineProfile, customerI
           (!session.auth_user_id && session.visitor_id === visitorId);
 
         if (canUseSession) {
-          return linkSessionToCustomer(session, customerIdentity);
+          const customerSession = await linkSessionToCustomer(
+            session,
+            customerIdentity
+          );
+          return linkSessionToEntrySource(customerSession, entrySource);
         }
       } else {
-        return session;
+        return linkSessionToEntrySource(session, entrySource);
       }
     }
 
@@ -1017,7 +1061,7 @@ async function getSessionForMessage(visitorId, sessionId, lineProfile, customerI
     );
   }
 
-  return getOrCreateSession(visitorId, customerIdentity);
+  return getOrCreateSession(visitorId, customerIdentity, entrySource);
 }
 
 async function insertMessage(sessionId, sender, message, providerUsed) {
@@ -1102,6 +1146,7 @@ export default async function handler(req, res) {
     const anonymousVisitorId = String(body.anonymous_visitor_id || "").trim();
     const lineIdToken = String(body.line_id_token || "").trim();
     const lineAccessToken = String(body.line_access_token || "").trim();
+    const entrySource = normalizeEntrySource(body.source || body.entry_source);
     const identity = await resolveVisitorIdentity({
       visitorId: requestedVisitorId,
       anonymousVisitorId,
@@ -1125,7 +1170,8 @@ export default async function handler(req, res) {
       visitorId,
       sessionId,
       identity.lineProfile,
-      customerIdentity
+      customerIdentity,
+      entrySource
     );
     session =
       (await updateSessionLineIdentity(session.id, identity.lineProfile)) ||

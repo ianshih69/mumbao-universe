@@ -193,7 +193,7 @@ function getFilterQuery(filter) {
     case "member":
       return "&or=(auth_user_id.not.is.null,customer_profile_id.not.is.null,customer_email.not.is.null)";
     case "visitor":
-      return "&auth_user_id=is.null&customer_profile_id=is.null&customer_email=is.null";
+      return "&auth_user_id=is.null&customer_profile_id=is.null&customer_email=is.null&line_user_id=is.null&or=(source.eq.web,source.is.null)";
     default:
       return "";
   }

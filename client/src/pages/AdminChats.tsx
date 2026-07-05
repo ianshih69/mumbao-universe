@@ -105,7 +105,7 @@ const sessionFilters: Array<{ value: ChatSessionFilter; label: string }> = [
   { value: "line", label: "LINE 圖文入口" },
   { value: "website", label: "網站問慢寶" },
   { value: "member", label: "會員登入" },
-  { value: "visitor", label: "訪客" },
+  { value: "visitor", label: "一般網站訪客" },
 ];
 
 function isLineEntrySession(session?: AdminChatSession) {
@@ -135,7 +135,7 @@ function getSourceLabel(session?: AdminChatSession) {
 function getAudienceLabel(session?: AdminChatSession) {
   if (isMemberSession(session)) return "會員登入";
   if (isLineEntrySession(session)) return "LINE 訪客";
-  return "訪客";
+  return "一般網站訪客";
 }
 
 function getSupportStatus(session?: AdminChatSession): ChatSupportStatus {

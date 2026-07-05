@@ -1042,19 +1042,36 @@ async function updateSessionAfterMessage(session, message, options = {}) {
   const unreadCount = options.incrementUnread
     ? Number(session.unread_count || 0) + 1
     : Number(session.unread_count || 0);
+  const now = new Date().toISOString();
+  const patch = {
+    last_message: message.message || "",
+    last_message_at: message.created_at || now,
+    latest_message_at: message.created_at || now,
+    unread_count: unreadCount,
+    updated_at: now,
+  };
+
+  if (options.supportStatus) {
+    patch.support_status = options.supportStatus;
+    patch.support_status_updated_at = now;
+
+    if (options.supportStatus === "needs_human") {
+      patch.status = "human_takeover";
+      patch.should_ai_reply = false;
+    }
+
+    if (options.supportStatus === "ai_replying") {
+      patch.status = "ai_active";
+      patch.should_ai_reply = true;
+    }
+  }
 
   try {
     const updatedSessions = await supabaseRequest(
       `/chat_sessions?id=eq.${encodeURIComponent(session.id)}`,
       {
         method: "PATCH",
-        body: JSON.stringify({
-          last_message: message.message || "",
-          last_message_at: message.created_at || new Date().toISOString(),
-          latest_message_at: message.created_at || new Date().toISOString(),
-          unread_count: unreadCount,
-          updated_at: new Date().toISOString(),
-        }),
+        body: JSON.stringify(patch),
       }
     );
 
@@ -1146,6 +1163,7 @@ export default async function handler(req, res) {
       const userMessage = await insertMessage(session.id, "user", message, null);
       session = await updateSessionAfterMessage(session, userMessage, {
         incrementUnread: true,
+        supportStatus: "needs_human",
       });
 
       logChatDebug("human takeover active, skip ai reply");
@@ -1162,6 +1180,7 @@ export default async function handler(req, res) {
       const userMessage = await insertMessage(session.id, "user", message, null);
       session = await updateSessionAfterMessage(session, userMessage, {
         incrementUnread: true,
+        supportStatus: "needs_human",
       });
 
       logChatDebug("scope=blocked");
@@ -1202,11 +1221,14 @@ export default async function handler(req, res) {
     const userMessage = await insertMessage(session.id, "user", message, null);
     session = await updateSessionAfterMessage(session, userMessage, {
       incrementUnread: true,
+      supportStatus: "ai_replying",
     });
 
     const aiAnswer = await callDeepSeek(message, recentMessages, dateInfo);
     const aiMessage = await insertMessage(session.id, "ai", aiAnswer, "deepseek");
-    session = await updateSessionAfterMessage(session, aiMessage);
+    session = await updateSessionAfterMessage(session, aiMessage, {
+      supportStatus: "ai_replying",
+    });
     logChatDebug("saved assistant message");
 
     return sendJson(res, 200, {

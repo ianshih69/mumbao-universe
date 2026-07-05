@@ -22,6 +22,22 @@ import {
 import { ensureFreshAdminSession } from "@/lib/shop/adminIdentityApi";
 
 type ChatSessionStatus = "ai_active" | "human_takeover" | "closed";
+type ChatSupportStatus =
+  | "ai_replying"
+  | "needs_human"
+  | "human_takeover"
+  | "replied"
+  | "closed";
+type ChatSessionFilter =
+  | "all"
+  | "needs_human"
+  | "human_takeover"
+  | "replied"
+  | "closed"
+  | "line"
+  | "website"
+  | "member"
+  | "visitor";
 
 type AdminChatSession = {
   id: string;
@@ -36,9 +52,18 @@ type AdminChatSession = {
   customer_profile_id?: string;
   customer_email?: string;
   status?: ChatSessionStatus;
+  support_status?: ChatSupportStatus;
+  should_ai_reply?: boolean;
   unread_count?: number;
   last_message?: string;
+  latest_message_sender?: string;
   latest_message_at?: string;
+  support_status_updated_at?: string;
+  handled_at?: string;
+  handled_by_name?: string;
+  handled_by_email?: string;
+  handled_by_role?: string;
+  closed_at?: string;
   created_at?: string;
   updated_at?: string;
 };
@@ -55,11 +80,33 @@ type AdminChatMessage = {
 const sessionListLimit = 30;
 const chatSupportRoles = new Set(["super_admin", "admin", "manager"]);
 
-const statusLabels: Record<string, string> = {
-  ai_active: "AI 回覆中",
+const supportStatusLabels: Record<ChatSupportStatus, string> = {
+  ai_replying: "AI 回覆中",
+  needs_human: "待人工處理",
   human_takeover: "人工接手中",
+  replied: "已回覆",
   closed: "已關閉",
 };
+
+const supportStatusStyles: Record<ChatSupportStatus, string> = {
+  ai_replying: "bg-stone-100 text-stone-600",
+  needs_human: "bg-[#fff0d9] text-[#9a5a22]",
+  human_takeover: "bg-[#efe6d9] text-[#7a5b41]",
+  replied: "bg-[#e5f2ec] text-[#4b7a63]",
+  closed: "bg-stone-200 text-stone-500",
+};
+
+const sessionFilters: Array<{ value: ChatSessionFilter; label: string }> = [
+  { value: "all", label: "全部" },
+  { value: "needs_human", label: "待處理" },
+  { value: "human_takeover", label: "人工接手" },
+  { value: "replied", label: "已回覆" },
+  { value: "closed", label: "已關閉" },
+  { value: "line", label: "LINE 圖文入口" },
+  { value: "website", label: "網站問慢寶" },
+  { value: "member", label: "會員登入" },
+  { value: "visitor", label: "訪客" },
+];
 
 function isLineEntrySession(session?: AdminChatSession) {
   const source = String(session?.source || "").toLowerCase();
@@ -89,6 +136,23 @@ function getAudienceLabel(session?: AdminChatSession) {
   if (isMemberSession(session)) return "會員登入";
   if (isLineEntrySession(session)) return "LINE 訪客";
   return "訪客";
+}
+
+function getSupportStatus(session?: AdminChatSession): ChatSupportStatus {
+  if (session?.status === "closed" || session?.support_status === "closed") {
+    return "closed";
+  }
+
+  if (session?.support_status) return session.support_status;
+  if (session?.latest_message_sender === "human") return "replied";
+
+  if (session?.status === "human_takeover" || session?.should_ai_reply === false) {
+    return Number(session?.unread_count || 0) > 0
+      ? "needs_human"
+      : "human_takeover";
+  }
+
+  return "ai_replying";
 }
 
 function canViewChatSupport(identity: AdminIdentity | null) {
@@ -267,6 +331,8 @@ export default function AdminChats() {
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [messages, setMessages] = useState<AdminChatMessage[]>([]);
   const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] =
+    useState<ChatSessionFilter>("needs_human");
   const [reply, setReply] = useState("");
   const [isSessionsLoading, setIsSessionsLoading] = useState(false);
   const [isMoreSessionsLoading, setIsMoreSessionsLoading] = useState(false);
@@ -338,6 +404,7 @@ export default function AdminChats() {
         const params = new URLSearchParams({
           limit: String(sessionListLimit),
           page: String(page),
+          filter: activeFilter,
         });
         const trimmedSearch = search.trim();
         if (trimmedSearch) params.set("q", trimmedSearch);
@@ -373,7 +440,7 @@ export default function AdminChats() {
         }
       }
     },
-    [canAccessChatSupport, handleAuthFailure, search, token]
+    [activeFilter, canAccessChatSupport, handleAuthFailure, search, token]
   );
 
   const loadMessages = useCallback(
@@ -443,7 +510,7 @@ export default function AdminChats() {
       10000
     );
     return () => window.clearInterval(timer);
-  }, [canAccessChatSupport, loadSessions, token]);
+  }, [activeFilter, canAccessChatSupport, loadSessions, token]);
 
   useEffect(() => {
     if (!token || !selectedSessionId) return;
@@ -498,16 +565,25 @@ export default function AdminChats() {
     }
   };
 
-  const updateStatus = async (status: ChatSessionStatus) => {
+  const updateSupportStatus = async (supportStatus: ChatSupportStatus) => {
     if (!selectedSessionId || !token || !canAccessChatSupport) return;
+
+    const actionByStatus: Record<ChatSupportStatus, string> = {
+      ai_replying:
+        selectedSession?.status === "closed" ? "reopen-session" : "restore-ai",
+      needs_human: "update-session-status",
+      human_takeover: "human-takeover",
+      replied: "mark-replied",
+      closed: "close-session",
+    };
 
     try {
       await fetchAdminJson(
-        `/api/admin-chat?action=session&sessionId=${encodeURIComponent(selectedSessionId)}`,
+        `/api/admin-chat?action=${actionByStatus[supportStatus]}&sessionId=${encodeURIComponent(selectedSessionId)}`,
         token,
         {
           method: "PATCH",
-          body: JSON.stringify({ status }),
+          body: JSON.stringify({ support_status: supportStatus }),
         }
       );
       await loadSessions({ page: 0, silent: true });
@@ -536,7 +612,7 @@ export default function AdminChats() {
     setIsSending(true);
     try {
       const data = await fetchAdminJson<{ message?: AdminChatMessage }>(
-        `/api/admin-chat?action=messages&sessionId=${encodeURIComponent(selectedSessionId)}`,
+        `/api/admin-chat?action=send-human-message&sessionId=${encodeURIComponent(selectedSessionId)}`,
         token,
         {
           method: "POST",
@@ -652,12 +728,34 @@ export default function AdminChats() {
             />
             {isSessionsLoading && <RefreshCw className="size-4 animate-spin text-stone-400" />}
           </div>
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+            {sessionFilters.map((filter) => (
+              <button
+                key={filter.value}
+                type="button"
+                onClick={() => {
+                  setActiveFilter(filter.value);
+                  setSessions([]);
+                  setSelectedSessionId("");
+                  setMessages([]);
+                }}
+                className={cn(
+                  "flex-none rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                  activeFilter === filter.value
+                    ? "border-[#9b7654] bg-[#9b7654] text-white"
+                    : "border-stone-200 bg-white text-stone-500 hover:border-[#c7a47f] hover:text-[#8a6a4f]"
+                )}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto" onScroll={handleSessionScroll}>
           {sessions.length === 0 ? (
             <div className="p-6 text-center text-sm text-stone-500">
-              目前沒有對話
+              目前沒有符合條件的對話
             </div>
           ) : (
             sessions.map((session) => {
@@ -665,6 +763,7 @@ export default function AdminChats() {
               const hasLineAvatar =
                 Boolean(session.line_picture_url) &&
                 !failedAvatarIds.has(String(session.id));
+              const supportStatus = getSupportStatus(session);
 
               return (
                 <button
@@ -718,8 +817,13 @@ export default function AdminChats() {
                       {session.last_message || "尚無訊息"}
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <span className="inline-flex rounded-full bg-stone-100 px-2 py-0.5 text-[11px] text-stone-500">
-                        {statusLabels[session.status || "ai_active"] || session.status}
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-2 py-0.5 text-[11px]",
+                          supportStatusStyles[supportStatus]
+                        )}
+                      >
+                        {supportStatusLabels[supportStatus]}
                       </span>
                       <span className="inline-flex rounded-full bg-[#f7efe6] px-2 py-0.5 text-[11px] text-[#8a6a4f]">
                         {getSourceLabel(session)}
@@ -753,6 +857,11 @@ export default function AdminChats() {
         )}
       >
         {selectedSession ? (
+          (() => {
+            const selectedSupportStatus = getSupportStatus(selectedSession);
+            const isClosed = selectedSupportStatus === "closed";
+
+            return (
           <>
             <header className="flex flex-none flex-col gap-3 border-b border-stone-200 bg-white px-4 py-3 md:flex-row md:items-center md:justify-between md:gap-4 md:px-5 md:py-4">
               <div className="flex min-w-0 items-start gap-3">
@@ -783,35 +892,71 @@ export default function AdminChats() {
                 </div>
               </div>
               <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 md:w-auto md:flex-wrap md:justify-end md:overflow-visible md:pb-0">
-                <span className="inline-flex flex-none whitespace-nowrap rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-600">
-                  {statusLabels[selectedSession.status || "ai_active"]}
+                <span
+                  className={cn(
+                    "inline-flex flex-none whitespace-nowrap rounded-full px-3 py-1 text-xs",
+                    supportStatusStyles[selectedSupportStatus]
+                  )}
+                >
+                  {supportStatusLabels[selectedSupportStatus]}
                 </span>
-                {selectedSession.status === "human_takeover" ? (
+                {isClosed ? (
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => updateStatus("ai_active")}
+                    onClick={() => updateSupportStatus("ai_replying")}
                     className="flex-none whitespace-nowrap"
                   >
-                    恢復 AI
+                    重新開啟對話
                   </Button>
                 ) : (
-                  <Button
-                    size="sm"
-                    onClick={() => updateStatus("human_takeover")}
-                    className="flex-none whitespace-nowrap"
-                  >
-                    接手對話
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => updateSupportStatus("needs_human")}
+                      className="flex-none whitespace-nowrap"
+                    >
+                      標記待處理
+                    </Button>
+                    {selectedSupportStatus === "human_takeover" ||
+                    selectedSupportStatus === "needs_human" ||
+                    selectedSupportStatus === "replied" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateSupportStatus("ai_replying")}
+                        className="flex-none whitespace-nowrap"
+                      >
+                        恢復 AI
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => updateSupportStatus("human_takeover")}
+                        className="flex-none whitespace-nowrap"
+                      >
+                        人工接手
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => updateSupportStatus("replied")}
+                      className="flex-none whitespace-nowrap"
+                    >
+                      標記已回覆
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => updateSupportStatus("closed")}
+                      className="flex-none whitespace-nowrap"
+                    >
+                      關閉對話
+                    </Button>
+                  </>
                 )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => updateStatus("closed")}
-                  className="flex-none whitespace-nowrap"
-                >
-                  關閉
-                </Button>
               </div>
             </header>
 
@@ -834,9 +979,20 @@ export default function AdminChats() {
                   </span>
                 )}
               </div>
-              {selectedSession.status === "human_takeover" && (
+              {selectedSupportStatus === "human_takeover" && (
                 <p className="mt-1">
                   已切換人工接手。慢寶將暫停自動回答，此對話仍只在網站問慢寶中進行。
+                </p>
+              )}
+              {selectedSupportStatus === "needs_human" && (
+                <p className="mt-1">
+                  此對話已標記為待人工處理，請確認客人問題後回覆或恢復 AI。
+                </p>
+              )}
+              {selectedSupportStatus === "closed" && selectedSession.closed_at && (
+                <p className="mt-1">
+                  此對話已於 {formatDateLabel(selectedSession.closed_at)}{" "}
+                  {formatMessageTime(selectedSession.closed_at)} 關閉。
                 </p>
               )}
               {isLineEntrySession(selectedSession) && (
@@ -928,13 +1084,18 @@ export default function AdminChats() {
                   value={reply}
                   onChange={(event) => setReply(event.target.value)}
                   onKeyDown={handleReplyKeyDown}
-                  placeholder="輸入要顯示在網站問慢寶聊天視窗的人工回覆，Enter 送出，Shift + Enter 換行"
+                  placeholder={
+                    isClosed
+                      ? "此對話已關閉，重新開啟後才能回覆"
+                      : "輸入要顯示在網站問慢寶聊天視窗的人工回覆，Enter 送出，Shift + Enter 換行"
+                  }
+                  disabled={isClosed}
                   className="max-h-32 min-h-12 flex-1 resize-none rounded-2xl"
                 />
                 <Button
                   type="button"
                   onClick={sendReply}
-                  disabled={!reply.trim() || isSending}
+                  disabled={isClosed || !reply.trim() || isSending}
                   className="h-12 flex-none gap-2 rounded-full px-4"
                   aria-label="回覆到網站聊天"
                 >
@@ -944,6 +1105,8 @@ export default function AdminChats() {
               </div>
             </footer>
           </>
+            );
+          })()
         ) : (
           <div className="flex h-full flex-col items-center justify-center text-stone-400">
             <Bot className="mb-3 size-10" />

@@ -103,7 +103,7 @@ function normalizeMessage(message) {
 
 async function assertSessionExists(sessionId) {
   const sessions = await supabaseRequest(
-    `/chat_sessions?id=eq.${encodeURIComponent(sessionId)}&select=id,status&limit=1`
+    `/chat_sessions?id=eq.${encodeURIComponent(sessionId)}&select=id,status,support_status&limit=1`
   );
 
   if (!sessions?.[0]) {
@@ -156,6 +156,7 @@ async function handleGet(req, res, sessionId) {
 }
 
 async function handlePost(req, res, sessionId) {
+  const admin = await requireChatSupportAdmin(req);
   await assertSessionExists(sessionId);
   const body = await readBody(req);
   const content = String(body.content || body.message || "").trim();
@@ -181,8 +182,17 @@ async function handlePost(req, res, sessionId) {
     method: "PATCH",
     body: JSON.stringify({
       status: "human_takeover",
+      support_status: "replied",
+      should_ai_reply: false,
       last_message: content,
       latest_message_at: message.created_at || new Date().toISOString(),
+      support_status_updated_at: message.created_at || new Date().toISOString(),
+      handled_at: message.created_at || new Date().toISOString(),
+      handled_by_admin_id: admin.adminProfileId || null,
+      handled_by_name: admin.displayName || "",
+      handled_by_email: admin.email || "",
+      handled_by_role: admin.roleCode || "",
+      unread_count: 0,
       updated_at: new Date().toISOString(),
     }),
   });
@@ -199,7 +209,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    await requireChatSupportAdmin(req);
     const sessionId = getSessionId(req);
 
     if (!sessionId) {
@@ -207,6 +216,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "GET") {
+      await requireChatSupportAdmin(req);
       return await handleGet(req, res, sessionId);
     }
 

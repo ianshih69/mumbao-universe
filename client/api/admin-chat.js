@@ -27,7 +27,22 @@ export default async function handler(req, res) {
     return sessionHandler(req, res);
   }
 
+  if (
+    action === "update-session-status" ||
+    action === "human-takeover" ||
+    action === "restore-ai" ||
+    action === "close-session" ||
+    action === "reopen-session" ||
+    action === "mark-replied"
+  ) {
+    return sessionHandler(req, res);
+  }
+
   if (action === "messages") {
+    return messagesHandler(req, res);
+  }
+
+  if (action === "send-human-message") {
     return messagesHandler(req, res);
   }
 

@@ -9,6 +9,13 @@ const jsonHeaders = {
 const supabaseTimeoutMs = 8000;
 const defaultLimit = 30;
 const maxLimit = 50;
+const supportStatusValues = new Set([
+  "ai_replying",
+  "needs_human",
+  "human_takeover",
+  "replied",
+  "closed",
+]);
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -78,6 +85,8 @@ function getPage(value) {
 }
 
 function normalizeSession(session) {
+  const supportStatus = getSupportStatus(session);
+
   return {
     id: session.id,
     session_id: session.id,
@@ -91,52 +100,103 @@ function normalizeSession(session) {
     customer_profile_id: session.customer_profile_id || "",
     customer_email: session.customer_email || "",
     status: session.status || "ai_active",
+    support_status: supportStatus,
+    should_ai_reply: session.should_ai_reply !== false,
     unread_count: Number(session.unread_count || 0),
     last_message: session.last_message || "",
+    latest_message_sender: session.latest_message_sender || "",
     latest_message_at: session.latest_message_at || session.updated_at || session.created_at || "",
+    support_status_updated_at: session.support_status_updated_at || "",
+    handled_at: session.handled_at || "",
+    handled_by_name: session.handled_by_name || "",
+    handled_by_email: session.handled_by_email || "",
+    handled_by_role: session.handled_by_role || "",
+    closed_at: session.closed_at || "",
     created_at: session.created_at || "",
     updated_at: session.updated_at || "",
   };
 }
 
-async function loadLatestMessage(sessionId) {
-  const messages = await supabaseRequest(
-    `/chat_messages?session_id=eq.${encodeURIComponent(
-      sessionId
-    )}&select=id,session_id,sender,message,created_at&order=created_at.desc&limit=10`
-  );
+function getSupportStatus(session) {
+  const persistedStatus = String(session.support_status || "").trim();
 
-  return (
-    (messages || []).find((message) => String(message.message || "").trim()) ||
-    messages?.[0] ||
-    null
+  if (session.status === "closed" || persistedStatus === "closed") {
+    return "closed";
+  }
+
+  if (supportStatusValues.has(persistedStatus)) {
+    return persistedStatus;
+  }
+
+  if (session.latest_message_sender === "human") return "replied";
+  if (session.status === "human_takeover" || session.should_ai_reply === false) {
+    return Number(session.unread_count || 0) > 0 ? "needs_human" : "human_takeover";
+  }
+
+  return "ai_replying";
+}
+
+async function loadLatestMessages(sessionIds) {
+  const ids = [...new Set((sessionIds || []).filter(Boolean).map(String))];
+
+  if (!ids.length) return new Map();
+
+  const messages = await supabaseRequest(
+    `/chat_messages?session_id=in.(${ids
+      .map((id) => encodeURIComponent(id))
+      .join(",")})&deleted_at=is.null&select=id,session_id,sender,message,created_at&order=created_at.desc`
   );
+  const bySession = new Map();
+
+  for (const message of messages || []) {
+    const sessionId = String(message.session_id || "");
+    if (!sessionId || bySession.has(sessionId)) continue;
+    bySession.set(sessionId, message);
+  }
+
+  return bySession;
 }
 
 async function applyLatestMessageFallbacks(sessions) {
-  return Promise.all(
-    sessions.map(async (session) => {
-      if (session.last_message && session.latest_message_at) {
-        return session;
-      }
+  const latestMessages = await loadLatestMessages((sessions || []).map((session) => session.id));
 
-      const latestMessage = await loadLatestMessage(session.id);
-      if (!latestMessage) {
-        return session;
-      }
+  return (sessions || []).map((session) => {
+    const latestMessage = latestMessages.get(String(session.id));
 
-      return {
-        ...session,
-        last_message: session.last_message || latestMessage.message || "",
-        latest_message_at:
-          session.latest_message_at ||
-          latestMessage.created_at ||
-          session.updated_at ||
-          session.created_at ||
-          "",
-      };
-    })
-  );
+    if (!latestMessage) return session;
+
+    return {
+      ...session,
+      last_message: session.last_message || latestMessage.message || "",
+      latest_message_sender: latestMessage.sender || "",
+      latest_message_at:
+        session.latest_message_at ||
+        latestMessage.created_at ||
+        session.updated_at ||
+        session.created_at ||
+        "",
+    };
+  });
+}
+
+function getFilterQuery(filter) {
+  switch (filter) {
+    case "needs_human":
+    case "human_takeover":
+    case "replied":
+    case "closed":
+      return `&support_status=eq.${filter}`;
+    case "line":
+      return "&or=(source.eq.line_liff,source.eq.line,source.eq.liff,line_user_id.not.is.null)";
+    case "website":
+      return "&or=(source.eq.web,source.is.null)";
+    case "member":
+      return "&or=(auth_user_id.not.is.null,customer_profile_id.not.is.null,customer_email.not.is.null)";
+    case "visitor":
+      return "&auth_user_id=is.null&customer_profile_id=is.null&customer_email=is.null";
+    default:
+      return "";
+  }
 }
 
 export default async function handler(req, res) {
@@ -148,17 +208,19 @@ export default async function handler(req, res) {
   try {
     await requireChatSupportAdmin(req);
     const search = String(firstQueryValue(req.query?.q) || "").trim().toLowerCase();
+    const filter = String(firstQueryValue(req.query?.filter) || "all").trim();
     const limit = getPositiveInt(firstQueryValue(req.query?.limit), defaultLimit, maxLimit);
     const page = getPage(firstQueryValue(req.query?.page));
     const offset = page * limit;
     const select =
-      "id,visitor_id,line_user_id,line_display_name,line_picture_url,source,auth_user_id,customer_profile_id,customer_email,status,unread_count,last_message,latest_message_at,created_at,updated_at";
+      "id,visitor_id,line_user_id,line_display_name,line_picture_url,source,auth_user_id,customer_profile_id,customer_email,status,support_status,should_ai_reply,unread_count,last_message,latest_message_at,support_status_updated_at,handled_at,handled_by_name,handled_by_email,handled_by_role,closed_at,created_at,updated_at";
+    const filterQuery = getFilterQuery(filter);
     const searchTerm = encodeURIComponent(`*${search.replace(/[(),]/g, " ")}*`);
-    const searchFilter = search
+    const searchFilter = search && !filterQuery.includes("&or=")
       ? `&or=(line_display_name.ilike.${searchTerm},visitor_id.ilike.${searchTerm},line_user_id.ilike.${searchTerm},last_message.ilike.${searchTerm})`
       : "";
     const sessions = await supabaseRequest(
-      `/chat_sessions?select=${select}${searchFilter}&order=latest_message_at.desc.nullslast,updated_at.desc.nullslast&limit=${
+      `/chat_sessions?select=${select}${filterQuery}${searchFilter}&order=latest_message_at.desc.nullslast,updated_at.desc.nullslast&limit=${
         limit + 1
       }&offset=${offset}`
     );

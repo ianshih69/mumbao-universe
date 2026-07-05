@@ -1,3 +1,8 @@
+import {
+  getAdminChatAuthErrorMessage,
+  requireChatSupportAdmin,
+} from "./adminAuth.js";
+
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
@@ -8,27 +13,6 @@ function sendJson(res, status, body) {
   res.statusCode = status;
   res.setHeader("Content-Type", jsonHeaders["Content-Type"]);
   res.end(JSON.stringify(body));
-}
-
-function requireAdmin(req) {
-  const adminPassword = String(process.env.ADMIN_PASSWORD || "").trim();
-  const authHeader = String(req.headers?.authorization || "");
-  const bearerToken = authHeader.startsWith("Bearer ")
-    ? authHeader.slice("Bearer ".length).trim()
-    : "";
-  const providedPassword = bearerToken || String(req.headers?.["x-admin-password"] || "").trim();
-
-  if (!adminPassword) {
-    const error = new Error("ADMIN_PASSWORD is not configured.");
-    error.status = 500;
-    throw error;
-  }
-
-  if (providedPassword !== adminPassword) {
-    const error = new Error("Unauthorized.");
-    error.status = 401;
-    throw error;
-  }
 }
 
 function getSupabaseConfig() {
@@ -97,7 +81,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    requireAdmin(req);
+    await requireChatSupportAdmin(req);
     const sessionId = getSessionId(req);
     const body = await readBody(req);
     const status = String(body.status || "").trim();
@@ -130,7 +114,7 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error("admin chat update session error:", error);
     return sendJson(res, error.status || 500, {
-      error: error.status === 401 ? "Unauthorized." : "Failed to update chat session.",
+      error: getAdminChatAuthErrorMessage(error),
     });
   }
 }

@@ -1,5 +1,4 @@
 import {
-  FormEvent,
   KeyboardEvent,
   UIEvent,
   useCallback,
@@ -8,11 +7,19 @@ import {
   useRef,
   useState,
 } from "react";
-import { Bot, Lock, RefreshCw, Search, Send, UserRound } from "lucide-react";
+import { Bot, RefreshCw, Search, Send, ShieldCheck, UserRound } from "lucide-react";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import {
+  clearAdminToken as clearStoredAdminToken,
+  getAdminIdentity,
+  getAdminToken,
+  isAdminAuthError,
+  type AdminIdentity,
+} from "@/lib/shop/adminAuth";
+import { ensureFreshAdminSession } from "@/lib/shop/adminIdentityApi";
 
 type ChatSessionStatus = "ai_active" | "human_takeover" | "closed";
 
@@ -45,8 +52,8 @@ type AdminChatMessage = {
   created_at?: string;
 };
 
-const adminTokenKey = "mumbao-admin-chat-token";
 const sessionListLimit = 30;
+const chatSupportRoles = new Set(["super_admin", "admin", "manager"]);
 
 const statusLabels: Record<string, string> = {
   ai_active: "AI 回覆中",
@@ -84,20 +91,8 @@ function getAudienceLabel(session?: AdminChatSession) {
   return "訪客";
 }
 
-function getStoredAdminToken() {
-  try {
-    return sessionStorage.getItem(adminTokenKey) || "";
-  } catch {
-    return "";
-  }
-}
-
-function saveAdminToken(token: string) {
-  sessionStorage.setItem(adminTokenKey, token);
-}
-
-function clearAdminToken() {
-  sessionStorage.removeItem(adminTokenKey);
+function canViewChatSupport(identity: AdminIdentity | null) {
+  return chatSupportRoles.has(identity?.role_code || "");
 }
 
 function getTaipeiDateParts(value: string | Date | number) {
@@ -183,10 +178,11 @@ async function fetchAdminJson<T>(
   token: string,
   options: RequestInit = {}
 ) {
+  const activeToken = await ensureFreshAdminSession(token);
   const response = await fetch(url, {
     ...options,
     headers: {
-      ...buildHeaders(token),
+      ...buildHeaders(activeToken),
       ...options.headers,
     },
   });
@@ -262,9 +258,11 @@ function mergeSessions(
 }
 
 export default function AdminChats() {
-  const [token, setToken] = useState(() => getStoredAdminToken());
-  const [password, setPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
+  const [, setLocation] = useLocation();
+  const [token, setToken] = useState(() => getAdminToken());
+  const [identity, setIdentity] = useState<AdminIdentity | null>(() =>
+    getAdminIdentity()
+  );
   const [sessions, setSessions] = useState<AdminChatSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [messages, setMessages] = useState<AdminChatMessage[]>([]);
@@ -282,6 +280,7 @@ export default function AdminChats() {
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesCacheRef = useRef<Map<string, AdminChatMessage[]>>(new Map());
+  const canAccessChatSupport = canViewChatSupport(identity);
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId),
@@ -312,13 +311,23 @@ export default function AdminChats() {
     });
   }, [messages]);
 
+  const handleAuthFailure = useCallback(() => {
+    clearStoredAdminToken();
+    messagesCacheRef.current.clear();
+    setToken("");
+    setIdentity(null);
+    setSessions([]);
+    setMessages([]);
+    setSelectedSessionId("");
+  }, []);
+
   const loadSessions = useCallback(
     async ({
       page = 0,
       append = false,
       silent = false,
     }: { page?: number; append?: boolean; silent?: boolean } = {}) => {
-      if (!token) return;
+      if (!token || !canAccessChatSupport) return;
       if (append) {
         setIsMoreSessionsLoading(true);
       } else if (!silent) {
@@ -350,6 +359,9 @@ export default function AdminChats() {
         setError("");
 
       } catch (loadError) {
+        if (isAdminAuthError(loadError)) {
+          handleAuthFailure();
+        }
         setError(
           loadError instanceof Error ? loadError.message : "載入對話列表失敗"
         );
@@ -361,7 +373,7 @@ export default function AdminChats() {
         }
       }
     },
-    [search, token]
+    [canAccessChatSupport, handleAuthFailure, search, token]
   );
 
   const loadMessages = useCallback(
@@ -369,7 +381,7 @@ export default function AdminChats() {
       sessionId = selectedSessionId,
       { silent = false, incremental = false } = {}
     ) => {
-      if (!token || !sessionId) return;
+      if (!token || !sessionId || !canAccessChatSupport) return;
 
       const cachedMessages = messagesCacheRef.current.get(sessionId) || [];
       const since = incremental ? getNewestCreatedAt(cachedMessages) : "";
@@ -403,6 +415,9 @@ export default function AdminChats() {
         }
         setError("");
       } catch (loadError) {
+        if (isAdminAuthError(loadError)) {
+          handleAuthFailure();
+        }
         setError(
           loadError instanceof Error ? loadError.message : "載入訊息失敗"
         );
@@ -412,11 +427,11 @@ export default function AdminChats() {
         }
       }
     },
-    [selectedSessionId, token]
+    [canAccessChatSupport, handleAuthFailure, selectedSessionId, token]
   );
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || !canAccessChatSupport) return;
 
     setSessions([]);
     setSelectedSessionId("");
@@ -428,7 +443,7 @@ export default function AdminChats() {
       10000
     );
     return () => window.clearInterval(timer);
-  }, [loadSessions, token]);
+  }, [canAccessChatSupport, loadSessions, token]);
 
   useEffect(() => {
     if (!token || !selectedSessionId) return;
@@ -456,28 +471,16 @@ export default function AdminChats() {
     });
   }, [messages]);
 
-  const handleLogin = (event: FormEvent) => {
-    event.preventDefault();
-    const nextToken = password.trim();
-    if (!nextToken) {
-      setLoginError("請輸入管理密碼");
-      return;
-    }
-
-    saveAdminToken(nextToken);
-    setToken(nextToken);
-    setLoginError("");
-  };
-
   const logout = () => {
-    clearAdminToken();
+    clearStoredAdminToken();
     messagesCacheRef.current.clear();
     setFailedAvatarIds(new Set());
     setToken("");
-    setPassword("");
+    setIdentity(null);
     setSessions([]);
     setMessages([]);
     setSelectedSessionId("");
+    setLocation("/admin/shop/login?redirect=/admin/chats");
   };
 
   const loadNextSessionPage = () => {
@@ -496,7 +499,7 @@ export default function AdminChats() {
   };
 
   const updateStatus = async (status: ChatSessionStatus) => {
-    if (!selectedSessionId || !token) return;
+    if (!selectedSessionId || !token || !canAccessChatSupport) return;
 
     try {
       await fetchAdminJson(
@@ -509,6 +512,9 @@ export default function AdminChats() {
       );
       await loadSessions({ page: 0, silent: true });
     } catch (statusError) {
+      if (isAdminAuthError(statusError)) {
+        handleAuthFailure();
+      }
       setError(
         statusError instanceof Error ? statusError.message : "更新狀態失敗"
       );
@@ -517,7 +523,15 @@ export default function AdminChats() {
 
   const sendReply = async () => {
     const content = reply.trim();
-    if (!content || !selectedSessionId || isSending || !token) return;
+    if (
+      !content ||
+      !selectedSessionId ||
+      isSending ||
+      !token ||
+      !canAccessChatSupport
+    ) {
+      return;
+    }
 
     setIsSending(true);
     try {
@@ -540,6 +554,9 @@ export default function AdminChats() {
       await loadSessions({ page: 0, silent: true });
     } catch (sendError) {
       console.error("admin chat send reply failed:", sendError);
+      if (isAdminAuthError(sendError)) {
+        handleAuthFailure();
+      }
       setError(sendError instanceof Error ? sendError.message : "送出失敗");
     } finally {
       setIsSending(false);
@@ -558,33 +575,49 @@ export default function AdminChats() {
   if (!token) {
     return (
       <main className="flex min-h-[100svh] items-center justify-center bg-[#f6f1ea] px-5 text-stone-900">
-        <form
-          onSubmit={handleLogin}
-          className="w-full max-w-md border border-stone-200 bg-white p-7 shadow-xl shadow-stone-200/70"
-        >
+        <section className="w-full max-w-md border border-stone-200 bg-white p-7 text-center shadow-xl shadow-stone-200/70">
           <div className="mb-6 flex items-center gap-3">
             <div className="flex size-11 items-center justify-center rounded-full bg-stone-900 text-white">
-              <Lock className="size-5" />
+              <ShieldCheck className="size-5" />
             </div>
-            <div>
+            <div className="text-left">
               <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
                 MUMBAO Admin
               </p>
               <h1 className="text-2xl font-semibold">網站問慢寶客服後台</h1>
             </div>
           </div>
-          <Input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="請輸入管理密碼"
-            className="h-11 rounded-none"
-          />
-          {loginError && <p className="mt-3 text-sm text-red-600">{loginError}</p>}
-          <Button type="submit" className="mt-5 h-11 w-full rounded-none">
-            進入客服後台
+          <p className="text-sm leading-6 text-stone-600">
+            請先使用正式後台帳號登入，才可查看問慢寶客服對話。
+          </p>
+          <Button asChild className="mt-5 h-11 w-full rounded-none">
+            <Link href="/admin/shop/login?redirect=/admin/chats">
+              前往後台登入
+            </Link>
           </Button>
-        </form>
+        </section>
+      </main>
+    );
+  }
+
+  if (!canAccessChatSupport) {
+    return (
+      <main className="flex min-h-[100svh] items-center justify-center bg-[#f6f1ea] px-5 text-stone-900">
+        <section className="w-full max-w-md border border-stone-200 bg-white p-7 text-center shadow-xl shadow-stone-200/70">
+          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-stone-100 text-stone-600">
+            <ShieldCheck className="size-5" />
+          </div>
+          <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
+            MUMBAO Admin
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold">你沒有問慢寶客服後台權限</h1>
+          <p className="mt-3 text-sm leading-6 text-stone-600">
+            此後台僅開放 super_admin、admin、manager 使用。
+          </p>
+          <Button asChild variant="outline" className="mt-5 h-11 w-full rounded-none">
+            <Link href="/account">回會員中心</Link>
+          </Button>
+        </section>
       </main>
     );
   }

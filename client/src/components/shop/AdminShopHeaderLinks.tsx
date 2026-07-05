@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import FrontendPreviewMenu, { frontendPreviewLinks } from "@/components/shop/FrontendPreviewMenu";
-import { clearAdminToken } from "@/lib/shop/adminAuth";
+import { clearAdminToken, getAdminIdentity } from "@/lib/shop/adminAuth";
 
 const adminHeaderLinkClassName =
   "inline-flex h-10 items-center rounded-full border border-stone-200 bg-white px-4 text-sm font-medium text-stone-700 transition hover:bg-stone-50";
 
 const mobileMenuItemClassName =
   "flex min-h-11 w-full items-center rounded-xl px-3 py-2.5 text-left text-sm font-medium text-stone-700 transition hover:bg-[#f7f1e9]";
+const mumbaoChatSupportRoles = new Set(["super_admin", "admin", "manager"]);
+const mumbaoChatSupportLink = { label: "問慢寶客服", href: "/admin/chats" };
 
 type AdminShopHeaderLinksProps = {
   context?: "shop" | "bookings" | "site";
@@ -24,6 +26,10 @@ export default function AdminShopHeaderLinks({
 }: AdminShopHeaderLinksProps) {
   const [, setLocation] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const identity = getAdminIdentity();
+  const canViewMumbaoChatSupport = mumbaoChatSupportRoles.has(
+    identity?.role_code || ""
+  );
   const secondaryLinks =
     context === "bookings"
       ? [
@@ -39,6 +45,9 @@ export default function AdminShopHeaderLinks({
             { label: "房況管理", href: "/admin/bookings" },
             { label: "官網內容管理", href: "/admin/site" },
           ];
+  const managementLinks = canViewMumbaoChatSupport
+    ? [...secondaryLinks, mumbaoChatSupportLink]
+    : secondaryLinks;
 
   useEffect(() => {
     if (!isMobileMenuOpen) return;
@@ -74,7 +83,7 @@ export default function AdminShopHeaderLinks({
         <Link href="/account" className={adminHeaderLinkClassName}>
           管理入口
         </Link>
-        {secondaryLinks.map((link) => (
+        {managementLinks.map((link) => (
           <Link key={link.href} href={link.href} className={adminHeaderLinkClassName}>
             {link.label}
           </Link>
@@ -121,7 +130,7 @@ export default function AdminShopHeaderLinks({
               <Link href="/account" className={mobileMenuItemClassName} onClick={closeMobileMenu}>
                 管理入口
               </Link>
-              {secondaryLinks.map((link) => (
+              {managementLinks.map((link) => (
                 <Link key={link.href} href={link.href} className={mobileMenuItemClassName} onClick={closeMobileMenu}>
                   {link.label}
                 </Link>

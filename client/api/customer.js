@@ -17,6 +17,7 @@ const ADMIN_LINKS_BY_ROLE = {
   super_admin: [
     { label: "商店後台", href: "/admin/shop" },
     { label: "房況管理", href: "/admin/bookings" },
+    { label: "問慢寶客服", href: "/admin/chats" },
     { label: "官網內容管理", href: "/admin/site" },
     { label: "使用者管理", href: "/admin/shop/users" },
     { label: "操作紀錄", href: "/admin/shop/audit-logs" },
@@ -24,12 +25,14 @@ const ADMIN_LINKS_BY_ROLE = {
   admin: [
     { label: "商店後台", href: "/admin/shop" },
     { label: "房況管理", href: "/admin/bookings" },
+    { label: "問慢寶客服", href: "/admin/chats" },
     { label: "官網內容管理", href: "/admin/site" },
     { label: "倉儲與資產", href: "/admin/shop/warehouse" },
     { label: "操作紀錄", href: "/admin/shop/audit-logs" },
   ],
   manager: [
     { label: "房況管理", href: "/admin/bookings" },
+    { label: "問慢寶客服", href: "/admin/chats" },
     { label: "訂單管理", href: "/admin/shop/orders" },
     { label: "倉儲與資產", href: "/admin/shop/warehouse" },
   ],

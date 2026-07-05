@@ -107,6 +107,9 @@ function normalizeSession(session) {
     visitor_name: session.line_display_name || "",
     line_picture_url: session.line_picture_url || "",
     source: session.source || "web",
+    auth_user_id: session.auth_user_id || "",
+    customer_profile_id: session.customer_profile_id || "",
+    customer_email: session.customer_email || "",
     status: session.status || "ai_active",
     unread_count: Number(session.unread_count || 0),
     last_message: session.last_message || "",
@@ -169,7 +172,7 @@ export default async function handler(req, res) {
     const page = getPage(firstQueryValue(req.query?.page));
     const offset = page * limit;
     const select =
-      "id,visitor_id,line_user_id,line_display_name,line_picture_url,source,status,unread_count,last_message,latest_message_at,created_at,updated_at";
+      "id,visitor_id,line_user_id,line_display_name,line_picture_url,source,auth_user_id,customer_profile_id,customer_email,status,unread_count,last_message,latest_message_at,created_at,updated_at";
     const searchTerm = encodeURIComponent(`*${search.replace(/[(),]/g, " ")}*`);
     const searchFilter = search
       ? `&or=(line_display_name.ilike.${searchTerm},visitor_id.ilike.${searchTerm},line_user_id.ilike.${searchTerm},last_message.ilike.${searchTerm})`

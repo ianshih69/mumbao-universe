@@ -25,6 +25,9 @@ type AdminChatSession = {
   line_display_name?: string;
   line_picture_url?: string;
   source?: string;
+  auth_user_id?: string;
+  customer_profile_id?: string;
+  customer_email?: string;
   status?: ChatSessionStatus;
   unread_count?: number;
   last_message?: string;
@@ -47,9 +50,39 @@ const sessionListLimit = 30;
 
 const statusLabels: Record<string, string> = {
   ai_active: "AI 回覆中",
-  human_takeover: "管家接手中",
+  human_takeover: "人工接手中",
   closed: "已關閉",
 };
+
+function isLineEntrySession(session?: AdminChatSession) {
+  const source = String(session?.source || "").toLowerCase();
+  return source === "line_liff" || source === "line" || Boolean(session?.line_user_id);
+}
+
+function isMemberSession(session?: AdminChatSession) {
+  return Boolean(
+    session?.auth_user_id ||
+      session?.customer_profile_id ||
+      session?.customer_email
+  );
+}
+
+function getSourceLabel(session?: AdminChatSession) {
+  const source = String(session?.source || "").toLowerCase();
+
+  if (source === "line_liff") return "LINE 圖文入口";
+  if (source === "line" || source === "liff") return "LIFF 入口";
+  if (isMemberSession(session)) return "會員登入";
+  if (source === "web" || !source) return "網站問慢寶";
+
+  return source;
+}
+
+function getAudienceLabel(session?: AdminChatSession) {
+  if (isMemberSession(session)) return "會員登入";
+  if (isLineEntrySession(session)) return "LINE 訪客";
+  return "訪客";
+}
 
 function getStoredAdminToken() {
   try {
@@ -537,7 +570,7 @@ export default function AdminChats() {
               <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
                 MUMBAO Admin
               </p>
-              <h1 className="text-2xl font-semibold">慢寶客服後台</h1>
+              <h1 className="text-2xl font-semibold">網站問慢寶客服後台</h1>
             </div>
           </div>
           <Input
@@ -570,7 +603,7 @@ export default function AdminChats() {
               <p className="text-xs uppercase tracking-[0.22em] text-stone-400">
                 Chat Console
               </p>
-              <h1 className="text-xl font-semibold">慢寶客服後台</h1>
+              <h1 className="text-xl font-semibold">網站問慢寶客服後台</h1>
             </div>
             <Button variant="ghost" size="sm" onClick={logout}>
               登出
@@ -651,14 +684,15 @@ export default function AdminChats() {
                     <p className="mt-1 line-clamp-1 text-sm text-stone-500">
                       {session.last_message || "尚無訊息"}
                     </p>
-                    <div className="mt-2 flex items-center gap-2">
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
                       <span className="inline-flex rounded-full bg-stone-100 px-2 py-0.5 text-[11px] text-stone-500">
                         {statusLabels[session.status || "ai_active"] || session.status}
                       </span>
+                      <span className="inline-flex rounded-full bg-[#f7efe6] px-2 py-0.5 text-[11px] text-[#8a6a4f]">
+                        {getSourceLabel(session)}
+                      </span>
                       <span className="text-[11px] text-stone-400">
-                        {session.source === "line_liff" || session.source === "line"
-                          ? "LINE"
-                          : "web"}
+                        {getAudienceLabel(session)}
                       </span>
                     </div>
                   </div>
@@ -702,9 +736,17 @@ export default function AdminChats() {
                   <h2 className="truncate text-base font-semibold md:text-lg">
                     {getDisplayName(selectedSession)}
                   </h2>
-                  <p className="mt-1 truncate text-xs text-stone-500">
-                    {selectedSession.line_user_id || selectedSession.visitor_id}
-                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-stone-500">
+                    <span>{getSourceLabel(selectedSession)}</span>
+                    <span>・</span>
+                    <span>{getAudienceLabel(selectedSession)}</span>
+                    {selectedSession.line_display_name && (
+                      <>
+                        <span>・</span>
+                        <span>LINE 名稱：{selectedSession.line_display_name}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 md:w-auto md:flex-wrap md:justify-end md:overflow-visible md:pb-0">
@@ -739,6 +781,37 @@ export default function AdminChats() {
                 </Button>
               </div>
             </header>
+
+            <div className="flex-none border-b border-stone-200 bg-[#fff8ec] px-4 py-3 text-xs leading-6 text-[#756357] md:px-5">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="font-medium text-[#4f4036]">
+                  來源：{getSourceLabel(selectedSession)}
+                </span>
+                {selectedSession.customer_email && (
+                  <span>會員：{selectedSession.customer_email}</span>
+                )}
+                {selectedSession.line_user_id && (
+                  <span className="text-stone-500">
+                    LINE ID：{selectedSession.line_user_id}
+                  </span>
+                )}
+                {selectedSession.visitor_id && !selectedSession.line_user_id && (
+                  <span className="text-stone-500">
+                    訪客 ID：{selectedSession.visitor_id}
+                  </span>
+                )}
+              </div>
+              {selectedSession.status === "human_takeover" && (
+                <p className="mt-1">
+                  已切換人工接手。慢寶將暫停自動回答，此對話仍只在網站問慢寶中進行。
+                </p>
+              )}
+              {isLineEntrySession(selectedSession) && (
+                <p className="mt-1">
+                  此客人是從 LINE 圖文選單開啟問慢寶，但目前系統不會將人工回覆推送到 LINE。
+                </p>
+              )}
+            </div>
 
             {error && (
               <div className="border-b border-red-100 bg-red-50 px-5 py-2 text-sm text-red-600">
@@ -782,7 +855,7 @@ export default function AdminChats() {
                     >
                       {!isSystem && (
                         <span className="px-1 text-[11px] text-stone-400">
-                          {isGuest ? "客人" : isHuman ? "管家" : "AI 慢寶"}
+                          {isGuest ? "客人" : isHuman ? "人工客服" : "AI 慢寶"}
                         </span>
                       )}
                       <div
@@ -814,22 +887,26 @@ export default function AdminChats() {
                 paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.75rem)",
               }}
             >
+              <p className="mb-2 text-xs leading-5 text-stone-500">
+                此回覆只會顯示在網站問慢寶聊天視窗，不會傳送到 LINE 官方帳號聊天室。
+              </p>
               <div className="flex items-end gap-2">
                 <Textarea
                   value={reply}
                   onChange={(event) => setReply(event.target.value)}
                   onKeyDown={handleReplyKeyDown}
-                  placeholder="輸入管家回覆，Enter 送出，Shift + Enter 換行"
+                  placeholder="輸入要顯示在網站問慢寶聊天視窗的人工回覆，Enter 送出，Shift + Enter 換行"
                   className="max-h-32 min-h-12 flex-1 resize-none rounded-2xl"
                 />
                 <Button
                   type="button"
                   onClick={sendReply}
                   disabled={!reply.trim() || isSending}
-                  className="size-12 rounded-full p-0"
-                  aria-label="送出管家回覆"
+                  className="h-12 flex-none gap-2 rounded-full px-4"
+                  aria-label="回覆到網站聊天"
                 >
                   <Send className="size-5" />
+                  <span className="hidden sm:inline">回覆到網站聊天</span>
                 </Button>
               </div>
             </footer>

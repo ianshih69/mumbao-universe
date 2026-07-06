@@ -431,11 +431,34 @@ async function loadCustomerSessions(customerIdentity) {
     return [];
   }
 
-  return supabaseRequest(
+  const sessions = await supabaseRequest(
     `/chat_sessions?auth_user_id=eq.${encodeURIComponent(
       customerIdentity.authUserId
-    )}&deleted_at=is.null&select=id,visitor_id,last_message,latest_message_at,last_message_at,title,created_at,updated_at&order=latest_message_at.desc.nullslast,updated_at.desc&limit=8`
+    )}&deleted_at=is.null&select=id,visitor_id,last_message,latest_message_at,last_message_at,title,created_at,updated_at,source,line_user_id&order=latest_message_at.desc.nullslast,updated_at.desc&limit=8`
   );
+
+  if (!Array.isArray(sessions) || sessions.length === 0) {
+    return [];
+  }
+
+  const previews = await Promise.all(
+    sessions.map(async (session) => {
+      if (!session?.id) return "";
+
+      const messages = await supabaseRequest(
+        `/chat_messages?session_id=eq.${encodeURIComponent(
+          session.id
+        )}&sender=eq.user&deleted_at=is.null&select=message,created_at&order=created_at.desc&limit=1`
+      );
+
+      return String(messages?.[0]?.message || "");
+    })
+  );
+
+  return sessions.map((session, index) => ({
+    ...session,
+    preview_message: previews[index] || "",
+  }));
 }
 
 async function getOrCreateSession(visitorId, customerIdentity, entrySource = "") {
@@ -710,9 +733,34 @@ export default async function handler(req, res) {
     const sessionOnly =
       body.session_only === true ||
       firstQueryValue(req.query?.session_only) === "true";
+    const listOnly =
+      body.list_only === true ||
+      firstQueryValue(req.query?.list_only) === "true";
     const forceNewSession =
       body.force_new_session === true ||
       firstQueryValue(req.query?.force_new_session) === "true";
+
+    if (listOnly) {
+      if (!customerIdentity?.authUserId) {
+        return sendJson(res, 401, { error: "Login is required." });
+      }
+
+      const customerSessions = await loadCustomerSessions(customerIdentity);
+      logApiTiming("request end", requestStartedAt, {
+        listOnly: true,
+        sessionCount: customerSessions.length,
+      });
+
+      return sendJson(res, 200, {
+        session: null,
+        sessions: customerSessions,
+        messages: [],
+        limit,
+        before: null,
+        next_before: null,
+        has_more: false,
+      });
+    }
 
     if (!visitorId) {
       return sendJson(res, 400, { error: "visitor_id is required." });

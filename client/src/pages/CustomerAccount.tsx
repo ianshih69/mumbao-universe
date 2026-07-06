@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { ExternalLink, LogOut, PackageSearch, RotateCcw, ShieldCheck, UserRound } from "lucide-react";
+import { ExternalLink, LogOut, MessageCircle, PackageSearch, RotateCcw, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -19,9 +19,35 @@ import {
 } from "@/lib/shop/customerProfileApi";
 import { getOrderStatusLabel, getPaymentStatusLabel } from "@/lib/shop/labels";
 
-type AccountTab = "profile" | "address" | "orders";
+type AccountTab = "profile" | "address" | "orders" | "chat";
 
 type ProfileFormState = Required<CustomerProfileUpdatePayload>;
+
+type AccountChatSession = {
+  id: string;
+  visitor_id?: string | null;
+  title?: string | null;
+  preview_message?: string | null;
+  last_message?: string | null;
+  latest_message_at?: string | null;
+  last_message_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  source?: string | null;
+  line_user_id?: string | null;
+};
+
+type AccountChatMessage = {
+  id: string;
+  sender: string;
+  message: string;
+  created_at: string;
+};
+
+type ChatHistoryResponse = {
+  sessions?: AccountChatSession[];
+  messages?: AccountChatMessage[];
+};
 
 const EMPTY_FORM: ProfileFormState = {
   name: "",
@@ -67,6 +93,132 @@ function formatDateTime(value: string) {
   }).format(date);
 }
 
+const chatVisitorStorageKey = "mumbao-chat-visitor-id";
+const legacyChatVisitorStorageKey = "mumbao_visitor_id";
+
+function getAccountChatVisitorId() {
+  if (typeof window === "undefined") return "";
+
+  const existing =
+    window.localStorage.getItem(chatVisitorStorageKey) ||
+    window.localStorage.getItem(legacyChatVisitorStorageKey);
+
+  if (existing) return existing;
+
+  const randomPart =
+    typeof window.crypto?.randomUUID === "function"
+      ? window.crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
+  const visitorId = `visitor_${randomPart}`;
+  window.localStorage.setItem(chatVisitorStorageKey, visitorId);
+  return visitorId;
+}
+
+function truncateText(value: string, maxLength = 20) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const chars = Array.from(normalized);
+  if (chars.length <= maxLength) return normalized;
+  return `${chars.slice(0, maxLength).join("")}...`;
+}
+
+function getChatSessionTime(chatSession: AccountChatSession) {
+  return (
+    chatSession.latest_message_at ||
+    chatSession.last_message_at ||
+    chatSession.updated_at ||
+    chatSession.created_at ||
+    ""
+  );
+}
+
+function getChatSessionTitle(chatSession: AccountChatSession) {
+  const title = String(chatSession.title || "").trim();
+  if (title) return title;
+
+  const preview = String(chatSession.preview_message || chatSession.last_message || "").trim();
+  return preview ? truncateText(preview) : "未命名對話";
+}
+
+function isLineChatSession(chatSession: AccountChatSession) {
+  const source = String(chatSession.source || "").toLowerCase();
+  return Boolean(
+    chatSession.line_user_id ||
+      source === "line_liff" ||
+      source === "line" ||
+      source === "liff"
+  );
+}
+
+function getChatSourceLabel(chatSession: AccountChatSession) {
+  return isLineChatSession(chatSession) ? "LINE 圖文入口" : "網站問慢寶";
+}
+
+function getChatSenderLabel(sender: string) {
+  const normalized = String(sender || "").toLowerCase();
+  if (normalized === "user") return "你";
+  if (normalized === "human") return "人工客服";
+  return "慢寶";
+}
+
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  const data = (await response.json().catch(() => ({}))) as T & { error?: string };
+  if (!response.ok) {
+    throw new Error(data.error || `Request failed: ${response.status}`);
+  }
+  return data;
+}
+
+async function fetchAccountChatSessions(accessToken: string) {
+  const response = await fetch("/api/ai-chat?action=history", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      list_only: true,
+      session_only: true,
+    }),
+  });
+
+  const data = await readJsonResponse<ChatHistoryResponse>(response);
+  return Array.isArray(data.sessions) ? data.sessions : [];
+}
+
+async function fetchAccountChatMessages(accessToken: string, chatSession: AccountChatSession) {
+  const response = await fetch("/api/ai-chat?action=history", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      visitor_id: chatSession.visitor_id || getAccountChatVisitorId(),
+      session_id: chatSession.id,
+      limit: 100,
+    }),
+  });
+
+  const data = await readJsonResponse<ChatHistoryResponse>(response);
+  return Array.isArray(data.messages) ? data.messages : [];
+}
+
+async function deleteAccountChatSession(accessToken: string, chatSession: AccountChatSession) {
+  const response = await fetch("/api/ai-chat?action=delete-session", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      session_id: chatSession.id,
+      visitor_id: chatSession.visitor_id || getAccountChatVisitorId(),
+    }),
+  });
+
+  await readJsonResponse(response);
+}
+
 export default function CustomerAccount() {
   const [, setLocation] = useLocation();
   const {
@@ -94,6 +246,14 @@ export default function CustomerAccount() {
   const [selectedOrderNumber, setSelectedOrderNumber] = useState("");
   const [isOrderDetailLoading, setIsOrderDetailLoading] = useState(false);
   const [orderDetailError, setOrderDetailError] = useState("");
+  const [chatSessions, setChatSessions] = useState<AccountChatSession[]>([]);
+  const [selectedChatSessionId, setSelectedChatSessionId] = useState("");
+  const [chatMessages, setChatMessages] = useState<AccountChatMessage[]>([]);
+  const [isChatSessionsLoading, setIsChatSessionsLoading] = useState(false);
+  const [isChatMessagesLoading, setIsChatMessagesLoading] = useState(false);
+  const [deletingChatSessionId, setDeletingChatSessionId] = useState("");
+  const [chatHistoryError, setChatHistoryError] = useState("");
+  const [hasLoadedChatSessions, setHasLoadedChatSessions] = useState(false);
   const [adminAccess, setAdminAccess] = useState<CustomerAdminAccess | null>(null);
   const [adminBridgeTarget, setAdminBridgeTarget] = useState("");
 
@@ -128,6 +288,10 @@ export default function CustomerAccount() {
 
   const readonlyEmail = useMemo(() => profile?.email || user?.email || "", [profile?.email, user?.email]);
   const isAccountDisabled = profileError === DISABLED_ACCOUNT_MESSAGE;
+  const selectedChatSession = useMemo(
+    () => chatSessions.find((item) => item.id === selectedChatSessionId) || null,
+    [chatSessions, selectedChatSessionId],
+  );
 
   function updateField(field: keyof ProfileFormState, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -199,6 +363,70 @@ export default function CustomerAccount() {
     [ordersPage, session?.access_token],
   );
 
+  const loadChatSessions = useCallback(async () => {
+    if (!session?.access_token) return;
+
+    setIsChatSessionsLoading(true);
+    setChatHistoryError("");
+
+    try {
+      const nextSessions = await fetchAccountChatSessions(session.access_token);
+      setChatSessions(nextSessions);
+      setHasLoadedChatSessions(true);
+
+      if (selectedChatSessionId && !nextSessions.some((item) => item.id === selectedChatSessionId)) {
+        setSelectedChatSessionId("");
+        setChatMessages([]);
+      }
+    } catch (loadError) {
+      setChatHistoryError(loadError instanceof Error ? loadError.message : "問慢寶紀錄暫時無法載入。");
+    } finally {
+      setIsChatSessionsLoading(false);
+    }
+  }, [selectedChatSessionId, session?.access_token]);
+
+  async function loadChatMessages(chatSession: AccountChatSession) {
+    if (!session?.access_token) return;
+
+    setSelectedChatSessionId(chatSession.id);
+    setChatMessages([]);
+    setChatHistoryError("");
+    setIsChatMessagesLoading(true);
+
+    try {
+      const nextMessages = await fetchAccountChatMessages(session.access_token, chatSession);
+      setChatMessages(nextMessages);
+    } catch (loadError) {
+      setChatHistoryError(loadError instanceof Error ? loadError.message : "這段問慢寶紀錄暫時無法載入。");
+    } finally {
+      setIsChatMessagesLoading(false);
+    }
+  }
+
+  async function handleDeleteChatSession(chatSession: AccountChatSession) {
+    if (!session?.access_token) return;
+
+    const confirmed = window.confirm("刪除後，此段對話將不再顯示，慢寶也不會再用它接續回答。");
+    if (!confirmed) return;
+
+    setDeletingChatSessionId(chatSession.id);
+    setChatHistoryError("");
+
+    try {
+      await deleteAccountChatSession(session.access_token, chatSession);
+      setChatSessions((current) => current.filter((item) => item.id !== chatSession.id));
+
+      if (selectedChatSessionId === chatSession.id) {
+        setSelectedChatSessionId("");
+        setChatMessages([]);
+      }
+    } catch (deleteError) {
+      setChatHistoryError(deleteError instanceof Error ? deleteError.message : "刪除問慢寶紀錄失敗。");
+    } finally {
+      setDeletingChatSessionId("");
+    }
+  }
+
   async function loadOrderDetail(orderNumber: string) {
     if (!session?.access_token) return;
 
@@ -224,6 +452,25 @@ export default function CustomerAccount() {
   }, [activeTab, isAuthenticated, isOrdersLoading, loadOrders, ordersData, session?.access_token]);
 
   useEffect(() => {
+    if (
+      activeTab === "chat" &&
+      isAuthenticated &&
+      session?.access_token &&
+      !isChatSessionsLoading &&
+      !hasLoadedChatSessions
+    ) {
+      void loadChatSessions();
+    }
+  }, [
+    activeTab,
+    hasLoadedChatSessions,
+    isAuthenticated,
+    isChatSessionsLoading,
+    loadChatSessions,
+    session?.access_token,
+  ]);
+
+  useEffect(() => {
     if (!isAuthenticated) {
       setOrdersData(null);
       setOrdersPage(1);
@@ -231,6 +478,11 @@ export default function CustomerAccount() {
       setSelectedOrder(null);
       setSelectedOrderNumber("");
       setOrderDetailError("");
+      setChatSessions([]);
+      setSelectedChatSessionId("");
+      setChatMessages([]);
+      setChatHistoryError("");
+      setHasLoadedChatSessions(false);
     }
   }, [isAuthenticated]);
 
@@ -290,6 +542,7 @@ export default function CustomerAccount() {
                   ["profile", "個人資料"],
                   ["address", "預設收件資料"],
                   ["orders", "歷史訂單"],
+                  ["chat", "問慢寶紀錄"],
                 ].map(([tab, label]) => (
                   <button
                     key={tab}
@@ -385,7 +638,7 @@ export default function CustomerAccount() {
 
               {!isProfileLoading && !profileError && (
                 <>
-                  {activeTab !== "orders" && (
+                  {activeTab !== "orders" && activeTab !== "chat" && (
                     <form
                       className="rounded-[8px] border border-[#eadfce] bg-[#fffdf8] p-6 shadow-sm shadow-stone-200/60"
                       onSubmit={handleSave}
@@ -665,6 +918,171 @@ export default function CustomerAccount() {
                             </div>
                           )}
                         </div>
+                      )}
+                    </div>
+                  )}
+
+                  {activeTab === "chat" && (
+                    <div className="space-y-4">
+                      <section className="rounded-[8px] border border-[#eadfce] bg-[#fffdf8] p-6 shadow-sm shadow-stone-200/60">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-sm uppercase tracking-[0.18em] text-[#9f7868]">Mumbao Chat</p>
+                            <h2 className="mt-1 font-serif text-2xl text-stone-900">問慢寶紀錄</h2>
+                            <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-500">
+                              這裡會顯示你登入後與慢寶的對話紀錄。你可以查看或刪除不需要的對話。
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
+                            disabled={isChatSessionsLoading}
+                            onClick={() => {
+                              setHasLoadedChatSessions(false);
+                              void loadChatSessions();
+                            }}
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                            重新整理
+                          </Button>
+                        </div>
+
+                        {chatHistoryError && (
+                          <p className="mt-5 rounded-[8px] border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                            {chatHistoryError}
+                          </p>
+                        )}
+
+                        {isChatSessionsLoading && (
+                          <p className="mt-6 text-sm text-stone-500">正在載入問慢寶紀錄...</p>
+                        )}
+
+                        {!isChatSessionsLoading && chatSessions.length === 0 && (
+                          <div className="mt-6 rounded-[8px] border border-dashed border-[#d7c6b5] bg-white/70 p-6 text-center">
+                            <MessageCircle className="mx-auto h-6 w-6 text-[#9f7868]" />
+                            <p className="mt-3 text-sm text-stone-500">目前還沒有問慢寶紀錄。</p>
+                            <Button
+                              asChild
+                              variant="outline"
+                              className="mt-5 rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
+                            >
+                              <Link href="/ai-chat">開始問慢寶</Link>
+                            </Button>
+                          </div>
+                        )}
+
+                        {!isChatSessionsLoading && chatSessions.length > 0 && (
+                          <div className="mt-6 space-y-3">
+                            {chatSessions.map((chatSession) => {
+                              const isSelected = selectedChatSessionId === chatSession.id;
+                              const isDeleting = deletingChatSessionId === chatSession.id;
+
+                              return (
+                                <article
+                                  key={chatSession.id}
+                                  className={`rounded-[8px] border p-4 transition ${
+                                    isSelected
+                                      ? "border-[#c7a485] bg-[#fff7ec]"
+                                      : "border-[#eadfce] bg-white/80"
+                                  }`}
+                                >
+                                  <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                                    <div className="min-w-0">
+                                      <h3 className="break-words text-base font-medium text-stone-900">
+                                        {getChatSessionTitle(chatSession)}
+                                      </h3>
+                                      <div className="mt-2 flex flex-wrap gap-2 text-xs text-stone-500">
+                                        <span>{formatDateTime(getChatSessionTime(chatSession))}</span>
+                                        <span className="rounded-full bg-[#f3eadf] px-2 py-0.5 text-[#765d4a]">
+                                          {getChatSourceLabel(chatSession)}
+                                        </span>
+                                        <span className="rounded-full bg-white px-2 py-0.5 text-[#8a796a]">
+                                          會員登入
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="flex shrink-0 flex-wrap gap-2">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="h-9 rounded-full border-[#eadfce] bg-white px-4 hover:bg-[#f3eadf]"
+                                        disabled={isChatMessagesLoading && isSelected}
+                                        onClick={() => void loadChatMessages(chatSession)}
+                                      >
+                                        查看
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="h-9 rounded-full border-[#eadfce] bg-white px-4 text-[#9a5f4e] hover:bg-[#fff3e8]"
+                                        disabled={Boolean(deletingChatSessionId)}
+                                        onClick={() => void handleDeleteChatSession(chatSession)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                        {isDeleting ? "刪除中" : "刪除此段"}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </article>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </section>
+
+                      {selectedChatSession && (
+                        <section className="rounded-[8px] border border-[#eadfce] bg-[#fffdf8] p-6 shadow-sm shadow-stone-200/60">
+                          <div className="mb-5">
+                            <p className="text-sm uppercase tracking-[0.18em] text-[#9f7868]">Conversation</p>
+                            <h3 className="mt-1 break-words font-serif text-2xl text-stone-900">
+                              {getChatSessionTitle(selectedChatSession)}
+                            </h3>
+                            <p className="mt-1 text-sm text-stone-500">
+                              {getChatSourceLabel(selectedChatSession)} · {formatDateTime(getChatSessionTime(selectedChatSession))}
+                            </p>
+                          </div>
+
+                          {isChatMessagesLoading && (
+                            <p className="text-sm text-stone-500">正在載入這段對話...</p>
+                          )}
+
+                          {!isChatMessagesLoading && chatMessages.length === 0 && (
+                            <p className="rounded-[8px] border border-dashed border-[#d7c6b5] bg-white/70 p-5 text-center text-sm text-stone-500">
+                              這段對話目前沒有可顯示的訊息。
+                            </p>
+                          )}
+
+                          {!isChatMessagesLoading && chatMessages.length > 0 && (
+                            <div className="space-y-3">
+                              {chatMessages.map((chatMessage) => {
+                                const senderLabel = getChatSenderLabel(chatMessage.sender);
+                                const isUser = String(chatMessage.sender || "").toLowerCase() === "user";
+
+                                return (
+                                  <div
+                                    key={chatMessage.id}
+                                    className={`flex min-w-0 ${isUser ? "justify-end" : "justify-start"}`}
+                                  >
+                                    <div
+                                      className={`max-w-full rounded-[14px] px-4 py-3 text-sm leading-7 shadow-sm md:max-w-[82%] ${
+                                        isUser
+                                          ? "bg-[#8b6f5b] text-white"
+                                          : "border border-[#eadfce] bg-white text-stone-700"
+                                      }`}
+                                    >
+                                      <div className="mb-1 flex flex-wrap items-center gap-2 text-xs opacity-80">
+                                        <span>{senderLabel}</span>
+                                        <span>{formatDateTime(chatMessage.created_at)}</span>
+                                      </div>
+                                      <p className="whitespace-pre-wrap break-words">{chatMessage.message}</p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </section>
                       )}
                     </div>
                   )}

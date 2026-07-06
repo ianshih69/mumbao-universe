@@ -1,5 +1,10 @@
 import { enforceAiChatRateLimit } from "./rateLimit.js";
 import {
+  buildFaqPromptSection,
+  hasHighConfidenceFaqMatch,
+  retrieveFaqItems,
+} from "./faqRetrieval.js";
+import {
   buildCustomerSessionPatch,
   isSessionOwnedByCustomer,
   resolveCustomerIdentity,
@@ -55,6 +60,13 @@ const supportScopeKeywords = [
   "訪客",
   "寵物",
   "毛孩",
+  "狗",
+  "狗狗",
+  "貓",
+  "貓咪",
+  "大型犬",
+  "小型犬",
+  "犬",
   "設施",
   "烤肉",
   "麻將",
@@ -397,8 +409,9 @@ async function loadGuesthouseKnowledge() {
   return guesthouseKnowledgeCache;
 }
 
-async function buildSystemPrompt(dateInfo) {
+async function buildSystemPrompt(dateInfo, retrievedFaqItems = []) {
   const guesthouseKnowledge = (await loadGuesthouseKnowledge()).trim();
+  const faqPromptSection = buildFaqPromptSection(retrievedFaqItems);
 
   return `${systemPrompt}
 
@@ -418,7 +431,7 @@ async function buildSystemPrompt(dateInfo) {
 - 不要直接提到你正在讀取 Markdown 檔案，也不要把知識庫原文整段貼給客人。
 
 以下是慢慢蒔光｜白雲基地 AI 客服知識庫 guesthouse-rules.md：
-${guesthouseKnowledge || "目前知識庫沒有可用內容。遇到不確定問題，請引導客人私訊官方 LINE。"}`;
+${guesthouseKnowledge || "目前知識庫沒有可用內容。遇到不確定問題，請引導客人私訊官方 LINE。"}${faqPromptSection}`;
 }
 
 async function readBody(req) {
@@ -819,9 +832,14 @@ function buildDeepSeekMessages(prompt, recentMessages, userMessage) {
   ];
 }
 
-async function callDeepSeek(userMessage, recentMessages, dateInfo) {
+async function callDeepSeek(
+  userMessage,
+  recentMessages,
+  dateInfo,
+  retrievedFaqItems = []
+) {
   const { apiKey, baseUrl, model } = getDeepSeekConfig();
-  const prompt = await buildSystemPrompt(dateInfo);
+  const prompt = await buildSystemPrompt(dateInfo, retrievedFaqItems);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), deepSeekTimeoutMs);
 
@@ -1177,14 +1195,22 @@ export default async function handler(req, res) {
       (await updateSessionLineIdentity(session.id, identity.lineProfile)) ||
       session;
     const dateInfo = getTaipeiDateInfo();
+    const retrievedFaqItems = await retrieveFaqItems(message, { limit: 8 });
+    const hasFaqScopeMatch = hasHighConfidenceFaqMatch(retrievedFaqItems);
     logChatDebug("current year", { currentYear: dateInfo.currentYear });
+    logChatDebug("faq retrieval", {
+      matchedFaqCount: retrievedFaqItems.length,
+      matchedFaqIds: retrievedFaqItems.map((item) => item.id),
+    });
 
     const clientRecentMessages = normalizeClientRecentMessages(body.recentMessages);
     let recentMessages = clientRecentMessages;
     let contextSource = "client";
     let contextText = buildContextText(recentMessages, message);
-    const isCurrentScopeAllowed = isAllowedSupportScope(message);
-    let isContextScopeAllowed = isAllowedSupportScope(message, contextText);
+    const isCurrentScopeAllowed =
+      hasFaqScopeMatch || isAllowedSupportScope(message);
+    let isContextScopeAllowed =
+      hasFaqScopeMatch || isAllowedSupportScope(message, contextText);
     const isClearlyBlockedWithoutSupport =
       includesKeyword(message.toLowerCase(), blockedScopeKeywords) &&
       !hasSupportContext(message);
@@ -1197,7 +1223,8 @@ export default async function handler(req, res) {
       recentMessages = await loadRecentMessages(session.id);
       contextSource = "supabase_fallback";
       contextText = buildContextText(recentMessages, message);
-      isContextScopeAllowed = isAllowedSupportScope(message, contextText);
+      isContextScopeAllowed =
+        hasFaqScopeMatch || isAllowedSupportScope(message, contextText);
     }
 
     logChatDebug("context source", {
@@ -1261,6 +1288,10 @@ export default async function handler(req, res) {
       return sendJson(res, rateLimit.status || 429, {
         error: rateLimit.message,
         reason: rateLimit.reason,
+        metadata: {
+          matchedFaqCount: retrievedFaqItems.length,
+          matchedFaqIds: retrievedFaqItems.map((item) => item.id),
+        },
       });
     }
 
@@ -1270,7 +1301,12 @@ export default async function handler(req, res) {
       supportStatus: "ai_replying",
     });
 
-    const aiAnswer = await callDeepSeek(message, recentMessages, dateInfo);
+    const aiAnswer = await callDeepSeek(
+      message,
+      recentMessages,
+      dateInfo,
+      retrievedFaqItems
+    );
     const aiMessage = await insertMessage(session.id, "ai", aiAnswer, "deepseek");
     session = await updateSessionAfterMessage(session, aiMessage, {
       supportStatus: "ai_replying",
@@ -1282,6 +1318,11 @@ export default async function handler(req, res) {
       userMessage,
       aiMessage,
       answer: aiAnswer,
+      metadata: {
+        provider_used: "deepseek",
+        matchedFaqCount: retrievedFaqItems.length,
+        matchedFaqIds: retrievedFaqItems.map((item) => item.id),
+      },
     });
   } catch (error) {
     console.error("ai-chat-message error:", error);

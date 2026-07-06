@@ -66,38 +66,14 @@ export function MumbaoChatLauncher() {
           type="button"
           onClick={() => setIsOpen(false)}
           className={cn(
-            "group pointer-events-auto relative flex w-full max-w-[390px] items-end gap-3 overflow-hidden rounded-[28px] border border-white/80 bg-[#fff8ec]/95 px-4 py-3 text-left text-[#6f5d50] shadow-[0_16px_40px_rgba(94,74,58,0.16)] outline-none backdrop-blur-xl",
-            "animate-[mumbao-card-in_240ms_ease-out_both] transition-transform duration-500 ease-out hover:-translate-y-0.5 focus-visible:ring-4 focus-visible:ring-[#9ec7b8]/30",
-            "md:w-[420px] md:max-w-[420px] md:gap-4 md:rounded-[30px] md:px-4 md:py-3.5"
+            "pointer-events-auto inline-flex h-10 items-center gap-2 rounded-full border border-white/80 bg-[#fff8ec]/95 px-4 text-sm font-medium text-[#6f5d50] shadow-[0_10px_26px_rgba(94,74,58,0.14)] outline-none backdrop-blur-xl",
+            "animate-[mumbao-card-in_200ms_ease-out_both] transition-colors duration-200 hover:bg-[#fff2df] focus-visible:ring-4 focus-visible:ring-[#9ec7b8]/30"
           )}
           aria-expanded={isOpen}
-          aria-label="關閉問慢寶 AI客服"
+          aria-label="關閉問慢寶"
         >
-          <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.82),rgba(255,248,236,0.42)_58%,rgba(242,229,208,0.48))]" />
-          <span className="pointer-events-none absolute inset-x-6 top-0 h-px bg-white/90" />
-          <span className="absolute right-2.5 top-2.5 z-30 flex size-6 items-center justify-center rounded-full bg-white/90 text-[#8a796a] shadow-[0_8px_18px_rgba(111,88,71,0.14)]">
-            <X className="size-4" aria-hidden="true" />
-          </span>
-
-          <span className="relative z-10 min-w-0 flex-1 self-start pr-1 pt-0.5 md:pt-1">
-            <span className="block text-xs leading-[1.6] text-[#756357] md:text-[13px]">
-              任何問題都可以詢問慢寶客服；若客服無法協助處理，您可輸入
-              <strong className="font-semibold text-[#4f4036]">「人工客服」</strong>
-              ，將由管家為您回覆，謝謝。
-            </span>
-          </span>
-
-          <span className="relative z-10 flex w-[74px] flex-none flex-col items-center justify-end md:w-[84px]">
-            <img
-              src="/images/stand.png"
-              alt=""
-              className="h-[76px] w-auto animate-[mumbao-character-float_4.8s_ease-in-out_infinite] object-contain drop-shadow-[0_10px_16px_rgba(94,74,58,0.2)] transition-transform duration-700 ease-out group-hover:-translate-y-1 md:h-[88px]"
-              draggable={false}
-            />
-            <span className="-mt-1 rounded-full bg-white/75 px-2.5 py-0.5 text-xs font-semibold tracking-wide text-[#66584f] shadow-[0_6px_14px_rgba(111,88,71,0.12)] backdrop-blur-sm md:text-[13px]">
-              問慢寶
-            </span>
-          </span>
+          <X className="size-4" aria-hidden="true" />
+          關閉問慢寶
         </button>
       ) : (
         <button

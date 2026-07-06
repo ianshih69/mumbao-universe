@@ -25,6 +25,7 @@ type ChatMessage = {
   created_at?: string;
   provider_used?: string | null;
   isWelcome?: boolean;
+  isOptimistic?: boolean;
 };
 
 type ApiMessage = {
@@ -96,6 +97,7 @@ const initialHistoryPageSize = 100;
 const localCacheMessageLimit = 50;
 const recentContextMessageLimit = 12;
 const sessionMessagesCacheTtlMs = 10 * 60 * 1000;
+const optimisticDuplicateWindowMs = 60 * 1000;
 const defaultDesktopWindowSize = { width: 420, height: 680 };
 const minDesktopWindowSize = { width: 360, height: 480 };
 const maxDesktopWindowSize = { width: 720, height: 900 };
@@ -333,21 +335,65 @@ function isRealChatMessage(message: ChatMessage) {
   return !message.isWelcome && message.message.trim().length > 0;
 }
 
+function normalizeMessageContent(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function areDuplicateMessages(first: ChatMessage, second: ChatMessage) {
+  if (first.id && second.id && first.id === second.id) {
+    return true;
+  }
+
+  if (!first.isOptimistic && !second.isOptimistic) {
+    return false;
+  }
+
+  if (first.role !== second.role) {
+    return false;
+  }
+
+  if (normalizeMessageContent(first.message) !== normalizeMessageContent(second.message)) {
+    return false;
+  }
+
+  const firstTime = getCreatedTime(first);
+  const secondTime = getCreatedTime(second);
+
+  if (firstTime === null || secondTime === null) {
+    return true;
+  }
+
+  return Math.abs(firstTime - secondTime) <= optimisticDuplicateWindowMs;
+}
+
+function choosePreferredMessage(current: ChatMessage, next: ChatMessage) {
+  if (current.isOptimistic && !next.isOptimistic) {
+    return next;
+  }
+
+  return current;
+}
+
 function dedupeMessages(messages: ChatMessage[]) {
-  const seen = new Set<string>();
+  const result: ChatMessage[] = [];
 
-  return messages.filter((message) => {
-    const key = message.created_at
-      ? `${message.created_at}:${message.role}:${message.message}`
-      : message.id;
+  messages.forEach((message) => {
+    const duplicateIndex = result.findIndex((existing) =>
+      areDuplicateMessages(existing, message)
+    );
 
-    if (seen.has(key)) {
-      return false;
+    if (duplicateIndex >= 0) {
+      result[duplicateIndex] = choosePreferredMessage(
+        result[duplicateIndex],
+        message
+      );
+      return;
     }
 
-    seen.add(key);
-    return true;
+    result.push(message);
   });
+
+  return result;
 }
 
 function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]) {
@@ -502,7 +548,8 @@ function saveCachedMessages(
   sessionId = ""
 ) {
   const cacheMessages = messages
-    .filter(isRealChatMessage)
+    .filter(isRealChatMessage);
+  const dedupedCacheMessages = dedupeMessages(cacheMessages)
     .slice(-localCacheMessageLimit)
     .map((message) => ({
       id: message.id,
@@ -519,11 +566,11 @@ function saveCachedMessages(
       created_at: message.created_at,
     }));
 
-  if (!visitorId || !sessionId || cacheMessages.length === 0) {
+  if (!visitorId || !sessionId || dedupedCacheMessages.length === 0) {
     logChatDebug("cache write skipped", {
       visitorId,
       sessionId,
-      messageCount: cacheMessages.length,
+      messageCount: dedupedCacheMessages.length,
     });
     return;
   }
@@ -533,14 +580,14 @@ function saveCachedMessages(
       visitor_id: visitorId,
       session_id: sessionId,
       expires_at: Date.now() + sessionMessagesCacheTtlMs,
-      messages: cacheMessages,
+      messages: dedupedCacheMessages,
     });
     sessionStorage.setItem(recentChatStorageKey, cachePayload);
     localStorage.setItem(recentChatStorageKey, cachePayload);
     logChatDebug("cache write success", {
       visitorId,
       sessionId,
-      messageCount: cacheMessages.length,
+      messageCount: dedupedCacheMessages.length,
     });
   } catch (error) {
     console.warn("Mumbao chat cache save unavailable:", error);
@@ -548,8 +595,7 @@ function saveCachedMessages(
 }
 
 function getRecentMessagesForApi(messages: ChatMessage[]) {
-  return messages
-    .filter(isRealChatMessage)
+  return dedupeMessages(messages.filter(isRealChatMessage))
     .slice(-recentContextMessageLimit)
     .map((message) => ({
       sender: message.role === "user" ? "user" : "ai",
@@ -1009,14 +1055,18 @@ export function MumbaoChat({
 
   const hasDraftMessage = useMemo(() => input.trim().length > 0, [input]);
   const canResizeWindow = compact && isDesktopResizable;
-  const realMessageCount = useMemo(
-    () => messages.filter(isRealChatMessage).length,
+  const visibleMessages = useMemo(
+    () => getInitialMessages(sortMessagesByCreatedAt(dedupeMessages(messages))),
     [messages]
+  );
+  const realMessageCount = useMemo(
+    () => visibleMessages.filter(isRealChatMessage).length,
+    [visibleMessages]
   );
   const messageTimeline = useMemo(() => {
     let lastDateKey = "";
 
-    return messages.flatMap((message) => {
+    return visibleMessages.flatMap((message) => {
       const items: Array<
         | { type: "date"; id: string; label: string }
         | { type: "message"; message: ChatMessage }
@@ -1035,7 +1085,7 @@ export function MumbaoChat({
       items.push({ type: "message", message });
       return items;
     });
-  }, [messages]);
+  }, [visibleMessages]);
 
   useEffect(() => {
     logChatDebug("mounted", { compact, initialIsOpen: isOpen });
@@ -1969,7 +2019,10 @@ export function MumbaoChat({
     const question = input.trim();
     if (!question || isLoading || !visitorId) return;
 
-    const pendingUserMessage = createMessage("user", question);
+    const pendingUserMessage = {
+      ...createMessage("user", question),
+      isOptimistic: true,
+    };
 
     shouldAutoScrollRef.current = true;
     setMessages((current) => [
@@ -2029,15 +2082,16 @@ export function MumbaoChat({
       }
 
       setMessages((current) =>
-        sortMessagesByCreatedAt(
-          [
-          ...current.filter(
-            (message) =>
-              isRealChatMessage(message) && message.id !== pendingUserMessage.id
-          ),
-          savedUserMessage,
-          savedAiMessage,
-        ].filter(Boolean) as ChatMessage[]
+        getInitialMessages(
+          sortMessagesByCreatedAt(
+            dedupeMessages(
+              [
+                ...current.filter((message) => isRealChatMessage(message)),
+                savedUserMessage,
+                savedAiMessage,
+              ].filter(Boolean) as ChatMessage[]
+            )
+          )
         )
       );
     } catch (error) {

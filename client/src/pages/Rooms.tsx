@@ -77,13 +77,15 @@ export default function RoomsPage() {
                     </span>
                     <h2 className="flex flex-wrap items-center gap-y-1 text-[26px] font-light leading-tight tracking-wide text-[#3d332b] md:text-[28px]">
                       {room.zodiacIcons && room.zodiacIcons.length > 0 && (
-                        <span className="mr-2 inline-flex items-center gap-1">
+                        <span className="mr-2.5 inline-flex items-center gap-2.5 md:mr-4 md:gap-3">
                           {room.zodiacIcons.map((icon) => (
                             <img
                               key={icon.src}
                               src={icon.src}
                               alt={icon.alt}
-                              className="h-[26px] w-[26px] object-contain md:h-8 md:w-8"
+                              className={`h-[34px] w-[34px] object-contain md:h-10 md:w-10 ${
+                                icon.alt === "巨蟹" ? "scale-[1.08]" : ""
+                              }`}
                               loading="lazy"
                             />
                           ))}

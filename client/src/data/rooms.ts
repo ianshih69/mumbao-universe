@@ -29,11 +29,11 @@ export const rooms: RoomDetailContent[] = [
     stars: "巨蟹 × 摩羯",
     zodiacIcons: [
       {
-        src: "/images/zodiac/慢慢蒔光-十二星座-巨蟹.png",
+        src: "/images/zodiac/Cancer.png",
         alt: "巨蟹",
       },
       {
-        src: "/images/zodiac/慢慢蒔光-十二星座-魔羯.png",
+        src: "/images/zodiac/Capricorn.png",
         alt: "摩羯",
       },
     ],
@@ -61,6 +61,16 @@ export const rooms: RoomDetailContent[] = [
     name: "畫雲 S360",
     slug: "room-360-senguang",
     stars: "天蠍 × 雙魚",
+    zodiacIcons: [
+      {
+        src: "/images/zodiac/Scorpio.png",
+        alt: "天蠍",
+      },
+      {
+        src: "/images/zodiac/Pisces.png",
+        alt: "雙魚",
+      },
+    ],
     image: "/images/mumbao/room-5.jpg",
     alt: "畫雲 S360 房型圖片",
     tagline: "有些夢，不用急著醒。",
@@ -85,6 +95,16 @@ export const rooms: RoomDetailContent[] = [
     name: "雲間 S530",
     slug: "room-530-nuanjin",
     stars: "處女 × 射手",
+    zodiacIcons: [
+      {
+        src: "/images/zodiac/Virgo.png",
+        alt: "處女",
+      },
+      {
+        src: "/images/zodiac/Sagittarius.png",
+        alt: "射手",
+      },
+    ],
     image: "/images/mumbao/room-2.jpg",
     alt: "雲間 S530 房型圖片",
     tagline: "也許你的下一段故事，就在雲與雲之間。",
@@ -108,6 +128,16 @@ export const rooms: RoomDetailContent[] = [
     name: "牧雲 S666",
     slug: "room-666-anhe",
     stars: "牡羊 × 獅子",
+    zodiacIcons: [
+      {
+        src: "/images/zodiac/Aries.png",
+        alt: "牡羊",
+      },
+      {
+        src: "/images/zodiac/Leo.png",
+        alt: "獅子",
+      },
+    ],
     image: "/images/mumbao/room-4.jpg",
     alt: "牧雲 S666 房型圖片",
     tagline: "如果你想發光，那就勇敢地站在雲上。",
@@ -132,6 +162,16 @@ export const rooms: RoomDetailContent[] = [
     name: "雲容 S888",
     slug: "room-888-xinghuo",
     stars: "天秤 × 金牛",
+    zodiacIcons: [
+      {
+        src: "/images/zodiac/Libra.png",
+        alt: "天秤",
+      },
+      {
+        src: "/images/zodiac/Taurus.png",
+        alt: "金牛",
+      },
+    ],
     image: "/images/mumbao/room-3.jpg",
     alt: "雲容 S888 房型圖片",
     tagline: "美好的事物，都值得慢慢感受。",

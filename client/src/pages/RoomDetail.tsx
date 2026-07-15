@@ -77,14 +77,18 @@ export default function RoomDetail() {
             </span>
             <h1 className="mt-5 flex flex-wrap items-center justify-center gap-y-2 text-4xl font-light leading-tight tracking-wide text-[#3d332b] md:text-5xl">
               {room.zodiacIcons && room.zodiacIcons.length > 0 && (
-                <span className="mr-2.5 inline-flex items-center gap-2.5 md:mr-4 md:gap-3">
+                <span className="mr-2.5 inline-flex items-center gap-2.5 overflow-visible md:mr-4 md:gap-3">
                   {room.zodiacIcons.map((icon) => (
                     <img
                       key={icon.src}
                       src={icon.src}
                       alt={icon.alt}
                       className={`h-10 w-10 object-contain md:h-[52px] md:w-[52px] ${
-                        icon.alt === "巨蟹" ? "scale-[1.08]" : ""
+                        icon.src.includes("/Taurus")
+                          ? "scale-[0.94] -translate-y-0.5 md:-translate-y-1"
+                          : icon.alt === "巨蟹"
+                            ? "scale-[1.08]"
+                            : ""
                       }`}
                       loading="lazy"
                     />

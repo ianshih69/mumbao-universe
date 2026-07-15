@@ -168,7 +168,7 @@ export const rooms: RoomDetailContent[] = [
         alt: "天秤",
       },
       {
-        src: "/images/zodiac/Taurus.png",
+        src: "/images/zodiac/Taurus-v2.png",
         alt: "金牛",
       },
     ],

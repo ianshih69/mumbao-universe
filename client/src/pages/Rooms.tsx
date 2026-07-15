@@ -75,8 +75,21 @@ export default function RoomsPage() {
                     <span className="block text-[10px] uppercase tracking-[0.24em] text-[#9a8676]">
                       ROOM {room.roomNumber}
                     </span>
-                    <h2 className="text-[26px] font-light leading-tight tracking-wide text-[#3d332b] md:text-[28px]">
-                      {room.name}主題房
+                    <h2 className="flex flex-wrap items-center gap-y-1 text-[26px] font-light leading-tight tracking-wide text-[#3d332b] md:text-[28px]">
+                      {room.zodiacIcons && room.zodiacIcons.length > 0 && (
+                        <span className="mr-2 inline-flex items-center gap-1">
+                          {room.zodiacIcons.map((icon) => (
+                            <img
+                              key={icon.src}
+                              src={icon.src}
+                              alt={icon.alt}
+                              className="h-[26px] w-[26px] object-contain md:h-8 md:w-8"
+                              loading="lazy"
+                            />
+                          ))}
+                        </span>
+                      )}
+                      <span>{room.name}</span>
                     </h2>
                     <p className="text-sm tracking-[0.12em] text-[#75685d]">
                       守護星座｜{room.stars}

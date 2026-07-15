@@ -3,7 +3,7 @@ import { asBoolean, asString, fetchSiteGlobalContent } from "@/lib/site/siteCont
 
 const ENABLE_CONSTRUCTION_NOTICE = true;
 const NOTICE_STORAGE_KEY = "mumbao_site_notice_seen";
-const FALLBACK_BANNER_TEXT = "官網建置中｜預計 2026 年 7–9 月試營運";
+const FALLBACK_BANNER_TEXT = "官網建置中｜預計 2026 年 9–10 月試營運";
 
 export function SiteConstructionNotice() {
   const [shouldShowModal, setShouldShowModal] = useState(false);

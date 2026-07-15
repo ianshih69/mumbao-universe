@@ -125,8 +125,21 @@ export function Rooms() {
                       <span className="block text-[10px] uppercase tracking-[0.24em] text-gray-400">
                         ROOM {room.roomNumber}
                       </span>
-                      <h3 className="font-serif text-[26px] leading-tight tracking-wide text-gray-900 transition-colors group-hover:text-gray-600 md:text-[28px]">
-                        {room.name}主題房
+                      <h3 className="flex flex-wrap items-center gap-y-1 font-serif text-[26px] leading-tight tracking-wide text-gray-900 transition-colors group-hover:text-gray-600 md:text-[28px]">
+                        {room.zodiacIcons && room.zodiacIcons.length > 0 && (
+                          <span className="mr-2 inline-flex items-center gap-1">
+                            {room.zodiacIcons.map((icon) => (
+                              <img
+                                key={icon.src}
+                                src={icon.src}
+                                alt={icon.alt}
+                                className="h-[26px] w-[26px] object-contain md:h-8 md:w-8"
+                                loading="lazy"
+                              />
+                            ))}
+                          </span>
+                        )}
+                        <span>{room.name}</span>
                       </h3>
                       <p className="text-sm tracking-[0.12em] text-gray-500">
                         守護星座｜{room.stars}

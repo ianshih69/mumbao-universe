@@ -30,7 +30,7 @@ export default function RoomDetail() {
       return;
     }
 
-    const pageTitle = `${room.name}主題房｜ROOM ${room.roomNumber}｜慢慢蒔光 STime Villa`;
+    const pageTitle = `${room.name}｜ROOM ${room.roomNumber}｜慢慢蒔光 STime Villa`;
     document.title = pageTitle;
     setMetaContent("meta[name=\"description\"]", room.subtitle || room.tagline);
     setMetaContent("meta[property=\"og:title\"]", pageTitle);
@@ -76,7 +76,7 @@ export default function RoomDetail() {
               ROOM {room.roomNumber}
             </span>
             <h1 className="mt-5 text-4xl font-light leading-tight tracking-wide text-[#3d332b] md:text-5xl">
-              {room.name}主題房
+              {room.name}
             </h1>
             <p className="mx-auto mt-5 max-w-3xl text-lg leading-9 text-[#75685d] md:text-xl">
               {room.subtitle}
@@ -94,35 +94,49 @@ export default function RoomDetail() {
           <div className="mx-auto mt-14 max-w-3xl space-y-9 md:mt-16">
             <div className="space-y-6 text-base leading-[2.05] text-[#75685d] md:text-lg md:leading-[2.15]">
               {room.intro.map((paragraph) => (
-                <p key={paragraph}>{paragraph}</p>
+                <p className="whitespace-pre-line" key={paragraph}>{paragraph}</p>
               ))}
             </div>
 
-            <section className="space-y-4 border-t border-[#ded1c1] pt-8">
-              <h2 className="text-sm font-medium tracking-[0.18em] text-[#3d332b]">
-                {room.sectionTitle}
-              </h2>
-              <div className="space-y-4 text-base leading-[2.05] text-[#75685d] md:text-lg md:leading-[2.15]">
-                {room.sectionContent.map((paragraph) => (
-                  <p key={paragraph}>{paragraph}</p>
-                ))}
-              </div>
-            </section>
+            {(room.sectionTitle || room.sectionContent.length > 0) && (
+              <section className="space-y-4 border-t border-[#ded1c1] pt-8">
+                {room.sectionTitle && (
+                  <h2 className="text-sm font-medium tracking-[0.18em] text-[#3d332b]">
+                    {room.sectionTitle}
+                  </h2>
+                )}
+                {room.sectionContent.length > 0 && (
+                  <div className="space-y-4 text-base leading-[2.05] text-[#75685d] md:text-lg md:leading-[2.15]">
+                    {room.sectionContent.map((paragraph) => (
+                      <p className="whitespace-pre-line" key={paragraph}>{paragraph}</p>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
 
-            <section className="space-y-4 border-t border-[#ded1c1] pt-8">
-              <h2 className="text-sm font-medium tracking-[0.18em] text-[#3d332b]">
-                {room.suitableTitle}
-              </h2>
-              <div className="space-y-4 text-base leading-[2.05] text-[#75685d] md:text-lg md:leading-[2.15]">
-                {room.suitableContent.map((paragraph) => (
-                  <p key={paragraph}>{paragraph}</p>
-                ))}
-              </div>
-            </section>
+            {(room.suitableTitle || room.suitableContent.length > 0) && (
+              <section className="space-y-4 border-t border-[#ded1c1] pt-8">
+                {room.suitableTitle && (
+                  <h2 className="text-sm font-medium tracking-[0.18em] text-[#3d332b]">
+                    {room.suitableTitle}
+                  </h2>
+                )}
+                {room.suitableContent.length > 0 && (
+                  <div className="space-y-4 text-base leading-[2.05] text-[#75685d] md:text-lg md:leading-[2.15]">
+                    {room.suitableContent.map((paragraph) => (
+                      <p className="whitespace-pre-line" key={paragraph}>{paragraph}</p>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
 
-            <p className="border-t border-[#ded1c1] pt-8 text-base leading-[2.05] text-[#75685d] md:text-lg md:leading-[2.15]">
-              {room.closing}
-            </p>
+            {room.closing && (
+              <p className="whitespace-pre-line border-t border-[#ded1c1] pt-8 text-base leading-[2.05] text-[#75685d] md:text-lg md:leading-[2.15]">
+                {room.closing}
+              </p>
+            )}
 
             <section className="space-y-3 rounded-[12px] bg-white/55 p-5 text-sm leading-[2] text-[#7f7064] md:p-6 md:text-base">
               {sharedNotice.map((paragraph) => (

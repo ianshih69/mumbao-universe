@@ -9,6 +9,37 @@ const roomsSeoTitle = "房型介紹｜慢慢蒔光 STime Villa";
 const roomsSeoDescription =
   "慢慢蒔光 STime Villa 五間公開主題房，結合房號、雙星守護與慢生活住宿氛圍，另有一間留給宇宙的隱藏星房。";
 
+const zodiacIconScale: Record<string, number> = {
+  Gemini: 1.8,
+  Aquarius: 1.1,
+  Scorpio: 1.45,
+  Pisces: 1.35,
+  Taurus: 1.2,
+  Cancer: 1.12,
+  Capricorn: 1.05,
+  Virgo: 1.15,
+  Sagittarius: 1.12,
+  Aries: 1.1,
+  Leo: 1.05,
+  Libra: 1.1,
+};
+
+function getZodiacIconScale(src: string) {
+  const match = Object.keys(zodiacIconScale).find((key) => src.includes(`/${key}`));
+  return match ? zodiacIconScale[match] : 1;
+}
+
+function hasZodiacPair(
+  icons: Array<{ src: string }> | undefined,
+  first: string,
+  second: string,
+) {
+  if (!icons) return false;
+
+  return icons.some((icon) => icon.src.includes(`/${first}`))
+    && icons.some((icon) => icon.src.includes(`/${second}`));
+}
+
 function setMetaContent(selector: string, content: string) {
   const meta = document.head.querySelector<HTMLMetaElement>(selector);
 
@@ -77,19 +108,25 @@ export default function RoomsPage() {
                     </span>
                     <h2 className="flex flex-wrap items-center gap-y-1 text-[26px] font-light leading-tight tracking-wide text-[#3d332b] md:text-[28px]">
                       {room.zodiacIcons && room.zodiacIcons.length > 0 && (
-                        <span className="mr-2.5 inline-flex items-center gap-2.5 overflow-visible md:mr-4 md:gap-3">
+                        <span
+                          className={`mr-3 inline-flex items-center overflow-visible md:mr-4 ${
+                            hasZodiacPair(room.zodiacIcons, "Gemini", "Aquarius")
+                              ? "gap-[18px] md:gap-[22px]"
+                              : hasZodiacPair(room.zodiacIcons, "Scorpio", "Pisces")
+                              ? "gap-[18px] md:gap-5"
+                              : "gap-2 md:gap-2.5"
+                          }`}
+                        >
                           {room.zodiacIcons.map((icon) => (
                             <img
                               key={icon.src}
                               src={icon.src}
                               alt={icon.alt}
-                              className={`h-[34px] w-[34px] object-contain md:h-10 md:w-10 ${
-                                icon.src.includes("/Taurus")
-                                  ? "scale-[0.94] -translate-y-0.5 md:-translate-y-1"
-                                  : icon.alt === "巨蟹"
-                                    ? "scale-[1.08]"
-                                    : ""
-                              }`}
+                              className="h-[clamp(38px,4.5vw,60px)] w-[clamp(38px,4.5vw,60px)] shrink-0 object-contain"
+                              style={{
+                                transform: `scale(${getZodiacIconScale(icon.src)})`,
+                                transformOrigin: "center",
+                              }}
                               loading="lazy"
                             />
                           ))}

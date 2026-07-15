@@ -10,6 +10,37 @@ const sharedNotice = [
   "慢慢蒔光每一間房都有不同主題與氛圍，實際開放房型將依訂房狀況與包棟安排為準。",
 ];
 
+const zodiacIconScale: Record<string, number> = {
+  Gemini: 1.8,
+  Aquarius: 1.1,
+  Scorpio: 1.45,
+  Pisces: 1.35,
+  Taurus: 1.2,
+  Cancer: 1.12,
+  Capricorn: 1.05,
+  Virgo: 1.15,
+  Sagittarius: 1.12,
+  Aries: 1.1,
+  Leo: 1.05,
+  Libra: 1.1,
+};
+
+function getZodiacIconScale(src: string) {
+  const match = Object.keys(zodiacIconScale).find((key) => src.includes(`/${key}`));
+  return match ? zodiacIconScale[match] : 1;
+}
+
+function hasZodiacPair(
+  icons: Array<{ src: string }> | undefined,
+  first: string,
+  second: string,
+) {
+  if (!icons) return false;
+
+  return icons.some((icon) => icon.src.includes(`/${first}`))
+    && icons.some((icon) => icon.src.includes(`/${second}`));
+}
+
 function setMetaContent(selector: string, content: string) {
   const meta = document.head.querySelector<HTMLMetaElement>(selector);
 
@@ -77,19 +108,25 @@ export default function RoomDetail() {
             </span>
             <h1 className="mt-5 flex flex-wrap items-center justify-center gap-y-2 text-4xl font-light leading-tight tracking-wide text-[#3d332b] md:text-5xl">
               {room.zodiacIcons && room.zodiacIcons.length > 0 && (
-                <span className="mr-2.5 inline-flex items-center gap-2.5 overflow-visible md:mr-4 md:gap-3">
+                <span
+                  className={`mr-3.5 inline-flex items-center overflow-visible md:mr-4 ${
+                    hasZodiacPair(room.zodiacIcons, "Gemini", "Aquarius")
+                      ? "gap-[18px] md:gap-6"
+                      : hasZodiacPair(room.zodiacIcons, "Scorpio", "Pisces")
+                      ? "gap-[18px] md:gap-6"
+                      : "gap-3.5 md:gap-4"
+                  }`}
+                >
                   {room.zodiacIcons.map((icon) => (
                     <img
                       key={icon.src}
                       src={icon.src}
                       alt={icon.alt}
-                      className={`h-10 w-10 object-contain md:h-[52px] md:w-[52px] ${
-                        icon.src.includes("/Taurus")
-                          ? "scale-[0.94] -translate-y-0.5 md:-translate-y-1"
-                          : icon.alt === "巨蟹"
-                            ? "scale-[1.08]"
-                            : ""
-                      }`}
+                      className="h-[clamp(46px,5.5vw,76px)] w-[clamp(46px,5.5vw,76px)] shrink-0 object-contain"
+                      style={{
+                        transform: `scale(${getZodiacIconScale(icon.src)})`,
+                        transformOrigin: "center",
+                      }}
                       loading="lazy"
                     />
                   ))}
@@ -102,11 +139,11 @@ export default function RoomDetail() {
             </p>
           </header>
 
-          <div className="mx-auto mt-12 flex aspect-[4/3] w-full max-w-[920px] items-center justify-center overflow-hidden rounded-[14px] bg-[#fbf7f1] p-2 shadow-[0_16px_44px_rgba(90,70,50,0.08)] md:mt-16">
+          <div className="mx-auto mt-12 flex aspect-[4/3] w-full max-w-[920px] items-center justify-center overflow-hidden rounded-[14px] bg-[#fbf7f1] shadow-[0_16px_44px_rgba(90,70,50,0.08)] md:mt-16">
             <img
               src={room.image}
               alt={room.alt}
-              className="block h-full w-full rounded-[10px] object-contain"
+              className="block h-full w-full object-cover object-center"
             />
           </div>
 

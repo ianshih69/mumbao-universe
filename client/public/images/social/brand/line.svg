@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="title">
+  <title>LINE</title>
+  <rect width="24" height="24" rx="5.3" fill="#06C755"/>
+  <path fill="#fff" d="M12 5.2c-4.2 0-7.6 2.75-7.6 6.12 0 3.02 2.7 5.55 6.34 6.04.25.05.6.16.69.37.08.19.05.5.03.7l-.11.67c-.04.2-.16.78.66.43.82-.35 4.42-2.6 6.03-4.45 1.12-1.23 1.56-2.47 1.56-3.76 0-3.37-3.4-6.12-7.6-6.12Z"/>
+  <text x="12" y="13.1" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="4.35" font-weight="800" letter-spacing="-.2" fill="#06C755">LINE</text>
+</svg>

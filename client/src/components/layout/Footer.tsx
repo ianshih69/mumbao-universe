@@ -1,5 +1,3 @@
-import { Facebook, Instagram, MessageCircle } from "lucide-react";
-
 const policyLinks = [
   { href: "/privacy", label: "隱私權政策" },
   { href: "/terms", label: "服務條款" },
@@ -7,9 +5,33 @@ const policyLinks = [
 ];
 
 const socialLinks = [
-  { href: "#", label: "Facebook", Icon: Facebook },
-  { href: "#", label: "Instagram", Icon: Instagram },
-  { href: "#", label: "LINE", Icon: MessageCircle },
+  {
+    href: "https://www.facebook.com/STimeVilla",
+    label: "Facebook",
+    src: "/images/social/brand/facebook.svg",
+  },
+  {
+    href: "https://www.instagram.com/mumbao.tw/",
+    label: "Instagram",
+    src: "/images/social/brand/instagram.svg",
+  },
+  {
+    href: "https://line.me/ti/g/SRvrzLE8CY",
+    label: "LINE",
+    src: "/images/social/brand/line.svg",
+  },
+  {
+    label: "Threads",
+    src: "/images/social/brand/threads.svg",
+  },
+  {
+    label: "X",
+    src: "/images/social/brand/x.svg",
+  },
+  {
+    label: "Google Maps",
+    src: "/images/social/brand/google-maps.svg",
+  },
 ];
 
 export function Footer() {
@@ -38,16 +60,30 @@ export function Footer() {
         <div className="mt-3 flex flex-row items-center justify-center gap-3 text-[12px] leading-[1.5] md:mt-0 md:gap-x-4 md:gap-y-1 md:text-[13px] md:leading-6">
           <span>Follow us on :</span>
           <div className="flex items-center justify-center gap-3">
-            {socialLinks.map(({ href, label, Icon }) => (
-              <a
-                key={label}
-                href={href}
-                aria-label={label}
-                className="text-[#5f5147] transition-colors duration-200 hover:text-[#B77C4B]"
-              >
-                <Icon className="h-[17px] w-[17px] md:h-[18px] md:w-[18px]" strokeWidth={1.5} />
-              </a>
-            ))}
+            {socialLinks.map(({ href, label, src }) =>
+              href ? (
+                <a
+                  key={label}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={label}
+                  className="inline-flex h-[17px] w-[17px] items-center justify-center transition-opacity duration-200 hover:opacity-75 md:h-[18px] md:w-[18px]"
+                >
+                  <img src={src} alt="" className="h-full w-full object-contain" />
+                </a>
+              ) : (
+                <span
+                  key={label}
+                  aria-label={`${label}（暫未設定連結）`}
+                  aria-disabled="true"
+                  title={`${label}（暫未設定連結）`}
+                  className="inline-flex h-[17px] w-[17px] cursor-default items-center justify-center md:h-[18px] md:w-[18px]"
+                >
+                  <img src={src} alt="" className="h-full w-full object-contain" />
+                </span>
+              )
+            )}
           </div>
         </div>
 

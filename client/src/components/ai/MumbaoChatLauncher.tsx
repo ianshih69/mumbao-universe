@@ -23,6 +23,19 @@ type DragSession = {
   hasDragged: boolean;
 };
 
+type MobileScrollLockSnapshot = {
+  scrollY: number;
+  bodyPosition: string;
+  bodyTop: string;
+  bodyLeft: string;
+  bodyRight: string;
+  bodyWidth: string;
+  bodyOverflow: string;
+  bodyOverscrollBehavior: string;
+  htmlOverflow: string;
+  htmlOverscrollBehavior: string;
+};
+
 export function MumbaoChatLauncher() {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(() => shouldAutoOpenChat(location));
@@ -34,6 +47,7 @@ export function MumbaoChatLauncher() {
   const dragSessionRef = useRef<DragSession | null>(null);
   const latestBottomOffsetRef = useRef<number | null>(null);
   const suppressNextClickRef = useRef(false);
+  const mobileScrollLockRef = useRef<MobileScrollLockSnapshot | null>(null);
 
   const hasCustomMobilePosition =
     isMobile && !isOpen && mobileBottomOffset !== null;
@@ -141,6 +155,63 @@ export function MumbaoChatLauncher() {
       window.visualViewport?.removeEventListener("resize", clampStoredPosition);
     };
   }, [isMobile]);
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      typeof document === "undefined" ||
+      !isMobile ||
+      !isOpen
+    ) {
+      return;
+    }
+
+    const body = document.body;
+    const html = document.documentElement;
+    const scrollY = window.scrollY || html.scrollTop || body.scrollTop || 0;
+
+    mobileScrollLockRef.current = {
+      scrollY,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyLeft: body.style.left,
+      bodyRight: body.style.right,
+      bodyWidth: body.style.width,
+      bodyOverflow: body.style.overflow,
+      bodyOverscrollBehavior: body.style.overscrollBehavior,
+      htmlOverflow: html.style.overflow,
+      htmlOverscrollBehavior: html.style.overscrollBehavior,
+    };
+
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
+    body.style.overscrollBehavior = "none";
+    html.style.overflow = "hidden";
+    html.style.overscrollBehavior = "none";
+
+    return () => {
+      const lock = mobileScrollLockRef.current;
+      if (!lock) {
+        return;
+      }
+
+      body.style.position = lock.bodyPosition;
+      body.style.top = lock.bodyTop;
+      body.style.left = lock.bodyLeft;
+      body.style.right = lock.bodyRight;
+      body.style.width = lock.bodyWidth;
+      body.style.overflow = lock.bodyOverflow;
+      body.style.overscrollBehavior = lock.bodyOverscrollBehavior;
+      html.style.overflow = lock.htmlOverflow;
+      html.style.overscrollBehavior = lock.htmlOverscrollBehavior;
+      mobileScrollLockRef.current = null;
+      window.scrollTo({ top: lock.scrollY, left: 0, behavior: "auto" });
+    };
+  }, [isMobile, isOpen]);
 
   useEffect(() => {
     if (typeof window === "undefined") {

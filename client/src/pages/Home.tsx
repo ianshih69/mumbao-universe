@@ -60,7 +60,7 @@ export default function Home() {
       <Header />
 
       <main>
-        <div id="about">
+        <div>
           <Hero />
         </div>
         <section className="relative z-10 bg-[#fbf7f1] px-5 pb-8 pt-14 md:px-8 md:pb-8 md:pt-16">
@@ -79,7 +79,9 @@ export default function Home() {
             </p>
           </div>
         </section>
-        <About />
+        <div id="about" className="scroll-mt-[120px]">
+          <About />
+        </div>
         <div id="news" className="scroll-mt-[120px]">
           <News />
         </div>

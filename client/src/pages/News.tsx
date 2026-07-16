@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ArrowRight } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -8,6 +8,7 @@ import { newsItems } from "@/data/news";
 const newsSeoTitle = "最新消息｜慢慢蒔光 STime Villa";
 const newsSeoDescription =
   "慢慢蒔光 STime Villa 最新消息，包含試營運籌備、慢寶 MUMBAO 原創 IP、文創商品與 LINE 貼圖相關公告。";
+const newsItemsPerPage = 6;
 
 function setMetaContent(selector: string, content: string) {
   const meta = document.head.querySelector<HTMLMetaElement>(selector);
@@ -17,7 +18,32 @@ function setMetaContent(selector: string, content: string) {
   }
 }
 
+function getNewsTimeValue(date: string) {
+  const [year, month] = date.split(".").map((value) => Number.parseInt(value, 10));
+
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    return 0;
+  }
+
+  return year * 100 + month;
+}
+
+function getCurrentPage(pageCount: number, location: string) {
+  const [, query = ""] = location.split("?");
+  const search = new URLSearchParams(query);
+  const page = Number.parseInt(search.get("page") || "1", 10);
+  const safePage = Number.isFinite(page) ? page : 1;
+
+  return Math.min(Math.max(safePage, 1), pageCount);
+}
+
+function getNewsPageHref(page: number) {
+  return page <= 1 ? "/news" : `/news?page=${page}`;
+}
+
 export default function NewsPage() {
+  const [location] = useLocation();
+
   useEffect(() => {
     document.title = newsSeoTitle;
     setMetaContent('meta[name="description"]', newsSeoDescription);
@@ -26,6 +52,20 @@ export default function NewsPage() {
     setMetaContent('meta[property="twitter:title"]', newsSeoTitle);
     setMetaContent('meta[property="twitter:description"]', newsSeoDescription);
   }, []);
+
+  const sortedNewsItems = newsItems
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const dateDiff = getNewsTimeValue(b.item.date) - getNewsTimeValue(a.item.date);
+
+      return dateDiff || a.index - b.index;
+    })
+    .map(({ item }) => item);
+  const pageCount = Math.max(1, Math.ceil(sortedNewsItems.length / newsItemsPerPage));
+  const currentPage = getCurrentPage(pageCount, location);
+  const pageStart = (currentPage - 1) * newsItemsPerPage;
+  const paginatedNewsItems = sortedNewsItems.slice(pageStart, pageStart + newsItemsPerPage);
+  const shouldShowPagination = pageCount > 1;
 
   return (
     <div className="min-h-screen-safe bg-[#fbf8f2] font-serif text-[#3d332b] selection:bg-[#c58a54] selection:text-white">
@@ -52,7 +92,7 @@ export default function NewsPage() {
           </div>
 
           <div className="mx-auto mt-16 grid max-w-6xl grid-cols-1 gap-10 md:grid-cols-2 lg:gap-12">
-            {newsItems.map((item) => (
+            {paginatedNewsItems.map((item) => (
               <Link
                 key={item.id}
                 href={`/news/${item.slug}`}
@@ -88,6 +128,56 @@ export default function NewsPage() {
               </Link>
             ))}
           </div>
+
+          {shouldShowPagination && (
+            <nav
+              aria-label="最新消息分頁"
+              className="mx-auto mt-14 flex max-w-6xl items-center justify-center gap-3 text-[13px] tracking-[0.08em] text-[#75685d] md:mt-16 md:gap-4 md:text-sm"
+            >
+              {currentPage > 1 ? (
+                <Link
+                  href={getNewsPageHref(currentPage - 1)}
+                  className="transition hover:text-[#B77C4B]"
+                >
+                  ← 上一頁
+                </Link>
+              ) : (
+                <span className="cursor-not-allowed text-[#b9aa9d]">← 上一頁</span>
+              )}
+
+              <div className="hidden items-center gap-2 sm:flex">
+                {Array.from({ length: pageCount }, (_, index) => index + 1).map((page) => (
+                  <Link
+                    key={page}
+                    href={getNewsPageHref(page)}
+                    aria-current={page === currentPage ? "page" : undefined}
+                    className={`flex h-8 min-w-8 items-center justify-center rounded-full border px-3 transition ${
+                      page === currentPage
+                        ? "border-[#a57652] bg-[#f4eadf] text-[#3d332b]"
+                        : "border-[#ded1c1] text-[#75685d] hover:border-[#B77C4B] hover:text-[#B77C4B]"
+                    }`}
+                  >
+                    {page}
+                  </Link>
+                ))}
+              </div>
+
+              <span className="rounded-full border border-[#ded1c1] px-4 py-1.5 text-[#75685d] sm:hidden">
+                {currentPage} / {pageCount}
+              </span>
+
+              {currentPage < pageCount ? (
+                <Link
+                  href={getNewsPageHref(currentPage + 1)}
+                  className="transition hover:text-[#B77C4B]"
+                >
+                  下一頁 →
+                </Link>
+              ) : (
+                <span className="cursor-not-allowed text-[#b9aa9d]">下一頁 →</span>
+              )}
+            </nav>
+          )}
         </section>
       </main>
 

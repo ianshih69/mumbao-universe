@@ -200,6 +200,15 @@ export default function About() {
             </div>
           </div>
         </section>
+
+        <section className="bg-[#FAFAFA] px-6 pb-20 pt-2 text-center md:px-12 md:pb-28">
+          <a
+            href="/#about"
+            className="inline-flex items-center justify-center border border-[#8b6f5b]/25 px-8 py-4 text-xs uppercase tracking-widest text-[#5f4d40] transition-all duration-500 hover:bg-[#8b6f5b] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b6f5b]/30"
+          >
+            返回關於慢慢蒔光
+          </a>
+        </section>
       </main>
 
       <Footer />

@@ -348,6 +348,7 @@ export function MumbaoChatLauncher() {
           <MumbaoChat
             compact
             isOpen={isOpen}
+            renderContext="mobile-portal"
             className="h-full max-h-none rounded-none border-0 shadow-none"
           />
         </div>
@@ -377,7 +378,7 @@ export function MumbaoChatLauncher() {
           )}
           aria-hidden={!isOpen}
         >
-          <MumbaoChat compact isOpen={isOpen} />
+          <MumbaoChat compact isOpen={isOpen} renderContext="desktop-launcher" />
         </div>
       )}
 

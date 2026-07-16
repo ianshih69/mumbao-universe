@@ -26,7 +26,7 @@ export const newsItems: NewsItem[] = [
       "貼圖內容將延伸慢寶的核心精神：「什麼都不做，也值得被愛。」不論是想說早安、想給朋友一點鼓勵，或只是想用可愛的方式表達今天想慢一點，慢寶都會陪你一起出現。",
       "實際上架時間與下載資訊，將以慢慢蒔光官網與官方社群公告為準。",
     ],
-    image: "/images/mumbao/News-1.JPG",
+    image: "/images/News/News-1.JPG",
     alt: "慢寶 LINE 貼圖即將上架",
   },
   {
@@ -43,7 +43,7 @@ export const newsItems: NewsItem[] = [
       "這裡不是急著完成的地方，而是一座慢慢整理、慢慢靠近旅人的白雲基地。未來將提供適合家庭、朋友與毛孩同行的包棟住宿體驗，讓旅人在山與田之間，留下一段真正能放慢的時間。",
       "試營運相關日期、訂房方式與入住資訊，將以官網最新公告為準。",
     ],
-    image: "/images/mumbao/News-2.JPG",
+    image: "/images/News/News-2.JPG",
     alt: "慢慢蒔光暑假試營運籌備中",
   },
   {
@@ -60,7 +60,7 @@ export const newsItems: NewsItem[] = [
       "我們希望每一件文創商品，都不只是紀念品，而是能承載慢寶想傳遞的那句話：「什麼都不做，也值得被愛。」",
       "商品品項、上架時間與購買方式，將於慢慢蒔光官網與官方社群陸續公開。",
     ],
-    image: "/images/mumbao/News-3.JPG",
+    image: "/images/News/News-3.JPG",
     alt: "慢寶文創商品準備上架",
   },
   {
@@ -77,7 +77,7 @@ export const newsItems: NewsItem[] = [
       "我們希望官網不只是提供資訊的地方，也是一個能慢慢認識慢慢蒔光與慢寶宇宙的入口。關於試營運、文創商品、LINE 貼圖與住宿體驗的最新消息，都會在這裡逐步公開。",
       "正式資訊仍以慢慢蒔光官網公告為準。",
     ],
-    image: "/images/mumbao/News-4.JPG",
+    image: "/images/News/News-4.JPG",
     alt: "慢慢蒔光官網資訊陸續更新",
   },
 ];

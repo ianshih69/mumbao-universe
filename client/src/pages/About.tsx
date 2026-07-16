@@ -52,7 +52,7 @@ export default function About() {
                 className="relative w-full overflow-hidden rounded-lg shadow-2xl"
               >
                 <img
-                  src="/images/mumbao/living.JPG"
+                  src="/images/aboutMe/aboutMe-1.jpg"
                   alt="慢慢蒔光 STime Villa 宜蘭員山包棟民宿的白色建築與山景倒影"
                   className="h-[400px] w-full object-cover transition-transform duration-[1.5s] hover:scale-105 md:h-[600px]"
                   loading="eager"
@@ -103,7 +103,7 @@ export default function About() {
               >
                 <div className="aspect-[3/4] overflow-hidden rounded-lg shadow-xl">
                   <img
-                    src="/images/aboutMe_2.webp"
+                    src="/images/aboutMe/aboutMe-2.jpg"
                     alt="慢慢蒔光室內柔和光線與留白空間"
                     className="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
                     loading="lazy"
@@ -190,7 +190,7 @@ export default function About() {
               >
                 <div className="aspect-[3/4] overflow-hidden rounded-lg shadow-xl">
                   <img
-                    src="/images/aboutMe_3.webp"
+                    src="/images/aboutMe/aboutMe-3.jpg"
                     alt="慢慢蒔光宜蘭員山包棟民宿裡慢下來的空間氛圍"
                     className="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
                     loading="lazy"

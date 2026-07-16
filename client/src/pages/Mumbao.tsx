@@ -16,15 +16,15 @@ const softReveal: Variants = {
 
 const mumbaoImages = {
   hero: {
-    src: "/images/mumbao/m3.jpg",
+    src: "/images/aboutMumbao/aboutMumbao-1.jpg",
     alt: "彩色慢寶站在蒔光雲上",
   },
   front: {
-    src: "/images/mumbao/m1.jpg",
+    src: "/images/aboutMumbao/aboutMumbao-2.jpg",
     alt: "慢寶正面素描設定圖",
   },
   back: {
-    src: "/images/mumbao/m2.jpg",
+    src: "/images/aboutMumbao/aboutMumbao-3.jpg",
     alt: "慢寶背面的星情光輪素描圖",
   },
 };

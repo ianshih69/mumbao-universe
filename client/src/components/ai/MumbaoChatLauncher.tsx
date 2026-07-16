@@ -1,13 +1,49 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import { X } from "lucide-react";
 import { useLocation } from "wouter";
 import { MumbaoChat } from "@/components/ai/MumbaoChat";
 import { cn } from "@/lib/utils";
 
+const mobilePositionStorageKey = "mumbaoChatMobileY";
+const mobileMediaQuery = "(max-width: 639px)";
+const dragThreshold = 8;
+const minMobileBottom = 16;
+const minMobileTop = 140;
+const fallbackLauncherHeight = 112;
+
+type DragSession = {
+  pointerId: number;
+  startY: number;
+  startBottom: number;
+  launcherHeight: number;
+  hasDragged: boolean;
+};
+
 export function MumbaoChatLauncher() {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(() => shouldAutoOpenChat(location));
   const [isFooterMode, setIsFooterMode] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [mobileBottomOffset, setMobileBottomOffset] = useState<number | null>(null);
+  const launcherButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dragSessionRef = useRef<DragSession | null>(null);
+  const latestBottomOffsetRef = useRef<number | null>(null);
+  const suppressNextClickRef = useRef(false);
+
+  const hasCustomMobilePosition =
+    isMobile && !isOpen && mobileBottomOffset !== null;
+  const launcherStyle = hasCustomMobilePosition
+    ? {
+        bottom: `calc(env(safe-area-inset-bottom, 0px) + ${Math.round(
+          mobileBottomOffset
+        )}px)`,
+      }
+    : undefined;
 
   useEffect(() => {
     if (shouldAutoOpenChat(location)) {
@@ -38,6 +74,172 @@ export function MumbaoChatLauncher() {
     return () => observer.disconnect();
   }, [location]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !("matchMedia" in window)) {
+      return;
+    }
+
+    const media = window.matchMedia(mobileMediaQuery);
+    const syncMobileState = () => {
+      const nextIsMobile = media.matches;
+      setIsMobile(nextIsMobile);
+
+      if (!nextIsMobile) {
+        setMobileBottomOffset(null);
+        latestBottomOffsetRef.current = null;
+        return;
+      }
+
+      const storedOffset = readStoredMobileBottom();
+      if (storedOffset === null) {
+        return;
+      }
+
+      const clampedOffset = clampMobileBottomOffset(
+        storedOffset,
+        getLauncherHeight(launcherButtonRef.current)
+      );
+      latestBottomOffsetRef.current = clampedOffset;
+      setMobileBottomOffset(clampedOffset);
+      storeMobileBottom(clampedOffset);
+    };
+
+    syncMobileState();
+    media.addEventListener("change", syncMobileState);
+
+    return () => {
+      media.removeEventListener("change", syncMobileState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isMobile) {
+      return;
+    }
+
+    const clampStoredPosition = () => {
+      setMobileBottomOffset((currentOffset) => {
+        if (currentOffset === null) {
+          return currentOffset;
+        }
+
+        const clampedOffset = clampMobileBottomOffset(
+          currentOffset,
+          getLauncherHeight(launcherButtonRef.current)
+        );
+        latestBottomOffsetRef.current = clampedOffset;
+        storeMobileBottom(clampedOffset);
+        return clampedOffset;
+      });
+    };
+
+    window.addEventListener("resize", clampStoredPosition);
+    window.visualViewport?.addEventListener("resize", clampStoredPosition);
+
+    return () => {
+      window.removeEventListener("resize", clampStoredPosition);
+      window.visualViewport?.removeEventListener("resize", clampStoredPosition);
+    };
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const session = dragSessionRef.current;
+      if (!session) {
+        return;
+      }
+
+      const deltaY = event.clientY - session.startY;
+      if (!session.hasDragged && Math.abs(deltaY) < dragThreshold) {
+        return;
+      }
+
+      if (!session.hasDragged) {
+        session.hasDragged = true;
+        suppressNextClickRef.current = true;
+        setIsDragging(true);
+      }
+
+      event.preventDefault();
+
+      const nextOffset = clampMobileBottomOffset(
+        session.startBottom - deltaY,
+        session.launcherHeight
+      );
+      latestBottomOffsetRef.current = nextOffset;
+      setMobileBottomOffset(nextOffset);
+    };
+
+    const finishDrag = (event: PointerEvent) => {
+      const session = dragSessionRef.current;
+      if (!session) {
+        return;
+      }
+
+      if (session.hasDragged) {
+        event.preventDefault();
+        const finalOffset = latestBottomOffsetRef.current ?? session.startBottom;
+        storeMobileBottom(finalOffset);
+        window.setTimeout(() => {
+          suppressNextClickRef.current = false;
+        }, 0);
+      }
+
+      dragSessionRef.current = null;
+      setIsDragging(false);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", finishDrag, { passive: false });
+    window.addEventListener("pointercancel", finishDrag, { passive: false });
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", finishDrag);
+      window.removeEventListener("pointercancel", finishDrag);
+    };
+  }, []);
+
+  const handleLauncherPointerDown = (
+    event: ReactPointerEvent<HTMLButtonElement>
+  ) => {
+    if (!isMobile || isOpen) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const launcherHeight = getLauncherHeight(event.currentTarget);
+    const currentBottom =
+      mobileBottomOffset ??
+      Math.max(minMobileBottom, getViewportHeight() - rect.bottom);
+    const clampedBottom = clampMobileBottomOffset(currentBottom, launcherHeight);
+
+    dragSessionRef.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startBottom: clampedBottom,
+      launcherHeight,
+      hasDragged: false,
+    };
+    latestBottomOffsetRef.current = clampedBottom;
+    suppressNextClickRef.current = false;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleLauncherClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (suppressNextClickRef.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    setIsOpen(true);
+  };
+
   if (location === "/ai-chat") {
     return null;
   }
@@ -46,10 +248,12 @@ export function MumbaoChatLauncher() {
     <div
       className={cn(
         "pointer-events-none fixed left-[max(0.75rem,env(safe-area-inset-left,0px))] right-[max(0.75rem,env(safe-area-inset-right,0px))] z-[80] flex flex-col items-end gap-3 transition-[bottom] duration-300 sm:left-auto sm:right-6",
+        isDragging && "transition-none duration-0",
         isFooterMode
           ? "footer-mode bottom-[calc(env(safe-area-inset-bottom,0px)_+_5rem)] sm:bottom-24"
           : "bottom-[calc(env(safe-area-inset-bottom,0px)_+_0.875rem)] sm:bottom-6"
       )}
+      style={launcherStyle}
     >
       <div
         className={cn(
@@ -77,13 +281,17 @@ export function MumbaoChatLauncher() {
         </button>
       ) : (
         <button
+          ref={launcherButtonRef}
           type="button"
-          onClick={() => setIsOpen(true)}
+          onPointerDown={handleLauncherPointerDown}
+          onClick={handleLauncherClick}
           className={cn(
             "group pointer-events-auto relative flex w-[104px] flex-col items-center justify-end border-0 bg-transparent text-[#5c5147] outline-none",
             "animate-[mumbao-float_5.8s_ease-in-out_infinite] transition-transform duration-500 ease-out hover:-translate-y-1 hover:scale-[1.04] focus-visible:ring-4 focus-visible:ring-[#9ec7b8]/30",
-            "sm:w-[118px]"
+            "sm:w-[118px]",
+            isMobile && "cursor-grab active:cursor-grabbing"
           )}
+          style={{ touchAction: isMobile ? "none" : undefined }}
           aria-expanded={isOpen}
           aria-label="打開問慢寶 AI客服"
         >
@@ -100,6 +308,54 @@ export function MumbaoChatLauncher() {
       )}
     </div>
   );
+}
+
+function getViewportHeight() {
+  if (typeof window === "undefined") {
+    return 0;
+  }
+
+  return window.visualViewport?.height || window.innerHeight;
+}
+
+function getLauncherHeight(element: HTMLElement | null) {
+  return element?.getBoundingClientRect().height || fallbackLauncherHeight;
+}
+
+function clampMobileBottomOffset(offset: number, launcherHeight: number) {
+  if (typeof window === "undefined") {
+    return offset;
+  }
+
+  const viewportHeight = getViewportHeight();
+  const maxBottom = Math.max(
+    minMobileBottom,
+    viewportHeight - minMobileTop - launcherHeight
+  );
+
+  return Math.min(Math.max(offset, minMobileBottom), maxBottom);
+}
+
+function readStoredMobileBottom() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const rawValue = window.localStorage.getItem(mobilePositionStorageKey);
+  if (!rawValue) {
+    return null;
+  }
+
+  const parsedValue = Number.parseFloat(rawValue);
+  return Number.isFinite(parsedValue) ? parsedValue : null;
+}
+
+function storeMobileBottom(offset: number) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(mobilePositionStorageKey, String(Math.round(offset)));
 }
 
 function shouldAutoOpenChat(location: string) {

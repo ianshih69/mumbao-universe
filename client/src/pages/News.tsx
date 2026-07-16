@@ -65,7 +65,6 @@ export default function NewsPage() {
   const currentPage = getCurrentPage(pageCount, location);
   const pageStart = (currentPage - 1) * newsItemsPerPage;
   const paginatedNewsItems = sortedNewsItems.slice(pageStart, pageStart + newsItemsPerPage);
-  const shouldShowPagination = pageCount > 1;
 
   return (
     <div className="min-h-screen-safe bg-[#fbf8f2] font-serif text-[#3d332b] selection:bg-[#c58a54] selection:text-white">
@@ -73,15 +72,6 @@ export default function NewsPage() {
 
       <main className="pt-28 md:pt-36">
         <section className="px-5 pb-20 pt-16 md:px-8 md:pb-28 md:pt-20">
-          <div className="mx-auto mb-8 max-w-6xl text-left">
-            <a
-              href="/#news"
-              className="text-[13px] leading-6 text-[#75685d] transition hover:text-[#B77C4B] md:text-sm"
-            >
-              ← Back Home / 回首頁
-            </a>
-          </div>
-
           <div className="mx-auto max-w-5xl text-center">
             <span className="block text-xs font-medium uppercase tracking-[0.32em] text-[#a57652]">
               LATEST NEWS
@@ -129,12 +119,12 @@ export default function NewsPage() {
             ))}
           </div>
 
-          {shouldShowPagination && (
-            <nav
-              aria-label="最新消息分頁"
-              className="mx-auto mt-14 flex max-w-6xl items-center justify-center gap-3 text-[13px] tracking-[0.08em] text-[#75685d] md:mt-16 md:gap-4 md:text-sm"
-            >
-              {currentPage > 1 ? (
+          <nav
+            aria-label="最新消息分頁"
+            className="mx-auto mt-12 flex max-w-6xl items-center justify-center gap-6 text-[13px] uppercase tracking-[0.18em] text-[#8a7667] md:mt-14 md:text-sm"
+          >
+            {pageCount > 1 && (
+              currentPage > 1 ? (
                 <Link
                   href={getNewsPageHref(currentPage - 1)}
                   className="transition hover:text-[#B77C4B]"
@@ -143,30 +133,15 @@ export default function NewsPage() {
                 </Link>
               ) : (
                 <span className="cursor-not-allowed text-[#b9aa9d]">← 上一頁</span>
-              )}
+              )
+            )}
 
-              <div className="hidden items-center gap-2 sm:flex">
-                {Array.from({ length: pageCount }, (_, index) => index + 1).map((page) => (
-                  <Link
-                    key={page}
-                    href={getNewsPageHref(page)}
-                    aria-current={page === currentPage ? "page" : undefined}
-                    className={`flex h-8 min-w-8 items-center justify-center rounded-full border px-3 transition ${
-                      page === currentPage
-                        ? "border-[#a57652] bg-[#f4eadf] text-[#3d332b]"
-                        : "border-[#ded1c1] text-[#75685d] hover:border-[#B77C4B] hover:text-[#B77C4B]"
-                    }`}
-                  >
-                    {page}
-                  </Link>
-                ))}
-              </div>
+            <span aria-current="page" className="text-[#6f6258]">
+              {currentPage} / {pageCount}
+            </span>
 
-              <span className="rounded-full border border-[#ded1c1] px-4 py-1.5 text-[#75685d] sm:hidden">
-                {currentPage} / {pageCount}
-              </span>
-
-              {currentPage < pageCount ? (
+            {pageCount > 1 && (
+              currentPage < pageCount ? (
                 <Link
                   href={getNewsPageHref(currentPage + 1)}
                   className="transition hover:text-[#B77C4B]"
@@ -175,9 +150,18 @@ export default function NewsPage() {
                 </Link>
               ) : (
                 <span className="cursor-not-allowed text-[#b9aa9d]">下一頁 →</span>
-              )}
-            </nav>
-          )}
+              )
+            )}
+          </nav>
+
+          <div className="mx-auto mt-7 flex max-w-6xl justify-center md:mt-8">
+            <a
+              href="/#news"
+              className="inline-flex items-center text-[13px] font-medium tracking-[0.08em] text-[#a57652] transition hover:-translate-x-0.5 hover:text-[#c58a54] md:text-sm"
+            >
+              ← 返回首頁
+            </a>
+          </div>
         </section>
       </main>
 

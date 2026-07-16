@@ -3,6 +3,7 @@ import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useLocation } from "wouter";
 import { MumbaoChat } from "@/components/ai/MumbaoChat";
@@ -51,6 +52,7 @@ export function MumbaoChatLauncher() {
 
   const hasCustomMobilePosition =
     isMobile && !isOpen && mobileBottomOffset !== null;
+  const isMobileChatOpen = isMobile && isOpen;
   const launcherStyle = hasCustomMobilePosition
     ? {
         bottom: `calc(env(safe-area-inset-bottom, 0px) + ${Math.round(
@@ -313,6 +315,38 @@ export function MumbaoChatLauncher() {
 
   if (location === "/ai-chat") {
     return null;
+  }
+
+  if (isMobileChatOpen && typeof document !== "undefined") {
+    return createPortal(
+      <div
+        className="fixed inset-0 z-[90] flex h-[100dvh] w-full flex-col overflow-hidden bg-[#fffaf2] md:hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-label="?撖?AI摰Ｘ?"
+      >
+        <div className="flex flex-none items-center justify-end border-b border-white/70 bg-[#fff8ec]/95 px-4 pb-3 pt-[calc(env(safe-area-inset-top,0px)_+_0.75rem)] shadow-[0_8px_24px_rgba(111,88,71,0.08)]">
+          <button
+            type="button"
+            onClick={() => setIsOpen(false)}
+            className="inline-flex h-10 items-center gap-2 rounded-full border border-white/80 bg-white/90 px-4 text-sm font-medium text-[#6f5d50] shadow-[0_10px_26px_rgba(94,74,58,0.12)] outline-none backdrop-blur-xl transition-colors duration-200 hover:bg-[#fff2df] focus-visible:ring-4 focus-visible:ring-[#9ec7b8]/30"
+            aria-expanded={isOpen}
+            aria-label="關閉問慢寶"
+          >
+            <X className="size-4" aria-hidden="true" />
+            關閉問慢寶
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <MumbaoChat
+            compact
+            isOpen={isOpen}
+            className="h-full max-h-none rounded-none border-0 shadow-none"
+          />
+        </div>
+      </div>,
+      document.body
+    );
   }
 
   return (

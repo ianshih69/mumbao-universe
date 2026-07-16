@@ -3,7 +3,8 @@ import { ArrowLeft } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 
-const breakfastImage = "/images/mumbao/breakfast.jpg";
+const breakfastDesktopImage = "/images/Main/breakfaset.JPG";
+const breakfastMobileImage = "/images/Main/breakfast.jpg";
 const breakfastSeoTitle = "宜蘭在地名店早餐代訂｜慢慢蒔光 STime Villa";
 const breakfastSeoDescription =
   "慢慢蒔光 STime Villa 提供宜蘭在地名店早餐代訂服務，每份 NT$250，讓旅人在入住的早晨以更自在的節奏慢慢開始一天。";
@@ -36,11 +37,14 @@ export default function Breakfast() {
       <main className="px-5 pb-20 pt-28 md:px-8 md:pb-28 md:pt-36">
         <section className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.48fr_0.52fr] lg:items-center lg:gap-16">
           <div className="overflow-hidden rounded-[12px] bg-[#efe7dc]">
-            <img
-              src={breakfastImage}
-              alt="早餐代訂服務"
-              className="aspect-[4/3] w-full object-cover lg:aspect-[4/5]"
-            />
+            <picture>
+              <source media="(min-width: 768px)" srcSet={breakfastDesktopImage} />
+              <img
+                src={breakfastMobileImage}
+                alt="早餐代訂服務"
+                className="aspect-[4/3] w-full object-cover lg:aspect-[4/5]"
+              />
+            </picture>
           </div>
 
           <article className="space-y-8">

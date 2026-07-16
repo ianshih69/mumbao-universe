@@ -9,13 +9,22 @@ type CmsHeroContent = {
   altText: string;
 };
 
-const defaultHeroImage = "/images/mumbao/STime.JPG";
-const defaultHeroMobileImage = "/images/mumbao/STime-mobile.JPG";
+const defaultHeroImage = "/images/Main/STime.JPG";
+const defaultHeroMobileImage = "/images/Main/STime-mobile.JPG";
 const legacyHeroImage = "/images/Hero.webp";
+const legacyMumbaoHeroImage = "/images/mumbao/STime.JPG";
+const legacyMumbaoHeroMobileImage = "/images/mumbao/STime-mobile.JPG";
 
 function resolveHeroImage(path: string) {
   const value = path.trim();
-  if (!value || value === legacyHeroImage) return defaultHeroImage;
+  if (
+    !value ||
+    value === legacyHeroImage ||
+    value === legacyMumbaoHeroImage ||
+    value === legacyMumbaoHeroMobileImage
+  ) {
+    return defaultHeroImage;
+  }
   return value;
 }
 

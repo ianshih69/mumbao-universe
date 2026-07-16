@@ -3,6 +3,9 @@ import { Link, useLocation } from "wouter";
 import { Plus, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 
+const breakfastDesktopImage = "/images/Main/breakfaset.JPG";
+const breakfastMobileImage = "/images/Main/breakfast.jpg";
+
 export function Experience() {
   const [, navigate] = useLocation();
   const openBreakfast = () => navigate("/experience/breakfast");
@@ -31,11 +34,14 @@ export function Experience() {
             viewport={{ once: true }}
           >
             <div className="absolute inset-0">
-              <img
-                src="/images/mumbao/breakfast.jpg"
-                alt="早餐代訂"
-                className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
-              />
+              <picture className="block h-full w-full">
+                <source media="(min-width: 768px)" srcSet={breakfastDesktopImage} />
+                <img
+                  src={breakfastMobileImage}
+                  alt="早餐代訂"
+                  className="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                />
+              </picture>
               <div className="absolute inset-0 bg-black/40 group-hover:bg-black/60 transition-colors duration-500" />
             </div>
 

@@ -41,7 +41,11 @@ export function MumbaoChatLauncher() {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(() => shouldAutoOpenChat(location));
   const [isFooterMode, setIsFooterMode] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" && "matchMedia" in window
+      ? window.matchMedia(mobileMediaQuery).matches
+      : false
+  );
   const [isDragging, setIsDragging] = useState(false);
   const [mobileBottomOffset, setMobileBottomOffset] = useState<number | null>(null);
   const launcherButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -52,7 +56,6 @@ export function MumbaoChatLauncher() {
 
   const hasCustomMobilePosition =
     isMobile && !isOpen && mobileBottomOffset !== null;
-  const isMobileChatOpen = isMobile && isOpen;
   const launcherStyle = hasCustomMobilePosition
     ? {
         bottom: `calc(env(safe-area-inset-bottom, 0px) + ${Math.round(
@@ -317,10 +320,14 @@ export function MumbaoChatLauncher() {
     return null;
   }
 
-  if (isMobileChatOpen && typeof document !== "undefined") {
-    return createPortal(
+  const mobileChatPortal =
+    isMobile && typeof document !== "undefined"
+      ? createPortal(
       <div
-        className="fixed inset-0 z-[90] flex h-[100dvh] w-full flex-col overflow-hidden bg-[#fffaf2] md:hidden"
+        className={cn(
+          "fixed inset-0 z-[90] flex h-[100dvh] w-full flex-col overflow-hidden bg-[#fffaf2] md:hidden",
+          !isOpen && "pointer-events-none hidden"
+        )}
         role="dialog"
         aria-modal="true"
         aria-label="?撖?AI摰Ｘ?"
@@ -346,8 +353,8 @@ export function MumbaoChatLauncher() {
         </div>
       </div>,
       document.body
-    );
-  }
+        )
+      : null;
 
   return (
     <div
@@ -360,17 +367,21 @@ export function MumbaoChatLauncher() {
       )}
       style={launcherStyle}
     >
-      <div
-        className={cn(
-          "pointer-events-auto h-[min(620px,calc(100dvh_-_7.5rem_-_env(safe-area-inset-bottom,0px)))] w-full max-w-[390px] md:h-auto md:w-auto md:max-w-none",
-          !isOpen && "hidden"
-        )}
-        aria-hidden={!isOpen}
-      >
-        <MumbaoChat compact isOpen={isOpen} />
-      </div>
+      {mobileChatPortal}
 
-      {isOpen ? (
+      {!isMobile && (
+        <div
+          className={cn(
+            "pointer-events-auto h-[min(620px,calc(100dvh_-_7.5rem_-_env(safe-area-inset-bottom,0px)))] w-full max-w-[390px] md:h-auto md:w-auto md:max-w-none",
+            !isOpen && "hidden"
+          )}
+          aria-hidden={!isOpen}
+        >
+          <MumbaoChat compact isOpen={isOpen} />
+        </div>
+      )}
+
+      {!isMobile && isOpen ? (
         <button
           type="button"
           onClick={() => setIsOpen(false)}
@@ -384,7 +395,7 @@ export function MumbaoChatLauncher() {
           <X className="size-4" aria-hidden="true" />
           關閉問慢寶
         </button>
-      ) : (
+      ) : !isOpen ? (
         <button
           ref={launcherButtonRef}
           type="button"
@@ -410,7 +421,7 @@ export function MumbaoChatLauncher() {
             問慢寶
           </span>
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

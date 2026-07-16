@@ -26,6 +26,7 @@ type ChatMessage = {
   provider_used?: string | null;
   isWelcome?: boolean;
   isOptimistic?: boolean;
+  clientRequestId?: string;
 };
 
 type ApiMessage = {
@@ -131,6 +132,28 @@ function logChatTiming(
     durationMs: Math.round(getTimingNow() - startedAt),
     ...details,
   });
+}
+
+function maskDebugId(value?: string | number | null) {
+  const text = String(value || "");
+  if (!text) return "";
+  if (text.length <= 10) return `${text.slice(0, 2)}...`;
+
+  return `${text.slice(0, 6)}...${text.slice(-4)}`;
+}
+
+function getMessageDebugSummary(messages: ChatMessage[]) {
+  const realMessages = messages.filter(isRealChatMessage);
+  const lastMessage = realMessages[realMessages.length - 1];
+
+  return {
+    realCount: realMessages.length,
+    optimisticCount: realMessages.filter((message) => message.isOptimistic)
+      .length,
+    lastRole: lastMessage?.role || "",
+    lastId: maskDebugId(lastMessage?.id),
+    lastCreatedAt: lastMessage?.created_at || "",
+  };
 }
 
 function createLocalId() {
@@ -344,7 +367,9 @@ function areDuplicateMessages(first: ChatMessage, second: ChatMessage) {
     return true;
   }
 
-  if (!first.isOptimistic && !second.isOptimistic) {
+  const optimisticCount =
+    Number(Boolean(first.isOptimistic)) + Number(Boolean(second.isOptimistic));
+  if (optimisticCount !== 1) {
     return false;
   }
 
@@ -398,8 +423,8 @@ function dedupeMessages(messages: ChatMessage[]) {
 
 function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]) {
   const merged = dedupeMessages([
-    ...incoming,
     ...current.filter((message) => isRealChatMessage(message)),
+    ...incoming.filter((message) => isRealChatMessage(message)),
   ]);
 
   return getInitialMessages(sortMessagesByCreatedAt(merged));
@@ -1037,6 +1062,9 @@ export function MumbaoChat({
   const bootStartedAtRef = useRef(getTimingNow());
   const firstMessagesRenderLoggedRef = useRef(false);
   const lastCustomerAccessTokenRef = useRef("");
+  const latestVisitorIdRef = useRef("");
+  const latestSessionIdRef = useRef("");
+  const isSendingRef = useRef(false);
   const shouldAutoScrollRef = useRef(true);
   const pendingScrollRestoreRef = useRef<{
     scrollHeight: number;
@@ -1058,6 +1086,35 @@ export function MumbaoChat({
   const visibleMessages = useMemo(
     () => getInitialMessages(sortMessagesByCreatedAt(dedupeMessages(messages))),
     [messages]
+  );
+  const mergeIncomingMessages = useCallback(
+    (
+      source: string,
+      incomingMessages: ChatMessage[],
+      details: Record<string, unknown> = {}
+    ) => {
+      const realIncomingMessages = incomingMessages.filter(isRealChatMessage);
+      if (realIncomingMessages.length === 0) {
+        logChatDebug("setMessages merge skipped: no incoming", {
+          source,
+          ...details,
+        });
+        return;
+      }
+
+      setMessages((current) => {
+        const merged = mergeMessages(current, realIncomingMessages);
+        logChatDebug("setMessages merge", {
+          source,
+          incomingCount: realIncomingMessages.length,
+          before: getMessageDebugSummary(current),
+          after: getMessageDebugSummary(merged),
+          ...details,
+        });
+        return merged;
+      });
+    },
+    []
   );
   const realMessageCount = useMemo(
     () => visibleMessages.filter(isRealChatMessage).length,
@@ -1094,6 +1151,11 @@ export function MumbaoChat({
       logChatDebug("unmounted", { compact });
     };
   }, []);
+
+  useEffect(() => {
+    latestVisitorIdRef.current = visitorId;
+    latestSessionIdRef.current = sessionId;
+  }, [sessionId, visitorId]);
 
   useEffect(() => {
     if (previousIsOpenRef.current !== isOpen) {
@@ -1153,10 +1215,12 @@ export function MumbaoChat({
     const coldStartCache = readRecentMessagesCache();
     if (coldStartCache) {
       messagesCacheRef.current.set(coldStartCache.sessionId, coldStartCache.messages);
-      setMessages(getInitialMessages(coldStartCache.messages));
+      mergeIncomingMessages("cold cache immediate render", coldStartCache.messages, {
+        cacheSessionId: maskDebugId(coldStartCache.sessionId),
+      });
       logChatDebug("cold cache immediate render", {
-        visitorId: coldStartCache.visitorId,
-        sessionId: coldStartCache.sessionId,
+        visitorId: maskDebugId(coldStartCache.visitorId),
+        sessionId: maskDebugId(coldStartCache.sessionId),
         source: coldStartCache.source,
         messageCount: coldStartCache.messages.length,
       });
@@ -1191,14 +1255,17 @@ export function MumbaoChat({
       initialCachedMessages.length > 0
         ? initialCachedMessages
         : coldStartCache?.messages || [];
-    setMessages(getInitialMessages(immediateMessages));
+    mergeIncomingMessages("initialization cache applied", immediateMessages, {
+      visitorId: maskDebugId(nextVisitorId),
+      sessionId: maskDebugId(existingSessionId),
+    });
     setIsInitialHistoryLoading(immediateMessages.length === 0);
     logChatDebug("initialization cache applied", {
-      visitorId: nextVisitorId,
-      sessionId: existingSessionId,
+      visitorId: maskDebugId(nextVisitorId),
+      sessionId: maskDebugId(existingSessionId),
       messageCount: immediateMessages.length,
       strictCacheCount: initialCachedMessages.length,
-      coldCacheSessionId: coldStartCache?.sessionId || "",
+      coldCacheSessionId: maskDebugId(coldStartCache?.sessionId),
     });
 
     async function recoverSession() {
@@ -1243,10 +1310,12 @@ export function MumbaoChat({
       }
 
       try {
+        const sessionIdForLineBind =
+          latestSessionIdRef.current || existingSessionId;
         const boundLineSession = await bindLineSession(
           identity,
           nextVisitorId,
-          existingSessionId
+          sessionIdForLineBind
         );
         const effectiveVisitorId =
           boundLineSession.session?.visitor_id &&
@@ -1268,9 +1337,9 @@ export function MumbaoChat({
         }
 
         logChatDebug("line session bound", {
-          anonymousVisitorId: nextVisitorId,
-          effectiveVisitorId,
-          recoveredSessionId,
+          anonymousVisitorId: maskDebugId(nextVisitorId),
+          effectiveVisitorId: maskDebugId(effectiveVisitorId),
+          recoveredSessionId: maskDebugId(recoveredSessionId),
         });
 
         if (
@@ -1279,10 +1348,14 @@ export function MumbaoChat({
         ) {
           messagesCacheRef.current.delete(coldStartCache.sessionId);
           clearCachedMessages("line session changed", {
-            coldCacheSessionId: coldStartCache.sessionId,
-            recoveredSessionId,
+            coldCacheSessionId: maskDebugId(coldStartCache.sessionId),
+            recoveredSessionId: maskDebugId(recoveredSessionId),
           });
-          setMessages([createWelcomeMessage()]);
+          logChatDebug("line session changed: preserving current messages", {
+            coldCacheSessionId: maskDebugId(coldStartCache.sessionId),
+            recoveredSessionId: maskDebugId(recoveredSessionId),
+            current: getMessageDebugSummary(messages),
+          });
         }
 
         setIsInitialHistoryLoading(true);
@@ -1296,12 +1369,15 @@ export function MumbaoChat({
           setLineIdentity(identity);
           setVisitorId(effectiveVisitorId);
           setSessionId(recoveredSessionId);
-          setMessages(getInitialMessages(cachedMessages));
+          mergeIncomingMessages("line cache applied before history", cachedMessages, {
+            visitorId: maskDebugId(effectiveVisitorId),
+            sessionId: maskDebugId(recoveredSessionId),
+          });
           messagesCacheRef.current.set(recoveredSessionId, cachedMessages);
           saveSessionId(recoveredSessionId, effectiveVisitorId);
           logChatDebug("line cache applied before history", {
-            visitorId: effectiveVisitorId,
-            sessionId: recoveredSessionId,
+            visitorId: maskDebugId(effectiveVisitorId),
+            sessionId: maskDebugId(recoveredSessionId),
             messageCount: cachedMessages.length,
           });
         }
@@ -1320,7 +1396,7 @@ export function MumbaoChat({
             .map(normalizeMessage)
             .filter((message) => message.message.trim().length > 0);
 
-          latestMessages =
+        latestMessages =
             historyMessages.length > 0
               ? sortMessagesByCreatedAt(historyMessages)
               : cachedMessages;
@@ -1329,17 +1405,33 @@ export function MumbaoChat({
           console.warn("Mumbao chat LINE history unavailable:", error);
         }
 
+        if (
+          isSendingRef.current &&
+          !sessionIdForLineBind &&
+          latestMessages.length === 0
+        ) {
+          setLineIdentity(identity);
+          logChatDebug("line initialization deferred during active send", {
+            anonymousVisitorId: maskDebugId(nextVisitorId),
+            recoveredSessionId: maskDebugId(recoveredSessionId),
+          });
+          return;
+        }
+
         setLineIdentity(identity);
         setVisitorId(effectiveVisitorId);
         setSessionId(recoveredSessionId);
-        setMessages(getInitialMessages(latestMessages));
+        mergeIncomingMessages("line initialization completed", latestMessages, {
+          visitorId: maskDebugId(effectiveVisitorId),
+          sessionId: maskDebugId(recoveredSessionId),
+        });
         setHasMoreHistory(hasMore);
         messagesCacheRef.current.set(recoveredSessionId, latestMessages);
         saveCachedMessages(effectiveVisitorId, latestMessages, recoveredSessionId);
         saveSessionId(recoveredSessionId, effectiveVisitorId);
         logChatDebug("line initialization completed", {
-          visitorId: effectiveVisitorId,
-          sessionId: recoveredSessionId,
+          visitorId: maskDebugId(effectiveVisitorId),
+          sessionId: maskDebugId(recoveredSessionId),
           messageCount: latestMessages.length,
           hasMore,
         });
@@ -1358,7 +1450,7 @@ export function MumbaoChat({
     return () => {
       isMounted = false;
     };
-  }, [isOpen]);
+  }, [customerAccessToken, isOpen, mergeIncomingMessages]);
 
   useEffect(() => {
     if (!visitorId) return;
@@ -1397,11 +1489,14 @@ export function MumbaoChat({
 
       if (cachedMessages.length > 0) {
         logChatDebug("history refresh hydrate from cache", {
-          visitorId: targetVisitorId,
-          sessionId: targetSessionId,
+          visitorId: maskDebugId(targetVisitorId),
+          sessionId: maskDebugId(targetSessionId),
           messageCount: cachedMessages.length,
         });
-        setMessages(getInitialMessages(cachedMessages));
+        mergeIncomingMessages("history refresh hydrate from cache", cachedMessages, {
+          visitorId: maskDebugId(targetVisitorId),
+          sessionId: maskDebugId(targetSessionId),
+        });
       } else if (showLoading) {
         setIsInitialHistoryLoading(true);
       }
@@ -1455,8 +1550,8 @@ export function MumbaoChat({
             );
             saveCachedMessages(effectiveVisitorId, merged, effectiveSessionId);
             logChatDebug("history refresh merged messages", {
-              visitorId: effectiveVisitorId,
-              sessionId: effectiveSessionId,
+              visitorId: maskDebugId(effectiveVisitorId),
+              sessionId: maskDebugId(effectiveSessionId),
               incomingCount: historyMessages.length,
               mergedCount: merged.filter(isRealChatMessage).length,
             });
@@ -1464,8 +1559,8 @@ export function MumbaoChat({
           });
         } else {
           logChatDebug("history refresh no incoming messages", {
-            visitorId: effectiveVisitorId,
-            sessionId: effectiveSessionId,
+            visitorId: maskDebugId(effectiveVisitorId),
+            sessionId: maskDebugId(effectiveSessionId),
           });
         }
 
@@ -1478,7 +1573,14 @@ export function MumbaoChat({
         }
       }
     },
-    [anonymousVisitorId, customerAccessToken, lineIdentity, sessionId, visitorId]
+    [
+      anonymousVisitorId,
+      customerAccessToken,
+      lineIdentity,
+      mergeIncomingMessages,
+      sessionId,
+      visitorId,
+    ]
   );
 
   useEffect(() => {
@@ -1548,12 +1650,12 @@ export function MumbaoChat({
     const effectiveSessionId = sessionId || storedSessionId;
 
     logChatDebug("open hydrate start", {
-      stateVisitorId: visitorId,
-      stateSessionId: sessionId,
-      storedVisitorId,
-      storedSessionId,
-      effectiveVisitorId,
-      effectiveSessionId,
+      stateVisitorId: maskDebugId(visitorId),
+      stateSessionId: maskDebugId(sessionId),
+      storedVisitorId: maskDebugId(storedVisitorId),
+      storedSessionId: maskDebugId(storedSessionId),
+      effectiveVisitorId: maskDebugId(effectiveVisitorId),
+      effectiveSessionId: maskDebugId(effectiveSessionId),
       hasInitialized: hasInitializedRef.current,
     });
 
@@ -1581,15 +1683,18 @@ export function MumbaoChat({
 
     if (cachedMessages.length > 0) {
       logChatDebug("open hydrate immediate messages", {
-        visitorId: effectiveVisitorId,
-        sessionId: effectiveSessionId,
+        visitorId: maskDebugId(effectiveVisitorId),
+        sessionId: maskDebugId(effectiveSessionId),
         messageCount: cachedMessages.length,
       });
-      setMessages(getInitialMessages(cachedMessages));
+      mergeIncomingMessages("open hydrate immediate messages", cachedMessages, {
+        visitorId: maskDebugId(effectiveVisitorId),
+        sessionId: maskDebugId(effectiveSessionId),
+      });
     } else {
       logChatDebug("open hydrate no cache, fetching history immediately", {
-        visitorId: effectiveVisitorId,
-        sessionId: effectiveSessionId,
+        visitorId: maskDebugId(effectiveVisitorId),
+        sessionId: maskDebugId(effectiveSessionId),
       });
     }
 
@@ -1604,6 +1709,7 @@ export function MumbaoChat({
     anonymousVisitorId,
     isOpen,
     lineIdentity,
+    mergeIncomingMessages,
     refreshCurrentSessionHistory,
     sessionId,
     visitorId,
@@ -2022,15 +2128,32 @@ export function MumbaoChat({
     const pendingUserMessage = {
       ...createMessage("user", question),
       isOptimistic: true,
+      clientRequestId: createLocalId(),
     };
 
+    logChatDebug("send start", {
+      visitorId: maskDebugId(visitorId),
+      sessionId: maskDebugId(sessionId),
+      hasCustomerToken: Boolean(customerAccessToken),
+      hasLineIdentity: Boolean(lineIdentity),
+      anonymousVisitorId: maskDebugId(anonymousVisitorId),
+      clientRequestId: maskDebugId(pendingUserMessage.clientRequestId),
+      current: getMessageDebugSummary(messages),
+    });
+
     shouldAutoScrollRef.current = true;
-    setMessages((current) => [
-      ...current.filter((message) => isRealChatMessage(message)),
-      pendingUserMessage,
-    ]);
+    setMessages((current) => {
+      const nextMessages = mergeMessages(current, [pendingUserMessage]);
+      logChatDebug("optimistic user message inserted", {
+        clientRequestId: maskDebugId(pendingUserMessage.clientRequestId),
+        before: getMessageDebugSummary(current),
+        after: getMessageDebugSummary(nextMessages),
+      });
+      return nextMessages;
+    });
     setInput("");
     setIsLoading(true);
+    isSendingRef.current = true;
 
     try {
       const data = await fetchJsonWithTimeout<{
@@ -2069,6 +2192,15 @@ export function MumbaoChat({
           ? createMessage("assistant", data.answer)
           : createMessage("assistant", errorReply);
 
+      logChatDebug("API response received", {
+        clientRequestId: maskDebugId(pendingUserMessage.clientRequestId),
+        responseSessionId: maskDebugId(data.session?.id),
+        responseVisitorId: maskDebugId(data.session?.visitor_id),
+        hasUserMessage: Boolean(data.userMessage),
+        hasAiMessage: Boolean(data.aiMessage || data.answer),
+        humanTakeover: Boolean(data.humanTakeover),
+      });
+
       if (data.session?.id) {
         const nextSessionId = String(data.session.id);
         const nextVisitorId = data.session.visitor_id
@@ -2081,19 +2213,18 @@ export function MumbaoChat({
         saveSessionId(nextSessionId, nextVisitorId);
       }
 
-      setMessages((current) =>
-        getInitialMessages(
-          sortMessagesByCreatedAt(
-            dedupeMessages(
-              [
-                ...current.filter((message) => isRealChatMessage(message)),
-                savedUserMessage,
-                savedAiMessage,
-              ].filter(Boolean) as ChatMessage[]
-            )
-          )
-        )
-      );
+      setMessages((current) => {
+        const nextMessages = mergeMessages(
+          current,
+          [savedUserMessage, savedAiMessage].filter(Boolean) as ChatMessage[]
+        );
+        logChatDebug("AI message inserted", {
+          clientRequestId: maskDebugId(pendingUserMessage.clientRequestId),
+          before: getMessageDebugSummary(current),
+          after: getMessageDebugSummary(nextMessages),
+        });
+        return nextMessages;
+      });
     } catch (error) {
       console.warn("Mumbao chat message unavailable:", error);
       const assistantErrorMessage =
@@ -2101,11 +2232,19 @@ export function MumbaoChat({
           ? error.message
           : errorReply;
 
-      setMessages((current) => [
-        ...current.filter((message) => isRealChatMessage(message)),
-        createMessage("assistant", assistantErrorMessage),
-      ]);
+      setMessages((current) => {
+        const nextMessages = mergeMessages(current, [
+          createMessage("assistant", assistantErrorMessage),
+        ]);
+        logChatDebug("send error message inserted", {
+          clientRequestId: maskDebugId(pendingUserMessage.clientRequestId),
+          before: getMessageDebugSummary(current),
+          after: getMessageDebugSummary(nextMessages),
+        });
+        return nextMessages;
+      });
     } finally {
+      isSendingRef.current = false;
       setIsLoading(false);
       requestAnimationFrame(() => inputRef.current?.focus());
     }

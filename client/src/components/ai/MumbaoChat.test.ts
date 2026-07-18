@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { mergeMessages, type ChatMessage } from "./MumbaoChat";
+import {
+  isValidChatUuid,
+  mergeMessages,
+  parseStoredChatSession,
+  type ChatMessage,
+} from "./MumbaoChat";
 
 function message(
   id: string,
@@ -80,5 +85,58 @@ describe("mergeMessages", () => {
     );
 
     expect(mergeMessages([visible], [deleted])).toEqual([visible]);
+  });
+});
+
+describe("Mumbao chat storage helpers", () => {
+  const visitorId = "11111111-1111-4111-8111-111111111111";
+  const sessionId = "22222222-2222-4222-8222-222222222222";
+
+  it("recognizes valid UUID values", () => {
+    expect(isValidChatUuid(visitorId)).toBe(true);
+    expect(isValidChatUuid("visitor_legacy")).toBe(false);
+  });
+
+  it("migrates a legacy raw UUID session id", () => {
+    expect(parseStoredChatSession(sessionId, visitorId)).toEqual({
+      sessionId,
+      shouldClear: false,
+      shouldPersist: true,
+    });
+  });
+
+  it("accepts the current JSON session shape", () => {
+    expect(
+      parseStoredChatSession(
+        JSON.stringify({
+          visitor_id: visitorId,
+          session_id: sessionId,
+        }),
+        visitorId
+      )
+    ).toEqual({
+      sessionId,
+      shouldClear: false,
+      shouldPersist: false,
+    });
+  });
+
+  it("clears malformed and mismatched sessions", () => {
+    expect(parseStoredChatSession("stale-session", visitorId)).toMatchObject({
+      sessionId: "",
+      shouldClear: true,
+    });
+    expect(
+      parseStoredChatSession(
+        JSON.stringify({
+          visitor_id: "33333333-3333-4333-8333-333333333333",
+          session_id: sessionId,
+        }),
+        visitorId
+      )
+    ).toMatchObject({
+      sessionId: "",
+      shouldClear: true,
+    });
   });
 });

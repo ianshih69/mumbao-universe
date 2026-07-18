@@ -3,6 +3,12 @@ import {
   isSessionOwnedByCustomer,
   resolveCustomerIdentity,
 } from "./customerIdentity.js";
+import {
+  buildSessionErrorBody,
+  createInvalidSessionIdError,
+  createSessionOwnershipMismatchError,
+  isValidSessionUuid,
+} from "./sessionValidation.js";
 
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
@@ -558,6 +564,10 @@ async function getSession({
   }
 
   if (sessionId) {
+    if (!isValidSessionUuid(sessionId)) {
+      throw createInvalidSessionIdError();
+    }
+
     const sessionFilters = customerIdentity?.authUserId
       ? `id=eq.${encodeURIComponent(sessionId)}&deleted_at=is.null`
       : `id=eq.${encodeURIComponent(sessionId)}&visitor_id=eq.${encodeURIComponent(
@@ -586,11 +596,7 @@ async function getSession({
       }
     }
 
-    throw createHttpError(
-      "session_id does not belong to visitor_id.",
-      403,
-      "session visitor mismatch"
-    );
+    throw createSessionOwnershipMismatchError();
   }
 
   return getOrCreateSession(visitorId, customerIdentity, entrySource);
@@ -856,6 +862,10 @@ export default async function handler(req, res) {
     const reason = error?.reason || "unknown error";
     if (reason === "missing env") {
       return sendJson(res, 500, { error: "missing env" });
+    }
+
+    if (error?.errorCode && (error?.status === 400 || error?.status === 403)) {
+      return sendJson(res, error.status, buildSessionErrorBody(error));
     }
 
     if (error?.status === 400 || error?.status === 403) {

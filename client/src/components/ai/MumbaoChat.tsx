@@ -74,6 +74,14 @@ type ChatSession = {
   deleted_at?: string | null;
 };
 
+type ChatMessageResponse = {
+  session?: ChatSession;
+  userMessage?: ApiMessage;
+  aiMessage?: ApiMessage | null;
+  answer?: string;
+  humanTakeover?: boolean;
+};
+
 type SessionRequestIdentity = {
   lineIdentity?: LineIdentity | null;
   anonymousVisitorId?: string;
@@ -93,6 +101,8 @@ const sessionStorageKey = "mumbao-chat-session-id";
 const visitorCookieKey = "mumbao_chat_visitor_id";
 const recentChatStorageKey = "mumbao_chat_recent_messages";
 const chatWindowSizeStorageKey = "mumbao-chat-window-size";
+const chatStorageVersionKey = "mumbao-chat-storage-version";
+const chatStorageVersion = "2";
 const lineLiffSdkUrl = "https://static.line-scdn.net/liff/edge/2/sdk.js";
 const lineLoginRedirectUri = "https://www.mumbao.tw/chat?liff=1";
 const historyPageSize = 7;
@@ -108,6 +118,9 @@ const welcomeMessage =
   "嗨，我是慢寶。你可以問我住宿、包棟、寵物、停車、入住時間，或白雲基地的故事。";
 const errorReply = "慢寶的雲朵訊號暫時不穩，請稍後再試。";
 const chatBuildMarker = "chat-debug-20260716-1";
+const sessionReconnectReply = "對話已重新連線，請再試一次。";
+const rateLimitReply = "慢寶現在收到較多問題，請稍後再問喔。";
+const networkErrorReply = "目前網路連線不穩，請檢查網路後重試。";
 const envChatDebugEnabled =
   String(
     (import.meta.env.NEXT_PUBLIC_CHAT_DEBUG || import.meta.env.VITE_CHAT_DEBUG || "")
@@ -229,6 +242,28 @@ function createLocalId() {
     : `${Date.now()}-${Math.random()}`;
 }
 
+const chatUuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isValidChatUuid(value: string) {
+  return chatUuidPattern.test(String(value || "").trim());
+}
+
+function createVisitorUuid() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  const randomHex = (length: number) =>
+    Array.from({ length }, () => Math.floor(Math.random() * 16).toString(16))
+      .join("");
+  const variant = (8 + Math.floor(Math.random() * 4)).toString(16);
+
+  return `${randomHex(8)}-${randomHex(4)}-4${randomHex(3)}-${variant}${randomHex(
+    3
+  )}-${randomHex(12)}`;
+}
+
 function createMessage(role: ChatRole, message: string): ChatMessage {
   return {
     id: createLocalId(),
@@ -260,26 +295,76 @@ function setCookieValue(name: string, value: string) {
   )}; Max-Age=31536000; Path=/; SameSite=Lax${secure}`;
 }
 
+function clearCookieValue(name: string) {
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax${secure}`;
+}
+
 function persistVisitorId(visitorId: string) {
   localStorage.setItem(visitorStorageKey, visitorId);
   setCookieValue(visitorCookieKey, visitorId);
 }
 
-function getVisitorIdentity() {
-  const existingVisitorId =
-    localStorage.getItem(visitorStorageKey) ||
-    localStorage.getItem(legacyVisitorStorageKey) ||
-    getCookieValue(visitorCookieKey);
+function removeLegacyVisitorId() {
+  localStorage.removeItem(legacyVisitorStorageKey);
+}
 
-  if (existingVisitorId) {
-    persistVisitorId(existingVisitorId);
+function normalizeStoredVisitorId(value: string | null) {
+  const visitorId = String(value || "").trim();
+  return isValidChatUuid(visitorId) ? visitorId : "";
+}
+
+function ensureChatStorageVersion() {
+  if (localStorage.getItem(chatStorageVersionKey) === chatStorageVersion) {
+    return;
+  }
+
+  localStorage.setItem(chatStorageVersionKey, chatStorageVersion);
+}
+
+function getVisitorIdentity() {
+  ensureChatStorageVersion();
+
+  const currentVisitorId = normalizeStoredVisitorId(
+    localStorage.getItem(visitorStorageKey)
+  );
+  if (currentVisitorId) {
+    persistVisitorId(currentVisitorId);
+    removeLegacyVisitorId();
     return {
-      visitorId: existingVisitorId,
+      visitorId: currentVisitorId,
       isExistingVisitor: true,
     };
   }
 
-  const nextVisitorId = createLocalId();
+  localStorage.removeItem(visitorStorageKey);
+
+  const legacyVisitorId = normalizeStoredVisitorId(
+    localStorage.getItem(legacyVisitorStorageKey)
+  );
+  if (legacyVisitorId) {
+    persistVisitorId(legacyVisitorId);
+    removeLegacyVisitorId();
+    return {
+      visitorId: legacyVisitorId,
+      isExistingVisitor: true,
+    };
+  }
+
+  removeLegacyVisitorId();
+
+  const cookieVisitorId = normalizeStoredVisitorId(getCookieValue(visitorCookieKey));
+  if (cookieVisitorId) {
+    persistVisitorId(cookieVisitorId);
+    return {
+      visitorId: cookieVisitorId,
+      isExistingVisitor: true,
+    };
+  }
+
+  clearCookieValue(visitorCookieKey);
+
+  const nextVisitorId = createVisitorUuid();
   persistVisitorId(nextVisitorId);
 
   return {
@@ -292,24 +377,87 @@ function isLineVisitorId(visitorId: string) {
   return visitorId.startsWith("line:");
 }
 
-function getStoredSessionId(visitorId: string) {
-  const rawSession = localStorage.getItem(sessionStorageKey) || "";
-  if (!rawSession) return "";
+export function parseStoredChatSession(rawSession: string, visitorId: string) {
+  const storedValue = String(rawSession || "").trim();
+  const currentVisitorId = String(visitorId || "").trim();
+
+  if (!storedValue || !currentVisitorId) {
+    return {
+      sessionId: "",
+      shouldClear: false,
+      shouldPersist: false,
+    };
+  }
 
   try {
-    const session = JSON.parse(rawSession) as {
+    const session = JSON.parse(storedValue) as {
       visitor_id?: string;
       session_id?: string;
     };
+    const storedVisitorId = String(session?.visitor_id || "").trim();
+    const storedSessionId = String(session?.session_id || "").trim();
 
-    return session.visitor_id === visitorId ? session.session_id || "" : "";
+    if (!storedVisitorId || storedVisitorId !== currentVisitorId) {
+      return {
+        sessionId: "",
+        shouldClear: true,
+        shouldPersist: false,
+      };
+    }
+
+    if (!isValidChatUuid(storedSessionId)) {
+      return {
+        sessionId: "",
+        shouldClear: true,
+        shouldPersist: false,
+      };
+    }
+
+    return {
+      sessionId: storedSessionId,
+      shouldClear: false,
+      shouldPersist: false,
+    };
   } catch {
-    return isLineVisitorId(visitorId) ? "" : rawSession;
+    if (isLineVisitorId(currentVisitorId) || !isValidChatUuid(storedValue)) {
+      return {
+        sessionId: "",
+        shouldClear: true,
+        shouldPersist: false,
+      };
+    }
+
+    return {
+      sessionId: storedValue,
+      shouldClear: false,
+      shouldPersist: true,
+    };
   }
+}
+
+function getStoredSessionId(visitorId: string) {
+  const rawSession = localStorage.getItem(sessionStorageKey) || "";
+  const parsedSession = parseStoredChatSession(rawSession, visitorId);
+
+  if (parsedSession.shouldClear) {
+    clearSessionId();
+    clearCachedMessages("stored session invalid", {
+      visitorId,
+    });
+    return "";
+  }
+
+  if (parsedSession.shouldPersist && parsedSession.sessionId) {
+    saveSessionId(parsedSession.sessionId, visitorId);
+  }
+
+  return parsedSession.sessionId;
 }
 
 function saveSessionId(nextSessionId: string, visitorId: string) {
   if (!nextSessionId || !visitorId) return;
+  if (!isValidChatUuid(nextSessionId)) return;
+
   localStorage.setItem(
     sessionStorageKey,
     JSON.stringify({
@@ -898,18 +1046,108 @@ async function fetchJsonWithTimeout<T>(
       signal: controller.signal,
     });
     onStatus?.(response.status);
-    const data = (await response.json().catch(() => ({}))) as T & {
-      error?: string;
-    };
+    const data = (await response.json().catch(() => ({}))) as T &
+      ChatApiErrorPayload;
 
     if (!response.ok) {
-      throw new Error(data.error || `Request failed: ${response.status}`);
+      throw new ChatApiError(data, response.status, response.headers);
     }
 
     return data;
   } finally {
     window.clearTimeout(timeoutId);
   }
+}
+
+type ChatApiErrorPayload = {
+  error?: string;
+  errorCode?: string;
+  failureStage?: string;
+  reason?: string;
+  retryAfter?: string | number;
+  metadata?: {
+    requestId?: string;
+    failureStage?: string;
+    providerStatus?: number;
+    retryAfter?: string | number;
+  };
+};
+
+class ChatApiError extends Error {
+  httpStatus: number;
+  errorCode: string;
+  failureStage: string;
+  reason: string;
+  requestId: string;
+  retryAfter: string;
+
+  constructor(payload: ChatApiErrorPayload, httpStatus: number, headers: Headers) {
+    super(payload.error || `Request failed: ${httpStatus}`);
+    this.name = "ChatApiError";
+    this.httpStatus = httpStatus;
+    this.errorCode = String(payload.errorCode || "");
+    this.failureStage = String(
+      payload.failureStage || payload.metadata?.failureStage || ""
+    );
+    this.reason = String(payload.reason || "");
+    this.requestId = String(payload.metadata?.requestId || "");
+    this.retryAfter = String(
+      payload.retryAfter ||
+        payload.metadata?.retryAfter ||
+        headers.get("Retry-After") ||
+        ""
+    );
+  }
+}
+
+const recoverableSessionErrorCodes = new Set([
+  "invalid_session_id",
+  "session_ownership_mismatch",
+  "session_not_found",
+  "deleted_session",
+  "closed_session",
+]);
+
+function isRecoverableSessionError(error: unknown) {
+  if (!(error instanceof ChatApiError)) return false;
+
+  return (
+    recoverableSessionErrorCodes.has(error.errorCode) ||
+    error.failureStage === "session_validation" ||
+    error.failureStage === "session_identity" ||
+    error.reason === "session visitor mismatch"
+  );
+}
+
+function getAssistantErrorMessage(error: unknown) {
+  if (isRecoverableSessionError(error)) {
+    return sessionReconnectReply;
+  }
+
+  if (error instanceof ChatApiError) {
+    if (error.httpStatus === 429) {
+      return rateLimitReply;
+    }
+
+    if (
+      error.failureStage.startsWith("provider_") ||
+      error.failureStage === "assistant_insert_failed" ||
+      [500, 502, 503, 504].includes(error.httpStatus)
+    ) {
+      return errorReply;
+    }
+
+    return error.message || errorReply;
+  }
+
+  if (
+    error instanceof Error &&
+    (error.name === "AbortError" || error.name === "TypeError")
+  ) {
+    return networkErrorReply;
+  }
+
+  return errorReply;
 }
 
 type MumbaoChatProps = {
@@ -1473,26 +1711,11 @@ export function MumbaoChat({
     }
     hasInitializedRef.current = true;
 
-    const coldStartCache = readRecentMessagesCache();
-    if (coldStartCache) {
-      messagesCacheRef.current.set(coldStartCache.sessionId, coldStartCache.messages);
-      mergeIncomingMessages("cold cache immediate render", coldStartCache.messages, {
-        cacheSessionId: maskDebugId(coldStartCache.sessionId),
-      });
-      logChatDebug("cold cache immediate render", {
-        visitorId: maskDebugId(coldStartCache.visitorId),
-        sessionId: maskDebugId(coldStartCache.sessionId),
-        source: coldStartCache.source,
-        messageCount: coldStartCache.messages.length,
-      });
-    } else {
-      setIsInitialHistoryLoading(true);
-    }
-
     const { visitorId: nextVisitorId, isExistingVisitor } = getVisitorIdentity();
     const existingSessionId = isExistingVisitor
       ? getStoredSessionId(nextVisitorId)
       : "";
+    const coldStartCache = existingSessionId ? readRecentMessagesCache() : null;
     let isMounted = true;
 
     logChatDebug("initialization start", {
@@ -1503,6 +1726,11 @@ export function MumbaoChat({
 
     if (!isExistingVisitor) {
       clearSessionId();
+    }
+    if (!existingSessionId) {
+      clearCachedMessages("initialization without active session", {
+        visitorId: nextVisitorId,
+      });
     }
 
     setAnonymousVisitorId(nextVisitorId);
@@ -1515,7 +1743,7 @@ export function MumbaoChat({
     const immediateMessages =
       initialCachedMessages.length > 0
         ? initialCachedMessages
-        : coldStartCache?.messages || [];
+        : [];
     mergeIncomingMessages("initialization cache applied", immediateMessages, {
       visitorId: maskDebugId(nextVisitorId),
       sessionId: maskDebugId(existingSessionId),
@@ -1857,6 +2085,50 @@ export function MumbaoChat({
         setHasMoreHistory(Boolean(data.has_more));
       } catch (error) {
         completeHistoryRequest("history-refresh", refreshHistorySequence, 0);
+        if (isRecoverableSessionError(error)) {
+          console.warn("Mumbao chat session expired during history refresh:", error);
+          messagesCacheRef.current.delete(targetSessionId);
+          clearSessionId();
+          clearCachedMessages("history session invalid", {
+            sessionId: targetSessionId,
+          });
+          updateMessages("history-session-reset", [createWelcomeMessage()]);
+          setHasMoreHistory(false);
+
+          if (targetSessionId === latestSessionIdRef.current) {
+            updateSessionId("history-session-reset", "");
+          }
+
+          try {
+            const data = await fetchSessionOnly(
+              targetVisitorId,
+              false,
+              {
+                lineIdentity: targetLineIdentity,
+                anonymousVisitorId: targetAnonymousVisitorId,
+              },
+              targetAccessToken
+            );
+            const nextSessionId = data.session?.id
+              ? String(data.session.id)
+              : "";
+            const nextVisitorId = data.session?.visitor_id
+              ? String(data.session.visitor_id)
+              : targetVisitorId;
+
+            if (nextSessionId) {
+              if (nextVisitorId !== visitorId) {
+                setVisitorId(nextVisitorId);
+              }
+              updateSessionId("history-session-recovered", nextSessionId);
+              saveSessionId(nextSessionId, nextVisitorId);
+            }
+          } catch (sessionError) {
+            console.warn("Mumbao chat session recovery unavailable:", sessionError);
+          }
+          return;
+        }
+
         console.warn("Mumbao chat history refresh unavailable:", error);
       } finally {
         if (historyFetchIdRef.current === fetchId) {
@@ -2084,6 +2356,16 @@ export function MumbaoChat({
         });
       } catch (error) {
         completeHistoryRequest("polling", pollingHistorySequence, 0);
+        if (isRecoverableSessionError(error)) {
+          console.warn("Mumbao chat polling session expired:", error);
+          messagesCacheRef.current.delete(sessionId);
+          clearSessionId();
+          clearCachedMessages("polling session invalid", { sessionId });
+          updateSessionId("polling-session-reset", "");
+          setHasMoreHistory(false);
+          return;
+        }
+
         console.warn("Mumbao chat live messages unavailable:", error);
       }
     };
@@ -2327,6 +2609,19 @@ export function MumbaoChat({
     } catch (error) {
       completeHistoryRequest("load-history", loadHistorySequence, 0);
       pendingScrollRestoreRef.current = null;
+      if (isRecoverableSessionError(error)) {
+        console.warn("Mumbao chat session expired during history load:", error);
+        if (sessionId) {
+          messagesCacheRef.current.delete(sessionId);
+        }
+        clearSessionId();
+        clearCachedMessages("load history session invalid", { sessionId });
+        updateSessionId("load-history-session-reset", "");
+        updateMessages("load-history-session-reset", [createWelcomeMessage()]);
+        setHasMoreHistory(false);
+        return;
+      }
+
       console.warn("Mumbao chat history unavailable:", error);
     } finally {
       setIsHistoryLoading(false);
@@ -2471,21 +2766,15 @@ export function MumbaoChat({
     setIsLoading(true);
     isSendingRef.current = true;
 
-    try {
-      const data = await fetchJsonWithTimeout<{
-        session?: ChatSession;
-        userMessage?: ApiMessage;
-        aiMessage?: ApiMessage | null;
-        answer?: string;
-        humanTakeover?: boolean;
-      }>(
+    const sendMessageRequest = (targetSessionId: string) =>
+      fetchJsonWithTimeout<ChatMessageResponse>(
         "/api/ai-chat?action=message",
         {
           method: "POST",
           headers: buildJsonHeaders(customerAccessToken),
           body: JSON.stringify({
             visitor_id: visitorId,
-            session_id: sessionId || undefined,
+            session_id: targetSessionId || undefined,
             message: question,
             recentMessages: getRecentMessagesForApi(messages),
             ...buildLineRequestPayload({
@@ -2497,6 +2786,28 @@ export function MumbaoChat({
         30000,
         (status) => recordDebug({ apiHttpStatus: status })
       );
+
+    try {
+      let data: ChatMessageResponse;
+
+      try {
+        data = await sendMessageRequest(sessionId);
+      } catch (error) {
+        if (!isRecoverableSessionError(error)) {
+          throw error;
+        }
+
+        console.warn("Mumbao chat session expired during send:", error);
+        if (sessionId) {
+          messagesCacheRef.current.delete(sessionId);
+        }
+        clearSessionId();
+        clearCachedMessages("message session invalid", { sessionId });
+        updateSessionId("message-session-reset", "");
+
+        data = await sendMessageRequest("");
+      }
+
       recordDebug({ sendStatus: "success" });
 
       const savedUserMessage = data.userMessage
@@ -2546,10 +2857,7 @@ export function MumbaoChat({
     } catch (error) {
       recordDebug({ sendStatus: "error" });
       console.warn("Mumbao chat message unavailable:", error);
-      const assistantErrorMessage =
-        error instanceof Error && error.message.includes("慢寶")
-          ? error.message
-          : errorReply;
+      const assistantErrorMessage = getAssistantErrorMessage(error);
 
       updateMessages("send-error", (current) => {
         const nextMessages = mergeMessages(current, [

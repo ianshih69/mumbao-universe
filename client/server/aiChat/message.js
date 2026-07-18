@@ -17,6 +17,12 @@ import {
   runWithFailureStage,
 } from "./deepSeek.js";
 import { loadGuesthouseKnowledge } from "./guesthouseKnowledge.js";
+import {
+  buildSessionErrorBody,
+  createInvalidSessionIdError,
+  createSessionOwnershipMismatchError,
+  isValidSessionUuid,
+} from "./sessionValidation.js";
 
 const systemPrompt = `你是「慢慢蒔光｜白雲基地」的 AI 客服小幫手。
 回答要溫柔、清楚、簡短，使用繁體中文。
@@ -1025,6 +1031,10 @@ async function getSessionForMessage(
   }
 
   if (normalizedSessionId) {
+    if (!isValidSessionUuid(normalizedSessionId)) {
+      throw createInvalidSessionIdError();
+    }
+
     const sessionQuery = customerIdentity?.authUserId
       ? `/chat_sessions?id=eq.${encodeURIComponent(
           normalizedSessionId
@@ -1057,11 +1067,7 @@ async function getSessionForMessage(
       }
     }
 
-    throw createHttpError(
-      "session_id does not belong to visitor_id.",
-      403,
-      "session visitor mismatch"
-    );
+    throw createSessionOwnershipMismatchError();
   }
 
   return getOrCreateSession(visitorId, customerIdentity, entrySource);
@@ -1371,11 +1377,12 @@ export default async function handler(req, res) {
 
     console.error("[ai-chat] message failed", failureMetadata);
 
-    if (error?.status === 403) {
-      return sendJson(res, 403, {
-        error: "session_id does not belong to visitor_id.",
-        metadata: { requestId },
-      });
+    if (error?.errorCode && (error?.status === 400 || error?.status === 403)) {
+      return sendJson(
+        res,
+        error.status,
+        buildSessionErrorBody(error, requestId)
+      );
     }
 
     return sendJson(res, 500, {

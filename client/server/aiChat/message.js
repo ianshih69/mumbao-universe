@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { enforceAiChatRateLimit } from "./rateLimit.js";
 import {
   buildFaqPromptSection,
@@ -9,6 +10,13 @@ import {
   isSessionOwnedByCustomer,
   resolveCustomerIdentity,
 } from "./customerIdentity.js";
+import {
+  buildDeepSeekRequestPayload,
+  createAiChatFailure,
+  parseDeepSeekResponseBody,
+  runWithFailureStage,
+} from "./deepSeek.js";
+import { loadGuesthouseKnowledge } from "./guesthouseKnowledge.js";
 
 const systemPrompt = `你是「慢慢蒔光｜白雲基地」的 AI 客服小幫手。
 回答要溫柔、清楚、簡短，使用繁體中文。
@@ -28,8 +36,6 @@ const recentMessagesLimit = 12;
 const recentContextMaxChars = 4000;
 const chatDebugEnabled =
   String(process.env.NEXT_PUBLIC_CHAT_DEBUG || "").toLowerCase() === "true";
-let hasGuesthouseKnowledgeCache = false;
-let guesthouseKnowledgeCache = "";
 
 function logChatDebug(event, details = {}) {
   if (!chatDebugEnabled) return;
@@ -335,7 +341,6 @@ function getDeepSeekConfig() {
   }
 
   if (!apiKey) {
-    console.error("DEEPSEEK_API_KEY is missing");
     const error = new Error("DEEPSEEK_API_KEY is missing");
     error.reason = "missing deepseek api key";
     throw error;
@@ -373,40 +378,6 @@ function getTaipeiDateInfo() {
     nextYear: currentYear + 1,
     timeZone: "Asia/Taipei",
   };
-}
-
-async function loadGuesthouseKnowledge() {
-  if (hasGuesthouseKnowledgeCache) {
-    return guesthouseKnowledgeCache;
-  }
-
-  const fs = await import("node:fs/promises");
-  const path = await import("node:path");
-  const cwd = process.cwd();
-  const candidatePaths = [
-    path.join(cwd, "api", "knowledge", "guesthouse-rules.md"),
-    path.join(cwd, "client", "api", "knowledge", "guesthouse-rules.md"),
-  ];
-
-  for (const knowledgePath of candidatePaths) {
-    try {
-      guesthouseKnowledgeCache = await fs.readFile(knowledgePath, "utf8");
-      hasGuesthouseKnowledgeCache = true;
-      return guesthouseKnowledgeCache;
-    } catch (error) {
-      if (error?.code !== "ENOENT") {
-        console.error("[ai-chat] failed to load guesthouse knowledge:", {
-          path: knowledgePath,
-          message: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-  }
-
-  console.error("[ai-chat] guesthouse knowledge file not found");
-  hasGuesthouseKnowledgeCache = true;
-  guesthouseKnowledgeCache = "";
-  return guesthouseKnowledgeCache;
 }
 
 async function buildSystemPrompt(dateInfo, retrievedFaqItems = []) {
@@ -836,73 +807,87 @@ async function callDeepSeek(
   userMessage,
   recentMessages,
   dateInfo,
-  retrievedFaqItems = []
+  retrievedFaqItems = [],
+  requestId
 ) {
-  const { apiKey, baseUrl, model } = getDeepSeekConfig();
-  const prompt = await buildSystemPrompt(dateInfo, retrievedFaqItems);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), deepSeekTimeoutMs);
 
   try {
-    logChatDebug("provider=deepseek", { model });
+    const { apiKey, baseUrl, model } = getDeepSeekConfig();
+    const prompt = await buildSystemPrompt(dateInfo, retrievedFaqItems);
+    const messages = buildDeepSeekMessages(
+      prompt,
+      recentMessages,
+      userMessage
+    );
+    const payload = buildDeepSeekRequestPayload({ model, messages });
 
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        messages: buildDeepSeekMessages(prompt, recentMessages, userMessage),
-        temperature: 0.7,
-        max_tokens: 500,
-      }),
+    logChatDebug("provider=deepseek", {
+      requestId,
+      model,
+      messagesCount: messages.length,
+      promptChars: prompt.length,
+      stream: payload.stream,
+      temperature: payload.temperature,
+      maxTokens: payload.max_tokens,
+      thinking: payload.thinking.type,
     });
 
-    logChatDebug("deepseek status", { status: response.status });
+    const response = await fetch(
+      `${baseUrl.replace(/\/$/, "")}/chat/completions`,
+      {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      }
+    );
 
-    const text = await response.text();
-    let data = null;
+    logChatDebug("deepseek status", {
+      requestId,
+      status: response.status,
+    });
 
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = { raw: text };
-    }
+    const body = await response.text();
+    const result = parseDeepSeekResponseBody({
+      ok: response.ok,
+      status: response.status,
+      body,
+    });
 
-    if (!response.ok) {
-      console.error("DeepSeek API error:", {
-        status: response.status,
-        statusText: response.statusText,
-        data,
-      });
-      throw new Error(`DeepSeek request failed: ${response.status}`);
-    }
-
-    const answer = data?.choices?.[0]?.message?.content?.trim();
-
-    if (!answer) {
-      console.error("DeepSeek API error:", {
-        message: "Missing assistant answer",
-        data,
-      });
-      throw new Error("DeepSeek response did not include an answer.");
-    }
-
-    return answer;
+    return result;
   } catch (error) {
-    if (error?.name === "AbortError") {
-      console.error("DeepSeek API error:", {
-        message: "DeepSeek request timed out",
-        timeoutMs: deepSeekTimeoutMs,
-      });
-    } else if (error?.reason !== "missing deepseek api key") {
-      console.error("DeepSeek API error:", error);
-    }
+    const normalizedError = error?.failureStage
+      ? error
+      : createAiChatFailure(
+          "provider_request_failed",
+          error?.name === "AbortError"
+            ? "DeepSeek request timed out."
+            : "DeepSeek request failed.",
+          {
+            providerErrorCode:
+              error?.name === "AbortError"
+                ? "timeout"
+                : error?.reason === "missing deepseek api key"
+                  ? "provider_not_configured"
+                  : "request_error",
+          },
+          error
+        );
 
-    throw error;
+    console.error("[ai-chat] DeepSeek request failed", {
+      requestId,
+      failureStage: normalizedError.failureStage,
+      providerStatus: normalizedError.providerStatus,
+      providerErrorCode: normalizedError.providerErrorCode,
+      finishReason: normalizedError.finishReason,
+    });
+
+    throw normalizedError;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -1096,6 +1081,39 @@ async function insertMessage(sessionId, sender, message, providerUsed) {
   return inserted[0];
 }
 
+async function insertUserMessage(sessionId, message) {
+  return runWithFailureStage("user_insert_failed", () =>
+    insertMessage(sessionId, "user", message, null)
+  );
+}
+
+async function insertAssistantMessage(
+  sessionId,
+  message,
+  providerUsed,
+  details = {}
+) {
+  return runWithFailureStage(
+    "assistant_insert_failed",
+    () => insertMessage(sessionId, "ai", message, providerUsed),
+    details
+  );
+}
+
+function buildFailureMetadata(requestId, error) {
+  return {
+    requestId,
+    failureStage: error?.failureStage || "request_failed",
+    ...(Number.isInteger(error?.providerStatus)
+      ? { providerStatus: error.providerStatus }
+      : {}),
+    ...(error?.providerErrorCode
+      ? { providerErrorCode: error.providerErrorCode }
+      : {}),
+    ...(error?.finishReason ? { finishReason: error.finishReason } : {}),
+  };
+}
+
 async function updateSessionAfterMessage(session, message, options = {}) {
   if (!session?.id || !message) {
     return session;
@@ -1157,6 +1175,8 @@ export default async function handler(req, res) {
     res.setHeader("Allow", "POST");
     return sendJson(res, 405, { error: "Method not allowed." });
   }
+
+  const requestId = randomUUID();
 
   try {
     const body = await readBody(req);
@@ -1233,7 +1253,7 @@ export default async function handler(req, res) {
     });
 
     if (shouldSkipAiReply(session)) {
-      const userMessage = await insertMessage(session.id, "user", message, null);
+      const userMessage = await insertUserMessage(session.id, message);
       session = await updateSessionAfterMessage(session, userMessage, {
         incrementUnread: true,
         supportStatus: "needs_human",
@@ -1250,16 +1270,15 @@ export default async function handler(req, res) {
     }
 
     if (!isContextScopeAllowed) {
-      const userMessage = await insertMessage(session.id, "user", message, null);
+      const userMessage = await insertUserMessage(session.id, message);
       session = await updateSessionAfterMessage(session, userMessage, {
         incrementUnread: true,
         supportStatus: "needs_human",
       });
 
       logChatDebug("scope=blocked");
-      const aiMessage = await insertMessage(
+      const aiMessage = await insertAssistantMessage(
         session.id,
-        "ai",
         scopeGuardReply,
         "scope_guard"
       );
@@ -1270,6 +1289,12 @@ export default async function handler(req, res) {
         userMessage,
         aiMessage,
         answer: scopeGuardReply,
+        metadata: {
+          requestId,
+          provider_used: "scope_guard",
+          matchedFaqCount: retrievedFaqItems.length,
+          matchedFaqIds: retrievedFaqItems.map((item) => item.id),
+        },
       });
     }
 
@@ -1285,29 +1310,43 @@ export default async function handler(req, res) {
     });
 
     if (!rateLimit.allowed) {
+      const usageFailure =
+        rateLimit.status === 503 && rateLimit.reason === "rate_limit_unavailable";
+
       return sendJson(res, rateLimit.status || 429, {
         error: rateLimit.message,
         reason: rateLimit.reason,
         metadata: {
+          requestId,
+          ...(usageFailure ? { failureStage: "usage_event_failed" } : {}),
           matchedFaqCount: retrievedFaqItems.length,
           matchedFaqIds: retrievedFaqItems.map((item) => item.id),
         },
       });
     }
 
-    const userMessage = await insertMessage(session.id, "user", message, null);
+    const userMessage = await insertUserMessage(session.id, message);
     session = await updateSessionAfterMessage(session, userMessage, {
       incrementUnread: true,
       supportStatus: "ai_replying",
     });
 
-    const aiAnswer = await callDeepSeek(
+    const providerResult = await callDeepSeek(
       message,
       recentMessages,
       dateInfo,
-      retrievedFaqItems
+      retrievedFaqItems,
+      requestId
     );
-    const aiMessage = await insertMessage(session.id, "ai", aiAnswer, "deepseek");
+    const aiMessage = await insertAssistantMessage(
+      session.id,
+      providerResult.answer,
+      "deepseek",
+      {
+        providerStatus: providerResult.providerStatus,
+        finishReason: providerResult.finishReason,
+      }
+    );
     session = await updateSessionAfterMessage(session, aiMessage, {
       supportStatus: "ai_replying",
     });
@@ -1317,26 +1356,31 @@ export default async function handler(req, res) {
       session,
       userMessage,
       aiMessage,
-      answer: aiAnswer,
+      answer: providerResult.answer,
       metadata: {
+        requestId,
         provider_used: "deepseek",
+        providerStatus: providerResult.providerStatus,
+        finishReason: providerResult.finishReason,
         matchedFaqCount: retrievedFaqItems.length,
         matchedFaqIds: retrievedFaqItems.map((item) => item.id),
       },
     });
   } catch (error) {
-    console.error("ai-chat-message error:", error);
+    const failureMetadata = buildFailureMetadata(requestId, error);
 
-    if (error?.reason === "missing deepseek api key") {
-      return sendJson(res, 500, { error: "DEEPSEEK_API_KEY is missing" });
-    }
+    console.error("[ai-chat] message failed", failureMetadata);
 
     if (error?.status === 403) {
       return sendJson(res, 403, {
         error: "session_id does not belong to visitor_id.",
+        metadata: { requestId },
       });
     }
 
-    return sendJson(res, 500, { error: aiErrorReply });
+    return sendJson(res, 500, {
+      error: aiErrorReply,
+      metadata: failureMetadata,
+    });
   }
 }

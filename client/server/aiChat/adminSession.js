@@ -89,8 +89,11 @@ function getAction(req) {
   return String(firstQueryValue(req.query?.action) || "").trim();
 }
 
-function getSupportStatusFromAction(action) {
+export function getSupportStatusFromAction(action) {
   switch (action) {
+    case "mark-needs-human":
+    case "update-session-status":
+      return "needs_human";
     case "human-takeover":
       return "human_takeover";
     case "restore-ai":
@@ -105,16 +108,13 @@ function getSupportStatusFromAction(action) {
   }
 }
 
-function getCoreStatusForSupportStatus(supportStatus) {
-  if (supportStatus === "closed") return "closed";
-  if (
-    supportStatus === "needs_human" ||
-    supportStatus === "human_takeover" ||
-    supportStatus === "replied"
-  ) {
-    return "human_takeover";
-  }
+export function getCoreStatusForSupportStatus(supportStatus) {
+  if (supportStatus === "human_takeover") return "human_takeover";
   return "ai_active";
+}
+
+export function shouldAiReplyForStatus(status) {
+  return status !== "human_takeover";
 }
 
 function buildAdminSnapshot(admin) {
@@ -124,6 +124,73 @@ function buildAdminSnapshot(admin) {
     handled_by_email: admin.email || "",
     handled_by_role: admin.roleCode || "",
   };
+}
+
+export function buildSessionStatusPatch({
+  requestedSupportStatus = "",
+  requestedStatus = "",
+  admin = {},
+  now = new Date().toISOString(),
+} = {}) {
+  const status = requestedSupportStatus
+    ? getCoreStatusForSupportStatus(requestedSupportStatus)
+    : requestedStatus;
+  const patch = {
+    status,
+    support_status:
+      requestedSupportStatus ||
+      (status === "closed"
+        ? "closed"
+        : status === "human_takeover"
+          ? "human_takeover"
+          : "ai_replying"),
+    should_ai_reply: shouldAiReplyForStatus(status),
+    support_status_updated_at: now,
+    updated_at: now,
+  };
+
+  if (patch.support_status === "needs_human") {
+    patch.status = "ai_active";
+    patch.should_ai_reply = true;
+  }
+
+  if (patch.support_status === "human_takeover") {
+    patch.status = "human_takeover";
+    patch.should_ai_reply = false;
+    Object.assign(patch, buildAdminSnapshot(admin));
+  }
+
+  if (patch.support_status === "replied") {
+    patch.status = "ai_active";
+    patch.should_ai_reply = true;
+    Object.assign(patch, buildAdminSnapshot(admin));
+    patch.handled_at = now;
+    patch.unread_count = 0;
+  }
+
+  if (patch.support_status === "closed") {
+    patch.status = "ai_active";
+    patch.should_ai_reply = true;
+    patch.closed_at = now;
+    patch.closed_by_admin_id = admin.adminProfileId || null;
+    patch.closed_by_name = admin.displayName || "";
+    patch.closed_by_email = admin.email || "";
+    patch.closed_by_role = admin.roleCode || "";
+    if (!patch.handled_at) patch.handled_at = now;
+    Object.assign(patch, buildAdminSnapshot(admin));
+  }
+
+  if (patch.support_status === "ai_replying") {
+    patch.status = "ai_active";
+    patch.should_ai_reply = true;
+    patch.closed_at = null;
+    patch.closed_by_admin_id = null;
+    patch.closed_by_name = null;
+    patch.closed_by_email = null;
+    patch.closed_by_role = null;
+  }
+
+  return patch;
 }
 
 export default async function handler(req, res) {
@@ -156,55 +223,11 @@ export default async function handler(req, res) {
     if (!allowedStatuses.has(status)) {
       return sendJson(res, 400, { error: "invalid status." });
     }
-    const now = new Date().toISOString();
-    const patch = {
-      status,
-      support_status:
-        requestedSupportStatus ||
-        (status === "closed"
-          ? "closed"
-          : status === "human_takeover"
-            ? "human_takeover"
-            : "ai_replying"),
-      should_ai_reply: status === "ai_active",
-      support_status_updated_at: now,
-      updated_at: now,
-    };
-
-    if (patch.support_status === "needs_human") {
-      patch.should_ai_reply = false;
-    }
-
-    if (
-      patch.support_status === "human_takeover" ||
-      patch.support_status === "replied"
-    ) {
-      patch.should_ai_reply = false;
-      Object.assign(patch, buildAdminSnapshot(admin));
-      if (patch.support_status === "replied") {
-        patch.handled_at = now;
-        patch.unread_count = 0;
-      }
-    }
-
-    if (patch.support_status === "closed") {
-      patch.should_ai_reply = false;
-      patch.closed_at = now;
-      patch.closed_by_admin_id = admin.adminProfileId || null;
-      patch.closed_by_name = admin.displayName || "";
-      patch.closed_by_email = admin.email || "";
-      patch.closed_by_role = admin.roleCode || "";
-      if (!patch.handled_at) patch.handled_at = now;
-      Object.assign(patch, buildAdminSnapshot(admin));
-    }
-
-    if (patch.support_status === "ai_replying") {
-      patch.closed_at = null;
-      patch.closed_by_admin_id = null;
-      patch.closed_by_name = null;
-      patch.closed_by_email = null;
-      patch.closed_by_role = null;
-    }
+    const patch = buildSessionStatusPatch({
+      requestedSupportStatus,
+      requestedStatus,
+      admin,
+    });
 
     const updatedSessions = await supabaseRequest(
       `/chat_sessions?id=eq.${encodeURIComponent(sessionId)}`,

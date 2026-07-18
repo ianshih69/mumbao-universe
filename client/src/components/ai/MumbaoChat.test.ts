@@ -1,10 +1,36 @@
 import { describe, expect, it } from "vitest";
 import {
+  createHumanTakeoverNoticeMessage,
+  getHumanUnreadState,
+  getLatestHumanMessage,
+  hasUnreadHumanMessage,
+  humanSeenStorageKey,
+  humanUnreadPollingIntervalMs,
+  isHumanMessage,
+  isRealChatMessage,
   isValidChatUuid,
+  markHumanMessageSeen,
   mergeMessages,
   parseStoredChatSession,
+  readHumanSeenMap,
   type ChatMessage,
 } from "./MumbaoChat";
+
+class MemoryStorage {
+  private values = new Map<string, string>();
+
+  getItem(key: string) {
+    return this.values.get(key) ?? null;
+  }
+
+  setItem(key: string, value: string) {
+    this.values.set(key, value);
+  }
+
+  removeItem(key: string) {
+    this.values.delete(key);
+  }
+}
 
 function message(
   id: string,
@@ -85,6 +111,128 @@ describe("mergeMessages", () => {
     );
 
     expect(mergeMessages([visible], [deleted])).toEqual([visible]);
+  });
+
+  it("keeps human takeover system notices out of real chat merges", () => {
+    const userMessage = message(
+      "user-1",
+      "user",
+      "可以帶狗嗎？",
+      "2026-07-18T10:00:00.000Z"
+    );
+    const notice = createHumanTakeoverNoticeMessage();
+
+    expect(isRealChatMessage(notice)).toBe(false);
+    expect(mergeMessages([userMessage], [notice])).toEqual([userMessage]);
+  });
+
+  it("merges human messages without duplicating them", () => {
+    const humanReply = message(
+      "human-1",
+      "human",
+      "管家回覆測試",
+      "2026-07-18T10:00:00.000Z",
+      { provider_used: "admin" }
+    );
+
+    expect(mergeMessages([humanReply], [humanReply])).toEqual([humanReply]);
+    expect(getLatestHumanMessage([humanReply])).toEqual(humanReply);
+  });
+});
+
+describe("human support unread helpers", () => {
+  it("recognizes current and production-compatible human message shapes", () => {
+    expect(isHumanMessage({ role: "human" })).toBe(true);
+    expect(isHumanMessage({ sender: "human" })).toBe(true);
+    expect(isHumanMessage({ sender_type: "human" })).toBe(true);
+    expect(isHumanMessage({ provider_used: "admin" })).toBe(true);
+    expect(isHumanMessage({ role: "assistant", provider_used: "deepseek" })).toBe(
+      false
+    );
+    expect(isHumanMessage({ role: "user", provider_used: "admin" })).toBe(false);
+  });
+
+  it("does not treat AI messages as human unread replies", () => {
+    const seenMap = {};
+    const aiMessage = message(
+      "ai-1",
+      "assistant",
+      "可以帶狗入住。",
+      "2026-07-18T10:00:00.000Z",
+      { provider_used: "deepseek" }
+    );
+
+    expect(getLatestHumanMessage([aiMessage])).toBeNull();
+    expect(
+      getHumanUnreadState(
+        [{ sessionId: "session-a", message: getLatestHumanMessage([aiMessage]) }],
+        seenMap
+      )
+    ).toMatchObject({ hasUnread: false, sessionId: "" });
+  });
+
+  it("tracks seen human replies per session", () => {
+    const seenMap = {
+      "session-a": {
+        message_id: "human-a",
+        created_at: "2026-07-18T10:00:00.000Z",
+      },
+    };
+    const latestA = message(
+      "human-a",
+      "human",
+      "A 已看過",
+      "2026-07-18T10:00:00.000Z"
+    );
+    const latestB = message(
+      "human-b",
+      "human",
+      "B 未讀",
+      "2026-07-18T10:01:00.000Z"
+    );
+
+    expect(hasUnreadHumanMessage("session-a", latestA, seenMap)).toBe(false);
+    expect(hasUnreadHumanMessage("session-b", latestB, seenMap)).toBe(true);
+  });
+
+  it("rebuilds a damaged seen map without crashing", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(humanSeenStorageKey, "{not-json");
+
+    expect(readHumanSeenMap(storage)).toEqual({});
+    expect(storage.getItem(humanSeenStorageKey)).toBe("{}");
+  });
+
+  it("marks human replies seen without touching unrelated storage", () => {
+    const storage = new MemoryStorage();
+    storage.setItem("mumbao_customer_auth", "KEEP_AUTH");
+    storage.setItem("mumbao-shop-cart", "KEEP_CART");
+    storage.setItem("adminShopToken", "KEEP_ADMIN");
+
+    markHumanMessageSeen(
+      "session-a",
+      message(
+        "human-a",
+        "human",
+        "管家回覆",
+        "2026-07-18T10:00:00.000Z"
+      ),
+      storage
+    );
+
+    expect(readHumanSeenMap(storage)).toEqual({
+      "session-a": {
+        message_id: "human-a",
+        created_at: "2026-07-18T10:00:00.000Z",
+      },
+    });
+    expect(storage.getItem("mumbao_customer_auth")).toBe("KEEP_AUTH");
+    expect(storage.getItem("mumbao-shop-cart")).toBe("KEEP_CART");
+    expect(storage.getItem("adminShopToken")).toBe("KEEP_ADMIN");
+  });
+
+  it("uses the first-version low-frequency polling interval", () => {
+    expect(humanUnreadPollingIntervalMs).toBe(25_000);
   });
 });
 

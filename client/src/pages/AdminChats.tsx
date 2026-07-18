@@ -82,7 +82,7 @@ const chatSupportRoles = new Set(["super_admin", "admin", "manager"]);
 
 const supportStatusLabels: Record<ChatSupportStatus, string> = {
   ai_replying: "AI 回覆中",
-  needs_human: "待人工處理",
+  needs_human: "人工待辦",
   human_takeover: "人工接手中",
   replied: "已回覆",
   closed: "已關閉",
@@ -98,7 +98,7 @@ const supportStatusStyles: Record<ChatSupportStatus, string> = {
 
 const sessionFilters: Array<{ value: ChatSessionFilter; label: string }> = [
   { value: "all", label: "全部" },
-  { value: "needs_human", label: "待處理" },
+  { value: "needs_human", label: "人工待辦" },
   { value: "human_takeover", label: "人工接手" },
   { value: "replied", label: "已回覆" },
   { value: "closed", label: "已關閉" },
@@ -341,6 +341,7 @@ export default function AdminChats() {
   const [hasMoreSessions, setHasMoreSessions] = useState(true);
   const [sessionPage, setSessionPage] = useState(0);
   const [error, setError] = useState("");
+  const [statusNotice, setStatusNotice] = useState("");
   const [failedAvatarIds, setFailedAvatarIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -568,6 +569,15 @@ export default function AdminChats() {
   const updateSupportStatus = async (supportStatus: ChatSupportStatus) => {
     if (!selectedSessionId || !token || !canAccessChatSupport) return;
 
+    if (
+      supportStatus === "human_takeover" &&
+      !window.confirm(
+        "將只暫停目前這段對話的慢寶自動回答，其他客人不受影響。確定接手嗎？"
+      )
+    ) {
+      return;
+    }
+
     const actionByStatus: Record<ChatSupportStatus, string> = {
       ai_replying:
         selectedSession?.status === "closed" ? "reopen-session" : "restore-ai",
@@ -578,6 +588,8 @@ export default function AdminChats() {
     };
 
     try {
+      setError("");
+      setStatusNotice("");
       await fetchAdminJson(
         `/api/admin-chat?action=${actionByStatus[supportStatus]}&sessionId=${encodeURIComponent(selectedSessionId)}`,
         token,
@@ -587,10 +599,16 @@ export default function AdminChats() {
         }
       );
       await loadSessions({ page: 0, silent: true });
+      if (supportStatus === "ai_replying") {
+        setStatusNotice(
+          "已恢復目前這段對話的慢寶自動回答，其他客人不受影響。"
+        );
+      }
     } catch (statusError) {
       if (isAdminAuthError(statusError)) {
         handleAuthFailure();
       }
+      setStatusNotice("");
       setError(
         statusError instanceof Error ? statusError.message : "更新狀態失敗"
       );
@@ -917,7 +935,7 @@ export default function AdminChats() {
                       onClick={() => updateSupportStatus("needs_human")}
                       className="flex-none whitespace-nowrap"
                     >
-                      標記待處理
+                      加入人工待辦
                     </Button>
                     {selectedSupportStatus === "human_takeover" ||
                     selectedSupportStatus === "needs_human" ||
@@ -936,7 +954,7 @@ export default function AdminChats() {
                         onClick={() => updateSupportStatus("human_takeover")}
                         className="flex-none whitespace-nowrap"
                       >
-                        人工接手
+                        人工接手並暫停 AI
                       </Button>
                     )}
                     <Button
@@ -979,14 +997,17 @@ export default function AdminChats() {
                   </span>
                 )}
               </div>
+              <p className="mt-1 font-medium text-[#5f4937]">
+                此操作只影響目前選中的對話，其他客人不受影響。
+              </p>
               {selectedSupportStatus === "human_takeover" && (
                 <p className="mt-1">
-                  已切換人工接手。慢寶將暫停自動回答，此對話仍只在網站問慢寶中進行。
+                  已切換人工接手。慢寶會暫停自動回答，使用者的新訊息會送達這個客服視窗。
                 </p>
               )}
               {selectedSupportStatus === "needs_human" && (
                 <p className="mt-1">
-                  此對話已標記為待人工處理，請確認客人問題後回覆或恢復 AI。
+                  此對話已加入人工待辦。慢寶仍會繼續自動回答，客服可視需要回覆或改為人工接手。
                 </p>
               )}
               {selectedSupportStatus === "closed" && selectedSession.closed_at && (
@@ -1005,6 +1026,11 @@ export default function AdminChats() {
             {error && (
               <div className="border-b border-red-100 bg-red-50 px-5 py-2 text-sm text-red-600">
                 {error}
+              </div>
+            )}
+            {statusNotice && (
+              <div className="border-b border-emerald-100 bg-emerald-50 px-5 py-2 text-sm text-emerald-700">
+                {statusNotice}
               </div>
             )}
 

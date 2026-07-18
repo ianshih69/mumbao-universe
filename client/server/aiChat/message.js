@@ -32,6 +32,8 @@ const systemPrompt = `你是「慢慢蒔光｜白雲基地」的 AI 客服小幫
 const aiErrorReply = "慢寶的雲朵訊號暫時不穩，請稍後再試。";
 const scopeGuardReply =
   "慢寶目前主要協助回答慢慢蒔光｜白雲基地的訂房、入住、設施、寵物與生活公約問題喔。若有其他問題，歡迎私訊官方 LINE，會有專人協助你。";
+const humanTakeoverNotice =
+  "這段對話目前由管家接手，慢寶已暫停自動回答。你的訊息已送達，管家會在這個聊天視窗回覆你。";
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
@@ -1142,13 +1144,18 @@ async function updateSessionAfterMessage(session, message, options = {}) {
     patch.support_status_updated_at = now;
 
     if (options.supportStatus === "needs_human") {
-      patch.status = "human_takeover";
-      patch.should_ai_reply = false;
+      patch.status = "ai_active";
+      patch.should_ai_reply = true;
     }
 
     if (options.supportStatus === "ai_replying") {
       patch.status = "ai_active";
       patch.should_ai_reply = true;
+    }
+
+    if (options.supportStatus === "human_takeover") {
+      patch.status = "human_takeover";
+      patch.should_ai_reply = false;
     }
   }
 
@@ -1168,12 +1175,40 @@ async function updateSessionAfterMessage(session, message, options = {}) {
   }
 }
 
-function shouldSkipAiReply(session) {
-  return (
-    session?.status === "human_takeover" ||
-    session?.status === "closed" ||
-    session?.should_ai_reply === false
-  );
+export function shouldSkipAiReply(session) {
+  return session?.status === "human_takeover";
+}
+
+export function getSessionSupportStatus(session) {
+  const supportStatus = String(session?.support_status || "").trim();
+  if (supportStatus) return supportStatus;
+  return session?.status === "human_takeover" ? "human_takeover" : "ai_replying";
+}
+
+export function getSessionAiMode(session) {
+  return session?.status === "human_takeover" ? "human_takeover" : "ai_active";
+}
+
+export function getAutoReplySupportStatus(session) {
+  return getSessionSupportStatus(session) === "needs_human"
+    ? "needs_human"
+    : "ai_replying";
+}
+
+export function buildSessionModeBody(session) {
+  return {
+    support_status: getSessionSupportStatus(session),
+    ai_mode: getSessionAiMode(session),
+  };
+}
+
+function serializeSessionForClient(session) {
+  if (!session) return null;
+
+  return {
+    ...session,
+    ...buildSessionModeBody(session),
+  };
 }
 
 export default async function handler(req, res) {
@@ -1220,6 +1255,34 @@ export default async function handler(req, res) {
     session =
       (await updateSessionLineIdentity(session.id, identity.lineProfile)) ||
       session;
+
+    if (shouldSkipAiReply(session)) {
+      const userMessage = await insertUserMessage(session.id, message);
+      session = await updateSessionAfterMessage(session, userMessage, {
+        incrementUnread: true,
+        supportStatus: "human_takeover",
+      });
+
+      logChatDebug("human takeover active, skip ai reply");
+      return sendJson(res, 200, {
+        session: serializeSessionForClient(session),
+        userMessage,
+        aiMessage: null,
+        answer: "",
+        humanTakeover: true,
+        ai_skipped: true,
+        provider_used: "human_takeover",
+        notice: humanTakeoverNotice,
+        ...buildSessionModeBody(session),
+        metadata: {
+          requestId,
+          provider_used: "human_takeover",
+          ai_skipped: true,
+          ...buildSessionModeBody(session),
+        },
+      });
+    }
+
     const dateInfo = getTaipeiDateInfo();
     const retrievedFaqItems = await retrieveFaqItems(message, { limit: 8 });
     const hasFaqScopeMatch = hasHighConfidenceFaqMatch(retrievedFaqItems);
@@ -1258,23 +1321,6 @@ export default async function handler(req, res) {
       recentMessagesCount: recentMessages.length,
     });
 
-    if (shouldSkipAiReply(session)) {
-      const userMessage = await insertUserMessage(session.id, message);
-      session = await updateSessionAfterMessage(session, userMessage, {
-        incrementUnread: true,
-        supportStatus: "needs_human",
-      });
-
-      logChatDebug("human takeover active, skip ai reply");
-      return sendJson(res, 200, {
-        session,
-        userMessage,
-        aiMessage: null,
-        answer: "",
-        humanTakeover: true,
-      });
-    }
-
     if (!isContextScopeAllowed) {
       const userMessage = await insertUserMessage(session.id, message);
       session = await updateSessionAfterMessage(session, userMessage, {
@@ -1291,7 +1337,7 @@ export default async function handler(req, res) {
       session = await updateSessionAfterMessage(session, aiMessage);
 
       return sendJson(res, 200, {
-        session,
+        session: serializeSessionForClient(session),
         userMessage,
         aiMessage,
         answer: scopeGuardReply,
@@ -1332,9 +1378,10 @@ export default async function handler(req, res) {
     }
 
     const userMessage = await insertUserMessage(session.id, message);
+    const autoReplySupportStatus = getAutoReplySupportStatus(session);
     session = await updateSessionAfterMessage(session, userMessage, {
       incrementUnread: true,
-      supportStatus: "ai_replying",
+      supportStatus: autoReplySupportStatus,
     });
 
     const providerResult = await callDeepSeek(
@@ -1354,12 +1401,12 @@ export default async function handler(req, res) {
       }
     );
     session = await updateSessionAfterMessage(session, aiMessage, {
-      supportStatus: "ai_replying",
+      supportStatus: autoReplySupportStatus,
     });
     logChatDebug("saved assistant message");
 
     return sendJson(res, 200, {
-      session,
+      session: serializeSessionForClient(session),
       userMessage,
       aiMessage,
       answer: providerResult.answer,

@@ -181,9 +181,9 @@ async function handlePost(req, res, sessionId) {
   await supabaseRequest(`/chat_sessions?id=eq.${encodeURIComponent(sessionId)}`, {
     method: "PATCH",
     body: JSON.stringify({
-      status: "human_takeover",
+      status: "ai_active",
       support_status: "replied",
-      should_ai_reply: false,
+      should_ai_reply: true,
       last_message: content,
       latest_message_at: message.created_at || new Date().toISOString(),
       support_status_updated_at: message.created_at || new Date().toISOString(),

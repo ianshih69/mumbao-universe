@@ -22,18 +22,25 @@ export type ChatMessage = {
   id: string;
   role: ChatRole;
   message: string;
+  session_id?: string;
   created_at?: string;
   provider_used?: string | null;
   isWelcome?: boolean;
   isOptimistic?: boolean;
+  isSystemNotice?: boolean;
   clientRequestId?: string;
   deleted_at?: string | null;
 };
 
 type ApiMessage = {
   id?: string | number;
+  session_id?: string | number;
+  role?: string;
   sender?: string;
+  sender_type?: string;
   message?: string;
+  content?: string;
+  provider?: string | null;
   provider_used?: string | null;
   created_at?: string;
   deleted_at?: string | null;
@@ -63,6 +70,10 @@ type LiffSdk = {
 
 type ChatSession = {
   id?: string | number;
+  status?: "ai_active" | "human_takeover" | "closed" | string;
+  support_status?: string;
+  ai_mode?: "ai_active" | "human_takeover" | string;
+  should_ai_reply?: boolean;
   visitor_id?: string;
   source?: string;
   line_user_id?: string;
@@ -80,6 +91,11 @@ type ChatMessageResponse = {
   aiMessage?: ApiMessage | null;
   answer?: string;
   humanTakeover?: boolean;
+  ai_skipped?: boolean;
+  provider_used?: string;
+  notice?: string;
+  support_status?: string;
+  ai_mode?: string;
 };
 
 type SessionRequestIdentity = {
@@ -94,6 +110,29 @@ type ChatWindowSize = {
 };
 
 type ResizeDirection = "left" | "top" | "top-left" | "bottom-right";
+type HumanSeenEntry = {
+  message_id: string;
+  created_at: string;
+};
+export type HumanSeenMap = Record<string, HumanSeenEntry>;
+type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+type HumanMessageLike = {
+  id?: string | number;
+  role?: string;
+  sender?: string;
+  sender_type?: string;
+  provider?: string | null;
+  provider_used?: string | null;
+};
+type HumanMessageSummary = Pick<
+  ChatMessage,
+  "id" | "message" | "created_at" | "session_id" | "role" | "provider_used"
+>;
+export type HumanUnreadState = {
+  hasUnread: boolean;
+  sessionId: string;
+  latestHumanMessage: HumanMessageSummary | null;
+};
 
 const visitorStorageKey = "mumbao-chat-visitor-id";
 const legacyVisitorStorageKey = "mumbao_visitor_id";
@@ -102,11 +141,14 @@ const visitorCookieKey = "mumbao_chat_visitor_id";
 const recentChatStorageKey = "mumbao_chat_recent_messages";
 const chatWindowSizeStorageKey = "mumbao-chat-window-size";
 const chatStorageVersionKey = "mumbao-chat-storage-version";
+export const humanSeenStorageKey = "mumbao-chat-human-seen-v1";
+export const humanSeenChangeEventName = "mumbao-chat-human-seen-change";
 const chatStorageVersion = "2";
 const lineLiffSdkUrl = "https://static.line-scdn.net/liff/edge/2/sdk.js";
 const lineLoginRedirectUri = "https://www.mumbao.tw/chat?liff=1";
 const historyPageSize = 7;
 const initialHistoryPageSize = 100;
+export const humanUnreadPollingIntervalMs = 25 * 1000;
 const localCacheMessageLimit = 50;
 const recentContextMessageLimit = 12;
 const sessionMessagesCacheTtlMs = 10 * 60 * 1000;
@@ -121,6 +163,10 @@ const chatBuildMarker = "chat-debug-20260716-1";
 const sessionReconnectReply = "對話已重新連線，請再試一次。";
 const rateLimitReply = "慢寶現在收到較多問題，請稍後再問喔。";
 const networkErrorReply = "目前網路連線不穩，請檢查網路後重試。";
+const humanTakeoverNotice =
+  "這段對話目前由管家接手，慢寶已暫停自動回答。你的訊息已送達，管家會在這個聊天視窗回覆你。";
+const humanTakeoverBanner = "目前由人工客服接手，慢寶暫停自動回答。";
+const humanTakeoverLabel = "人工客服處理中";
 const envChatDebugEnabled =
   String(
     (import.meta.env.NEXT_PUBLIC_CHAT_DEBUG || import.meta.env.VITE_CHAT_DEBUG || "")
@@ -132,6 +178,7 @@ let lastChatUnmountAt = "";
 type ChatLiffStatus = "idle" | "initializing" | "ready" | "failed";
 type ChatSendStatus = "idle" | "sending" | "success" | "error";
 type ChatRenderContext = "mobile-portal" | "desktop-launcher" | "page";
+type ChatAiMode = "ai_active" | "human_takeover";
 
 type ChatDebugState = {
   lastMessagesUpdate: string;
@@ -277,6 +324,14 @@ function createWelcomeMessage() {
   return {
     ...createMessage("assistant", welcomeMessage),
     isWelcome: true,
+  };
+}
+
+export function createHumanTakeoverNoticeMessage(message = humanTakeoverNotice) {
+  return {
+    ...createMessage("system", message),
+    provider_used: "human_takeover",
+    isSystemNotice: true,
   };
 }
 
@@ -471,22 +526,219 @@ function clearSessionId() {
   localStorage.removeItem(sessionStorageKey);
 }
 
+function getLocalStorage(): StorageLike | null {
+  return typeof window === "undefined" ? null : window.localStorage;
+}
+
+export function readStoredChatIdentity(
+  storage: StorageLike | null = getLocalStorage()
+) {
+  if (!storage) {
+    return {
+      visitorId: "",
+      sessionId: "",
+    };
+  }
+
+  const storedVisitorId = normalizeStoredVisitorId(
+    storage.getItem(visitorStorageKey)
+  );
+  const cookieVisitorId =
+    typeof document === "undefined"
+      ? ""
+      : normalizeStoredVisitorId(getCookieValue(visitorCookieKey));
+  const visitorId = storedVisitorId || cookieVisitorId;
+  const parsedSession = parseStoredChatSession(
+    storage.getItem(sessionStorageKey) || "",
+    visitorId
+  );
+
+  return {
+    visitorId,
+    sessionId: parsedSession.sessionId,
+  };
+}
+
+function createEmptyHumanSeenMap(storage: StorageLike | null) {
+  if (storage) {
+    try {
+      storage.setItem(humanSeenStorageKey, "{}");
+    } catch {
+      // Ignore storage quota or privacy-mode failures.
+    }
+  }
+
+  return {};
+}
+
+export function readHumanSeenMap(
+  storage: StorageLike | null = getLocalStorage()
+): HumanSeenMap {
+  if (!storage) return {};
+
+  try {
+    const rawValue = storage.getItem(humanSeenStorageKey);
+    if (!rawValue) return {};
+
+    const parsed = JSON.parse(rawValue) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return createEmptyHumanSeenMap(storage);
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, Partial<HumanSeenEntry>>)
+        .map(([sessionId, entry]) => {
+          const normalizedSessionId = String(sessionId || "").trim();
+          const messageId = String(entry?.message_id || "").trim();
+          const createdAt = String(entry?.created_at || "").trim();
+
+          if (!normalizedSessionId || !messageId) return null;
+          return [
+            normalizedSessionId,
+            {
+              message_id: messageId,
+              created_at: createdAt,
+            },
+          ] as const;
+        })
+        .filter(Boolean) as Array<[string, HumanSeenEntry]>
+    );
+  } catch {
+    return createEmptyHumanSeenMap(storage);
+  }
+}
+
+export function writeHumanSeenMap(
+  seenMap: HumanSeenMap,
+  storage: StorageLike | null = getLocalStorage()
+) {
+  if (!storage) return;
+
+  try {
+    storage.setItem(humanSeenStorageKey, JSON.stringify(seenMap));
+  } catch (error) {
+    console.warn("Mumbao chat human seen map save unavailable:", error);
+  }
+}
+
+export function isHumanMessage(message: HumanMessageLike | null | undefined) {
+  const role = String(message?.role || "").trim().toLowerCase();
+  const sender = String(message?.sender || "").trim().toLowerCase();
+  const senderType = String(message?.sender_type || "").trim().toLowerCase();
+  const provider = String(
+    message?.provider_used || message?.provider || ""
+  ).trim().toLowerCase();
+
+  return (
+    role === "human" ||
+    sender === "human" ||
+    senderType === "human" ||
+    (provider === "admin" && role !== "user" && sender !== "user")
+  );
+}
+
+export function getLatestHumanMessage(messages: ChatMessage[]) {
+  return sortMessagesByCreatedAt(
+    messages.filter(
+      (message) =>
+        isRealChatMessage(message) &&
+        isHumanMessage(message) &&
+        Boolean(message.id)
+    )
+  ).at(-1) || null;
+}
+
+function isNewerThanSeen(
+  latestHumanMessage: Pick<ChatMessage, "id" | "created_at">,
+  seenEntry?: HumanSeenEntry
+) {
+  if (!seenEntry) return true;
+  if (String(latestHumanMessage.id || "") !== seenEntry.message_id) return true;
+
+  const latestTime = Date.parse(latestHumanMessage.created_at || "");
+  const seenTime = Date.parse(seenEntry.created_at || "");
+
+  return (
+    !Number.isNaN(latestTime) &&
+    (Number.isNaN(seenTime) || latestTime > seenTime)
+  );
+}
+
+export function hasUnreadHumanMessage(
+  sessionId: string,
+  latestHumanMessage: Pick<ChatMessage, "id" | "created_at"> | null | undefined,
+  seenMap: HumanSeenMap = readHumanSeenMap()
+) {
+  const normalizedSessionId = String(sessionId || "").trim();
+  if (!normalizedSessionId || !latestHumanMessage?.id) return false;
+
+  return isNewerThanSeen(
+    latestHumanMessage,
+    seenMap[normalizedSessionId]
+  );
+}
+
+export function getHumanUnreadState(
+  latestHumanMessages: Array<{
+    sessionId: string;
+    message: HumanMessageSummary | null | undefined;
+  }>,
+  seenMap: HumanSeenMap = readHumanSeenMap()
+): HumanUnreadState {
+  const unreadEntry = latestHumanMessages.find(({ sessionId, message }) =>
+    hasUnreadHumanMessage(sessionId, message, seenMap)
+  );
+
+  return {
+    hasUnread: Boolean(unreadEntry),
+    sessionId: unreadEntry?.sessionId || "",
+    latestHumanMessage: unreadEntry?.message || null,
+  };
+}
+
+export function markHumanMessageSeen(
+  sessionId: string,
+  latestHumanMessage: Pick<ChatMessage, "id" | "created_at"> | null | undefined,
+  storage: StorageLike | null = getLocalStorage()
+) {
+  const normalizedSessionId = String(sessionId || "").trim();
+  if (!normalizedSessionId || !latestHumanMessage?.id) return;
+
+  const nextSeenMap = {
+    ...readHumanSeenMap(storage),
+    [normalizedSessionId]: {
+      message_id: String(latestHumanMessage.id),
+      created_at: String(latestHumanMessage.created_at || ""),
+    },
+  };
+  writeHumanSeenMap(nextSeenMap, storage);
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent(humanSeenChangeEventName, {
+        detail: { sessionId: normalizedSessionId },
+      })
+    );
+  }
+}
+
 function normalizeMessage(apiMessage: ApiMessage): ChatMessage {
   const sender = String(apiMessage.sender || "").toLowerCase();
   const role =
-    sender === "user"
-      ? "user"
-      : sender === "human"
-        ? "human"
+    isHumanMessage(apiMessage)
+      ? "human"
+      : sender === "user"
+        ? "user"
         : sender === "system"
           ? "system"
           : "assistant";
 
   return {
     id: String(apiMessage.id || createLocalId()),
+    session_id: apiMessage.session_id ? String(apiMessage.session_id) : undefined,
     role,
-    message: String(apiMessage.message || ""),
-    provider_used: apiMessage.provider_used,
+    message: String(apiMessage.message || apiMessage.content || ""),
+    provider_used: apiMessage.provider_used || apiMessage.provider,
     created_at: apiMessage.created_at,
     deleted_at: apiMessage.deleted_at,
   };
@@ -570,8 +822,13 @@ function sortMessagesByCreatedAt(messages: ChatMessage[]) {
   });
 }
 
-function isRealChatMessage(message: ChatMessage) {
-  return !message.isWelcome && !message.deleted_at && message.message.trim().length > 0;
+export function isRealChatMessage(message: ChatMessage) {
+  return (
+    !message.isWelcome &&
+    !message.isSystemNotice &&
+    !message.deleted_at &&
+    message.message.trim().length > 0
+  );
 }
 
 function normalizeMessageContent(value: string) {
@@ -656,6 +913,23 @@ function getNewestCreatedAt(messages: ChatMessage[]) {
   return sortMessagesByCreatedAt(messages.filter(isRealChatMessage))
     .reverse()
     .find((message) => message.created_at)?.created_at;
+}
+
+function hasHumanTakeoverNotice(messages: ChatMessage[]) {
+  return messages.some(
+    (message) =>
+      message.isSystemNotice &&
+      message.provider_used === "human_takeover" &&
+      message.message.trim().length > 0
+  );
+}
+
+function isNearScrollBottom(element: HTMLElement | null, threshold = 120) {
+  if (!element) return true;
+
+  return (
+    element.scrollHeight - element.scrollTop - element.clientHeight <= threshold
+  );
 }
 
 type RecentMessagesCache = {
@@ -794,6 +1068,7 @@ function saveCachedMessages(
     .slice(-localCacheMessageLimit)
     .map((message) => ({
       id: message.id,
+      session_id: message.session_id,
       sender:
         message.role === "user"
           ? "user"
@@ -1038,11 +1313,24 @@ async function fetchJsonWithTimeout<T>(
   onStatus?: (status: number) => void
 ): Promise<T> {
   const controller = new AbortController();
+  const externalSignal = options.signal;
+  const handleExternalAbort = () => controller.abort();
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort();
+      } else {
+        externalSignal.addEventListener("abort", handleExternalAbort, {
+          once: true,
+        });
+      }
+    }
+
+    const { signal: _externalSignal, ...requestOptions } = options;
     const response = await fetch(url, {
-      ...options,
+      ...requestOptions,
       signal: controller.signal,
     });
     onStatus?.(response.status);
@@ -1055,6 +1343,7 @@ async function fetchJsonWithTimeout<T>(
 
     return data;
   } finally {
+    externalSignal?.removeEventListener("abort", handleExternalAbort);
     window.clearTimeout(timeoutId);
   }
 }
@@ -1150,10 +1439,26 @@ function getAssistantErrorMessage(error: unknown) {
   return errorReply;
 }
 
+function normalizeAiMode(value?: string): ChatAiMode {
+  return value === "human_takeover" ? "human_takeover" : "ai_active";
+}
+
+function getAiModeFromSession(
+  session?: ChatSession | null,
+  fallbackAiMode?: string
+): ChatAiMode {
+  if (session?.status === "human_takeover") {
+    return "human_takeover";
+  }
+
+  return normalizeAiMode(session?.ai_mode || fallbackAiMode);
+}
+
 type MumbaoChatProps = {
   className?: string;
   compact?: boolean;
   isOpen?: boolean;
+  preferredSessionId?: string;
   renderContext?: ChatRenderContext;
 };
 
@@ -1184,6 +1489,132 @@ function buildJsonHeaders(accessToken = "") {
     "Content-Type": "application/json",
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
   };
+}
+
+function normalizeHumanMessageSummary(
+  message:
+    | (HumanMessageLike & {
+        session_id?: string | number;
+        created_at?: string;
+      })
+    | null
+    | undefined,
+  fallbackSessionId = ""
+): HumanMessageSummary | null {
+  if (!message?.id || !isHumanMessage(message)) return null;
+
+  return {
+    id: String(message.id),
+    session_id: message.session_id
+      ? String(message.session_id)
+      : fallbackSessionId || undefined,
+    role: "human",
+    message: "",
+    provider_used: message.provider_used || message.provider || "admin",
+    created_at: String(message.created_at || ""),
+  };
+}
+
+function collectLatestHumanMessages(data: {
+  session?: (ChatSession & { latest_human_message?: ApiMessage | null }) | null;
+  sessions?: Array<ChatSession & { latest_human_message?: ApiMessage | null }>;
+  latest_human_message?: ApiMessage | null;
+}) {
+  const entries: Array<{
+    sessionId: string;
+    message: HumanMessageSummary | null;
+  }> = [];
+
+  if (data.session?.id) {
+    const sessionId = String(data.session.id);
+    entries.push({
+      sessionId,
+      message: normalizeHumanMessageSummary(
+        data.session.latest_human_message || data.latest_human_message,
+        sessionId
+      ),
+    });
+  }
+
+  (data.sessions || []).forEach((session) => {
+    if (!session?.id) return;
+    const sessionId = String(session.id);
+    entries.push({
+      sessionId,
+      message: normalizeHumanMessageSummary(
+        session.latest_human_message,
+        sessionId
+      ),
+    });
+  });
+
+  return entries.filter((entry) => entry.message);
+}
+
+export async function fetchHumanUnreadState(accessToken = "") {
+  const latestHumanMessages: Array<{
+    sessionId: string;
+    message: HumanMessageSummary | null;
+  }> = [];
+
+  if (accessToken) {
+    const data = await fetchJsonWithTimeout<{
+      sessions?: Array<ChatSession & { latest_human_message?: ApiMessage | null }>;
+      latest_human_message?: ApiMessage | null;
+    }>(
+      "/api/ai-chat?action=history",
+      {
+        method: "POST",
+        headers: buildJsonHeaders(accessToken),
+        body: JSON.stringify({
+          list_only: true,
+          check_updates: true,
+        }),
+      },
+      8000
+    );
+
+    latestHumanMessages.push(...collectLatestHumanMessages(data));
+  }
+
+  const storedIdentity = readStoredChatIdentity();
+  if (storedIdentity.visitorId && storedIdentity.sessionId) {
+    const data = await fetchJsonWithTimeout<{
+      session?: ChatSession & { latest_human_message?: ApiMessage | null };
+      latest_human_message?: ApiMessage | null;
+    }>(
+      "/api/ai-chat?action=history",
+      {
+        method: "POST",
+        headers: buildJsonHeaders(accessToken),
+        body: JSON.stringify({
+          visitor_id: storedIdentity.visitorId,
+          session_id: storedIdentity.sessionId,
+          session_only: true,
+          check_updates: true,
+        }),
+      },
+      8000
+    );
+
+    latestHumanMessages.push(...collectLatestHumanMessages(data));
+  }
+
+  const dedupedLatestHumanMessages = Array.from(
+    new Map(
+      latestHumanMessages.map((entry) => [entry.sessionId, entry])
+    ).values()
+  ).sort((first, second) => {
+    const firstTime = Date.parse(first.message?.created_at || "");
+    const secondTime = Date.parse(second.message?.created_at || "");
+
+    return (
+      (Number.isNaN(secondTime) ? 0 : secondTime) -
+      (Number.isNaN(firstTime) ? 0 : firstTime)
+    );
+  });
+
+  return getHumanUnreadState(dedupedLatestHumanMessages);
 }
 
 async function bindLineSession(
@@ -1244,6 +1675,8 @@ async function fetchSessionOnly(
   return fetchJsonWithTimeout<{
     session?: ChatSession;
     sessions?: ChatSession[];
+    support_status?: string;
+    ai_mode?: string;
   }>(
     "/api/ai-chat?action=history",
     {
@@ -1280,6 +1713,8 @@ async function fetchLatestHistory(
       session?: ChatSession;
       messages?: ApiMessage[];
       has_more?: boolean;
+      support_status?: string;
+      ai_mode?: string;
     }>(
       "/api/ai-chat?action=history",
       {
@@ -1354,6 +1789,7 @@ function ChatDebugPanel({
   source,
   liffStatus,
   messagesCount,
+  aiMode,
 }: {
   state: ChatDebugState;
   expanded: boolean;
@@ -1367,6 +1803,7 @@ function ChatDebugPanel({
   source: "web" | "line_liff";
   liffStatus: ChatLiffStatus;
   messagesCount: number;
+  aiMode: ChatAiMode;
 }) {
   return (
     <div className="rounded-xl border border-[#d8c6b4] bg-[#fff8eb] p-3 font-mono text-[10px] leading-5 text-[#66584f] shadow-sm">
@@ -1388,6 +1825,7 @@ function ChatDebugPanel({
           <dt>Visitor</dt><dd>{hasVisitorId ? "present" : "missing"}</dd>
           <dt>Source</dt><dd>{source}</dd>
           <dt>LIFF</dt><dd>{liffStatus}</dd>
+          <dt>AI mode</dt><dd>{aiMode}</dd>
           <dt>Messages</dt><dd>{messagesCount}</dd>
           <dt>Last update</dt><dd className="break-all">{state.lastMessagesUpdate}</dd>
           <dt>Session update</dt><dd className="break-all">{state.lastSessionUpdate}</dd>
@@ -1408,6 +1846,7 @@ export function MumbaoChat({
   className,
   compact = false,
   isOpen = true,
+  preferredSessionId = "",
   renderContext = "page",
 }: MumbaoChatProps) {
   const { session: customerSession } = useCustomerAuth();
@@ -1431,6 +1870,7 @@ export function MumbaoChat({
   const [anonymousVisitorId, setAnonymousVisitorId] = useState("");
   const [lineIdentity, setLineIdentity] = useState<LineIdentity | null>(null);
   const [sessionId, setSessionId] = useState("");
+  const [aiMode, setAiMode] = useState<ChatAiMode>("ai_active");
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     createWelcomeMessage(),
   ]);
@@ -1445,6 +1885,7 @@ export function MumbaoChat({
     loadChatWindowSize()
   );
   const [isResizing, setIsResizing] = useState(false);
+  const [hasNewHumanNotice, setHasNewHumanNotice] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasInitializedRef = useRef(false);
@@ -1458,6 +1899,9 @@ export function MumbaoChat({
   const latestVisitorIdRef = useRef("");
   const latestSessionIdRef = useRef("");
   const isSendingRef = useRef(false);
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  const pollingInFlightRef = useRef(false);
+  const pollingAbortControllerRef = useRef<AbortController | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const pendingScrollRestoreRef = useRef<{
     scrollHeight: number;
@@ -1501,6 +1945,24 @@ export function MumbaoChat({
       setSessionId(nextSessionId);
     },
     [recordDebug]
+  );
+
+  const applyAiModeFromResponse = useCallback(
+    (
+      source: string,
+      data: { session?: ChatSession | null; ai_mode?: string }
+    ) => {
+      const nextAiMode = getAiModeFromSession(data.session, data.ai_mode);
+      setAiMode(nextAiMode);
+      logChatDebug("ai mode update", {
+        source,
+        aiMode: nextAiMode,
+        sessionStatus: data.session?.status || "",
+        supportStatus: data.session?.support_status || "",
+      });
+      return nextAiMode;
+    },
+    []
   );
 
   const updateMessages = useCallback(
@@ -1559,10 +2021,15 @@ export function MumbaoChat({
   );
 
   const hasDraftMessage = useMemo(() => input.trim().length > 0, [input]);
+  const isHumanTakeoverMode = aiMode === "human_takeover";
   const canResizeWindow = compact && isDesktopResizable;
   const visibleMessages = useMemo(
     () => getInitialMessages(sortMessagesByCreatedAt(dedupeMessages(messages))),
     [messages]
+  );
+  const latestVisibleHumanMessage = useMemo(
+    () => getLatestHumanMessage(visibleMessages),
+    [visibleMessages]
   );
   const mergeIncomingMessages = useCallback(
     (
@@ -1657,6 +2124,10 @@ export function MumbaoChat({
   }, [sessionId, visitorId]);
 
   useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
     if (previousIsOpenRef.current !== isOpen) {
       logChatDebug("isOpen changed", {
         previous: previousIsOpenRef.current,
@@ -1681,6 +2152,23 @@ export function MumbaoChat({
       messageCount: realMessageCount,
     });
   }, [realMessageCount, sessionId, visitorId]);
+
+  useEffect(() => {
+    if (
+      !isOpen ||
+      typeof document === "undefined" ||
+      document.visibilityState !== "visible" ||
+      !latestVisibleHumanMessage
+    ) {
+      return;
+    }
+
+    const humanSessionId = latestVisibleHumanMessage.session_id || sessionId;
+    if (!humanSessionId) return;
+
+    markHumanMessageSeen(humanSessionId, latestVisibleHumanMessage);
+    setHasNewHumanNotice(false);
+  }, [isOpen, latestVisibleHumanMessage, sessionId]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 768px)");
@@ -1778,6 +2266,7 @@ export function MumbaoChat({
 
         if (!isMounted || !recoveredSessionId) return;
 
+        applyAiModeFromResponse("session-recovery", data);
         updateSessionId("session-recovery", recoveredSessionId);
         saveSessionId(recoveredSessionId, nextVisitorId);
       } catch (error) {
@@ -1814,6 +2303,7 @@ export function MumbaoChat({
           nextVisitorId,
           sessionIdForLineBind
         );
+        applyAiModeFromResponse("line-session-bind", boundLineSession);
         const effectiveVisitorId =
           boundLineSession.session?.visitor_id &&
           isLineVisitorId(String(boundLineSession.session.visitor_id))
@@ -1890,6 +2380,7 @@ export function MumbaoChat({
             },
             customerAccessToken
           );
+          applyAiModeFromResponse("line-history", historyData);
           const historyMessages = (historyData.messages || [])
             .map(normalizeMessage)
             .filter((message) => message.message.trim().length > 0);
@@ -1960,6 +2451,7 @@ export function MumbaoChat({
     completeHistoryRequest,
     customerAccessToken,
     isOpen,
+    applyAiModeFromResponse,
     mergeIncomingMessages,
     updateSessionId,
   ]);
@@ -2027,6 +2519,7 @@ export function MumbaoChat({
 
         if (historyFetchIdRef.current !== fetchId) return;
 
+        applyAiModeFromResponse("history-refresh", data);
         let effectiveSessionId = targetSessionId;
         let effectiveVisitorId = targetVisitorId;
 
@@ -2052,7 +2545,7 @@ export function MumbaoChat({
           .filter((message) => message.message.trim().length > 0);
 
         if (historyMessages.length > 0) {
-          shouldAutoScrollRef.current = true;
+          shouldAutoScrollRef.current = isNearScrollBottom(scrollRef.current);
           updateMessages("history-response", (current) => {
             const merged = getInitialMessages(
               sortMessagesByCreatedAt(
@@ -2093,6 +2586,7 @@ export function MumbaoChat({
             sessionId: targetSessionId,
           });
           updateMessages("history-session-reset", [createWelcomeMessage()]);
+          setAiMode("ai_active");
           setHasMoreHistory(false);
 
           if (targetSessionId === latestSessionIdRef.current) {
@@ -2117,6 +2611,7 @@ export function MumbaoChat({
               : targetVisitorId;
 
             if (nextSessionId) {
+              applyAiModeFromResponse("history-session-recovered", data);
               if (nextVisitorId !== visitorId) {
                 setVisitorId(nextVisitorId);
               }
@@ -2138,6 +2633,7 @@ export function MumbaoChat({
     },
     [
       anonymousVisitorId,
+      applyAiModeFromResponse,
       beginHistoryRequest,
       completeHistoryRequest,
       customerAccessToken,
@@ -2170,6 +2666,7 @@ export function MumbaoChat({
 
         if (isCancelled || !data.session?.id) return;
 
+        applyAiModeFromResponse("customer-bind", data);
         const nextSessionId = String(data.session.id);
         const nextVisitorId = data.session.visitor_id
           ? String(data.session.visitor_id)
@@ -2198,6 +2695,7 @@ export function MumbaoChat({
     };
   }, [
     anonymousVisitorId,
+    applyAiModeFromResponse,
     customerAccessToken,
     isOpen,
     lineIdentity,
@@ -2214,13 +2712,18 @@ export function MumbaoChat({
     const storedSessionId = effectiveVisitorId
       ? getStoredSessionId(effectiveVisitorId)
       : "";
-    const effectiveSessionId = sessionId || storedSessionId;
+    const unreadPreferredSessionId = isValidChatUuid(preferredSessionId)
+      ? preferredSessionId
+      : "";
+    const effectiveSessionId =
+      unreadPreferredSessionId || sessionId || storedSessionId;
 
     logChatDebug("open hydrate start", {
       stateVisitorId: maskDebugId(visitorId),
       stateSessionId: maskDebugId(sessionId),
       storedVisitorId: maskDebugId(storedVisitorId),
       storedSessionId: maskDebugId(storedSessionId),
+      preferredSessionId: maskDebugId(unreadPreferredSessionId),
       effectiveVisitorId: maskDebugId(effectiveVisitorId),
       effectiveSessionId: maskDebugId(effectiveSessionId),
       hasInitialized: hasInitializedRef.current,
@@ -2232,7 +2735,7 @@ export function MumbaoChat({
     if (!anonymousVisitorId && storedVisitorId) {
       setAnonymousVisitorId(storedVisitorId);
     }
-    if (!sessionId && effectiveSessionId) {
+    if (effectiveSessionId && effectiveSessionId !== sessionId) {
       updateSessionId("open-hydrate", effectiveSessionId);
     }
 
@@ -2277,6 +2780,7 @@ export function MumbaoChat({
     isOpen,
     lineIdentity,
     mergeIncomingMessages,
+    preferredSessionId,
     refreshCurrentSessionHistory,
     sessionId,
     updateSessionId,
@@ -2288,21 +2792,50 @@ export function MumbaoChat({
 
     let isCancelled = false;
 
-    const loadNewMessages = async () => {
-      const after = getNewestCreatedAt(messages);
+    const loadNewMessages = async (reason = "interval") => {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      ) {
+        logChatDebug("polling skipped: document hidden", {
+          reason,
+          visitorId,
+          sessionId,
+        });
+        return;
+      }
+
+      if (pollingInFlightRef.current) {
+        logChatDebug("polling skipped: request in flight", {
+          reason,
+          visitorId,
+          sessionId,
+        });
+        return;
+      }
+
+      const after = getNewestCreatedAt(messagesRef.current);
       const pollingHistorySequence = beginHistoryRequest("polling");
+      const shouldScrollAfterMerge = isNearScrollBottom(scrollRef.current);
+      const abortController = new AbortController();
+      pollingInFlightRef.current = true;
+      pollingAbortControllerRef.current = abortController;
 
       logChatDebug("polling tick", {
+        reason,
         endpoint: "/api/ai-chat?action=history",
         visitorId,
         sessionId,
         after: after || "",
-        currentMessageCount: messages.filter(isRealChatMessage).length,
+        currentMessageCount: messagesRef.current.filter(isRealChatMessage).length,
       });
 
       try {
         const data = await fetchJsonWithTimeout<{
+          session?: ChatSession;
           messages?: ApiMessage[];
+          support_status?: string;
+          ai_mode?: string;
         }>(
           "/api/ai-chat?action=history",
           {
@@ -2318,6 +2851,7 @@ export function MumbaoChat({
                 anonymousVisitorId,
               }),
             }),
+            signal: abortController.signal,
           },
           8000
         );
@@ -2329,6 +2863,7 @@ export function MumbaoChat({
 
         if (isCancelled) return;
 
+        applyAiModeFromResponse("polling", data);
         const incomingMessages = (data.messages || [])
           .map(normalizeMessage)
           .filter((message) => message.message.trim().length > 0);
@@ -2338,7 +2873,13 @@ export function MumbaoChat({
           return;
         }
 
-        shouldAutoScrollRef.current = true;
+        shouldAutoScrollRef.current = shouldScrollAfterMerge;
+        if (
+          incomingMessages.some((message) => isHumanMessage(message)) &&
+          !shouldScrollAfterMerge
+        ) {
+          setHasNewHumanNotice(true);
+        }
         updateMessages("polling-response", (current) =>
           getInitialMessages(
             sortMessagesByCreatedAt(
@@ -2356,43 +2897,83 @@ export function MumbaoChat({
         });
       } catch (error) {
         completeHistoryRequest("polling", pollingHistorySequence, 0);
+        if (error instanceof Error && error.name === "AbortError") {
+          logChatDebug("polling aborted", { reason, visitorId, sessionId });
+          return;
+        }
+
         if (isRecoverableSessionError(error)) {
           console.warn("Mumbao chat polling session expired:", error);
           messagesCacheRef.current.delete(sessionId);
           clearSessionId();
           clearCachedMessages("polling session invalid", { sessionId });
           updateSessionId("polling-session-reset", "");
+          setAiMode("ai_active");
           setHasMoreHistory(false);
           return;
         }
 
         console.warn("Mumbao chat live messages unavailable:", error);
+      } finally {
+        if (pollingAbortControllerRef.current === abortController) {
+          pollingAbortControllerRef.current = null;
+        }
+        pollingInFlightRef.current = false;
       }
     };
 
     logChatDebug("polling started", {
-      intervalMs: 5000,
+      intervalMs: humanUnreadPollingIntervalMs,
       visitorId,
       sessionId,
     });
-    const timer = window.setInterval(loadNewMessages, 5000);
+    const timer = window.setInterval(
+      () => void loadNewMessages("interval"),
+      humanUnreadPollingIntervalMs
+    );
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadNewMessages("visible");
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       isCancelled = true;
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      pollingAbortControllerRef.current?.abort();
+      pollingAbortControllerRef.current = null;
+      pollingInFlightRef.current = false;
       logChatDebug("polling stopped", { visitorId, sessionId });
     };
   }, [
     anonymousVisitorId,
+    applyAiModeFromResponse,
     beginHistoryRequest,
     completeHistoryRequest,
     customerAccessToken,
     isOpen,
     lineIdentity,
-    messages,
     sessionId,
     updateMessages,
     visitorId,
   ]);
+
+  useEffect(() => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) return;
+
+    const handleScroll = () => {
+      if (isNearScrollBottom(scrollElement)) {
+        setHasNewHumanNotice(false);
+      }
+    };
+
+    scrollElement.addEventListener("scroll", handleScroll, { passive: true });
+    return () => scrollElement.removeEventListener("scroll", handleScroll);
+  }, []);
 
   useEffect(() => {
     if (!shouldAutoScrollRef.current || pendingScrollRestoreRef.current) {
@@ -2554,6 +3135,8 @@ export function MumbaoChat({
       sessions?: ChatSession[];
       messages?: ApiMessage[];
       has_more?: boolean;
+      support_status?: string;
+      ai_mode?: string;
       }>(
         "/api/ai-chat?action=history",
         {
@@ -2578,6 +3161,7 @@ export function MumbaoChat({
         data.messages?.length || 0
       );
 
+      applyAiModeFromResponse("load-history", data);
       if (data.session?.id) {
         const nextSessionId = String(data.session.id);
         const nextVisitorId = data.session.visitor_id
@@ -2618,6 +3202,7 @@ export function MumbaoChat({
         clearCachedMessages("load history session invalid", { sessionId });
         updateSessionId("load-history-session-reset", "");
         updateMessages("load-history-session-reset", [createWelcomeMessage()]);
+        setAiMode("ai_active");
         setHasMoreHistory(false);
         return;
       }
@@ -2649,6 +3234,7 @@ export function MumbaoChat({
         ? String(data.session.visitor_id)
         : visitorId;
 
+      applyAiModeFromResponse("new-chat", data);
       if (nextSessionId) {
         setVisitorId(nextVisitorId);
         updateSessionId("new-chat", nextSessionId);
@@ -2698,6 +3284,7 @@ export function MumbaoChat({
       updateMessages("delete-session", [createWelcomeMessage()]);
       setHasMoreHistory(false);
       updateSessionId("delete-session", "");
+      setAiMode("ai_active");
 
       const data = await fetchSessionOnly(
         visitorId,
@@ -2713,6 +3300,7 @@ export function MumbaoChat({
         ? String(data.session.visitor_id)
         : visitorId;
 
+      applyAiModeFromResponse("delete-session-replacement", data);
       if (nextSessionId) {
         setVisitorId(nextVisitorId);
         updateSessionId("delete-session-replacement", nextSessionId);
@@ -2804,22 +3392,33 @@ export function MumbaoChat({
         clearSessionId();
         clearCachedMessages("message session invalid", { sessionId });
         updateSessionId("message-session-reset", "");
+        setAiMode("ai_active");
 
         data = await sendMessageRequest("");
       }
 
       recordDebug({ sendStatus: "success" });
 
+      const responseAiMode = applyAiModeFromResponse("message-response", data);
+      const isAiSkipped = Boolean(
+        data.ai_skipped ||
+          data.humanTakeover ||
+          data.provider_used === "human_takeover" ||
+          responseAiMode === "human_takeover"
+      );
       const savedUserMessage = data.userMessage
         ? normalizeMessage(data.userMessage)
         : pendingUserMessage;
-      const savedAiMessage = data.humanTakeover
+      const savedAiMessage = isAiSkipped
         ? null
         : data.aiMessage
         ? normalizeMessage(data.aiMessage)
         : data.answer
           ? createMessage("assistant", data.answer)
           : createMessage("assistant", errorReply);
+      const systemNoticeMessage = isAiSkipped
+        ? createHumanTakeoverNoticeMessage(data.notice || humanTakeoverNotice)
+        : null;
 
       logChatDebug("API response received", {
         clientRequestId: maskDebugId(pendingUserMessage.clientRequestId),
@@ -2828,6 +3427,7 @@ export function MumbaoChat({
         hasUserMessage: Boolean(data.userMessage),
         hasAiMessage: Boolean(data.aiMessage || data.answer),
         humanTakeover: Boolean(data.humanTakeover),
+        aiSkipped: isAiSkipped,
       });
 
       if (data.session?.id) {
@@ -2842,17 +3442,22 @@ export function MumbaoChat({
         saveSessionId(nextSessionId, nextVisitorId);
       }
 
-      updateMessages("api-response", (current) => {
+      updateMessages(isAiSkipped ? "human-takeover-response" : "api-response", (current) => {
         const nextMessages = mergeMessages(
           current,
           [savedUserMessage, savedAiMessage].filter(Boolean) as ChatMessage[]
         );
+        const displayMessages =
+          systemNoticeMessage && !hasHumanTakeoverNotice(nextMessages)
+            ? [...nextMessages, systemNoticeMessage]
+            : nextMessages;
         logChatDebug("AI message inserted", {
           clientRequestId: maskDebugId(pendingUserMessage.clientRequestId),
           before: getMessageDebugSummary(current),
-          after: getMessageDebugSummary(nextMessages),
+          after: getMessageDebugSummary(displayMessages),
+          aiSkipped: isAiSkipped,
         });
-        return nextMessages;
+        return displayMessages;
       });
     } catch (error) {
       recordDebug({ sendStatus: "error" });
@@ -2936,6 +3541,7 @@ export function MumbaoChat({
             source={getChatEntrySource() === "line_liff" ? "line_liff" : "web"}
             liffStatus={liffStatus}
             messagesCount={realMessageCount}
+            aiMode={aiMode}
           />
         </div>
       )}
@@ -2986,6 +3592,13 @@ export function MumbaoChat({
           </div>
         </div>
 
+        {isHumanTakeoverMode && (
+          <div className="rounded-2xl border border-[#ead8c6] bg-[#fff7ea] px-4 py-3 text-xs leading-5 text-[#7a5a40] shadow-sm">
+            <p className="font-semibold text-[#5f4937]">{humanTakeoverLabel}</p>
+            <p className="mt-1">{humanTakeoverBanner}</p>
+          </div>
+        )}
+
         {isInitialHistoryLoading && realMessageCount === 0 && (
           <div className="space-y-3 py-3">
             <div className="flex justify-center">
@@ -3009,13 +3622,28 @@ export function MumbaoChat({
           }
 
           const { message } = item;
+          if (message.isSystemNotice || message.role === "system") {
+            return (
+              <div key={message.id} className="flex justify-center">
+                <div className="max-w-[90%] rounded-2xl border border-[#ead8c6] bg-[#fff7ea] px-4 py-3 text-center text-xs leading-6 text-[#7a5a40] shadow-sm">
+                  <p className="font-semibold text-[#5f4937]">
+                    {humanTakeoverLabel}
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap break-words">
+                    {message.message}
+                  </p>
+                </div>
+              </div>
+            );
+          }
+
           const messageTime = formatTaipeiMessageTime(message.created_at);
           const isUserMessage = message.role === "user";
-          const isHumanMessage = message.role === "human";
+          const isHumanChatMessage = isHumanMessage(message);
           const senderName = isUserMessage
             ? "我"
-            : isHumanMessage
-              ? "慢慢蒔光管家"
+            : isHumanChatMessage
+              ? "人工客服"
               : "慢寶";
 
           return (
@@ -3056,7 +3684,7 @@ export function MumbaoChat({
                     "whitespace-pre-wrap break-words rounded-[22px] px-4 py-3 text-sm leading-7 shadow-[0_8px_20px_rgba(111,88,71,0.08)]",
                     isUserMessage
                       ? "rounded-tr-md bg-[#e99554] text-[#fffaf2]"
-                      : isHumanMessage
+                      : isHumanChatMessage
                         ? "rounded-tl-md border border-[#e1eadf] bg-[#f6fbf4] text-[#546456]"
                         : "rounded-tl-md border border-[#f0e3d4] bg-white text-[#5f544b]"
                   )}
@@ -3078,7 +3706,26 @@ export function MumbaoChat({
           );
         })}
 
-        {isLoading && (
+        {hasNewHumanNotice && (
+          <div className="sticky bottom-3 z-10 flex justify-center">
+            <button
+              type="button"
+              onClick={() => {
+                shouldAutoScrollRef.current = true;
+                setHasNewHumanNotice(false);
+                scrollRef.current?.scrollTo({
+                  top: scrollRef.current.scrollHeight,
+                  behavior: "smooth",
+                });
+              }}
+              className="rounded-full border border-[#ead8c6] bg-white/95 px-4 py-2 text-xs font-semibold text-[#7a5a40] shadow-[0_10px_24px_rgba(111,88,71,0.14)] backdrop-blur"
+            >
+              管家有新回覆
+            </button>
+          </div>
+        )}
+
+        {isLoading && !isHumanTakeoverMode && (
           <div className="flex w-full justify-start">
             <div className="mr-2 -mt-0.5 flex size-9 flex-none items-center justify-center overflow-hidden rounded-full border border-white/90 bg-[#fff4e4] shadow-[0_6px_14px_rgba(111,88,71,0.12)] sm:size-10">
               <img

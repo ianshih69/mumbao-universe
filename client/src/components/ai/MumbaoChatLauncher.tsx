@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
@@ -6,7 +6,13 @@ import type {
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useLocation } from "wouter";
-import { MumbaoChat } from "@/components/ai/MumbaoChat";
+import {
+  MumbaoChat,
+  fetchHumanUnreadState,
+  humanSeenChangeEventName,
+  type HumanUnreadState,
+} from "@/components/ai/MumbaoChat";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { cn } from "@/lib/utils";
 
 const mobilePositionStorageKey = "mumbaoChatMobileY";
@@ -15,6 +21,12 @@ const dragThreshold = 8;
 const minMobileBottom = 16;
 const minMobileTop = 140;
 const fallbackLauncherHeight = 112;
+const unreadFocusDebounceMs = 600;
+const emptyHumanUnreadState: HumanUnreadState = {
+  hasUnread: false,
+  sessionId: "",
+  latestHumanMessage: null,
+};
 
 type DragSession = {
   pointerId: number;
@@ -39,6 +51,8 @@ type MobileScrollLockSnapshot = {
 
 export function MumbaoChatLauncher() {
   const [location] = useLocation();
+  const { session: customerSession } = useCustomerAuth();
+  const customerAccessToken = customerSession?.access_token || "";
   const [isOpen, setIsOpen] = useState(() => shouldAutoOpenChat(location));
   const [isFooterMode, setIsFooterMode] = useState(false);
   const [isMobile, setIsMobile] = useState(() =>
@@ -47,12 +61,17 @@ export function MumbaoChatLauncher() {
       : false
   );
   const [isDragging, setIsDragging] = useState(false);
+  const [humanUnreadState, setHumanUnreadState] = useState<HumanUnreadState>(
+    emptyHumanUnreadState
+  );
   const [mobileBottomOffset, setMobileBottomOffset] = useState<number | null>(null);
   const launcherButtonRef = useRef<HTMLButtonElement | null>(null);
   const dragSessionRef = useRef<DragSession | null>(null);
   const latestBottomOffsetRef = useRef<number | null>(null);
   const suppressNextClickRef = useRef(false);
   const mobileScrollLockRef = useRef<MobileScrollLockSnapshot | null>(null);
+  const unreadCheckInFlightRef = useRef(false);
+  const unreadCheckTimerRef = useRef<number | null>(null);
 
   const hasCustomMobilePosition =
     isMobile && !isOpen && mobileBottomOffset !== null;
@@ -63,12 +82,101 @@ export function MumbaoChatLauncher() {
         )}px)`,
       }
     : undefined;
+  const hasUnreadHumanReply = humanUnreadState.hasUnread;
+
+  const refreshHumanUnread = useCallback(
+    async (reason: string) => {
+      if (typeof window === "undefined" || unreadCheckInFlightRef.current) {
+        return;
+      }
+
+      unreadCheckInFlightRef.current = true;
+      try {
+        const nextUnreadState = await fetchHumanUnreadState(customerAccessToken);
+        setHumanUnreadState(nextUnreadState);
+      } catch (error) {
+        console.warn("Mumbao chat human unread check unavailable:", {
+          reason,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        unreadCheckInFlightRef.current = false;
+      }
+    },
+    [customerAccessToken]
+  );
+
+  const scheduleHumanUnreadRefresh = useCallback(
+    (reason: string) => {
+      if (typeof window === "undefined") return;
+
+      if (unreadCheckTimerRef.current !== null) {
+        window.clearTimeout(unreadCheckTimerRef.current);
+      }
+
+      unreadCheckTimerRef.current = window.setTimeout(() => {
+        unreadCheckTimerRef.current = null;
+        void refreshHumanUnread(reason);
+      }, unreadFocusDebounceMs);
+    },
+    [refreshHumanUnread]
+  );
 
   useEffect(() => {
     if (shouldAutoOpenChat(location)) {
       setIsOpen(true);
     }
   }, [location]);
+
+  useEffect(() => {
+    scheduleHumanUnreadRefresh("initial-load");
+
+    return () => {
+      if (unreadCheckTimerRef.current !== null) {
+        window.clearTimeout(unreadCheckTimerRef.current);
+        unreadCheckTimerRef.current = null;
+      }
+    };
+  }, [scheduleHumanUnreadRefresh]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    const handleFocus = () => scheduleHumanUnreadRefresh("focus");
+    const handleOnline = () => scheduleHumanUnreadRefresh("online");
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        scheduleHumanUnreadRefresh("visible");
+      }
+    };
+    const handleSeenChange = (event: Event) => {
+      const seenSessionId = String(
+        (event as CustomEvent<{ sessionId?: string }>).detail?.sessionId || ""
+      );
+
+      if (seenSessionId) {
+        setHumanUnreadState((current) =>
+          current.sessionId === seenSessionId ? emptyHumanUnreadState : current
+        );
+      }
+
+      scheduleHumanUnreadRefresh("seen-change");
+    };
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener(humanSeenChangeEventName, handleSeenChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener(humanSeenChangeEventName, handleSeenChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [scheduleHumanUnreadRefresh]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("IntersectionObserver" in window)) {
@@ -348,6 +456,7 @@ export function MumbaoChatLauncher() {
           <MumbaoChat
             compact
             isOpen={isOpen}
+            preferredSessionId={humanUnreadState.sessionId}
             renderContext="mobile-portal"
             className="h-full max-h-none rounded-none border-0 shadow-none"
           />
@@ -378,7 +487,12 @@ export function MumbaoChatLauncher() {
           )}
           aria-hidden={!isOpen}
         >
-          <MumbaoChat compact isOpen={isOpen} renderContext="desktop-launcher" />
+          <MumbaoChat
+            compact
+            isOpen={isOpen}
+            preferredSessionId={humanUnreadState.sessionId}
+            renderContext="desktop-launcher"
+          />
         </div>
       )}
 
@@ -410,8 +524,20 @@ export function MumbaoChatLauncher() {
           )}
           style={{ touchAction: isMobile ? "none" : undefined }}
           aria-expanded={isOpen}
-          aria-label="打開問慢寶 AI客服"
+          aria-label={
+            hasUnreadHumanReply ? "問慢寶，有管家新回覆" : "打開問慢寶 AI客服"
+          }
         >
+          {hasUnreadHumanReply && (
+            <span className="absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full border border-white bg-[#d64f43] px-2 py-1 text-[10px] font-bold leading-none text-white shadow-[0_6px_14px_rgba(126,54,45,0.22)] sm:right-4 sm:top-4">
+              <span
+                className="size-2 rounded-full bg-white"
+                aria-hidden="true"
+              />
+              <span className="sr-only">有管家新回覆</span>
+              <span className="hidden sm:inline">管家有新回覆</span>
+            </span>
+          )}
           <img
             src="/images/stand.png"
             alt=""

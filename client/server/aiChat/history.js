@@ -359,6 +359,26 @@ function normalizeEntrySource(value) {
     : "";
 }
 
+function getSessionSupportStatus(session) {
+  const supportStatus = String(session?.support_status || "").trim();
+  if (supportStatus) return supportStatus;
+  return session?.status === "human_takeover" ? "human_takeover" : "ai_replying";
+}
+
+function getSessionAiMode(session) {
+  return session?.status === "human_takeover" ? "human_takeover" : "ai_active";
+}
+
+function serializeSessionForClient(session) {
+  if (!session) return null;
+
+  return {
+    ...session,
+    support_status: getSessionSupportStatus(session),
+    ai_mode: getSessionAiMode(session),
+  };
+}
+
 function buildCreateSessionPayload(visitorId, customerIdentity, entrySource = "") {
   return {
     visitor_id: visitorId,
@@ -432,7 +452,47 @@ async function getLatestCustomerSession(customerIdentity) {
   return sessions?.[0] || null;
 }
 
-async function loadCustomerSessions(customerIdentity) {
+function summarizeHumanMessage(message) {
+  if (!message?.id) return null;
+
+  return {
+    id: message.id,
+    session_id: message.session_id || "",
+    sender: "human",
+    role: "human",
+    provider_used: message.provider_used || "admin",
+    created_at: message.created_at || "",
+  };
+}
+
+async function loadLatestHumanMessage(sessionId) {
+  if (!sessionId) return null;
+
+  const messages = await supabaseRequest(
+    `/chat_messages?session_id=eq.${encodeURIComponent(
+      sessionId
+    )}&sender=eq.human&deleted_at=is.null&select=id,session_id,sender,provider_used,created_at&order=created_at.desc&limit=1`
+  );
+
+  return summarizeHumanMessage(messages?.[0]);
+}
+
+async function attachLatestHumanMessages(sessions) {
+  if (!Array.isArray(sessions) || sessions.length === 0) {
+    return [];
+  }
+
+  const latestHumanMessages = await Promise.all(
+    sessions.map((session) => loadLatestHumanMessage(session?.id))
+  );
+
+  return sessions.map((session, index) => ({
+    ...session,
+    latest_human_message: latestHumanMessages[index] || null,
+  }));
+}
+
+async function loadCustomerSessions(customerIdentity, options = {}) {
   if (!customerIdentity?.authUserId) {
     return [];
   }
@@ -461,10 +521,55 @@ async function loadCustomerSessions(customerIdentity) {
     })
   );
 
-  return sessions.map((session, index) => ({
+  const sessionSummaries = sessions.map((session, index) => ({
     ...session,
     preview_message: previews[index] || "",
   }));
+
+  return options.includeUpdateMetadata
+    ? attachLatestHumanMessages(sessionSummaries)
+    : sessionSummaries;
+}
+
+async function loadSessionForUpdateCheck({
+  visitorId,
+  sessionId,
+  customerIdentity,
+}) {
+  if (!sessionId || !isValidSessionUuid(sessionId)) {
+    return null;
+  }
+
+  if (customerIdentity?.authUserId) {
+    const sessions = await supabaseRequest(
+      `/chat_sessions?id=eq.${encodeURIComponent(
+        sessionId
+      )}&deleted_at=is.null&select=*&limit=1`
+    );
+    const session = sessions?.[0] || null;
+
+    if (
+      session &&
+      (isSessionOwnedByCustomer(session, customerIdentity) ||
+        (!session.auth_user_id && session.visitor_id === visitorId))
+    ) {
+      return session;
+    }
+
+    return null;
+  }
+
+  if (!visitorId) return null;
+
+  const sessions = await supabaseRequest(
+    `/chat_sessions?id=eq.${encodeURIComponent(
+      sessionId
+    )}&visitor_id=eq.${encodeURIComponent(
+      visitorId
+    )}&auth_user_id=is.null&deleted_at=is.null&select=*&limit=1`
+  );
+
+  return sessions?.[0] || null;
 }
 
 async function getOrCreateSession(visitorId, customerIdentity, entrySource = "") {
@@ -742,6 +847,9 @@ export default async function handler(req, res) {
     const listOnly =
       body.list_only === true ||
       firstQueryValue(req.query?.list_only) === "true";
+    const checkUpdates =
+      body.check_updates === true ||
+      firstQueryValue(req.query?.check_updates) === "true";
     const forceNewSession =
       body.force_new_session === true ||
       firstQueryValue(req.query?.force_new_session) === "true";
@@ -751,7 +859,16 @@ export default async function handler(req, res) {
         return sendJson(res, 401, { error: "Login is required." });
       }
 
-      const customerSessions = await loadCustomerSessions(customerIdentity);
+      const customerSessions = await loadCustomerSessions(customerIdentity, {
+        includeUpdateMetadata: checkUpdates,
+      });
+      const latestHumanMessage = customerSessions
+        .map((session) => session.latest_human_message)
+        .filter(Boolean)
+        .sort(
+          (first, second) =>
+            getCreatedTime(second) - getCreatedTime(first)
+        )[0] || null;
       logApiTiming("request end", requestStartedAt, {
         listOnly: true,
         sessionCount: customerSessions.length,
@@ -761,6 +878,9 @@ export default async function handler(req, res) {
         session: null,
         sessions: customerSessions,
         messages: [],
+        latest_human_message: latestHumanMessage,
+        support_status: "ai_replying",
+        ai_mode: "ai_active",
         limit,
         before: null,
         next_before: null,
@@ -770,6 +890,44 @@ export default async function handler(req, res) {
 
     if (!visitorId) {
       return sendJson(res, 400, { error: "visitor_id is required." });
+    }
+
+    if (checkUpdates && sessionOnly) {
+      const checkedSession = await loadSessionForUpdateCheck({
+        visitorId,
+        sessionId,
+        customerIdentity,
+      });
+      const sessionsWithHuman = checkedSession
+        ? await attachLatestHumanMessages([checkedSession])
+        : [];
+      const sessionWithHuman = sessionsWithHuman[0] || null;
+      const customerSessions = await loadCustomerSessions(customerIdentity, {
+        includeUpdateMetadata: true,
+      });
+
+      logApiTiming("request end", requestStartedAt, {
+        sessionOnly: true,
+        checkUpdates: true,
+        sessionFound: Boolean(sessionWithHuman),
+      });
+
+      return sendJson(res, 200, {
+        session: sessionWithHuman
+          ? serializeSessionForClient(sessionWithHuman)
+          : null,
+        sessions: customerSessions,
+        messages: [],
+        latest_human_message: sessionWithHuman?.latest_human_message || null,
+        support_status: sessionWithHuman
+          ? getSessionSupportStatus(sessionWithHuman)
+          : "ai_replying",
+        ai_mode: sessionWithHuman ? getSessionAiMode(sessionWithHuman) : "ai_active",
+        limit,
+        before: null,
+        next_before: null,
+        has_more: false,
+      });
     }
 
     const sessionStartedAt = getTimingNow();
@@ -800,9 +958,11 @@ export default async function handler(req, res) {
         sessionId: session.id,
       });
       return sendJson(res, 200, {
-        session,
+        session: serializeSessionForClient(session),
         sessions: customerSessions,
         messages: [],
+        support_status: getSessionSupportStatus(session),
+        ai_mode: getSessionAiMode(session),
         limit,
         before: null,
         next_before: null,
@@ -847,9 +1007,11 @@ export default async function handler(req, res) {
     });
 
     return sendJson(res, 200, {
-      session,
+      session: serializeSessionForClient(session),
       sessions: customerSessions,
       messages: sortedMessages,
+      support_status: getSessionSupportStatus(session),
+      ai_mode: getSessionAiMode(session),
       limit,
       before: before || null,
       after: after || null,

@@ -2,6 +2,11 @@ import {
   getAdminChatAuthErrorMessage,
   requireChatSupportAdmin,
 } from "./adminAuth.js";
+import {
+  buildSessionModeBody,
+  getSessionSupportStatus,
+  normalizeExpiredHumanTakeovers,
+} from "./sessionAiMode.js";
 
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
@@ -9,8 +14,7 @@ const jsonHeaders = {
 const supabaseTimeoutMs = 8000;
 const defaultLimit = 30;
 const maxLimit = 50;
-const supportStatusValues = new Set([
-  "ai_replying",
+const supportFilters = new Set([
   "needs_human",
   "human_takeover",
   "replied",
@@ -85,7 +89,8 @@ function getPage(value) {
 }
 
 function normalizeSession(session) {
-  const supportStatus = getSupportStatus(session);
+  const modeBody = buildSessionModeBody(session);
+  const supportStatus = modeBody.support_status;
 
   return {
     id: session.id,
@@ -101,6 +106,8 @@ function normalizeSession(session) {
     customer_email: session.customer_email || "",
     status: session.status || "ai_active",
     support_status: supportStatus,
+    ai_mode: modeBody.ai_mode,
+    ai_paused_until: modeBody.ai_paused_until,
     should_ai_reply: session.should_ai_reply !== false,
     unread_count: Number(session.unread_count || 0),
     last_message: session.last_message || "",
@@ -117,23 +124,9 @@ function normalizeSession(session) {
   };
 }
 
-function getSupportStatus(session) {
-  const persistedStatus = String(session.support_status || "").trim();
-
-  if (session.status === "closed" || persistedStatus === "closed") {
-    return "closed";
-  }
-
-  if (supportStatusValues.has(persistedStatus)) {
-    return persistedStatus;
-  }
-
-  if (session.latest_message_sender === "human") return "replied";
-  if (session.status === "human_takeover" || session.should_ai_reply === false) {
-    return Number(session.unread_count || 0) > 0 ? "needs_human" : "human_takeover";
-  }
-
-  return "ai_replying";
+function matchesEffectiveFilter(session, filter) {
+  if (!supportFilters.has(filter)) return true;
+  return getSessionSupportStatus(session) === filter;
 }
 
 async function loadLatestMessages(sessionIds) {
@@ -179,6 +172,21 @@ async function applyLatestMessageFallbacks(sessions) {
   });
 }
 
+async function restoreExpiredHumanTakeoversForList() {
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const expiredSessions = await supabaseRequest(
+    `/chat_sessions?status=eq.human_takeover&ai_paused_until=not.is.null&ai_paused_until=lte.${encodeURIComponent(
+      nowIso
+    )}&deleted_at=is.null&select=id,status,support_status,should_ai_reply,ai_paused_until&limit=50`
+  );
+
+  await normalizeExpiredHumanTakeovers(expiredSessions || [], {
+    supabaseRequest,
+    now,
+  });
+}
+
 function getFilterQuery(filter) {
   switch (filter) {
     case "needs_human":
@@ -212,8 +220,9 @@ export default async function handler(req, res) {
     const limit = getPositiveInt(firstQueryValue(req.query?.limit), defaultLimit, maxLimit);
     const page = getPage(firstQueryValue(req.query?.page));
     const offset = page * limit;
+    await restoreExpiredHumanTakeoversForList();
     const select =
-      "id,visitor_id,line_user_id,line_display_name,line_picture_url,source,auth_user_id,customer_profile_id,customer_email,status,support_status,should_ai_reply,unread_count,last_message,latest_message_at,support_status_updated_at,handled_at,handled_by_name,handled_by_email,handled_by_role,closed_at,created_at,updated_at";
+      "id,visitor_id,line_user_id,line_display_name,line_picture_url,source,auth_user_id,customer_profile_id,customer_email,status,support_status,should_ai_reply,ai_paused_until,unread_count,last_message,latest_message_at,support_status_updated_at,handled_at,handled_by_name,handled_by_email,handled_by_role,closed_at,created_at,updated_at";
     const filterQuery = getFilterQuery(filter);
     const searchTerm = encodeURIComponent(`*${search.replace(/[(),]/g, " ")}*`);
     const searchFilter = search && !filterQuery.includes("&or=")
@@ -224,7 +233,12 @@ export default async function handler(req, res) {
         limit + 1
       }&offset=${offset}`
     );
-    const sessionPage = await applyLatestMessageFallbacks(sessions || []);
+    const effectiveSessions = await normalizeExpiredHumanTakeovers(sessions || [], {
+      supabaseRequest,
+    });
+    const sessionPage = (
+      await applyLatestMessageFallbacks(effectiveSessions)
+    ).filter((session) => matchesEffectiveFilter(session, filter));
     const hasMore = sessionPage.length > limit;
 
     return sendJson(res, 200, {

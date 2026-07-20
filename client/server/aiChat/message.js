@@ -23,6 +23,13 @@ import {
   createSessionOwnershipMismatchError,
   isValidSessionUuid,
 } from "./sessionValidation.js";
+import {
+  buildSessionModeBody as buildSharedSessionModeBody,
+  getSessionAiMode,
+  getSessionSupportStatus,
+  normalizeExpiredHumanTakeover,
+  normalizeExpiredHumanTakeovers,
+} from "./sessionAiMode.js";
 
 const systemPrompt = `你是「慢慢蒔光｜白雲基地」的 AI 客服小幫手。
 回答要溫柔、清楚、簡短，使用繁體中文。
@@ -689,8 +696,11 @@ async function loadBestLineSession(lineUserId) {
     return null;
   }
 
+  const effectiveSessions = await normalizeExpiredHumanTakeovers(sessions, {
+    supabaseRequest,
+  });
   const entries = await Promise.all(
-    sessions.map(async (session) => ({
+    effectiveSessions.map(async (session) => ({
       session,
       messageCount: await countSessionMessages(session.id),
     }))
@@ -911,6 +921,9 @@ function normalizeEntrySource(value) {
 function buildCreateSessionPayload(visitorId, customerIdentity, entrySource = "") {
   return {
     visitor_id: visitorId,
+    status: "ai_active",
+    support_status: "ai_replying",
+    should_ai_reply: true,
     ...(entrySource ? { source: entrySource } : {}),
     ...buildCustomerSessionPatch(customerIdentity),
   };
@@ -1146,11 +1159,13 @@ async function updateSessionAfterMessage(session, message, options = {}) {
     if (options.supportStatus === "needs_human") {
       patch.status = "ai_active";
       patch.should_ai_reply = true;
+      patch.ai_paused_until = null;
     }
 
     if (options.supportStatus === "ai_replying") {
       patch.status = "ai_active";
       patch.should_ai_reply = true;
+      patch.ai_paused_until = null;
     }
 
     if (options.supportStatus === "human_takeover") {
@@ -1176,17 +1191,7 @@ async function updateSessionAfterMessage(session, message, options = {}) {
 }
 
 export function shouldSkipAiReply(session) {
-  return session?.status === "human_takeover";
-}
-
-export function getSessionSupportStatus(session) {
-  const supportStatus = String(session?.support_status || "").trim();
-  if (supportStatus) return supportStatus;
-  return session?.status === "human_takeover" ? "human_takeover" : "ai_replying";
-}
-
-export function getSessionAiMode(session) {
-  return session?.status === "human_takeover" ? "human_takeover" : "ai_active";
+  return getSessionAiMode(session) === "human_takeover";
 }
 
 export function getAutoReplySupportStatus(session) {
@@ -1196,10 +1201,7 @@ export function getAutoReplySupportStatus(session) {
 }
 
 export function buildSessionModeBody(session) {
-  return {
-    support_status: getSessionSupportStatus(session),
-    ai_mode: getSessionAiMode(session),
-  };
+  return buildSharedSessionModeBody(session);
 }
 
 function serializeSessionForClient(session) {
@@ -1255,6 +1257,7 @@ export default async function handler(req, res) {
     session =
       (await updateSessionLineIdentity(session.id, identity.lineProfile)) ||
       session;
+    session = await normalizeExpiredHumanTakeover(session, { supabaseRequest });
 
     if (shouldSkipAiReply(session)) {
       const userMessage = await insertUserMessage(session.id, message);

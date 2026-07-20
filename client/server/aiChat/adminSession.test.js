@@ -93,6 +93,7 @@ describe("admin chat support status mapping", () => {
       status: "ai_active",
       support_status: "needs_human",
       should_ai_reply: true,
+      ai_paused_until: null,
     });
   });
 
@@ -107,13 +108,45 @@ describe("admin chat support status mapping", () => {
       buildSessionStatusPatch({
         requestedSupportStatus: "human_takeover",
         admin,
+        pauseDuration: "30m",
         now,
       })
     ).toMatchObject({
       status: "human_takeover",
       support_status: "human_takeover",
       should_ai_reply: false,
+      ai_paused_until: "2026-07-18T10:30:00.000Z",
       handled_by_admin_id: "admin-1",
+    });
+  });
+
+  it("supports timed and manual AI pauses from safe durations", () => {
+    expect(
+      buildSessionStatusPatch({
+        requestedSupportStatus: "human_takeover",
+        pauseDuration: "1h",
+        admin,
+        now,
+      })
+    ).toMatchObject({
+      status: "human_takeover",
+      support_status: "human_takeover",
+      should_ai_reply: false,
+      ai_paused_until: "2026-07-18T11:00:00.000Z",
+    });
+
+    expect(
+      buildSessionStatusPatch({
+        requestedSupportStatus: "human_takeover",
+        pauseDuration: "manual",
+        admin,
+        now,
+      })
+    ).toMatchObject({
+      status: "human_takeover",
+      support_status: "human_takeover",
+      should_ai_reply: false,
+      ai_paused_until: null,
     });
   });
 
@@ -130,6 +163,7 @@ describe("admin chat support status mapping", () => {
         status: "ai_active",
         support_status: "ai_replying",
         should_ai_reply: true,
+        ai_paused_until: null,
         closed_at: null,
       });
     }
@@ -146,6 +180,7 @@ describe("admin chat support status mapping", () => {
       status: "ai_active",
       support_status: "replied",
       should_ai_reply: true,
+      ai_paused_until: null,
       handled_at: now,
       unread_count: 0,
     });
@@ -162,6 +197,7 @@ describe("admin chat support status mapping", () => {
       status: "ai_active",
       support_status: "closed",
       should_ai_reply: true,
+      ai_paused_until: null,
       closed_at: now,
       closed_by_admin_id: "admin-1",
     });

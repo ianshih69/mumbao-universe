@@ -2,6 +2,12 @@ import {
   getAdminChatAuthErrorMessage,
   requireChatSupportAdmin,
 } from "./adminAuth.js";
+import {
+  assertPauseDuration,
+  buildSessionModeBody,
+  defaultPauseDuration,
+  getAiPausedUntilForDuration,
+} from "./sessionAiMode.js";
 
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
@@ -130,6 +136,7 @@ export function buildSessionStatusPatch({
   requestedSupportStatus = "",
   requestedStatus = "",
   admin = {},
+  pauseDuration = defaultPauseDuration,
   now = new Date().toISOString(),
 } = {}) {
   const status = requestedSupportStatus
@@ -152,17 +159,23 @@ export function buildSessionStatusPatch({
   if (patch.support_status === "needs_human") {
     patch.status = "ai_active";
     patch.should_ai_reply = true;
+    patch.ai_paused_until = null;
   }
 
   if (patch.support_status === "human_takeover") {
     patch.status = "human_takeover";
     patch.should_ai_reply = false;
+    patch.ai_paused_until = getAiPausedUntilForDuration(
+      pauseDuration,
+      new Date(now)
+    );
     Object.assign(patch, buildAdminSnapshot(admin));
   }
 
   if (patch.support_status === "replied") {
     patch.status = "ai_active";
     patch.should_ai_reply = true;
+    patch.ai_paused_until = null;
     Object.assign(patch, buildAdminSnapshot(admin));
     patch.handled_at = now;
     patch.unread_count = 0;
@@ -171,6 +184,7 @@ export function buildSessionStatusPatch({
   if (patch.support_status === "closed") {
     patch.status = "ai_active";
     patch.should_ai_reply = true;
+    patch.ai_paused_until = null;
     patch.closed_at = now;
     patch.closed_by_admin_id = admin.adminProfileId || null;
     patch.closed_by_name = admin.displayName || "";
@@ -183,6 +197,7 @@ export function buildSessionStatusPatch({
   if (patch.support_status === "ai_replying") {
     patch.status = "ai_active";
     patch.should_ai_reply = true;
+    patch.ai_paused_until = null;
     patch.closed_at = null;
     patch.closed_by_admin_id = null;
     patch.closed_by_name = null;
@@ -191,6 +206,18 @@ export function buildSessionStatusPatch({
   }
 
   return patch;
+}
+
+function serializeSessionStatusResponse(session, pauseDuration = null) {
+  if (!session) return null;
+
+  return {
+    session_id: session.id,
+    status: session.status || "ai_active",
+    should_ai_reply: session.should_ai_reply !== false,
+    ...buildSessionModeBody(session),
+    pause_duration: pauseDuration,
+  };
 }
 
 export default async function handler(req, res) {
@@ -208,6 +235,12 @@ export default async function handler(req, res) {
       body.support_status || body.supportStatus || actionSupportStatus || ""
     ).trim();
     const requestedStatus = String(body.status || "").trim();
+    const pauseDuration =
+      requestedSupportStatus === "human_takeover"
+        ? assertPauseDuration(
+            body.pause_duration || body.pauseDuration || defaultPauseDuration
+          )
+        : null;
     const status = requestedSupportStatus
       ? getCoreStatusForSupportStatus(requestedSupportStatus)
       : requestedStatus;
@@ -227,6 +260,7 @@ export default async function handler(req, res) {
       requestedSupportStatus,
       requestedStatus,
       admin,
+      pauseDuration: pauseDuration || defaultPauseDuration,
     });
 
     const updatedSessions = await supabaseRequest(
@@ -241,9 +275,14 @@ export default async function handler(req, res) {
       return sendJson(res, 404, { error: "Chat session not found." });
     }
 
-    return sendJson(res, 200, { session: updatedSessions[0] });
+    return sendJson(res, 200, {
+      session: serializeSessionStatusResponse(updatedSessions[0], pauseDuration),
+    });
   } catch (error) {
     console.error("admin chat update session error:", error);
+    if (error.status === 400) {
+      return sendJson(res, 400, { error: error.message });
+    }
     return sendJson(res, error.status || 500, {
       error: getAdminChatAuthErrorMessage(error),
     });

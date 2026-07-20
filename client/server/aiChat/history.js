@@ -9,6 +9,13 @@ import {
   createSessionOwnershipMismatchError,
   isValidSessionUuid,
 } from "./sessionValidation.js";
+import {
+  buildSessionModeBody,
+  getSessionAiMode,
+  getSessionSupportStatus,
+  normalizeExpiredHumanTakeover,
+  normalizeExpiredHumanTakeovers,
+} from "./sessionAiMode.js";
 
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
@@ -342,8 +349,11 @@ async function loadBestLineSession(lineUserId) {
     return null;
   }
 
+  const effectiveSessions = await normalizeExpiredHumanTakeovers(sessions, {
+    supabaseRequest,
+  });
   const entries = await Promise.all(
-    sessions.map(async (session) => ({
+    effectiveSessions.map(async (session) => ({
       session,
       messageCount: await countSessionMessages(session.id),
     }))
@@ -359,29 +369,21 @@ function normalizeEntrySource(value) {
     : "";
 }
 
-function getSessionSupportStatus(session) {
-  const supportStatus = String(session?.support_status || "").trim();
-  if (supportStatus) return supportStatus;
-  return session?.status === "human_takeover" ? "human_takeover" : "ai_replying";
-}
-
-function getSessionAiMode(session) {
-  return session?.status === "human_takeover" ? "human_takeover" : "ai_active";
-}
-
 function serializeSessionForClient(session) {
   if (!session) return null;
 
   return {
     ...session,
-    support_status: getSessionSupportStatus(session),
-    ai_mode: getSessionAiMode(session),
+    ...buildSessionModeBody(session),
   };
 }
 
 function buildCreateSessionPayload(visitorId, customerIdentity, entrySource = "") {
   return {
     visitor_id: visitorId,
+    status: "ai_active",
+    support_status: "ai_replying",
+    should_ai_reply: true,
     ...(entrySource ? { source: entrySource } : {}),
     ...buildCustomerSessionPatch(customerIdentity),
   };
@@ -500,15 +502,18 @@ async function loadCustomerSessions(customerIdentity, options = {}) {
   const sessions = await supabaseRequest(
     `/chat_sessions?auth_user_id=eq.${encodeURIComponent(
       customerIdentity.authUserId
-    )}&deleted_at=is.null&select=id,visitor_id,last_message,latest_message_at,last_message_at,title,created_at,updated_at,source,line_user_id&order=latest_message_at.desc.nullslast,updated_at.desc&limit=8`
+    )}&deleted_at=is.null&select=id,visitor_id,last_message,latest_message_at,last_message_at,title,created_at,updated_at,source,line_user_id,status,support_status,should_ai_reply,ai_paused_until&order=latest_message_at.desc.nullslast,updated_at.desc&limit=8`
   );
 
   if (!Array.isArray(sessions) || sessions.length === 0) {
     return [];
   }
+  const effectiveSessions = await normalizeExpiredHumanTakeovers(sessions, {
+    supabaseRequest,
+  });
 
   const previews = await Promise.all(
-    sessions.map(async (session) => {
+    effectiveSessions.map(async (session) => {
       if (!session?.id) return "";
 
       const messages = await supabaseRequest(
@@ -521,8 +526,9 @@ async function loadCustomerSessions(customerIdentity, options = {}) {
     })
   );
 
-  const sessionSummaries = sessions.map((session, index) => ({
+  const sessionSummaries = effectiveSessions.map((session, index) => ({
     ...session,
+    ...buildSessionModeBody(session),
     preview_message: previews[index] || "",
   }));
 
@@ -553,7 +559,7 @@ async function loadSessionForUpdateCheck({
       (isSessionOwnedByCustomer(session, customerIdentity) ||
         (!session.auth_user_id && session.visitor_id === visitorId))
     ) {
-      return session;
+      return normalizeExpiredHumanTakeover(session, { supabaseRequest });
     }
 
     return null;
@@ -569,7 +575,9 @@ async function loadSessionForUpdateCheck({
     )}&auth_user_id=is.null&deleted_at=is.null&select=*&limit=1`
   );
 
-  return sessions?.[0] || null;
+  return sessions?.[0]
+    ? normalizeExpiredHumanTakeover(sessions[0], { supabaseRequest })
+    : null;
 }
 
 async function getOrCreateSession(visitorId, customerIdentity, entrySource = "") {
@@ -944,6 +952,7 @@ export default async function handler(req, res) {
     session =
       (await updateSessionLineIdentity(session.id, identity.lineProfile)) ||
       session;
+    session = await normalizeExpiredHumanTakeover(session, { supabaseRequest });
     logApiTiming("session resolve end", sessionStartedAt, {
       sessionId: session?.id || "",
       visitorId: session?.visitor_id || visitorId,

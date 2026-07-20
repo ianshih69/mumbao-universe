@@ -73,6 +73,7 @@ type ChatSession = {
   status?: "ai_active" | "human_takeover" | "closed" | string;
   support_status?: string;
   ai_mode?: "ai_active" | "human_takeover" | string;
+  ai_paused_until?: string | null;
   should_ai_reply?: boolean;
   visitor_id?: string;
   source?: string;
@@ -96,6 +97,7 @@ type ChatMessageResponse = {
   notice?: string;
   support_status?: string;
   ai_mode?: string;
+  ai_paused_until?: string | null;
 };
 
 type SessionRequestIdentity = {
@@ -164,8 +166,7 @@ const sessionReconnectReply = "對話已重新連線，請再試一次。";
 const rateLimitReply = "慢寶現在收到較多問題，請稍後再問喔。";
 const networkErrorReply = "目前網路連線不穩，請檢查網路後重試。";
 const humanTakeoverNotice =
-  "這段對話目前由管家接手，慢寶已暫停自動回答。你的訊息已送達，管家會在這個聊天視窗回覆你。";
-const humanTakeoverBanner = "目前由人工客服接手，慢寶暫停自動回答。";
+  "訊息已送達人工客服。管家會在這個聊天視窗回覆你。";
 const humanTakeoverLabel = "人工客服處理中";
 const envChatDebugEnabled =
   String(
@@ -807,6 +808,18 @@ function formatTaipeiMessageTime(value?: string) {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(value));
+}
+
+function getHumanTakeoverBanner(aiPausedUntil?: string | null) {
+  const pausedUntilLabel = formatTaipeiMessageTime(aiPausedUntil || "");
+  const newChatHint =
+    "想詢問其他一般住宿問題，也可以開啟新對話，慢寶會繼續為你服務。";
+
+  if (pausedUntilLabel) {
+    return `這段對話目前由管家接手，慢寶將暫停自動回答至 ${pausedUntilLabel}。你的訊息仍會送達管家。\n${newChatHint}`;
+  }
+
+  return `這段對話目前由管家接手，慢寶已暫停自動回答。你的訊息仍會送達管家。\n${newChatHint}`;
 }
 
 function sortMessagesByCreatedAt(messages: ChatMessage[]) {
@@ -1871,6 +1884,7 @@ export function MumbaoChat({
   const [lineIdentity, setLineIdentity] = useState<LineIdentity | null>(null);
   const [sessionId, setSessionId] = useState("");
   const [aiMode, setAiMode] = useState<ChatAiMode>("ai_active");
+  const [aiPausedUntil, setAiPausedUntil] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     createWelcomeMessage(),
   ]);
@@ -1950,13 +1964,24 @@ export function MumbaoChat({
   const applyAiModeFromResponse = useCallback(
     (
       source: string,
-      data: { session?: ChatSession | null; ai_mode?: string }
+      data: {
+        session?: ChatSession | null;
+        ai_mode?: string;
+        ai_paused_until?: string | null;
+      }
     ) => {
       const nextAiMode = getAiModeFromSession(data.session, data.ai_mode);
+      const nextAiPausedUntil =
+        nextAiMode === "human_takeover"
+          ? String(data.session?.ai_paused_until || data.ai_paused_until || "") ||
+            null
+          : null;
       setAiMode(nextAiMode);
+      setAiPausedUntil(nextAiPausedUntil);
       logChatDebug("ai mode update", {
         source,
         aiMode: nextAiMode,
+        aiPausedUntil: nextAiPausedUntil || "",
         sessionStatus: data.session?.status || "",
         supportStatus: data.session?.support_status || "",
       });
@@ -2587,6 +2612,7 @@ export function MumbaoChat({
           });
           updateMessages("history-session-reset", [createWelcomeMessage()]);
           setAiMode("ai_active");
+          setAiPausedUntil(null);
           setHasMoreHistory(false);
 
           if (targetSessionId === latestSessionIdRef.current) {
@@ -2909,6 +2935,7 @@ export function MumbaoChat({
           clearCachedMessages("polling session invalid", { sessionId });
           updateSessionId("polling-session-reset", "");
           setAiMode("ai_active");
+          setAiPausedUntil(null);
           setHasMoreHistory(false);
           return;
         }
@@ -3203,6 +3230,7 @@ export function MumbaoChat({
         updateSessionId("load-history-session-reset", "");
         updateMessages("load-history-session-reset", [createWelcomeMessage()]);
         setAiMode("ai_active");
+        setAiPausedUntil(null);
         setHasMoreHistory(false);
         return;
       }
@@ -3285,6 +3313,7 @@ export function MumbaoChat({
       setHasMoreHistory(false);
       updateSessionId("delete-session", "");
       setAiMode("ai_active");
+      setAiPausedUntil(null);
 
       const data = await fetchSessionOnly(
         visitorId,
@@ -3393,6 +3422,7 @@ export function MumbaoChat({
         clearCachedMessages("message session invalid", { sessionId });
         updateSessionId("message-session-reset", "");
         setAiMode("ai_active");
+        setAiPausedUntil(null);
 
         data = await sendMessageRequest("");
       }
@@ -3595,7 +3625,19 @@ export function MumbaoChat({
         {isHumanTakeoverMode && (
           <div className="rounded-2xl border border-[#ead8c6] bg-[#fff7ea] px-4 py-3 text-xs leading-5 text-[#7a5a40] shadow-sm">
             <p className="font-semibold text-[#5f4937]">{humanTakeoverLabel}</p>
-            <p className="mt-1">{humanTakeoverBanner}</p>
+            <p className="mt-1 whitespace-pre-line">
+              {getHumanTakeoverBanner(aiPausedUntil)}
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleStartNewSession}
+              disabled={isSessionActionLoading || isLoading || !visitorId}
+              className="mt-3 h-8 rounded-full border-[#d8c3ad] bg-white px-3 text-xs text-[#6f5a45] hover:bg-[#fff2df] disabled:cursor-wait disabled:opacity-60"
+            >
+              開啟新對話
+            </Button>
           </div>
         )}
 

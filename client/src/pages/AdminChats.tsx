@@ -7,9 +7,18 @@ import {
   useRef,
   useState,
 } from "react";
-import { Bot, RefreshCw, Search, Send, ShieldCheck, UserRound } from "lucide-react";
+import { Bot, PauseCircle, RefreshCw, Search, Send, ShieldCheck, UserRound } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
@@ -28,6 +37,7 @@ type ChatSupportStatus =
   | "human_takeover"
   | "replied"
   | "closed";
+type PauseDuration = "30m" | "1h" | "manual";
 type ChatSessionFilter =
   | "all"
   | "needs_human"
@@ -53,6 +63,8 @@ type AdminChatSession = {
   customer_email?: string;
   status?: ChatSessionStatus;
   support_status?: ChatSupportStatus;
+  ai_mode?: "ai_active" | "human_takeover" | string;
+  ai_paused_until?: string | null;
   should_ai_reply?: boolean;
   unread_count?: number;
   last_message?: string;
@@ -79,11 +91,32 @@ type AdminChatMessage = {
 
 const sessionListLimit = 30;
 const chatSupportRoles = new Set(["super_admin", "admin", "manager"]);
+const pauseDurationOptions: Array<{
+  value: PauseDuration;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "30m",
+    label: "暫停 30 分鐘",
+    description: "預設選項，適合短時間由管家接手確認。",
+  },
+  {
+    value: "1h",
+    label: "暫停 1 小時",
+    description: "適合付款、退款或需要稍長處理時間的對話。",
+  },
+  {
+    value: "manual",
+    label: "持續暫停，直到手動恢復",
+    description: "只用在客訴或需管家全程處理的特殊情況。",
+  },
+];
 
 const supportStatusLabels: Record<ChatSupportStatus, string> = {
   ai_replying: "AI 回覆中",
   needs_human: "人工待辦",
-  human_takeover: "人工接手中",
+  human_takeover: "AI 已暫停",
   replied: "已回覆",
   closed: "已關閉",
 };
@@ -99,7 +132,7 @@ const supportStatusStyles: Record<ChatSupportStatus, string> = {
 const sessionFilters: Array<{ value: ChatSessionFilter; label: string }> = [
   { value: "all", label: "全部" },
   { value: "needs_human", label: "人工待辦" },
-  { value: "human_takeover", label: "人工接手" },
+  { value: "human_takeover", label: "AI 已暫停" },
   { value: "replied", label: "已回覆" },
   { value: "closed", label: "已關閉" },
   { value: "line", label: "LINE 圖文入口" },
@@ -210,6 +243,20 @@ function formatMessageTime(value?: string) {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(value));
+}
+
+function getPauseRemainingLabel(value?: string | null) {
+  if (!value || Number.isNaN(Date.parse(value))) return "";
+
+  const remainingMs = Date.parse(value) - Date.now();
+  if (remainingMs <= 0) return "即將自動恢復";
+
+  const remainingMinutes = Math.ceil(remainingMs / 60000);
+  if (remainingMinutes < 60) return `剩餘 ${remainingMinutes} 分鐘`;
+
+  const hours = Math.floor(remainingMinutes / 60);
+  const minutes = remainingMinutes % 60;
+  return minutes ? `剩餘 ${hours} 小時 ${minutes} 分鐘` : `剩餘 ${hours} 小時`;
 }
 
 function formatSessionTime(value?: string) {
@@ -342,6 +389,8 @@ export default function AdminChats() {
   const [sessionPage, setSessionPage] = useState(0);
   const [error, setError] = useState("");
   const [statusNotice, setStatusNotice] = useState("");
+  const [isPauseDialogOpen, setIsPauseDialogOpen] = useState(false);
+  const [pauseDuration, setPauseDuration] = useState<PauseDuration>("30m");
   const [failedAvatarIds, setFailedAvatarIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -566,17 +615,11 @@ export default function AdminChats() {
     }
   };
 
-  const updateSupportStatus = async (supportStatus: ChatSupportStatus) => {
+  const updateSupportStatus = async (
+    supportStatus: ChatSupportStatus,
+    options: { pauseDuration?: PauseDuration } = {}
+  ) => {
     if (!selectedSessionId || !token || !canAccessChatSupport) return;
-
-    if (
-      supportStatus === "human_takeover" &&
-      !window.confirm(
-        "將只暫停目前這段對話的慢寶自動回答，其他客人不受影響。確定接手嗎？"
-      )
-    ) {
-      return;
-    }
 
     const actionByStatus: Record<ChatSupportStatus, string> = {
       ai_replying:
@@ -595,7 +638,12 @@ export default function AdminChats() {
         token,
         {
           method: "PATCH",
-          body: JSON.stringify({ support_status: supportStatus }),
+          body: JSON.stringify({
+            support_status: supportStatus,
+            ...(supportStatus === "human_takeover"
+              ? { pause_duration: options.pauseDuration || "30m" }
+              : {}),
+          }),
         }
       );
       await loadSessions({ page: 0, silent: true });
@@ -603,6 +651,9 @@ export default function AdminChats() {
         setStatusNotice(
           "已恢復目前這段對話的慢寶自動回答，其他客人不受影響。"
         );
+      } else if (supportStatus === "human_takeover") {
+        setIsPauseDialogOpen(false);
+        setStatusNotice("已暫停目前這段對話的慢寶自動回答，其他客人不受影響。");
       }
     } catch (statusError) {
       if (isAdminAuthError(statusError)) {
@@ -613,6 +664,10 @@ export default function AdminChats() {
         statusError instanceof Error ? statusError.message : "更新狀態失敗"
       );
     }
+  };
+
+  const confirmPauseAi = () => {
+    void updateSupportStatus("human_takeover", { pauseDuration });
   };
 
   const sendReply = async () => {
@@ -878,6 +933,9 @@ export default function AdminChats() {
           (() => {
             const selectedSupportStatus = getSupportStatus(selectedSession);
             const isClosed = selectedSupportStatus === "closed";
+            const pauseUntil = selectedSession.ai_paused_until || "";
+            const pauseUntilLabel = formatMessageTime(pauseUntil);
+            const pauseRemainingLabel = getPauseRemainingLabel(pauseUntil);
 
             return (
           <>
@@ -946,17 +1004,23 @@ export default function AdminChats() {
                         onClick={() => updateSupportStatus("ai_replying")}
                         className="flex-none whitespace-nowrap"
                       >
-                        恢復 AI
+                        立即恢復 AI
                       </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        onClick={() => updateSupportStatus("human_takeover")}
-                        className="flex-none whitespace-nowrap"
-                      >
-                        人工接手並暫停 AI
-                      </Button>
-                    )}
+                    ) : null}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setPauseDuration("30m");
+                        setIsPauseDialogOpen(true);
+                      }}
+                      className="flex-none whitespace-nowrap border-[#d8c4ad] text-[#7a5b41]"
+                    >
+                      <PauseCircle className="mr-1 size-4" aria-hidden="true" />
+                      {selectedSupportStatus === "human_takeover"
+                        ? "調整暫停時間"
+                        : "暫停此對話的 AI"}
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
@@ -1001,13 +1065,21 @@ export default function AdminChats() {
                 此操作只影響目前選中的對話，其他客人不受影響。
               </p>
               {selectedSupportStatus === "human_takeover" && (
-                <p className="mt-1">
-                  已切換人工接手。慢寶會暫停自動回答，使用者的新訊息會送達這個客服視窗。
-                </p>
+                <div className="mt-1 space-y-1">
+                  <p>此對話的 AI 已暫停。</p>
+                  {pauseUntilLabel ? (
+                    <p>
+                      將於 {pauseUntilLabel} 自動恢復
+                      {pauseRemainingLabel ? `（${pauseRemainingLabel}）` : ""}。
+                    </p>
+                  ) : (
+                    <p>此對話的 AI 已持續暫停，直到管理員手動恢復。</p>
+                  )}
+                </div>
               )}
               {selectedSupportStatus === "needs_human" && (
                 <p className="mt-1">
-                  此對話已加入人工待辦。慢寶仍會繼續自動回答，客服可視需要回覆或改為人工接手。
+                  只加入客服待辦，慢寶仍會繼續回答。客服可視需要回覆或改為暫停此對話的 AI。
                 </p>
               )}
               {selectedSupportStatus === "closed" && selectedSession.closed_at && (
@@ -1022,6 +1094,49 @@ export default function AdminChats() {
                 </p>
               )}
             </div>
+
+            <Dialog open={isPauseDialogOpen} onOpenChange={setIsPauseDialogOpen}>
+              <DialogContent className="max-w-md bg-[#fffaf2]">
+                <DialogHeader>
+                  <DialogTitle>暫停此對話的 AI</DialogTitle>
+                  <DialogDescription className="leading-6">
+                    僅適用於退款、客訴、付款或需要由管家全程處理的特殊情況。此操作只影響目前這段對話，其他客人不受影響。
+                  </DialogDescription>
+                </DialogHeader>
+                <RadioGroup
+                  value={pauseDuration}
+                  onValueChange={(value) => setPauseDuration(value as PauseDuration)}
+                  className="gap-2"
+                >
+                  {pauseDurationOptions.map((option) => (
+                    <label
+                      key={option.value}
+                      className="flex cursor-pointer gap-3 rounded-lg border border-[#ead8c6] bg-white px-3 py-3 text-sm text-[#5f4937] transition hover:bg-[#fff6e8]"
+                    >
+                      <RadioGroupItem value={option.value} className="mt-0.5" />
+                      <span>
+                        <span className="block font-medium">{option.label}</span>
+                        <span className="mt-1 block text-xs leading-5 text-[#8a796a]">
+                          {option.description}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </RadioGroup>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsPauseDialogOpen(false)}
+                  >
+                    取消
+                  </Button>
+                  <Button type="button" onClick={confirmPauseAi}>
+                    確認暫停 AI
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             {error && (
               <div className="border-b border-red-100 bg-red-50 px-5 py-2 text-sm text-red-600">

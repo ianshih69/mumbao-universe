@@ -2,6 +2,7 @@ import {
   getAdminChatAuthErrorMessage,
   requireChatSupportAdmin,
 } from "./adminAuth.js";
+import { normalizeExpiredHumanTakeover } from "./sessionAiMode.js";
 
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
@@ -103,7 +104,7 @@ function normalizeMessage(message) {
 
 async function assertSessionExists(sessionId) {
   const sessions = await supabaseRequest(
-    `/chat_sessions?id=eq.${encodeURIComponent(sessionId)}&select=id,status,support_status&limit=1`
+    `/chat_sessions?id=eq.${encodeURIComponent(sessionId)}&select=id,status,support_status,should_ai_reply,ai_paused_until&limit=1`
   );
 
   if (!sessions?.[0]) {
@@ -112,7 +113,7 @@ async function assertSessionExists(sessionId) {
     throw error;
   }
 
-  return sessions[0];
+  return normalizeExpiredHumanTakeover(sessions[0], { supabaseRequest });
 }
 
 async function markRead(sessionId) {
@@ -157,7 +158,7 @@ async function handleGet(req, res, sessionId) {
 
 async function handlePost(req, res, sessionId) {
   const admin = await requireChatSupportAdmin(req);
-  await assertSessionExists(sessionId);
+  const session = await assertSessionExists(sessionId);
   const body = await readBody(req);
   const content = String(body.content || body.message || "").trim();
 
@@ -180,26 +181,47 @@ async function handlePost(req, res, sessionId) {
 
   await supabaseRequest(`/chat_sessions?id=eq.${encodeURIComponent(sessionId)}`, {
     method: "PATCH",
-    body: JSON.stringify({
-      status: "ai_active",
-      support_status: "replied",
-      should_ai_reply: true,
-      last_message: content,
-      latest_message_at: message.created_at || new Date().toISOString(),
-      support_status_updated_at: message.created_at || new Date().toISOString(),
-      handled_at: message.created_at || new Date().toISOString(),
-      handled_by_admin_id: admin.adminProfileId || null,
-      handled_by_name: admin.displayName || "",
-      handled_by_email: admin.email || "",
-      handled_by_role: admin.roleCode || "",
-      unread_count: 0,
-      updated_at: new Date().toISOString(),
-    }),
+    body: JSON.stringify(
+      buildHumanReplySessionPatch({
+        session,
+        admin,
+        content,
+        messageCreatedAt: message.created_at,
+      })
+    ),
   });
 
   return sendJson(res, 200, {
     message: normalizeMessage(message),
   });
+}
+
+export function buildHumanReplySessionPatch({
+  session = {},
+  admin = {},
+  content = "",
+  messageCreatedAt = "",
+  now = new Date().toISOString(),
+} = {}) {
+  const timestamp = messageCreatedAt || now;
+  const isHumanTakeover = session?.status === "human_takeover";
+
+  return {
+    status: isHumanTakeover ? "human_takeover" : "ai_active",
+    support_status: isHumanTakeover ? "human_takeover" : "replied",
+    should_ai_reply: !isHumanTakeover,
+    ai_paused_until: isHumanTakeover ? session.ai_paused_until || null : null,
+    last_message: content,
+    latest_message_at: timestamp,
+    support_status_updated_at: timestamp,
+    handled_at: timestamp,
+    handled_by_admin_id: admin.adminProfileId || null,
+    handled_by_name: admin.displayName || "",
+    handled_by_email: admin.email || "",
+    handled_by_role: admin.roleCode || "",
+    unread_count: 0,
+    updated_at: now,
+  };
 }
 
 export default async function handler(req, res) {

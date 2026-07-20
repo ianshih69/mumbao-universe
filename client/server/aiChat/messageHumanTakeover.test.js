@@ -43,6 +43,7 @@ describe("AI chat human takeover mode", () => {
     ).toEqual({
       support_status: "needs_human",
       ai_mode: "ai_active",
+      ai_paused_until: null,
     });
 
     expect(
@@ -53,6 +54,7 @@ describe("AI chat human takeover mode", () => {
     ).toEqual({
       support_status: "human_takeover",
       ai_mode: "human_takeover",
+      ai_paused_until: null,
     });
   });
 

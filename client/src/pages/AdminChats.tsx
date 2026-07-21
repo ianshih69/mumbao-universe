@@ -89,7 +89,29 @@ type AdminChatMessage = {
   created_at?: string;
 };
 
+type ScrollMetrics = Pick<
+  HTMLElement,
+  "clientHeight" | "scrollHeight" | "scrollTop"
+>;
+
+type ScrollIntent =
+  | {
+      mode: "bottom";
+      sessionId: string;
+      behavior?: ScrollBehavior;
+    }
+  | {
+      mode: "preserve-prepend";
+      nextScrollHeight: number;
+      previousScrollHeight: number;
+      previousScrollTop: number;
+      sessionId: string;
+    };
+
 const sessionListLimit = 30;
+export const adminChatSessionPollMs = 10_000;
+export const adminChatMessagePollMs = 5_000;
+export const adminChatNearBottomThresholdPx = 100;
 const chatSupportRoles = new Set(["super_admin", "admin", "manager"]);
 const pauseDurationOptions: Array<{
   value: PauseDuration;
@@ -322,7 +344,66 @@ function getNewestCreatedAt(messages: AdminChatMessage[]) {
   }, "");
 }
 
-function mergeMessages(
+function getMessageComparableFields(message: AdminChatMessage) {
+  return [
+    String(message.id),
+    String(message.session_id || ""),
+    message.role || "",
+    message.content || "",
+    message.provider_used || "",
+    message.created_at || "",
+  ].join("\u001f");
+}
+
+export function areAdminMessageListsEqual(
+  first: AdminChatMessage[],
+  second: AdminChatMessage[]
+) {
+  if (first === second) return true;
+  if (first.length !== second.length) return false;
+
+  return first.every(
+    (message, index) =>
+      getMessageComparableFields(message) ===
+      getMessageComparableFields(second[index])
+  );
+}
+
+export function getNewAdminMessageCount(
+  current: AdminChatMessage[],
+  next: AdminChatMessage[]
+) {
+  const currentIds = new Set(current.map((message) => String(message.id)));
+  return next.filter((message) => !currentIds.has(String(message.id))).length;
+}
+
+export function isNearBottom(
+  element: ScrollMetrics | null,
+  threshold = adminChatNearBottomThresholdPx
+) {
+  if (!element) return true;
+  return (
+    element.scrollHeight - element.scrollTop - element.clientHeight <= threshold
+  );
+}
+
+export function getPrependedScrollTop({
+  nextScrollHeight,
+  previousScrollHeight,
+  previousScrollTop,
+}: {
+  nextScrollHeight: number;
+  previousScrollHeight: number;
+  previousScrollTop: number;
+}) {
+  return previousScrollTop + Math.max(0, nextScrollHeight - previousScrollHeight);
+}
+
+export function getNewMessageNoticeLabel(count: number) {
+  return count === 1 ? "1 則新訊息 ↓" : `${count} 則新訊息 ↓`;
+}
+
+export function mergeMessages(
   current: AdminChatMessage[],
   incoming: AdminChatMessage[]
 ) {
@@ -339,7 +420,62 @@ function mergeMessages(
   });
 }
 
-function mergeSessions(
+export function mergeMessagesPreservingReference(
+  current: AdminChatMessage[],
+  incoming: AdminChatMessage[]
+) {
+  const merged = mergeMessages(current, incoming);
+  return areAdminMessageListsEqual(current, merged) ? current : merged;
+}
+
+function getSessionComparableFields(session: AdminChatSession) {
+  return [
+    session.id || "",
+    session.session_id || "",
+    session.visitor_id || "",
+    session.visitor_name || "",
+    session.line_user_id || "",
+    session.line_display_name || "",
+    session.line_picture_url || "",
+    session.source || "",
+    session.auth_user_id || "",
+    session.customer_profile_id || "",
+    session.customer_email || "",
+    session.status || "",
+    session.support_status || "",
+    session.ai_mode || "",
+    session.ai_paused_until || "",
+    String(session.should_ai_reply !== false),
+    String(session.unread_count || 0),
+    session.last_message || "",
+    session.latest_message_sender || "",
+    session.latest_message_at || "",
+    session.support_status_updated_at || "",
+    session.handled_at || "",
+    session.handled_by_name || "",
+    session.handled_by_email || "",
+    session.handled_by_role || "",
+    session.closed_at || "",
+    session.created_at || "",
+    session.updated_at || "",
+  ].join("\u001f");
+}
+
+export function areAdminSessionListsEqual(
+  first: AdminChatSession[],
+  second: AdminChatSession[]
+) {
+  if (first === second) return true;
+  if (first.length !== second.length) return false;
+
+  return first.every(
+    (session, index) =>
+      getSessionComparableFields(session) ===
+      getSessionComparableFields(second[index])
+  );
+}
+
+export function mergeSessions(
   current: AdminChatSession[],
   incoming: AdminChatSession[],
   replace = false
@@ -359,13 +495,17 @@ function mergeSessions(
     }
   }
 
-  return Array.from(byId.values()).sort((first, second) => {
+  const mergedSessions = Array.from(byId.values()).sort((first, second) => {
     const firstTime =
       Date.parse(first.latest_message_at || first.updated_at || "") || 0;
     const secondTime =
       Date.parse(second.latest_message_at || second.updated_at || "") || 0;
     return secondTime - firstTime;
   });
+
+  return areAdminSessionListsEqual(current, mergedSessions)
+    ? current
+    : mergedSessions;
 }
 
 export default function AdminChats() {
@@ -394,8 +534,12 @@ export default function AdminChats() {
   const [failedAvatarIds, setFailedAvatarIds] = useState<Set<string>>(
     () => new Set()
   );
+  const [newMessageCount, setNewMessageCount] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesCacheRef = useRef<Map<string, AdminChatMessage[]>>(new Map());
+  const pendingScrollIntentRef = useRef<ScrollIntent | null>(null);
+  const selectedSessionIdRef = useRef("");
+  const userScrolledUpRef = useRef(false);
   const canAccessChatSupport = canViewChatSupport(identity);
 
   const selectedSession = useMemo(
@@ -426,6 +570,42 @@ export default function AdminChats() {
       return items;
     });
   }, [messages]);
+
+  const queueScrollToBottom = useCallback(
+    (sessionId: string, behavior: ScrollBehavior = "auto") => {
+      pendingScrollIntentRef.current = {
+        mode: "bottom",
+        sessionId,
+        behavior,
+      };
+    },
+    []
+  );
+
+  const handleNewMessageNoticeClick = useCallback(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+
+    element.scrollTo({
+      top: element.scrollHeight,
+      behavior: "smooth",
+    });
+    userScrolledUpRef.current = false;
+    setNewMessageCount(0);
+  }, []);
+
+  const handleMessageScroll = useCallback(
+    (event: UIEvent<HTMLDivElement>) => {
+      const element = event.currentTarget;
+      const nearBottom = isNearBottom(element);
+
+      userScrolledUpRef.current = !nearBottom;
+      if (nearBottom && newMessageCount > 0) {
+        setNewMessageCount(0);
+      }
+    },
+    [newMessageCount]
+  );
 
   const handleAuthFailure = useCallback(() => {
     clearStoredAdminToken();
@@ -503,10 +683,6 @@ export default function AdminChats() {
       const cachedMessages = messagesCacheRef.current.get(sessionId) || [];
       const since = incremental ? getNewestCreatedAt(cachedMessages) : "";
 
-      if (!silent && cachedMessages.length > 0) {
-        setMessages(cachedMessages);
-      }
-
       if (!silent && cachedMessages.length === 0) {
         setIsMessagesLoading(true);
       }
@@ -523,12 +699,42 @@ export default function AdminChats() {
         );
         const incomingMessages = data.messages || [];
         const mergedMessages = since
-          ? mergeMessages(cachedMessages, incomingMessages)
+          ? mergeMessagesPreservingReference(cachedMessages, incomingMessages)
           : mergeMessages([], incomingMessages);
 
+        if (areAdminMessageListsEqual(cachedMessages, mergedMessages)) {
+          setError("");
+          return;
+        }
+
+        const isSelectedSession = sessionId === selectedSessionIdRef.current;
+        const scrollElement = scrollRef.current;
+        const wasNearBottom = isNearBottom(scrollElement);
+        const incomingNewMessageCount = getNewAdminMessageCount(
+          cachedMessages,
+          mergedMessages
+        );
+
         messagesCacheRef.current.set(sessionId, mergedMessages);
-        if (sessionId === selectedSessionId) {
-          setMessages(mergedMessages);
+        if (isSelectedSession) {
+          if (!silent || !incremental) {
+            queueScrollToBottom(sessionId);
+            userScrolledUpRef.current = false;
+            setNewMessageCount(0);
+          } else if (incomingNewMessageCount > 0) {
+            if (wasNearBottom && !userScrolledUpRef.current) {
+              queueScrollToBottom(sessionId);
+              setNewMessageCount(0);
+            } else {
+              setNewMessageCount((current) => current + incomingNewMessageCount);
+            }
+          }
+
+          setMessages((current) =>
+            areAdminMessageListsEqual(current, mergedMessages)
+              ? current
+              : mergedMessages
+          );
         }
         setError("");
       } catch (loadError) {
@@ -544,7 +750,13 @@ export default function AdminChats() {
         }
       }
     },
-    [canAccessChatSupport, handleAuthFailure, selectedSessionId, token]
+    [
+      canAccessChatSupport,
+      handleAuthFailure,
+      queueScrollToBottom,
+      selectedSessionId,
+      token,
+    ]
   );
 
   useEffect(() => {
@@ -557,17 +769,30 @@ export default function AdminChats() {
     loadSessions({ page: 0 });
     const timer = window.setInterval(
       () => loadSessions({ page: 0, silent: true }),
-      10000
+      adminChatSessionPollMs
     );
     return () => window.clearInterval(timer);
   }, [activeFilter, canAccessChatSupport, loadSessions, token]);
 
   useEffect(() => {
+    selectedSessionIdRef.current = selectedSessionId;
+  }, [selectedSessionId]);
+
+  useEffect(() => {
     if (!token || !selectedSessionId) return;
+
+    pendingScrollIntentRef.current = null;
+    userScrolledUpRef.current = false;
+    setNewMessageCount(0);
 
     const cachedMessages = messagesCacheRef.current.get(selectedSessionId);
     if (cachedMessages) {
-      setMessages(cachedMessages);
+      queueScrollToBottom(selectedSessionId);
+      setMessages((current) =>
+        areAdminMessageListsEqual(current, cachedMessages)
+          ? current
+          : cachedMessages
+      );
       loadMessages(selectedSessionId, { silent: true, incremental: true });
     } else {
       setMessages([]);
@@ -576,17 +801,35 @@ export default function AdminChats() {
 
     const timer = window.setInterval(
       () => loadMessages(selectedSessionId, { silent: true, incremental: true }),
-      5000
+      adminChatMessagePollMs
     );
     return () => window.clearInterval(timer);
-  }, [loadMessages, selectedSessionId, token]);
+  }, [loadMessages, queueScrollToBottom, selectedSessionId, token]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: "smooth",
+    const intent = pendingScrollIntentRef.current;
+    if (!intent || intent.sessionId !== selectedSessionId) return;
+
+    pendingScrollIntentRef.current = null;
+    window.requestAnimationFrame(() => {
+      const element = scrollRef.current;
+      if (!element) return;
+
+      if (intent.mode === "bottom") {
+        element.scrollTo({
+          top: element.scrollHeight,
+          behavior: intent.behavior || "auto",
+        });
+        if (isNearBottom(element)) {
+          userScrolledUpRef.current = false;
+          setNewMessageCount(0);
+        }
+        return;
+      }
+
+      element.scrollTop = getPrependedScrollTop(intent);
     });
-  }, [messages]);
+  }, [messages, selectedSessionId]);
 
   const logout = () => {
     clearStoredAdminToken();
@@ -696,9 +939,22 @@ export default function AdminChats() {
       if (data.message) {
         const cachedMessages =
           messagesCacheRef.current.get(selectedSessionId) || [];
-        const mergedMessages = mergeMessages(cachedMessages, [data.message]);
-        messagesCacheRef.current.set(selectedSessionId, mergedMessages);
-        setMessages(mergedMessages);
+        const mergedMessages = mergeMessagesPreservingReference(cachedMessages, [
+          data.message,
+        ]);
+
+        if (!areAdminMessageListsEqual(cachedMessages, mergedMessages)) {
+          messagesCacheRef.current.set(selectedSessionId, mergedMessages);
+          if (selectedSessionId === selectedSessionIdRef.current) {
+            queueScrollToBottom(selectedSessionId);
+            setNewMessageCount(0);
+            setMessages((current) =>
+              areAdminMessageListsEqual(current, mergedMessages)
+                ? current
+                : mergedMessages
+            );
+          }
+        }
       }
       await loadSessions({ page: 0, silent: true });
     } catch (sendError) {
@@ -1149,65 +1405,81 @@ export default function AdminChats() {
               </div>
             )}
 
-            <div
-              ref={scrollRef}
-              className="min-h-0 w-full flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-3 py-4 md:px-5 md:py-5"
-            >
-              {isMessagesLoading ? (
-                <div className="py-10 text-center text-sm text-stone-400">
-                  載入訊息中...
-                </div>
-              ) : (
-                messageTimeline.map((item) => {
-                  if (item.type === "date") {
+            <div className="relative min-h-0 flex-1">
+              <div
+                ref={scrollRef}
+                onScroll={handleMessageScroll}
+                className="h-full min-h-0 w-full space-y-4 overflow-y-auto overflow-x-hidden px-3 py-4 md:px-5 md:py-5"
+              >
+                {isMessagesLoading ? (
+                  <div className="py-10 text-center text-sm text-stone-400">
+                    載入訊息中...
+                  </div>
+                ) : (
+                  messageTimeline.map((item) => {
+                    if (item.type === "date") {
+                      return (
+                        <div key={item.id} className="flex justify-center py-2">
+                          <span className="rounded-full bg-[#eee8df] px-3 py-1 text-xs font-medium text-[#9a8b7d]">
+                            {item.label}
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    const { message } = item;
+                    const isGuest = message.role === "user";
+                    const isHuman = message.role === "human";
+                    const isSystem = message.role === "system";
+
                     return (
-                      <div key={item.id} className="flex justify-center py-2">
-                        <span className="rounded-full bg-[#eee8df] px-3 py-1 text-xs font-medium text-[#9a8b7d]">
-                          {item.label}
-                        </span>
-                      </div>
-                    );
-                  }
-
-                  const { message } = item;
-                  const isGuest = message.role === "user";
-                  const isHuman = message.role === "human";
-                  const isSystem = message.role === "system";
-
-                  return (
-                    <div
-                      key={message.id}
-                      className={cn(
-                        "flex w-full flex-col gap-1",
-                        isGuest ? "items-start" : "items-end",
-                        isSystem && "items-center"
-                      )}
-                    >
-                      {!isSystem && (
-                        <span className="px-1 text-[11px] text-stone-400">
-                          {isGuest ? "客人" : isHuman ? "人工客服" : "AI 慢寶"}
-                        </span>
-                      )}
                       <div
+                        key={message.id}
                         className={cn(
-                          "max-w-[78%] whitespace-pre-wrap break-words rounded-3xl px-4 py-3 text-sm leading-7 shadow-sm md:max-w-[72%]",
-                          isGuest && "rounded-bl-md border border-stone-200 bg-white text-stone-700",
-                          message.role === "assistant" &&
-                            "rounded-br-md bg-[#e9f2ee] text-stone-700",
-                          isHuman && "rounded-br-md bg-[#9ec7b8] text-white",
-                          isSystem && "rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-500"
+                          "flex w-full flex-col gap-1",
+                          isGuest ? "items-start" : "items-end",
+                          isSystem && "items-center"
                         )}
                       >
-                        {message.content}
+                        {!isSystem && (
+                          <span className="px-1 text-[11px] text-stone-400">
+                            {isGuest ? "客人" : isHuman ? "人工客服" : "AI 慢寶"}
+                          </span>
+                        )}
+                        <div
+                          className={cn(
+                            "max-w-[78%] whitespace-pre-wrap break-words rounded-3xl px-4 py-3 text-sm leading-7 shadow-sm md:max-w-[72%]",
+                            isGuest &&
+                              "rounded-bl-md border border-stone-200 bg-white text-stone-700",
+                            message.role === "assistant" &&
+                              "rounded-br-md bg-[#e9f2ee] text-stone-700",
+                            isHuman && "rounded-br-md bg-[#9ec7b8] text-white",
+                            isSystem &&
+                              "rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-500"
+                          )}
+                        >
+                          {message.content}
+                        </div>
+                        {!isSystem && (
+                          <span className="px-1 text-[11px] leading-none text-stone-400">
+                            {formatMessageTime(message.created_at)}
+                          </span>
+                        )}
                       </div>
-                      {!isSystem && (
-                        <span className="px-1 text-[11px] leading-none text-stone-400">
-                          {formatMessageTime(message.created_at)}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })
+                    );
+                  })
+                )}
+              </div>
+
+              {newMessageCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleNewMessageNoticeClick}
+                  aria-label={`${newMessageCount} 則新訊息，捲到最新訊息`}
+                  className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-[#d8c4ad] bg-white/95 px-4 py-2 text-xs font-semibold text-[#7a5b41] shadow-[0_10px_24px_rgba(111,88,71,0.16)] backdrop-blur transition hover:bg-[#fff8ec] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#9ec7b8]/30"
+                >
+                  {getNewMessageNoticeLabel(newMessageCount)}
+                </button>
               )}
             </div>
 

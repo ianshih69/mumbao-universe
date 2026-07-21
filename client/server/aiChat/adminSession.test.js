@@ -295,12 +295,15 @@ describe("admin chat support status mapping", () => {
       support_status: "human_takeover",
       should_ai_reply: false,
     });
+    expect(sessions.get("session-a").ai_paused_until).toBeTruthy();
     expect(sessions.get("session-b")).toEqual(originalB);
+    expect(sessions.get("session-b")).not.toHaveProperty("ai_paused_until");
     expect(sessions.get("session-c")).toMatchObject({
       status: "ai_active",
       support_status: "ai_replying",
       should_ai_reply: true,
     });
+    expect(sessions.get("session-c")).not.toHaveProperty("ai_paused_until");
 
     await expect(
       patchSession({
@@ -313,6 +316,7 @@ describe("admin chat support status mapping", () => {
       status: "ai_active",
       support_status: "needs_human",
       should_ai_reply: true,
+      ai_paused_until: null,
     });
     expect(sessions.get("session-b")).toEqual(originalB);
 
@@ -327,6 +331,7 @@ describe("admin chat support status mapping", () => {
       status: "ai_active",
       support_status: "ai_replying",
       should_ai_reply: true,
+      ai_paused_until: null,
     });
     expect(sessions.get("session-b")).toEqual(originalB);
     expect(sessions.get("session-c")).toMatchObject({

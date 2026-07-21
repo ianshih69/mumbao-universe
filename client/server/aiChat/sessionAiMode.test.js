@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildExpiredHumanTakeoverPatch,
   buildSessionModeBody,
@@ -6,15 +6,24 @@ import {
   normalizeExpiredHumanTakeover,
 } from "./sessionAiMode.js";
 
-const now = new Date("2026-07-20T10:00:00.000Z");
+const now = new Date("2030-01-01T10:00:00.000Z");
 
 describe("AI chat session pause mode", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("calculates safe pause durations from server time", () => {
     expect(getAiPausedUntilForDuration("30m", now)).toBe(
-      "2026-07-20T10:30:00.000Z"
+      "2030-01-01T10:30:00.000Z"
     );
     expect(getAiPausedUntilForDuration("1h", now)).toBe(
-      "2026-07-20T11:00:00.000Z"
+      "2030-01-01T11:00:00.000Z"
     );
     expect(getAiPausedUntilForDuration("manual", now)).toBeNull();
   });
@@ -26,12 +35,12 @@ describe("AI chat session pause mode", () => {
       status: "human_takeover",
       support_status: "human_takeover",
       should_ai_reply: false,
-      ai_paused_until: "2026-07-20T10:30:00.000Z",
+      ai_paused_until: "2030-01-01T10:30:00.000Z",
     };
 
     const result = await normalizeExpiredHumanTakeover(session, {
       supabaseRequest,
-      now: new Date("2026-07-20T10:29:00.000Z"),
+      now: new Date("2030-01-01T10:29:00.000Z"),
     });
 
     expect(result).toBe(session);
@@ -39,7 +48,7 @@ describe("AI chat session pause mode", () => {
     expect(buildSessionModeBody(result)).toMatchObject({
       support_status: "human_takeover",
       ai_mode: "human_takeover",
-      ai_paused_until: "2026-07-20T10:30:00.000Z",
+      ai_paused_until: "2030-01-01T10:30:00.000Z",
     });
   });
 
@@ -59,11 +68,11 @@ describe("AI chat session pause mode", () => {
         status: "human_takeover",
         support_status: "human_takeover",
         should_ai_reply: false,
-        ai_paused_until: "2026-07-20T10:30:00.000Z",
+        ai_paused_until: "2030-01-01T10:30:00.000Z",
       },
       {
         supabaseRequest,
-        now: new Date("2026-07-20T10:31:00.000Z"),
+        now: new Date("2030-01-01T10:31:00.000Z"),
       }
     );
 
@@ -86,7 +95,7 @@ describe("AI chat session pause mode", () => {
       status: "human_takeover",
       support_status: "human_takeover",
       should_ai_reply: false,
-      ai_paused_until: "2026-07-20T11:00:00.000Z",
+      ai_paused_until: "2030-01-01T11:00:00.000Z",
     };
     const beforeRequest = vi.fn();
     const afterRequest = vi.fn(async () => [
@@ -102,7 +111,7 @@ describe("AI chat session pause mode", () => {
     await expect(
       normalizeExpiredHumanTakeover(session, {
         supabaseRequest: beforeRequest,
-        now: new Date("2026-07-20T10:59:00.000Z"),
+        now: new Date("2030-01-01T10:59:00.000Z"),
       })
     ).resolves.toBe(session);
     expect(beforeRequest).not.toHaveBeenCalled();
@@ -110,7 +119,7 @@ describe("AI chat session pause mode", () => {
     await expect(
       normalizeExpiredHumanTakeover(session, {
         supabaseRequest: afterRequest,
-        now: new Date("2026-07-20T11:01:00.000Z"),
+        now: new Date("2030-01-01T11:01:00.000Z"),
       })
     ).resolves.toMatchObject({
       status: "ai_active",
@@ -133,7 +142,7 @@ describe("AI chat session pause mode", () => {
 
     const result = await normalizeExpiredHumanTakeover(session, {
       supabaseRequest,
-      now: new Date("2026-07-21T10:00:00.000Z"),
+      now: new Date("2030-01-02T10:00:00.000Z"),
     });
 
     expect(result).toBe(session);
@@ -146,8 +155,8 @@ describe("AI chat session pause mode", () => {
       support_status: "needs_human",
       should_ai_reply: true,
       ai_paused_until: null,
-      support_status_updated_at: "2026-07-20T10:00:00.000Z",
-      updated_at: "2026-07-20T10:00:00.000Z",
+      support_status_updated_at: "2030-01-01T10:00:00.000Z",
+      updated_at: "2030-01-01T10:00:00.000Z",
     });
   });
 });

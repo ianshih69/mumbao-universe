@@ -15,6 +15,7 @@ type CustomerAuthApiResponse = {
   };
   message?: string;
   cooldownSeconds?: number;
+  requiresEmailVerification?: boolean;
 };
 
 export type CustomerVerificationResendResult = {
@@ -28,6 +29,19 @@ export type CustomerSignUpApiInput = {
   name: string;
   phone: string;
 };
+
+export const customerAuthApiCodes = {
+  signupCreated: "SIGNUP_CREATED",
+  emailAlreadyRegistered: "EMAIL_ALREADY_REGISTERED",
+  emailNotVerified: "EMAIL_NOT_VERIFIED",
+} as const;
+
+export const customerAuthApiMessages = {
+  emailAlreadyRegistered:
+    "此 Email 已建立會員帳號，請直接前往登入；若忘記密碼，可使用忘記密碼功能。",
+  emailNotVerified:
+    "此 Email 已註冊，但尚未完成 Email 驗證。請重新寄送驗證信後完成驗證。",
+} as const;
 
 export class CustomerAuthApiError extends Error {
   status: number;
@@ -122,7 +136,11 @@ export function createCustomerEmailMayExistError() {
 }
 
 export function isCustomerEmailMayExistError(error: unknown) {
-  if (error instanceof CustomerAuthApiError && error.code === "CUSTOMER_EMAIL_MAY_ALREADY_REGISTERED") {
+  if (
+    error instanceof CustomerAuthApiError &&
+    (error.code === "CUSTOMER_EMAIL_MAY_ALREADY_REGISTERED" ||
+      error.code === customerAuthApiCodes.emailAlreadyRegistered)
+  ) {
     return true;
   }
   if (error instanceof Error && error.name === "CustomerEmailMayExistError") return true;
@@ -140,6 +158,10 @@ export function isCustomerEmailMayExistError(error: unknown) {
     normalizedMessage.includes("already registered") ||
     normalizedMessage.includes("already exists")
   );
+}
+
+export function isCustomerEmailNotVerifiedError(error: unknown) {
+  return error instanceof CustomerAuthApiError && error.code === customerAuthApiCodes.emailNotVerified;
 }
 
 async function postCustomerAuthApi(action: string, payload: unknown) {
@@ -166,8 +188,8 @@ async function postCustomerAuthApi(action: string, payload: unknown) {
   return data;
 }
 
-export async function registerCustomerAccount(input: CustomerSignUpApiInput): Promise<void> {
-  await postCustomerAuthApi("sign-up", input);
+export async function registerCustomerAccount(input: CustomerSignUpApiInput): Promise<CustomerAuthApiResponse> {
+  return postCustomerAuthApi("sign-up", input);
 }
 
 export async function resendCustomerVerificationEmail(
@@ -184,6 +206,12 @@ export function getCustomerAuthErrorMessage(error: unknown, fallback: string) {
   if (isCustomerAuthConfigError(error)) return message;
   if (error instanceof CustomerAuthApiError && error.details?.passwordErrors?.length) {
     return error.details.passwordErrors[0];
+  }
+  if (error instanceof CustomerAuthApiError && error.code === customerAuthApiCodes.emailAlreadyRegistered) {
+    return customerAuthApiMessages.emailAlreadyRegistered;
+  }
+  if (error instanceof CustomerAuthApiError && error.code === customerAuthApiCodes.emailNotVerified) {
+    return customerAuthApiMessages.emailNotVerified;
   }
   if (error instanceof CustomerAuthApiError && error.message) {
     return error.message;

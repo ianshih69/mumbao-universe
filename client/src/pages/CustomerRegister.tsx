@@ -8,6 +8,7 @@ import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import {
   getCustomerAuthErrorMessage,
   isCustomerEmailMayExistError,
+  isCustomerEmailNotVerifiedError,
   normalizeCustomerEmail,
 } from "@/lib/shop/customerAuthClient";
 import {
@@ -32,6 +33,7 @@ export default function CustomerRegister() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [message, setMessage] = useState("");
   const [showAccountRecoveryLinks, setShowAccountRecoveryLinks] = useState(false);
+  const [showEmailNotVerifiedActions, setShowEmailNotVerifiedActions] = useState(false);
   const [success, setSuccess] = useState("");
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState("");
   const [resendMessage, setResendMessage] = useState("");
@@ -68,6 +70,7 @@ export default function CustomerRegister() {
     event.preventDefault();
     setMessage("");
     setShowAccountRecoveryLinks(false);
+    setShowEmailNotVerifiedActions(false);
     setSuccess("");
     setResendMessage("");
     setResendError("");
@@ -98,9 +101,16 @@ export default function CustomerRegister() {
       setShowConfirmPassword(false);
       setPendingVerificationEmail(normalizedEmail);
       setResendCooldownSeconds(0);
-      setSuccess("註冊成功，請至信箱完成 Email 驗證。驗證完成後即可開始使用會員功能。");
+      setSuccess("註冊成功，請至信箱完成 Email 驗證。");
     } catch (error) {
-      setShowAccountRecoveryLinks(isCustomerEmailMayExistError(error));
+      const normalizedEmail = normalizeCustomerEmail(form.email);
+      const isAlreadyRegistered = isCustomerEmailMayExistError(error);
+      const isNotVerified = isCustomerEmailNotVerifiedError(error);
+
+      setPendingVerificationEmail(isNotVerified ? normalizedEmail : "");
+      setResendCooldownSeconds(isNotVerified ? 0 : resendCooldownSeconds);
+      setShowAccountRecoveryLinks(isAlreadyRegistered && !isNotVerified);
+      setShowEmailNotVerifiedActions(isNotVerified);
       setMessage(getCustomerAuthErrorMessage(error, "註冊暫時無法完成，請稍後再試。"));
     } finally {
       setIsSubmitting(false);
@@ -169,7 +179,7 @@ export default function CustomerRegister() {
           )}
 
           {message && (
-            <div className="mb-4 rounded-[8px] border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="mb-4 rounded-[8px] border border-red-100 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
               {message}
               {showAccountRecoveryLinks && (
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -179,6 +189,31 @@ export default function CustomerRegister() {
                   <Button asChild size="sm" variant="outline" className="rounded-full bg-white">
                     <Link href="/account/forgot-password">忘記密碼</Link>
                   </Button>
+                </div>
+              )}
+              {showEmailNotVerifiedActions && (
+                <div className="mt-3">
+                  {resendMessage && <p className="mb-2 text-emerald-700">{resendMessage}</p>}
+                  {resendError && <p className="mb-2">{resendError}</p>}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-full bg-white"
+                      disabled={isResendingVerification || resendCooldownSeconds > 0}
+                      type="button"
+                      onClick={handleResendVerification}
+                    >
+                      {resendCooldownSeconds > 0
+                        ? `重新寄送驗證信（${resendCooldownSeconds}s）`
+                        : isResendingVerification
+                          ? "寄送中..."
+                          : "重新寄送驗證信"}
+                    </Button>
+                    <Button asChild size="sm" variant="outline" className="rounded-full bg-white">
+                      <Link href="/account/login">前往登入</Link>
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

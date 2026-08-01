@@ -59,6 +59,65 @@ export type AdminAuditLog = {
   created_at: string;
 };
 
+export type AdminMemberProfileStatus =
+  | "normal"
+  | "email_not_verified"
+  | "missing_profile"
+  | "inactive"
+  | "admin_user";
+
+export type AdminMember = {
+  id: string;
+  auth_user_id: string;
+  profile_id?: string | null;
+  name?: string | null;
+  email: string;
+  phone?: string | null;
+  email_verified: boolean;
+  email_verified_label: "已驗證" | "尚未驗證";
+  registered_at?: string | null;
+  last_login_at?: string | null;
+  profile_status: AdminMemberProfileStatus;
+  profile_status_label: string;
+  is_admin_user?: boolean;
+  admin_profile_id?: string | null;
+  member_type?: "customer" | "admin";
+  has_profile: boolean;
+  profile_is_active?: boolean | null;
+  profile_created_at?: string | null;
+  profile_updated_at?: string | null;
+};
+
+export type AdminMemberBusinessBlocker = {
+  type: string;
+  label: string;
+  matched_by: string;
+};
+
+export type AdminMemberDeletionInfo = {
+  hasBusinessRecords: boolean;
+  blockers: AdminMemberBusinessBlocker[];
+  can_delete: boolean;
+  profile_deletion_mode: "auth_user_on_delete_cascade" | "no_profile";
+};
+
+export type AdminMembersResponse = {
+  members: AdminMember[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasMore: boolean;
+  search?: string;
+  searchLimited?: boolean;
+  source?: string;
+};
+
+export type AdminMemberDetailResponse = {
+  member: AdminMember;
+  deletion: AdminMemberDeletionInfo;
+};
+
 export type AdminAuditLogsResponse = {
   logs?: AdminAuditLog[];
   items?: AdminAuditLog[];
@@ -186,6 +245,52 @@ export function fetchAdminUsers(token: string) {
     "/api/admin-shop?action=admin-users",
     token
   );
+}
+
+export function fetchAdminMembers(
+  token: string,
+  filters: { page?: number; pageSize?: number; search?: string } = {}
+) {
+  const params = new URLSearchParams({ action: "admin-members" });
+  if (filters.page) params.set("page", String(filters.page));
+  if (filters.pageSize) params.set("pageSize", String(filters.pageSize));
+  const search = filters.search?.trim();
+  if (search) params.set("search", search);
+  return requestAdminIdentity<AdminMembersResponse>(
+    `/api/admin-shop?${params.toString()}`,
+    token
+  );
+}
+
+export function fetchAdminMemberDetail(token: string, authUserId: string) {
+  const params = new URLSearchParams({
+    action: "admin-members",
+    id: authUserId,
+  });
+  return requestAdminIdentity<AdminMemberDetailResponse>(
+    `/api/admin-shop?${params.toString()}`,
+    token
+  );
+}
+
+export function deleteAdminMember(
+  token: string,
+  authUserId: string,
+  confirmEmail: string
+) {
+  const params = new URLSearchParams({
+    action: "admin-members",
+    id: authUserId,
+  });
+  return requestAdminIdentity<{
+    ok: true;
+    code: "MEMBER_DELETED";
+    message: string;
+    profile_deletion_mode: "auth_user_on_delete_cascade" | "no_profile";
+  }>(`/api/admin-shop?${params.toString()}`, token, {
+    method: "DELETE",
+    body: JSON.stringify({ confirmEmail: confirmEmail.trim() }),
+  });
 }
 
 export function createAdminUser(

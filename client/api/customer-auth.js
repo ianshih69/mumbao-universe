@@ -5,9 +5,11 @@ import {
 } from "../server/customerPasswordPolicy.js";
 import {
   firstQueryValue,
+  getSupabaseConfig,
   getServerEnv,
   readBody,
   sendJson,
+  supabaseRequest,
 } from "../server/shopShared.js";
 
 export const customerAuthSiteOrigin = "https://www.mumbao.tw";
@@ -22,6 +24,23 @@ export const customerAuthRateLimits = {
 
 const resendCooldownByEmailHash = new Map();
 const requestRateLimitByKey = new Map();
+const profileSelect = "id,auth_user_id,email,name,phone,is_active,created_at,updated_at";
+const signupFreshUserWindowMs = 5 * 60_000;
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export const customerAuthResponseCodes = {
+  signupCreated: "SIGNUP_CREATED",
+  emailAlreadyRegistered: "EMAIL_ALREADY_REGISTERED",
+  emailNotVerified: "EMAIL_NOT_VERIFIED",
+};
+
+const customerAuthMessages = {
+  emailAlreadyRegistered:
+    "此 Email 已建立會員帳號，請直接前往登入；若忘記密碼，可使用忘記密碼功能。",
+  emailNotVerified:
+    "此 Email 已註冊，但尚未完成 Email 驗證。請重新寄送驗證信後完成驗證。",
+};
 
 function createRequestId() {
   return `customer_auth_${Date.now().toString(36)}_${Math.random()
@@ -48,6 +67,10 @@ function isLikelyEmail(email) {
 function normalizeOptionalText(value, maxLength) {
   const text = String(value || "").trim();
   return text.slice(0, maxLength);
+}
+
+function isValidUuid(value) {
+  return uuidPattern.test(String(value || "").trim());
 }
 
 function getVerificationRedirectUrl() {
@@ -113,6 +136,17 @@ function normalizeAuthError(error) {
     status >= 500 ? 502 : status,
     "驗證信暫時無法寄出，請稍後再試。",
     "CUSTOMER_VERIFICATION_EMAIL_FAILED",
+  );
+}
+
+function isUniqueProfileConflict(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    message.includes("23505") ||
+    message.includes("duplicate") ||
+    message.includes("shop_customer_profiles_auth_user_id_key") ||
+    message.includes("shop_customer_profiles_email_unique_idx") ||
+    message.includes("shop_customer_profiles_email_normalized_unique_idx")
   );
 }
 
@@ -215,6 +249,125 @@ function markResendCooldown(email, now) {
   resendCooldownByEmailHash.set(getEmailCooldownKey(email), now);
 }
 
+function isAuthUserEmailVerified(authUser) {
+  return Boolean(authUser?.email_confirmed_at || authUser?.confirmed_at);
+}
+
+function createEmailAlreadyRegisteredError() {
+  return createHttpError(
+    409,
+    customerAuthMessages.emailAlreadyRegistered,
+    customerAuthResponseCodes.emailAlreadyRegistered,
+  );
+}
+
+function createEmailNotVerifiedError() {
+  return createHttpError(
+    409,
+    customerAuthMessages.emailNotVerified,
+    customerAuthResponseCodes.emailNotVerified,
+  );
+}
+
+function createExistingEmailError(authUser) {
+  return isAuthUserEmailVerified(authUser)
+    ? createEmailAlreadyRegisteredError()
+    : createEmailNotVerifiedError();
+}
+
+function normalizeCustomerProfile(row) {
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    auth_user_id: row.auth_user_id,
+    email: normalizeEmail(row.email),
+    name: row.name || "",
+    phone: row.phone || "",
+    is_active: row.is_active !== false,
+    created_at: row.created_at || null,
+    updated_at: row.updated_at || null,
+  };
+}
+
+async function findCustomerProfileByEmail(email) {
+  const rows = await supabaseRequest(
+    `/shop_customer_profiles?email=eq.${encodeURIComponent(
+      normalizeEmail(email),
+    )}&select=${profileSelect}&order=created_at.asc&limit=1`,
+  );
+  return normalizeCustomerProfile(Array.isArray(rows) && rows.length ? rows[0] : null);
+}
+
+async function findCustomerProfileByAuthUserId(authUserId) {
+  if (!isValidUuid(authUserId)) return null;
+
+  const rows = await supabaseRequest(
+    `/shop_customer_profiles?auth_user_id=eq.${encodeURIComponent(
+      authUserId,
+    )}&select=${profileSelect}&limit=1`,
+  );
+  return normalizeCustomerProfile(Array.isArray(rows) && rows.length ? rows[0] : null);
+}
+
+async function getAuthUserById(authUserId) {
+  if (!isValidUuid(authUserId)) return null;
+
+  const { serviceRoleKey } = getSupabaseConfig();
+  const supabaseUrl = getServerEnv("SUPABASE_URL").replace(/\/$/, "");
+  const response = await fetch(`${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(authUserId)}`, {
+    method: "GET",
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+    },
+  });
+
+  if (response.status === 404) return null;
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+
+  if (!response.ok) {
+    throw createHttpError(
+      502,
+      "會員 Auth 暫時無法查詢，請稍後再試。",
+      "CUSTOMER_AUTH_USER_LOOKUP_FAILED",
+    );
+  }
+
+  return data?.user || data;
+}
+
+async function createCustomerProfileFromAuthUser(authUser) {
+  const authUserId = String(authUser?.id || "").trim();
+  const email = normalizeEmail(authUser?.email);
+  const metadata =
+    authUser?.user_metadata && typeof authUser.user_metadata === "object"
+      ? authUser.user_metadata
+      : {};
+
+  if (!isValidUuid(authUserId) || !email) {
+    throw createHttpError(502, "會員 Auth 回應格式不正確。", "CUSTOMER_AUTH_USER_INVALID");
+  }
+
+  try {
+    const rows = await supabaseRequest(`/shop_customer_profiles?select=${profileSelect}`, {
+      method: "POST",
+      body: JSON.stringify({
+        auth_user_id: authUserId,
+        email,
+        name: normalizeOptionalText(metadata.name, 80) || null,
+        phone: normalizeOptionalText(metadata.phone, 40) || null,
+      }),
+    });
+    return normalizeCustomerProfile(Array.isArray(rows) && rows.length ? rows[0] : null);
+  } catch (error) {
+    if (isUniqueProfileConflict(error)) return null;
+    throw error;
+  }
+}
+
 function validateSignUpPayload(body) {
   const email = normalizeEmail(body?.email);
   const password = String(body?.password || "");
@@ -251,14 +404,35 @@ function validateResendPayload(body) {
   return { email };
 }
 
+async function assertEmailCanSignUp(email, dependencies) {
+  const existingProfile = await dependencies.findCustomerProfileByEmail(email);
+  if (!existingProfile) return;
+
+  const authUser = await dependencies.getAuthUserById(existingProfile.auth_user_id);
+  throw createExistingEmailError(authUser);
+}
+
+function assertSignUpReturnedFreshAuthUser(authUser, email, requestStartedAt) {
+  if (!authUser?.id || normalizeEmail(authUser.email) !== email) {
+    throw createEmailAlreadyRegisteredError();
+  }
+
+  const createdAtMs = Date.parse(String(authUser.created_at || ""));
+  if (Number.isFinite(createdAtMs) && createdAtMs < requestStartedAt - signupFreshUserWindowMs) {
+    throw createExistingEmailError(authUser);
+  }
+}
+
 async function handleSignUp(body, dependencies, req) {
   const payload = validateSignUpPayload(body);
+  const requestStartedAt = dependencies.now();
   enforceAuthRateLimit({
     action: "sign-up",
     email: payload.email,
     req,
-    now: dependencies.now(),
+    now: requestStartedAt,
   });
+  await assertEmailCanSignUp(payload.email, dependencies);
 
   const supabase = dependencies.getSupabaseAuthClient();
   const { data, error } = await supabase.auth.signUp({
@@ -274,13 +448,6 @@ async function handleSignUp(body, dependencies, req) {
   });
 
   if (error) throw normalizeAuthError(error);
-  if (!data?.user && !data?.session) {
-    throw createHttpError(
-      409,
-      "此 Email 可能已註冊，請直接登入或使用忘記密碼。",
-      "CUSTOMER_EMAIL_MAY_ALREADY_REGISTERED",
-    );
-  }
   if (data?.session) {
     throw createHttpError(
       500,
@@ -289,9 +456,29 @@ async function handleSignUp(body, dependencies, req) {
     );
   }
 
+  const authUserId = data?.user?.id;
+  if (!isValidUuid(authUserId)) {
+    throw createEmailAlreadyRegisteredError();
+  }
+
+  const authUser = await dependencies.getAuthUserById(authUserId);
+  assertSignUpReturnedFreshAuthUser(authUser, payload.email, requestStartedAt);
+
+  const existingProfileByAuthUserId = await dependencies.findCustomerProfileByAuthUserId(authUser.id);
+  if (existingProfileByAuthUserId) {
+    throw createExistingEmailError(authUser);
+  }
+
+  const insertedProfile = await dependencies.createCustomerProfileFromAuthUser(authUser);
+  if (!insertedProfile) {
+    throw createExistingEmailError(authUser);
+  }
+
   return {
     ok: true,
+    code: customerAuthResponseCodes.signupCreated,
     emailVerificationSent: true,
+    requiresEmailVerification: true,
     verificationRedirectOrigin: customerAuthSiteOrigin,
   };
 }
@@ -342,6 +529,10 @@ async function handleResendVerification(body, dependencies, req) {
 
 export function createCustomerAuthHandler(dependencies = {}) {
   const resolvedDependencies = {
+    createCustomerProfileFromAuthUser,
+    findCustomerProfileByAuthUserId,
+    findCustomerProfileByEmail,
+    getAuthUserById,
     getSupabaseAuthClient,
     now: () => Date.now(),
     ...dependencies,

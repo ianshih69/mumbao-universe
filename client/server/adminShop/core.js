@@ -295,6 +295,17 @@ async function requireAnyPermission(req, permissionCodes) {
 }
 
 const auditFieldAllowLists = {
+  customer_member: [
+    "id",
+    "auth_user_id",
+    "profile_id",
+    "email",
+    "name",
+    "phone",
+    "profile_status",
+    "delete_status",
+    "error",
+  ],
   supply: [
     "id",
     "name",
@@ -5996,6 +6007,14 @@ async function handleWarehouseMedia(req, res, context) {
 
   return sendJson(res, 405, { error: "Method not allowed." });
 }
+
+export {
+  hasAdminPermission,
+  requireAnyPermission,
+  requireAuthenticatedAdmin,
+  requirePermission,
+  writeAdminActivityLog,
+};
 
 export async function handleWarehouseSupplyQuantityAction(req, res) {
   const adminContext = await requireAuthenticatedAdmin(req);

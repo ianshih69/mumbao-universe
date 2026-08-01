@@ -1,8 +1,47 @@
 import { createClient, type AuthError, type SupabaseClient } from "@supabase/supabase-js";
 
 export const customerAuthStorageKey = "mumbao_customer_auth";
+export const customerAccountOrigin = "https://www.mumbao.tw";
 
 let customerSupabaseClient: SupabaseClient | null = null;
+
+type CustomerAuthApiResponse = {
+  ok?: boolean;
+  error?: string;
+  code?: string;
+  details?: {
+    passwordErrors?: string[];
+    cooldownSeconds?: number;
+  };
+  message?: string;
+  cooldownSeconds?: number;
+};
+
+export type CustomerVerificationResendResult = {
+  message?: string;
+  cooldownSeconds?: number;
+};
+
+export type CustomerSignUpApiInput = {
+  email: string;
+  password: string;
+  name: string;
+  phone: string;
+};
+
+export class CustomerAuthApiError extends Error {
+  status: number;
+  code: string;
+  details: CustomerAuthApiResponse["details"];
+
+  constructor(message: string, status: number, code: string, details?: CustomerAuthApiResponse["details"]) {
+    super(message);
+    this.name = "CustomerAuthApiError";
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
 
 function createCustomerAuthConfigError() {
   const error = new Error("尚未設定商城會員 Auth，請設定 VITE_SUPABASE_URL 與 VITE_SUPABASE_ANON_KEY。");
@@ -49,9 +88,7 @@ export function normalizeCustomerEmail(email: string) {
 }
 
 export function getAccountRedirectUrl(pathname: string) {
-  const origin =
-    typeof window === "undefined" ? "https://www.mumbao.tw" : window.location.origin;
-  return `${origin}${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
+  return `${customerAccountOrigin}${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
 }
 
 export function getSafeAccountReturnTo(value: string | null | undefined, fallback = "/account") {
@@ -85,6 +122,9 @@ export function createCustomerEmailMayExistError() {
 }
 
 export function isCustomerEmailMayExistError(error: unknown) {
+  if (error instanceof CustomerAuthApiError && error.code === "CUSTOMER_EMAIL_MAY_ALREADY_REGISTERED") {
+    return true;
+  }
   if (error instanceof Error && error.name === "CustomerEmailMayExistError") return true;
 
   const authError = error as AuthError | undefined;
@@ -102,12 +142,55 @@ export function isCustomerEmailMayExistError(error: unknown) {
   );
 }
 
+async function postCustomerAuthApi(action: string, payload: unknown) {
+  const response = await fetch(`/api/customer-auth?action=${encodeURIComponent(action)}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = (await response.json().catch(() => ({}))) as CustomerAuthApiResponse;
+
+  if (!response.ok || data.ok === false) {
+    throw new CustomerAuthApiError(
+      data.error || "會員 Auth 暫時無法使用，請稍後再試。",
+      response.status,
+      data.code || "CUSTOMER_AUTH_API_ERROR",
+      data.details,
+    );
+  }
+
+  return data;
+}
+
+export async function registerCustomerAccount(input: CustomerSignUpApiInput): Promise<void> {
+  await postCustomerAuthApi("sign-up", input);
+}
+
+export async function resendCustomerVerificationEmail(
+  email: string,
+): Promise<CustomerVerificationResendResult> {
+  return postCustomerAuthApi("resend-verification", { email });
+}
+
 export function getCustomerAuthErrorMessage(error: unknown, fallback: string) {
   const authError = error as AuthError | undefined;
   const message = authError?.message || (error instanceof Error ? error.message : "");
   const normalizedMessage = message.toLowerCase();
 
   if (isCustomerAuthConfigError(error)) return message;
+  if (error instanceof CustomerAuthApiError && error.details?.passwordErrors?.length) {
+    return error.details.passwordErrors[0];
+  }
+  if (error instanceof CustomerAuthApiError && error.message) {
+    return error.message;
+  }
+  if (message.startsWith("密碼至少需要") || message.includes("密碼需要包含至少")) {
+    return message;
+  }
   if (isEmailNotConfirmedError(error)) return "Email 尚未驗證，請先至信箱完成驗證後再登入。";
   if (
     normalizedMessage.includes("invalid login credentials") ||
@@ -119,7 +202,7 @@ export function getCustomerAuthErrorMessage(error: unknown, fallback: string) {
     return "此 Email 可能已註冊，請直接登入或使用忘記密碼。";
   }
   if (normalizedMessage.includes("password")) {
-    return "密碼格式不符合要求，請確認至少 12 碼。";
+    return "密碼格式不符合要求，請確認至少 8 碼，並包含英文大寫、英文小寫及數字。";
   }
   if (normalizedMessage.includes("rate limit") || normalizedMessage.includes("too many")) {
     return "操作太頻繁，請稍後再試。";

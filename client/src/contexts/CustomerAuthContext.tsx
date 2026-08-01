@@ -9,11 +9,12 @@ import {
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import {
-  createCustomerEmailMayExistError,
   getAccountRedirectUrl,
   getCustomerAuthErrorMessage,
   getCustomerSupabaseClient,
   normalizeCustomerEmail,
+  registerCustomerAccount,
+  resendCustomerVerificationEmail,
 } from "@/lib/shop/customerAuthClient";
 import {
   fetchCustomerProfile,
@@ -21,6 +22,7 @@ import {
   type CustomerProfile,
   type CustomerProfileUpdatePayload,
 } from "@/lib/shop/customerProfileApi";
+import { getCustomerPasswordValidationError } from "@/lib/shop/customerPasswordPolicy";
 
 type CustomerSignUpInput = {
   email: string;
@@ -42,6 +44,7 @@ type CustomerAuthContextValue = {
   signUp: (input: CustomerSignUpInput) => Promise<void>;
   signOut: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
+  resendVerificationEmail: (email: string) => Promise<{ message?: string; cooldownSeconds?: number }>;
   updatePassword: (password: string) => Promise<void>;
   refreshProfile: () => Promise<CustomerProfile | null>;
   updateProfile: (payload: CustomerProfileUpdatePayload) => Promise<CustomerProfile>;
@@ -162,21 +165,15 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUp = useCallback(async ({ email, password, name, phone }: CustomerSignUpInput) => {
-    const supabase = getCustomerSupabaseClient();
-    const { data, error } = await supabase.auth.signUp({
+    const passwordError = getCustomerPasswordValidationError(password);
+    if (passwordError) throw new Error(passwordError);
+
+    await registerCustomerAccount({
       email: normalizeCustomerEmail(email),
       password,
-      options: {
-        data: {
-          name: name.trim(),
-          phone: phone.trim(),
-        },
-        emailRedirectTo: getAccountRedirectUrl("/account/login?verified=1"),
-      },
+      name: name.trim(),
+      phone: phone.trim(),
     });
-
-    if (error) throw error;
-    if (!data.user && !data.session) throw createCustomerEmailMayExistError();
   }, []);
 
   const signOut = useCallback(async () => {
@@ -196,7 +193,14 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   }, []);
 
+  const resendVerificationEmail = useCallback(async (email: string) => {
+    return resendCustomerVerificationEmail(normalizeCustomerEmail(email));
+  }, []);
+
   const updatePassword = useCallback(async (password: string) => {
+    const passwordError = getCustomerPasswordValidationError(password);
+    if (passwordError) throw new Error(passwordError);
+
     const supabase = getCustomerSupabaseClient();
     const { error } = await supabase.auth.updateUser({ password });
     if (error) throw error;
@@ -252,6 +256,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       signUp,
       signOut,
       sendPasswordReset,
+      resendVerificationEmail,
       updatePassword,
       refreshProfile,
       updateProfile,
@@ -263,6 +268,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       profile,
       profileError,
       refreshProfile,
+      resendVerificationEmail,
       sendPasswordReset,
       session,
       signIn,

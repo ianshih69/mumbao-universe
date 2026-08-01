@@ -4,7 +4,11 @@ import { Link, useLocation } from "wouter";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
-import { getCustomerAuthErrorMessage, getSafeAccountReturnTo } from "@/lib/shop/customerAuthClient";
+import {
+  getCustomerAuthErrorMessage,
+  getSafeAccountReturnTo,
+  isEmailNotConfirmedError,
+} from "@/lib/shop/customerAuthClient";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 
 function authInputClass() {
@@ -13,11 +17,16 @@ function authInputClass() {
 
 export default function CustomerLogin() {
   const [, setLocation] = useLocation();
-  const { signIn, isLoading, isAuthenticated } = useCustomerAuth();
+  const { signIn, isLoading, isAuthenticated, resendVerificationEmail } = useCustomerAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
+  const [showResendVerification, setShowResendVerification] = useState(false);
+  const [resendMessage, setResendMessage] = useState("");
+  const [resendError, setResendError] = useState("");
+  const [resendCooldownSeconds, setResendCooldownSeconds] = useState(0);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const returnTo = getSafeAccountReturnTo(searchParams.get("returnTo"));
@@ -26,15 +35,37 @@ export default function CustomerLogin() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setMessage("");
+    setShowResendVerification(false);
+    setResendMessage("");
+    setResendError("");
     setIsSubmitting(true);
 
     try {
       await signIn(email, password);
       setLocation(returnTo);
     } catch (error) {
+      setShowResendVerification(isEmailNotConfirmedError(error));
       setMessage(getCustomerAuthErrorMessage(error, "登入失敗，請稍後再試。"));
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleResendVerification() {
+    if (!email || isResendingVerification || resendCooldownSeconds > 0) return;
+
+    setResendMessage("");
+    setResendError("");
+    setIsResendingVerification(true);
+
+    try {
+      const result = await resendVerificationEmail(email);
+      setResendMessage(result.message || "若此 Email 尚未驗證，我們已寄出驗證信，請至信箱查看。");
+      setResendCooldownSeconds(result.cooldownSeconds || 60);
+    } catch (error) {
+      setResendError(getCustomerAuthErrorMessage(error, "驗證信暫時無法寄出，請稍後再試。"));
+    } finally {
+      setIsResendingVerification(false);
     }
   }
 
@@ -43,6 +74,16 @@ export default function CustomerLogin() {
       setLocation(returnTo);
     }
   }, [isAuthenticated, isLoading, returnTo, setLocation]);
+
+  useEffect(() => {
+    if (resendCooldownSeconds <= 0) return;
+
+    const timerId = window.setInterval(() => {
+      setResendCooldownSeconds((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, [resendCooldownSeconds]);
 
   return (
     <div className="min-h-screen bg-[#fbf8f2] text-stone-900">
@@ -67,8 +108,28 @@ export default function CustomerLogin() {
           )}
 
           {message && (
-            <div className="mb-4 rounded-[8px] border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="mb-4 rounded-[8px] border border-red-100 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
               {message}
+              {showResendVerification && (
+                <div className="mt-3">
+                  {resendMessage && <p className="mb-2 text-emerald-700">{resendMessage}</p>}
+                  {resendError && <p className="mb-2">{resendError}</p>}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full bg-white"
+                    disabled={isResendingVerification || resendCooldownSeconds > 0}
+                    type="button"
+                    onClick={handleResendVerification}
+                  >
+                    {resendCooldownSeconds > 0
+                      ? `重新寄送驗證信（${resendCooldownSeconds}s）`
+                      : isResendingVerification
+                        ? "寄送中..."
+                        : "重新寄送驗證信"}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 

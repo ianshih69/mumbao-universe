@@ -15,6 +15,10 @@ import {
   updateCurrentSupabasePassword,
   verifyCurrentSupabasePassword,
 } from "@/lib/shop/supabaseAuthClient";
+import {
+  CUSTOMER_PASSWORD_HINT,
+  getCustomerPasswordValidationError,
+} from "@/lib/shop/customerPasswordPolicy";
 
 type PasswordField = "current" | "next" | "confirm";
 
@@ -38,7 +42,8 @@ function getPasswordError({
   confirmPassword: string;
 }) {
   if (!currentPassword) return "請輸入目前密碼。";
-  if (nextPassword.length < 12) return "新密碼至少需要 12 碼。";
+  const passwordError = getCustomerPasswordValidationError(nextPassword);
+  if (passwordError) return passwordError;
   if (nextPassword !== confirmPassword) return "新密碼與確認密碼不一致。";
   if (nextPassword === currentPassword) return "新密碼不可與目前密碼相同。";
   return "";
@@ -278,7 +283,7 @@ export default function AdminShopAccount() {
 
             <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs leading-5 text-stone-500">
-                新密碼至少 12 碼，且不可與目前密碼相同。
+                {CUSTOMER_PASSWORD_HINT} 且不可與目前密碼相同。
               </p>
               <Button
                 type="submit"

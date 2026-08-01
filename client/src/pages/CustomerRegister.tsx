@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Eye, EyeOff, UserPlus } from "lucide-react";
 import { Link } from "wouter";
 import { Header } from "@/components/layout/Header";
@@ -10,13 +10,17 @@ import {
   isCustomerEmailMayExistError,
   normalizeCustomerEmail,
 } from "@/lib/shop/customerAuthClient";
+import {
+  CUSTOMER_PASSWORD_HINT,
+  getCustomerPasswordValidationError,
+} from "@/lib/shop/customerPasswordPolicy";
 
 function inputClass() {
   return "h-11 w-full rounded-[8px] border border-[#eadfce] bg-white px-4 text-sm text-stone-800 outline-none transition focus:border-[#9f7868] focus:ring-2 focus:ring-[#ead8c8]";
 }
 
 export default function CustomerRegister() {
-  const { signUp } = useCustomerAuth();
+  const { signUp, resendVerificationEmail } = useCustomerAuth();
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -29,7 +33,22 @@ export default function CustomerRegister() {
   const [message, setMessage] = useState("");
   const [showAccountRecoveryLinks, setShowAccountRecoveryLinks] = useState(false);
   const [success, setSuccess] = useState("");
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState("");
+  const [resendMessage, setResendMessage] = useState("");
+  const [resendError, setResendError] = useState("");
+  const [resendCooldownSeconds, setResendCooldownSeconds] = useState(0);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (resendCooldownSeconds <= 0) return;
+
+    const timerId = window.setInterval(() => {
+      setResendCooldownSeconds((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, [resendCooldownSeconds]);
 
   function updateField(field: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -39,7 +58,8 @@ export default function CustomerRegister() {
     if (!form.name.trim()) return "請輸入姓名。";
     if (!form.phone.trim()) return "請輸入手機。";
     if (!normalizeCustomerEmail(form.email)) return "請輸入 Email。";
-    if (form.password.length < 12) return "密碼至少需要 12 碼。";
+    const passwordError = getCustomerPasswordValidationError(form.password);
+    if (passwordError) return passwordError;
     if (form.password !== form.confirmPassword) return "密碼與確認密碼不一致。";
     return "";
   }
@@ -49,6 +69,8 @@ export default function CustomerRegister() {
     setMessage("");
     setShowAccountRecoveryLinks(false);
     setSuccess("");
+    setResendMessage("");
+    setResendError("");
 
     const validationError = validateForm();
     if (validationError) {
@@ -58,10 +80,11 @@ export default function CustomerRegister() {
 
     setIsSubmitting(true);
     try {
+      const normalizedEmail = normalizeCustomerEmail(form.email);
       await signUp({
         name: form.name,
         phone: form.phone,
-        email: form.email,
+        email: normalizedEmail,
         password: form.password,
       });
       setForm({
@@ -73,12 +96,32 @@ export default function CustomerRegister() {
       });
       setShowPassword(false);
       setShowConfirmPassword(false);
+      setPendingVerificationEmail(normalizedEmail);
+      setResendCooldownSeconds(0);
       setSuccess("註冊成功，請至信箱完成 Email 驗證。驗證完成後即可開始使用會員功能。");
     } catch (error) {
       setShowAccountRecoveryLinks(isCustomerEmailMayExistError(error));
       setMessage(getCustomerAuthErrorMessage(error, "註冊暫時無法完成，請稍後再試。"));
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleResendVerification() {
+    if (!pendingVerificationEmail || isResendingVerification || resendCooldownSeconds > 0) return;
+
+    setResendMessage("");
+    setResendError("");
+    setIsResendingVerification(true);
+
+    try {
+      const result = await resendVerificationEmail(pendingVerificationEmail);
+      setResendMessage(result.message || "若此 Email 尚未驗證，我們已寄出驗證信，請至信箱查看。");
+      setResendCooldownSeconds(result.cooldownSeconds || 60);
+    } catch (error) {
+      setResendError(getCustomerAuthErrorMessage(error, "驗證信暫時無法寄出，請稍後再試。"));
+    } finally {
+      setIsResendingVerification(false);
     }
   }
 
@@ -101,7 +144,23 @@ export default function CustomerRegister() {
           {success && (
             <div className="mb-4 rounded-[8px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-700">
               {success}
-              <div className="mt-3">
+              {resendMessage && <p className="mt-2">{resendMessage}</p>}
+              {resendError && <p className="mt-2 text-red-700">{resendError}</p>}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full bg-white"
+                  disabled={isResendingVerification || resendCooldownSeconds > 0}
+                  type="button"
+                  onClick={handleResendVerification}
+                >
+                  {resendCooldownSeconds > 0
+                    ? `重新寄送驗證信（${resendCooldownSeconds}s）`
+                    : isResendingVerification
+                      ? "寄送中..."
+                      : "重新寄送驗證信"}
+                </Button>
                 <Button asChild size="sm" className="rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]">
                   <Link href="/account/login">前往登入</Link>
                 </Button>
@@ -181,6 +240,7 @@ export default function CustomerRegister() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </span>
+              <span className="block text-xs leading-5 text-stone-500">{CUSTOMER_PASSWORD_HINT}</span>
             </label>
 
             <label className="block space-y-2 text-sm font-medium text-stone-700">

@@ -6,6 +6,10 @@ import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { getCustomerAuthErrorMessage } from "@/lib/shop/customerAuthClient";
+import {
+  CUSTOMER_PASSWORD_HINT,
+  getCustomerPasswordValidationError,
+} from "@/lib/shop/customerPasswordPolicy";
 
 function inputClass() {
   return "h-11 w-full rounded-[8px] border border-[#eadfce] bg-white px-4 text-sm text-stone-800 outline-none transition focus:border-[#9f7868] focus:ring-2 focus:ring-[#ead8c8]";
@@ -35,8 +39,9 @@ export default function ResetPassword() {
       setError("密碼重設連結無效或已過期，請重新申請。");
       return;
     }
-    if (password.length < 12) {
-      setError("新密碼至少需要 12 碼。");
+    const passwordError = getCustomerPasswordValidationError(password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
     if (password !== confirmPassword) {
@@ -117,6 +122,7 @@ export default function ResetPassword() {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </span>
+                <span className="block text-xs leading-5 text-stone-500">{CUSTOMER_PASSWORD_HINT}</span>
               </label>
 
               <label className="block space-y-2 text-sm font-medium text-stone-700">

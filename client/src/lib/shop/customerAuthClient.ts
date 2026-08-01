@@ -2,6 +2,10 @@ import { createClient, type AuthError, type SupabaseClient } from "@supabase/sup
 
 export const customerAuthStorageKey = "mumbao_customer_auth";
 export const customerAccountOrigin = "https://www.mumbao.tw";
+export const customerEmailVerificationNoticeStorageKey =
+  "mumbao_customer_email_verification_notice";
+export const customerEmailVerificationSuccessMessage =
+  "Email 驗證成功，歡迎加入慢慢蒔光。";
 
 let customerSupabaseClient: SupabaseClient | null = null;
 
@@ -105,19 +109,100 @@ export function getAccountRedirectUrl(pathname: string) {
   return `${customerAccountOrigin}${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
 }
 
-export function getSafeAccountReturnTo(value: string | null | undefined, fallback = "/account") {
+const forbiddenCustomerReturnPathnames = new Set([
+  "/account/login",
+  "/account/register",
+  "/account/reset-password",
+]);
+
+export function getSafeAccountReturnTo(value: string | null | undefined, fallback = "/") {
   const trimmedValue = String(value || "").trim();
 
   if (
     !trimmedValue ||
     !trimmedValue.startsWith("/") ||
     trimmedValue.startsWith("//") ||
+    trimmedValue.includes("\\") ||
     trimmedValue.startsWith("/admin")
   ) {
     return fallback;
   }
 
-  return trimmedValue;
+  try {
+    const url = new URL(trimmedValue, customerAccountOrigin);
+    if (url.origin !== customerAccountOrigin) return fallback;
+    if (forbiddenCustomerReturnPathnames.has(url.pathname)) return fallback;
+    return `${url.pathname}${url.search}${url.hash}` || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function getSafeCustomerReturnToFromReferrer(referrer: string | null | undefined, fallback = "") {
+  const referrerValue = String(referrer || "").trim();
+  if (!referrerValue) return fallback;
+
+  try {
+    const url = new URL(referrerValue);
+    const currentOrigin = typeof window === "undefined" ? customerAccountOrigin : window.location.origin;
+    if (url.origin !== currentOrigin) return fallback;
+    return getSafeAccountReturnTo(`${url.pathname}${url.search}${url.hash}`, fallback);
+  } catch {
+    return fallback;
+  }
+}
+
+export function resolveCustomerLoginReturnTo({
+  returnTo,
+  referrer,
+  fallback = "/",
+}: {
+  returnTo?: string | null;
+  referrer?: string | null;
+  fallback?: string;
+}) {
+  const hasExplicitReturnTo = String(returnTo || "").trim().length > 0;
+  if (hasExplicitReturnTo) {
+    return getSafeAccountReturnTo(returnTo, fallback);
+  }
+
+  return getSafeCustomerReturnToFromReferrer(referrer, fallback) || fallback;
+}
+
+export function getCurrentCustomerReturnTo(fallback = "/") {
+  if (typeof window === "undefined") return fallback;
+  return getSafeAccountReturnTo(
+    `${window.location.pathname}${window.location.search}${window.location.hash}`,
+    fallback,
+  );
+}
+
+export function getCustomerLoginHref(returnTo = getCurrentCustomerReturnTo()) {
+  return `/account/login?returnTo=${encodeURIComponent(getSafeAccountReturnTo(returnTo, "/"))}`;
+}
+
+function getBrowserSessionStorage() {
+  return typeof window === "undefined" ? null : window.sessionStorage;
+}
+
+export function markCustomerEmailVerificationSuccessNotice(storage?: Storage | null) {
+  try {
+    const targetStorage = storage ?? getBrowserSessionStorage();
+    targetStorage?.setItem(customerEmailVerificationNoticeStorageKey, customerEmailVerificationSuccessMessage);
+  } catch {
+    // Storage can be unavailable in private modes; silently skip the one-time notice.
+  }
+}
+
+export function consumeCustomerEmailVerificationSuccessNotice(storage?: Storage | null) {
+  try {
+    const targetStorage = storage ?? getBrowserSessionStorage();
+    const message = targetStorage?.getItem(customerEmailVerificationNoticeStorageKey) || "";
+    if (message) targetStorage?.removeItem(customerEmailVerificationNoticeStorageKey);
+    return message === customerEmailVerificationSuccessMessage ? message : "";
+  } catch {
+    return "";
+  }
 }
 
 export function isCustomerAuthConfigError(error: unknown) {

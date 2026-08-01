@@ -6,8 +6,9 @@ import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import {
   getCustomerAuthErrorMessage,
-  getSafeAccountReturnTo,
   isEmailNotConfirmedError,
+  markCustomerEmailVerificationSuccessNotice,
+  resolveCustomerLoginReturnTo,
 } from "@/lib/shop/customerAuthClient";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 
@@ -29,7 +30,11 @@ export default function CustomerLogin() {
   const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
-  const returnTo = getSafeAccountReturnTo(searchParams.get("returnTo"));
+  const returnTo = resolveCustomerLoginReturnTo({
+    returnTo: searchParams.get("returnTo"),
+    referrer: document.referrer,
+    fallback: "/",
+  });
   const verified = searchParams.get("verified") === "1";
 
   async function handleSubmit(event: FormEvent) {
@@ -70,10 +75,18 @@ export default function CustomerLogin() {
   }
 
   useEffect(() => {
+    if (verified) {
+      markCustomerEmailVerificationSuccessNotice();
+      setLocation("/");
+    }
+  }, [setLocation, verified]);
+
+  useEffect(() => {
+    if (verified) return;
     if (!isLoading && isAuthenticated) {
       setLocation(returnTo);
     }
-  }, [isAuthenticated, isLoading, returnTo, setLocation]);
+  }, [isAuthenticated, isLoading, returnTo, setLocation, verified]);
 
   useEffect(() => {
     if (resendCooldownSeconds <= 0) return;
@@ -103,7 +116,7 @@ export default function CustomerLogin() {
 
           {verified && (
             <div className="mb-4 rounded-[8px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              Email 驗證完成，現在可以登入。
+              Email 驗證成功，正在返回首頁。
             </div>
           )}
 

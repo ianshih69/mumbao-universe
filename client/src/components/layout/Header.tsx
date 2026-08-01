@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { Globe, X, LogOut, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import { getCustomerLoginHref } from "@/lib/shop/customerAuthClient";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -126,6 +127,7 @@ export function Header() {
     "font-serif text-[24px] font-normal leading-none tracking-[0.08em] text-[#3D332B] transition duration-[230ms] ease-out hover:translate-x-1 hover:text-[#C58A54] motion-safe:animate-[mumbao-menu-item-in_300ms_ease-out_both] md:text-[28px]";
   const memberLinkClass =
     "inline-flex items-center gap-2.5 text-left font-serif text-[18px] font-normal leading-none tracking-[0.06em] text-[rgba(61,51,43,0.78)] transition duration-[230ms] ease-out hover:translate-x-1 hover:text-[#C58A54] md:text-[20px]";
+  const customerLoginHref = getCustomerLoginHref();
 
   const isMenuItemActive = (item: MenuItem) => {
     if (!item.internal) return false;
@@ -247,7 +249,7 @@ export function Header() {
                     <div className="flex flex-col gap-5">
                       <SheetClose asChild>
                         <Link
-                          href="/account/login"
+                          href={customerLoginHref}
                           className={memberLinkClass}
                         >
                           登入
@@ -305,7 +307,7 @@ export function Header() {
                 </>
               ) : (
                 <>
-                  <Link href="/account/login" className={authLinkClass}>
+                  <Link href={customerLoginHref} className={authLinkClass}>
                     登入
                   </Link>
                   <Link href="/account/register" className={registerLinkClass}>

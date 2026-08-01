@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Hero } from "@/components/sections/Hero";
@@ -9,6 +9,7 @@ import { Rooms } from "@/components/sections/Rooms";
 import { BookingCTA } from "@/components/sections/BookingCTA";
 import FlyingMascot from "@/components/effects/FlyingMascot";
 import MeteorShower from "@/components/effects/MeteorShower";
+import { consumeCustomerEmailVerificationSuccessNotice } from "@/lib/shop/customerAuthClient";
 
 const enableCruisingMascot =
   import.meta.env.NEXT_PUBLIC_ENABLE_CRUISING_MASCOT === "true";
@@ -41,6 +42,8 @@ function setCanonicalUrl(url: string) {
 }
 
 export default function Home() {
+  const [verificationNotice, setVerificationNotice] = useState("");
+
   useEffect(() => {
     document.title = homeSeoTitle;
     setMetaContent('meta[name="description"]', homeSeoDescription);
@@ -53,11 +56,23 @@ export default function Home() {
     setCanonicalUrl(homeCanonicalUrl);
   }, []);
 
+  useEffect(() => {
+    setVerificationNotice(consumeCustomerEmailVerificationSuccessNotice());
+  }, []);
+
   return (
     <div className="min-h-screen-safe bg-background font-sans selection:bg-[#E8A0BF] selection:text-white">
       <MeteorShower intensity={300} showBackground={false} opacity={0.14} />
       {enableCruisingMascot && <FlyingMascot />}
       <Header />
+      {verificationNotice && (
+        <div
+          className="fixed left-1/2 top-24 z-[60] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-[8px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-center text-sm font-medium text-emerald-700 shadow-sm"
+          role="status"
+        >
+          {verificationNotice}
+        </div>
+      )}
 
       <main>
         <div>

@@ -24,25 +24,15 @@ import {
   type PetType,
   type StayType,
 } from "@/lib/bookings/bookingApi";
+import {
+  readBookingDraft,
+  writeBookingDraft,
+  type BookingDraftForm,
+} from "@/lib/bookings/bookingDraft";
 import { cn } from "@/lib/utils";
 import { asArray, asString, fetchSitePageContent } from "@/lib/site/siteContentApi";
 
-type BookingForm = {
-  guest_name: string;
-  email: string;
-  phone: string;
-  check_in: string;
-  check_out: string;
-  stay_type: StayType;
-  adults: number;
-  children: number;
-  room_count: number;
-  has_pets: boolean;
-  pet_count: number;
-  pet_type: PetType;
-  pet_notes: string;
-  notes: string;
-};
+type BookingForm = BookingDraftForm;
 
 type BookingCmsCopy = {
   eyebrow: string;
@@ -218,6 +208,11 @@ function reconcileFormWithSettings(form: BookingForm, settings: PublicBookingSet
   };
 }
 
+function getInitialBookingForm() {
+  if (typeof window === "undefined") return emptyForm;
+  return readBookingDraft(window.sessionStorage, emptyForm);
+}
+
 function Stepper({
   label,
   value,
@@ -270,7 +265,7 @@ function Stepper({
 }
 
 export default function Booking() {
-  const [form, setForm] = useState<BookingForm>(emptyForm);
+  const [form, setForm] = useState<BookingForm>(() => getInitialBookingForm());
   const [settings, setSettings] = useState<PublicBookingSettings>(() => ({ ...DEFAULT_BOOKING_SETTINGS }));
   const [bookingCopy, setBookingCopy] = useState<BookingCmsCopy>(fallbackBookingCopy);
   const [visibleMonth, setVisibleMonth] = useState(() => monthStart(todayText()));
@@ -349,6 +344,11 @@ export default function Booking() {
       isCurrent = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    writeBookingDraft(window.sessionStorage, form);
+  }, [form]);
 
   function updateField<K extends keyof BookingForm>(field: K, value: BookingForm[K]) {
     setForm((current) => ({ ...current, [field]: value }));

@@ -9,6 +9,10 @@
     "start": "NODE_ENV=production node dist/index.js",
     "preview": "vite preview --host",
     "check": "tsc --noEmit",
+    "faq:validate": "node client/scripts/faq/validateFaqMaster.mjs",
+    "faq:build": "node client/scripts/faq/buildFaqItems.mjs",
+    "faq:test": "tsx client/scripts/faq/runFaqRegression.mjs",
+    "faq:audit": "node client/scripts/faq/validateFaqMaster.mjs && node client/scripts/faq/buildFaqItems.mjs --dry-run && tsx client/scripts/faq/runFaqRegression.mjs",
     "format": "prettier --write ."
   },
   "dependencies": {

@@ -3,7 +3,7 @@ import { asBoolean, asString, fetchSiteGlobalContent } from "@/lib/site/siteCont
 
 const ENABLE_CONSTRUCTION_NOTICE = true;
 const NOTICE_STORAGE_KEY = "mumbao_site_notice_seen";
-const FALLBACK_BANNER_TEXT = "官網建置中｜預計 2026 年 9–10 月試營運";
+const FALLBACK_BANNER_TEXT = "官網建置中｜預計 2026 年 11 月試營運";
 
 export function SiteConstructionNotice() {
   const [shouldShowModal, setShouldShowModal] = useState(false);
@@ -88,8 +88,7 @@ export function SiteConstructionNotice() {
               慢慢蒔光官網建置中
             </h2>
             <p className="mt-4 text-left text-sm leading-7 text-stone-700 sm:text-base sm:leading-8">
-              慢慢蒔光 STime Villa 民宿目前官網與住宿空間仍在建置中，預計於 2026 年
-              7～9 月期間開始試營運／正式營業。房型、訂房與最新資訊將陸續更新，請以官網公告為準。
+              慢慢蒔光 STime Villa 民宿目前官網與住宿空間仍在建置中，預計於 2026 年 11 月開始試營運。房型、訂房與最新資訊將陸續更新，請以官網公告為準。
             </p>
             <button
               type="button"

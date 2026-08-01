@@ -94,10 +94,17 @@ type ChatMessageResponse = {
   humanTakeover?: boolean;
   ai_skipped?: boolean;
   provider_used?: string;
+  knowledge_gap?: boolean;
   notice?: string;
   support_status?: string;
   ai_mode?: string;
   ai_paused_until?: string | null;
+  metadata?: {
+    provider_used?: string;
+    knowledge_gap?: boolean;
+    ai_skipped?: boolean;
+    requestId?: string;
+  };
 };
 
 type SessionRequestIdentity = {
@@ -3430,10 +3437,11 @@ export function MumbaoChat({
       recordDebug({ sendStatus: "success" });
 
       const responseAiMode = applyAiModeFromResponse("message-response", data);
+      const responseProviderUsed =
+        data.provider_used || data.metadata?.provider_used || "";
       const isAiSkipped = Boolean(
-        data.ai_skipped ||
-          data.humanTakeover ||
-          data.provider_used === "human_takeover" ||
+        data.humanTakeover ||
+          responseProviderUsed === "human_takeover" ||
           responseAiMode === "human_takeover"
       );
       const savedUserMessage = data.userMessage

@@ -135,7 +135,7 @@ insert into public.site_sections (page_id, section_key, section_type, title, sub
 select id, 'global.top_banner', 'top_banner', '全站上方公告', null,
   '{
     "enable_cms_override": false,
-    "text": "官網建置中｜預計 2026 年 7～9 月試營運／正式營業",
+    "text": "官網建置中｜預計 2026 年 11 月試營運",
     "is_visible": true
   }'::jsonb,
   10

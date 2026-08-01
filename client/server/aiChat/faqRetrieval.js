@@ -1,7 +1,9 @@
 const defaultFaqLimit = 5;
 const minimumMatchScore = 28;
-let hasFaqCache = false;
-let faqItemsCache = [];
+const highConfidenceScore = 70;
+const strongScoreGap = 18;
+let hasRawFaqCache = false;
+let rawFaqItemsCache = [];
 
 const broadKeywords = new Set([
   "包棟",
@@ -15,6 +17,8 @@ const broadKeywords = new Set([
   "價格",
   "清潔",
   "訪客",
+  "房間",
+  "房型",
 ]);
 
 const topicSignals = [
@@ -55,7 +59,7 @@ const topicSignals = [
   },
 ];
 
-function normalizeText(value) {
+export function normalizeText(value) {
   return String(value || "")
     .toLowerCase()
     .replace(/[，。！？、；：「」『』（）()\[\]【】"'`~!@#$%^&*_+=|\\/:;,.?<>-]/g, "")
@@ -76,9 +80,31 @@ function getPriorityBoost(priority) {
   return Math.min(6, value / 15);
 }
 
-async function loadFaqItems() {
-  if (hasFaqCache) {
-    return faqItemsCache;
+function normalizeStatus(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+export function normalizeAnswerMode(value) {
+  const mode = String(value || "direct").trim().toLowerCase();
+  if (mode === "human") return "ask_human";
+  if (mode === "ask_human" || mode === "collect_info" || mode === "direct") {
+    return mode;
+  }
+  return "direct";
+}
+
+export function isApprovedActiveFaqItem(item) {
+  return (
+    item?.is_active === true &&
+    normalizeStatus(item?.status) === "approved" &&
+    Boolean(String(item?.question || "").trim()) &&
+    Boolean(String(item?.answer || "").trim())
+  );
+}
+
+async function loadRawFaqItems() {
+  if (hasRawFaqCache) {
+    return rawFaqItemsCache;
   }
 
   const fs = await import("node:fs/promises");
@@ -93,9 +119,9 @@ async function loadFaqItems() {
     try {
       const raw = await fs.readFile(faqPath, "utf8");
       const parsed = JSON.parse(raw);
-      faqItemsCache = Array.isArray(parsed) ? parsed.filter((item) => item?.is_active) : [];
-      hasFaqCache = true;
-      return faqItemsCache;
+      rawFaqItemsCache = Array.isArray(parsed) ? parsed : [];
+      hasRawFaqCache = true;
+      return rawFaqItemsCache;
     } catch (error) {
       if (error?.code !== "ENOENT") {
         console.warn("[ai-chat] failed to load FAQ knowledge:", {
@@ -107,9 +133,16 @@ async function loadFaqItems() {
     }
   }
 
-  hasFaqCache = true;
-  faqItemsCache = [];
-  return faqItemsCache;
+  hasRawFaqCache = true;
+  rawFaqItemsCache = [];
+  return rawFaqItemsCache;
+}
+
+export async function loadFaqItems(options = {}) {
+  const items = Array.isArray(options.items)
+    ? options.items
+    : await loadRawFaqItems();
+  return options.includeAll ? items : items.filter(isApprovedActiveFaqItem);
 }
 
 function getAliasValues(item) {
@@ -128,66 +161,108 @@ function detectQuestionTopics(normalizedQuestion) {
 }
 
 function includesAnyTerm(text, terms) {
-  return terms.some((term) => text.includes(normalizeText(term)));
+  const normalizedText = normalizeText(text);
+  return terms.some((term) => normalizedText.includes(normalizeText(term)));
 }
 
-function scoreTopicAlignment({ normalizedQuestion, itemQuestion, answer, category, keywords }) {
+function scoreTopicAlignment({
+  normalizedQuestion,
+  itemQuestion,
+  answer,
+  category,
+  keywords,
+}) {
   const topics = detectQuestionTopics(normalizedQuestion);
   let score = 0;
+  let categoryAlignment = false;
+  const topicNames = [];
 
   for (const topic of topics) {
+    let topicScore = 0;
+
     if (includesAnyTerm(itemQuestion, topic.terms)) {
-      score += 14;
+      topicScore += 14;
     }
 
     if (includesAnyTerm(category, topic.categoryHints)) {
-      score += 12;
+      topicScore += 12;
+      categoryAlignment = true;
     }
 
     if (keywords.some((keyword) => includesAnyTerm(keyword, topic.terms))) {
-      score += 8;
+      topicScore += 8;
     }
 
     if (includesAnyTerm(answer, topic.terms)) {
-      score += 3;
+      topicScore += 3;
+    }
+
+    if (topicScore > 0) {
+      topicNames.push(topic.name);
+      score += topicScore;
     }
   }
 
-  return score;
+  return { score, categoryAlignment, topicNames };
 }
 
 function scoreFaqItem(item, normalizedQuestion) {
   if (!normalizedQuestion) {
-    return { score: 0, isExactQuestionMatch: false, isAliasMatch: false };
+    return {
+      score: 0,
+      isExactQuestionMatch: false,
+      isAliasMatch: false,
+      matchedFields: [],
+      keywordMatchCount: 0,
+      broadKeywordMatchCount: 0,
+      nonBroadKeywordMatchCount: 0,
+      categoryAlignment: false,
+      topicNames: [],
+    };
   }
 
   const question = normalizeText(item?.question);
   const answer = normalizeText(item?.answer);
   const category = normalizeText(item?.category);
-  const keywords = Array.isArray(item?.keywords) ? item.keywords.map(normalizeKeyword) : [];
+  const keywords = Array.isArray(item?.keywords)
+    ? item.keywords.map(normalizeKeyword)
+    : [];
   const aliases = getAliasValues(item).map(normalizeText);
+  const matchedFields = [];
   let keywordMatchCount = 0;
+  let broadKeywordMatchCount = 0;
+  let nonBroadKeywordMatchCount = 0;
   let isExactQuestionMatch = false;
   let isAliasMatch = false;
   let score = 0;
+  let categoryAlignment = false;
+  let topicNames = [];
 
   if (question) {
     if (question === normalizedQuestion) {
       isExactQuestionMatch = true;
+      matchedFields.push("question_exact");
       score += 100;
     } else if (
       question.includes(normalizedQuestion) ||
       normalizedQuestion.includes(question)
     ) {
+      matchedFields.push("question_partial");
       score += 60;
     } else {
-      score += scoreTopicAlignment({
+      const topicScore = scoreTopicAlignment({
         normalizedQuestion,
         itemQuestion: question,
         answer,
         category,
         keywords,
       });
+      score += topicScore.score;
+      categoryAlignment = topicScore.categoryAlignment;
+      topicNames = topicScore.topicNames;
+      if (topicScore.score > 0) {
+        matchedFields.push("topic_alignment");
+      }
     }
   }
 
@@ -198,9 +273,11 @@ function scoreFaqItem(item, normalizedQuestion) {
 
     if (alias === normalizedQuestion) {
       isAliasMatch = true;
+      matchedFields.push("alias_exact");
       score += 82;
     } else if (alias.includes(normalizedQuestion) || normalizedQuestion.includes(alias)) {
       isAliasMatch = true;
+      matchedFields.push("alias_partial");
       score += 55;
     }
   }
@@ -210,15 +287,28 @@ function scoreFaqItem(item, normalizedQuestion) {
       continue;
     }
 
-    if (normalizedQuestion === normalizedKeyword) {
-      keywordMatchCount += 1;
-      score += broadKeywords.has(normalizedKeyword) ? 18 : 45;
-    } else if (
+    const isBroadKeyword = broadKeywords.has(normalizedKeyword);
+    const isMatch =
+      normalizedQuestion === normalizedKeyword ||
       normalizedQuestion.includes(normalizedKeyword) ||
-      normalizedKeyword.includes(normalizedQuestion)
-    ) {
-      keywordMatchCount += 1;
-      score += broadKeywords.has(normalizedKeyword) ? 8 : 28;
+      normalizedKeyword.includes(normalizedQuestion);
+
+    if (!isMatch) {
+      continue;
+    }
+
+    keywordMatchCount += 1;
+    if (isBroadKeyword) {
+      broadKeywordMatchCount += 1;
+    } else {
+      nonBroadKeywordMatchCount += 1;
+    }
+
+    matchedFields.push(isBroadKeyword ? "keyword_broad" : "keyword");
+    if (normalizedQuestion === normalizedKeyword) {
+      score += isBroadKeyword ? 18 : 45;
+    } else {
+      score += isBroadKeyword ? 8 : 28;
     }
   }
 
@@ -227,10 +317,13 @@ function scoreFaqItem(item, normalizedQuestion) {
   }
 
   if (category && normalizedQuestion.includes(category)) {
+    categoryAlignment = true;
+    matchedFields.push("category");
     score += 8;
   }
 
   if (answer && answer.includes(normalizedQuestion)) {
+    matchedFields.push("answer");
     score += 4;
   }
 
@@ -238,7 +331,107 @@ function scoreFaqItem(item, normalizedQuestion) {
     score += getPriorityBoost(item?.priority);
   }
 
-  return { score, isExactQuestionMatch, isAliasMatch };
+  return {
+    score,
+    isExactQuestionMatch,
+    isAliasMatch,
+    matchedFields: Array.from(new Set(matchedFields)),
+    keywordMatchCount,
+    broadKeywordMatchCount,
+    nonBroadKeywordMatchCount,
+    categoryAlignment,
+    topicNames: Array.from(new Set(topicNames)),
+  };
+}
+
+function getScoreGap(candidates, index) {
+  if (index !== 0) {
+    return Number(candidates[0]?.score || 0) - Number(candidates[index]?.score || 0);
+  }
+
+  return Number(candidates[0]?.score || 0) - Number(candidates[1]?.score || 0);
+}
+
+function getRejectionReason(entry, candidates, index, normalizedQuestion) {
+  if (!isApprovedActiveFaqItem(entry.item)) return "not_approved_active";
+  if (entry.score < minimumMatchScore) return "below_minimum_score";
+
+  const scoreGap = getScoreGap(candidates, index);
+  const second = candidates[index === 0 ? 1 : 0];
+  const closeDifferentCategory =
+    second &&
+    Math.abs(Number(entry.score || 0) - Number(second.score || 0)) < strongScoreGap &&
+    String(second.item?.category || "") !== String(entry.item?.category || "");
+  const singleBroadKeywordQuery =
+    broadKeywords.has(normalizedQuestion) &&
+    !entry.isExactQuestionMatch &&
+    !entry.isAliasMatch &&
+    entry.nonBroadKeywordMatchCount === 0;
+
+  if (singleBroadKeywordQuery) return "single_broad_keyword";
+  if (closeDifferentCategory) return "close_cross_category_candidate";
+  if (index === 0 && candidates[1] && scoreGap < strongScoreGap) {
+    return "top_score_gap_too_small";
+  }
+  if (
+    !entry.isExactQuestionMatch &&
+    !entry.isAliasMatch &&
+    entry.score < highConfidenceScore
+  ) {
+    return "medium_score";
+  }
+  if (
+    !entry.isExactQuestionMatch &&
+    !entry.isAliasMatch &&
+    !entry.categoryAlignment &&
+    entry.topicNames.length > 0
+  ) {
+    return "topic_not_aligned";
+  }
+
+  return "";
+}
+
+function getConfidence(entry, candidates, index, normalizedQuestion) {
+  if (entry.score < minimumMatchScore) return "none";
+
+  const rejectionReason = getRejectionReason(
+    entry,
+    candidates,
+    index,
+    normalizedQuestion
+  );
+
+  if (entry.isExactQuestionMatch || entry.isAliasMatch) {
+    return rejectionReason === "close_cross_category_candidate" ? "medium" : "high";
+  }
+
+  if (!rejectionReason && entry.score >= highConfidenceScore) {
+    return "high";
+  }
+
+  if (entry.score >= 45 || rejectionReason === "single_broad_keyword") {
+    return "medium";
+  }
+
+  return "low";
+}
+
+function enrichCandidate(entry, candidates, index, normalizedQuestion) {
+  const scoreGap = getScoreGap(candidates, index);
+  const confidence = getConfidence(entry, candidates, index, normalizedQuestion);
+  const rejectionReason =
+    confidence === "high"
+      ? ""
+      : getRejectionReason(entry, candidates, index, normalizedQuestion) ||
+        "not_high_confidence";
+
+  return {
+    ...entry,
+    confidence,
+    scoreGap,
+    rejectionReason,
+  };
 }
 
 function limitCandidates(candidates, requestedLimit) {
@@ -247,42 +440,49 @@ function limitCandidates(candidates, requestedLimit) {
   }
 
   const topScore = Number(candidates[0]?.score || 0);
-  const secondScore = Number(candidates[1]?.score || 0);
   const hasExactOrAliasTop = Boolean(
     candidates[0]?.isExactQuestionMatch || candidates[0]?.isAliasMatch
   );
   const relativeFloor = hasExactOrAliasTop
     ? Math.max(minimumMatchScore, topScore * 0.4)
     : minimumMatchScore;
-  const hasStrongLead = secondScore > 0 && topScore - secondScore >= 60;
-  const confidenceLimit = hasExactOrAliasTop && hasStrongLead ? 3 : requestedLimit;
 
   return candidates
     .filter((entry) => Number(entry?.score || 0) >= relativeFloor)
-    .slice(0, Math.min(requestedLimit, confidenceLimit));
+    .slice(0, requestedLimit);
 }
 
-function normalizeFaqForPrompt(item, score) {
+function normalizeFaqForPrompt(entry) {
+  const { item } = entry;
   return {
     id: String(item?.id || ""),
     category: String(item?.category || "未分類"),
     question: String(item?.question || "").trim(),
     answer: String(item?.answer || "").trim(),
+    answer_mode: normalizeAnswerMode(item?.answer_mode),
     priority: Number(item?.priority) || 0,
-    score,
+    score: Number(entry.score || 0),
+    matchedFields: entry.matchedFields || [],
+    exactMatch: Boolean(entry.isExactQuestionMatch),
+    aliasMatch: Boolean(entry.isAliasMatch),
+    categoryAlignment: Boolean(entry.categoryAlignment),
+    confidence: entry.confidence || "none",
+    scoreGap: Number(entry.scoreGap || 0),
+    rejectionReason: entry.rejectionReason || "",
   };
 }
 
 export async function retrieveFaqItems(question, options = {}) {
   try {
     const normalizedQuestion = normalizeText(question);
-    const faqItems = await loadFaqItems();
+    const faqItems = await loadFaqItems(options);
 
     const requestedLimit = Math.max(
       1,
       Math.min(
-        Number.parseInt(String(options.limit || defaultFaqLimit), 10) || defaultFaqLimit,
-        defaultFaqLimit
+        Number.parseInt(String(options.limit || defaultFaqLimit), 10) ||
+          defaultFaqLimit,
+        Number.parseInt(String(options.maxLimit || 8), 10) || 8
       )
     );
     const candidates = faqItems
@@ -297,24 +497,30 @@ export async function retrieveFaqItems(question, options = {}) {
         }
 
         return (Number(second.item?.priority) || 0) - (Number(first.item?.priority) || 0);
-      });
+      })
+      .map((entry, index, allCandidates) =>
+        enrichCandidate(entry, allCandidates, index, normalizedQuestion)
+      );
     const limitedCandidates = limitCandidates(candidates, requestedLimit);
 
-    return limitedCandidates
-      .map(({ item, score }) => normalizeFaqForPrompt(item, score));
+    return limitedCandidates.map(normalizeFaqForPrompt);
   } catch (error) {
     console.warn("[ai-chat] FAQ retrieval unavailable:", error);
     return [];
   }
 }
 
-export function hasHighConfidenceFaqMatch(items, threshold = 20) {
-  return (items || []).some((item) => Number(item?.score || 0) >= threshold);
+export function hasHighConfidenceFaqMatch(items) {
+  return (items || []).some((item) => item?.confidence === "high");
 }
 
 export function buildFaqPromptSection(items) {
   const faqItems = (items || []).filter(
-    (item) => item?.question && item?.answer
+    (item) =>
+      item?.confidence === "high" &&
+      item?.question &&
+      item?.answer &&
+      normalizeAnswerMode(item?.answer_mode) !== "ask_human"
   );
 
   if (!faqItems.length) {
@@ -323,10 +529,10 @@ export function buildFaqPromptSection(items) {
 
   const entries = faqItems
     .map(
-      (item, index) =>
-        `${index + 1}. 分類：${item.category}\n問題：${item.question}\n標準回答：${item.answer}`
+      (item) =>
+        `FAQ ID: ${item.id}\n問題: ${item.question}\n標準答案: ${item.answer}\n分類: ${item.category}\n回答模式: ${normalizeAnswerMode(item.answer_mode)}`
     )
     .join("\n\n");
 
-  return `\n\n以下是與使用者問題最相關的問慢寶 FAQ，若與問題相關，請優先依此回答；若不相關，不要硬套。\n${entries}`;
+  return `<approved_knowledge>\n${entries}\n</approved_knowledge>`;
 }

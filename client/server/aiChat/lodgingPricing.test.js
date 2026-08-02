@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildContextualKnowledgeRouteOverride,
+  buildConversationContextUpdate,
+  normalizeConversationContext,
+} from "./conversationContext.js";
+import {
   buildOfficialPricingReply,
   buildOfficialPricingRouteOverride,
   buildOfficialPricingResolution,
@@ -22,6 +27,14 @@ const completeDogContext = {
 
 const completeNoPetContext = {
   ...completeDogContext,
+  pet_count: 0,
+  pet_type: null,
+};
+
+const repricedNoPetContext = {
+  ...completeDogContext,
+  check_in: "2026-10-01",
+  check_out: "2026-10-02",
   pet_count: 0,
   pet_type: null,
 };
@@ -60,6 +73,27 @@ function quoteOptions(message, recentMessages = []) {
     message,
     recentMessages,
   };
+}
+
+function contextChangeOptions(message, previousContext, recentMessages = []) {
+  return {
+    message,
+    previousContext,
+    recentMessages,
+  };
+}
+
+function buildContextUpdate(previousContext, message) {
+  return buildConversationContextUpdate({
+    previousContext,
+    recentMessages: [],
+    message,
+    dateInfo: {
+      todayText: "2026-08-02",
+      currentYear: 2026,
+    },
+    nowIso: "2026-08-02T00:00:00.000Z",
+  });
 }
 
 describe("official lodging pricing", () => {
@@ -408,6 +442,214 @@ describe("official lodging pricing", () => {
     }
   });
 
+  it("automatically reprices when pricing context dates are changed", async () => {
+    const update = buildContextUpdate(completeDogContext, "日期改到10月1號到2號");
+
+    const override = await buildOfficialPricingRouteOverride(
+      update.context,
+      route(),
+      contextChangeOptions("日期改到10月1號到2號", update.previousContext)
+    );
+
+    expect(update.extracted).toMatchObject({
+      check_in: "2026-10-01",
+      check_out: "2026-10-02",
+    });
+    expect(override).toMatchObject({
+      route: "reprice_after_context_change",
+      providerUsed: "official_pricing",
+      shouldMarkNeedsHuman: true,
+      knowledgeGap: false,
+    });
+    expect(override.answer).toContain("已改為 2026 年 10 月 1 日入住");
+    expect(override.answer).toContain("15 位包棟");
+    expect(override.answer).toContain("住宿房價為 NT$37,500");
+    expect(override.answer).toContain("寵物費與安排需再由管家確認");
+    expect(override.semanticMetadata).toMatchObject({
+      pricing_reply_mode: "reprice_after_context_change",
+      lodging_price_amount: 37500,
+      pet_fee_status: "unresolved",
+      unresolved_price_items: ["pet_fee"],
+      needs_human: true,
+    });
+  });
+
+  it("reprices after changing dates and clearing pets without stale pet uncertainty", async () => {
+    const update = buildContextUpdate(
+      completeDogContext,
+      "日期改了，改到10月1號到2號，不帶狗"
+    );
+
+    const override = await buildOfficialPricingRouteOverride(
+      update.context,
+      route(),
+      contextChangeOptions(
+        "日期改了，改到10月1號到2號，不帶狗",
+        update.previousContext,
+        [previousPricingAssistant]
+      )
+    );
+
+    expect(update.context).toMatchObject({
+      check_in: "2026-10-01",
+      check_out: "2026-10-02",
+      guest_count: 15,
+      pet_count: 0,
+      pet_type: null,
+    });
+    expect(override).toMatchObject({
+      route: "reprice_after_context_change",
+      providerUsed: "official_pricing",
+      shouldMarkNeedsHuman: false,
+      knowledgeGap: false,
+    });
+    expect(override.answer).toContain("已改為 2026 年 10 月 1 日入住");
+    expect(override.answer).toContain("10 月 2 日退房");
+    expect(override.answer).toContain("15 位包棟");
+    expect(override.answer).toContain("不攜帶寵物");
+    expect(override.answer).toContain("住宿房價為 NT$37,500");
+    expect(override.answer).not.toContain("寵物費需確認");
+    expect(override.answer).not.toContain("寵物安排需確認");
+    expect(override.answer).not.toContain("尚未包含寵物費");
+    expect(override.answer).not.toContain("尚未包含寵物相關費用");
+    expect(override.semanticMetadata).toMatchObject({
+      lodging_price_status: "resolved",
+      lodging_price_amount: 37500,
+      pet_fee_status: "not_applicable",
+      unresolved_price_items: [],
+      pricing_reply_mode: "reprice_after_context_change",
+      current_turn_intent: "reprice_after_context_change",
+      needs_human: false,
+    });
+  });
+
+  it("clears pets when the guest says the pet will not come", () => {
+    const update = buildContextUpdate(completeDogContext, "毛孩不去了");
+
+    expect(update.context).toMatchObject({
+      pet_count: 0,
+      pet_type: null,
+    });
+  });
+
+  it("automatically reprices after changing the guest count", async () => {
+    const update = buildContextUpdate(completeDogContext, "改成12人");
+
+    const override = await buildOfficialPricingRouteOverride(
+      update.context,
+      route(),
+      contextChangeOptions("改成12人", update.previousContext)
+    );
+
+    expect(update.context.guest_count).toBe(12);
+    expect(override).toMatchObject({
+      route: "reprice_after_context_change",
+      providerUsed: "official_pricing",
+      shouldMarkNeedsHuman: true,
+    });
+    expect(override.answer).toContain("12 位包棟");
+    expect(override.answer).toContain("住宿房價為 NT$38,400");
+  });
+
+  it("asks for the missing new dates instead of using old dates when a date change is incomplete", async () => {
+    const update = buildContextUpdate(completeDogContext, "日期改了");
+    const override = await buildOfficialPricingRouteOverride(
+      update.context,
+      route(),
+      contextChangeOptions("日期改了", update.previousContext)
+    );
+    const contextualRoute = buildContextualKnowledgeRouteOverride(update.context, route());
+
+    expect(update.context.check_in).toBeNull();
+    expect(update.context.check_out).toBeNull();
+    expect(override).toBeNull();
+    expect(contextualRoute).toMatchObject({
+      route: "faq_collect_info",
+      providerUsed: "faq_collect_info",
+    });
+    expect(contextualRoute.answer).toContain("入住日期");
+    expect(contextualRoute.answer).not.toContain("2027年7月26日");
+    expect(contextualRoute.answer).not.toContain("NT$48,000");
+  });
+
+  it("does not reprice a new session that only provides new dates", async () => {
+    const update = buildContextUpdate(
+      normalizeConversationContext({}),
+      "改到10月1號到2號"
+    );
+
+    const override = await buildOfficialPricingRouteOverride(
+      update.context,
+      route(),
+      contextChangeOptions("改到10月1號到2號", update.previousContext)
+    );
+
+    expect(update.context).toMatchObject({
+      check_in: "2026-10-01",
+      check_out: "2026-10-02",
+      guest_count: null,
+      stay_type: null,
+    });
+    expect(override).toBeNull();
+  });
+
+  it("reprices consistently in legacy, shadow, and hybrid mode", async () => {
+    for (const semanticMode of ["legacy", "shadow", "hybrid"]) {
+      const override = await buildOfficialPricingRouteOverride(
+        repricedNoPetContext,
+        route({
+          semanticMetadata: {
+            semantic_mode: semanticMode,
+          },
+        }),
+        contextChangeOptions(
+          "日期改了，改到10月1號到2號，不帶狗",
+          completeDogContext,
+          [previousPricingAssistant]
+        )
+      );
+
+      expect(override).toMatchObject({
+        route: "reprice_after_context_change",
+        providerUsed: "official_pricing",
+      });
+      expect(override.answer).toContain("住宿房價為 NT$37,500");
+      expect(override.semanticMetadata.semantic_mode).toBe(semanticMode);
+      expect(override.semanticMetadata.needs_human).toBe(false);
+    }
+  });
+
+  it("overrides a DeepSeek draft that hides a verified repriced lodging amount", async () => {
+    const override = await buildOfficialPricingRouteOverride(
+      repricedNoPetContext,
+      route({
+        route: "knowledge_gap",
+        providerUsed: "deepseek_semantic",
+        answer: "實際房價仍需由管家確認。",
+        semanticMetadata: {
+          semantic_route: "knowledge_gap",
+        },
+      }),
+      contextChangeOptions(
+        "日期改了，改到10月1號到2號，不帶狗",
+        completeDogContext,
+        [previousPricingAssistant]
+      )
+    );
+
+    expect(override).toMatchObject({
+      route: "reprice_after_context_change",
+      providerUsed: "official_pricing",
+    });
+    expect(override.answer).toContain("住宿房價為 NT$37,500");
+    expect(override.answer).not.toContain("實際房價仍需由管家確認");
+    expect(override.semanticMetadata).toMatchObject({
+      semantic_route: "knowledge_gap",
+      lodging_price_amount: 37500,
+      pricing_override_applied: true,
+    });
+  });
+
   it("classifies current-turn pricing reply intents", () => {
     expect(classifyPricingReplyIntent({ message: "總共多少錢" })).toBe(
       "initial_quote"
@@ -436,6 +678,14 @@ describe("official lodging pricing", () => {
     expect(classifyPricingReplyIntent({ message: "可以烤肉嗎" })).toBe(
       "unrelated_or_new_topic"
     );
+    expect(
+      classifyPricingReplyIntent({
+        message: "日期改了，改到10月1號到2號，不帶狗",
+        previousContext: completeDogContext,
+        context: repricedNoPetContext,
+        recentMessages: [previousPricingAssistant],
+      })
+    ).toBe("reprice_after_context_change");
   });
 
   it("keeps the base partial quote composer available for direct use", async () => {

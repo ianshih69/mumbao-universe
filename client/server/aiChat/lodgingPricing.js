@@ -9,7 +9,26 @@ const pricingReplyModes = new Set([
   "quote_confirmation",
   "quote_breakdown",
   "lodging_only_quote",
+  "reprice_after_context_change",
 ]);
+const turnActionToPricingReplyMode = new Map([
+  ["request_quote", "initial_quote"],
+  ["update_quote", "reprice_after_context_change"],
+  ["confirm_quote", "quote_confirmation"],
+  ["explain_quote", "quote_breakdown"],
+  ["lodging_only_quote", "lodging_only_quote"],
+]);
+const pricingRelevantContextFields = [
+  "check_in",
+  "check_out",
+  "guest_count",
+  "adult_count",
+  "child_count",
+  "stay_type",
+  "room_count",
+  "pet_count",
+  "pet_type",
+];
 
 const dateTypeLabels = {
   weekday: "平日（日～四）",
@@ -491,6 +510,28 @@ export function buildOfficialLodgingOnlyReply(context, pricingResolution) {
   return `${dateSummary}，${lodgingSummary}的住宿小計是 ${lodgingAmount}。${petPart}`;
 }
 
+export function buildOfficialRepriceReply(context, pricingResolution) {
+  const { state, lodgingPrice, dateSummary, lodgingSummary, lodgingAmount, petSummary } =
+    buildPricingSummary(context, pricingResolution);
+
+  if (lodgingPrice?.status !== "resolved") {
+    return buildContextualKnowledgeGapReply(state);
+  }
+
+  const petPart =
+    state.pet_count === 0
+      ? "不攜帶寵物"
+      : petSummary
+        ? `會攜帶 ${petSummary}`
+        : "寵物需求未確認";
+  const unresolvedPetPart =
+    pricingResolution.pet_fee?.status === "unresolved" && petSummary
+      ? `目前房價尚未包含寵物相關費用，寵物費與安排需再由管家確認。`
+      : "";
+
+  return `好的，已改為 ${dateSummary}，${lodgingSummary}、${petPart}。依目前價目表試算，住宿房價為 ${lodgingAmount}。${unresolvedPetPart}`.trim();
+}
+
 export function buildOfficialPricingMetadata(pricingResolution) {
   const lodgingPrice = pricingResolution?.lodging_price || {};
   const petFee = pricingResolution?.pet_fee || {};
@@ -518,6 +559,33 @@ function hasCompletePricingContext(context) {
       getEffectiveGuestCount(state) !== null &&
       state.pet_count !== null
   );
+}
+
+function hasCompletePricingDetails(context) {
+  const state = normalizeConversationContext(context);
+  return Boolean(
+    state.stay_type === "villa" &&
+      state.check_in &&
+      state.check_out &&
+      getEffectiveGuestCount(state) !== null &&
+      state.pet_count !== null
+  );
+}
+
+function hasPricingSessionContext(context, recentMessages = []) {
+  const state = normalizeConversationContext(context);
+  return Boolean(
+    state.active_intent === "pricing" ||
+      state.current_topic === "booking_price" ||
+      hasPreviousPricingReply(recentMessages)
+  );
+}
+
+export function getPricingRelevantChangedFields(previousContext, context) {
+  const before = normalizeConversationContext(previousContext);
+  const after = normalizeConversationContext(context);
+
+  return pricingRelevantContextFields.filter((field) => before[field] !== after[field]);
 }
 
 function normalizeCompactText(value) {
@@ -588,7 +656,13 @@ function hasPreviousPricingReply(recentMessages = []) {
 export function classifyPricingReplyIntent({
   message,
   recentMessages = [],
+  previousContext = null,
+  context = null,
+  turnAction = "",
 } = {}) {
+  if (turnActionToPricingReplyMode.has(turnAction)) {
+    return turnActionToPricingReplyMode.get(turnAction);
+  }
   if (isNewQuestionAcknowledgement(message)) return "new_question_acknowledgement";
   if (isCasualAcknowledgement(message)) return "casual_acknowledgement";
   if (isLodgingOnlyQuote(message)) return "lodging_only_quote";
@@ -599,6 +673,14 @@ export function classifyPricingReplyIntent({
       : "quote_confirmation_missing_context";
   }
   if (isInitialQuoteRequest(message)) return "initial_quote";
+  if (
+    previousContext &&
+    context &&
+    hasPricingSessionContext(context, recentMessages) &&
+    getPricingRelevantChangedFields(previousContext, context).length > 0
+  ) {
+    return "reprice_after_context_change";
+  }
   return "unrelated_or_new_topic";
 }
 
@@ -638,6 +720,9 @@ function selectPricingReply({ intent, context, pricingResolution }) {
   if (intent === "lodging_only_quote") {
     return buildOfficialLodgingOnlyReply(context, pricingResolution);
   }
+  if (intent === "reprice_after_context_change") {
+    return buildOfficialRepriceReply(context, pricingResolution);
+  }
   return buildOfficialPricingReply(context, pricingResolution);
 }
 
@@ -649,6 +734,9 @@ export async function buildOfficialPricingRouteOverride(
   const currentTurnIntent = classifyPricingReplyIntent({
     message: options.message,
     recentMessages: options.recentMessages,
+    previousContext: options.previousContext,
+    context,
+    turnAction: options.turnAction,
   });
 
   if (currentTurnIntent === "new_question_acknowledgement") {
@@ -680,7 +768,16 @@ export async function buildOfficialPricingRouteOverride(
   }
 
   if (!pricingReplyModes.has(currentTurnIntent)) return null;
-  if (!hasCompletePricingContext(context)) return null;
+  if (currentTurnIntent === "reprice_after_context_change") {
+    if (
+      !hasPricingSessionContext(context, options.recentMessages) ||
+      !hasCompletePricingDetails(context)
+    ) {
+      return null;
+    }
+  } else if (!hasCompletePricingContext(context)) {
+    return null;
+  }
 
   const pricingResolution = await buildOfficialPricingResolution(context);
   if (pricingResolution.lodging_price.status !== "resolved") {

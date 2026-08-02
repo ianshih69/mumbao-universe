@@ -22,7 +22,6 @@ import {
   buildKnowledgeMetadata,
   routeKnowledge,
 } from "./knowledgeRouter.js";
-import { buildOfficialPricingRouteOverride } from "./lodgingPricing.js";
 import {
   buildModelUsageMetadata,
   buildNoSecondCallFallbackRoute,
@@ -33,6 +32,7 @@ import {
   mergeSemanticContext,
   shouldUseSemanticOrchestrator,
 } from "./semanticOrchestrator.js";
+import { executeTurnAction } from "./turnActionExecutor.js";
 import {
   buildSessionErrorBody,
   createInvalidSessionIdError,
@@ -1447,6 +1447,7 @@ export default async function handler(req, res) {
     let knowledgeRoute = legacyKnowledgeRoute;
     let finalConversationContext = conversationContextUpdate.context;
     let finalConversationContextChanged = conversationContextUpdate.changed;
+    let semanticResultForAction = null;
     const semanticFaqItems = (
       rawKnowledgeRoute.candidateFaqItems?.length
         ? rawKnowledgeRoute.candidateFaqItems
@@ -1514,6 +1515,7 @@ export default async function handler(req, res) {
         );
 
         if (semanticMode === "hybrid") {
+          semanticResultForAction = semanticAttempt.semanticResult;
           finalConversationContext = semanticContext.context;
           finalConversationContextChanged =
             conversationContextUpdate.changed || semanticContext.changed;
@@ -1561,17 +1563,17 @@ export default async function handler(req, res) {
       }
     }
 
-    const officialPricingRouteOverride = await buildOfficialPricingRouteOverride(
-      finalConversationContext,
-      knowledgeRoute,
-      {
-        message,
-        recentMessages,
-      }
-    );
-    if (officialPricingRouteOverride) {
+    const actionRoute = await executeTurnAction({
+      message,
+      semanticResult: semanticResultForAction,
+      routeResult: knowledgeRoute,
+      context: finalConversationContext,
+      previousContext: conversationContextUpdate.previousContext,
+      recentMessages,
+    });
+    if (actionRoute) {
       const { conversationContextPatch, ...routeOverride } =
-        officialPricingRouteOverride;
+        actionRoute;
       if (
         conversationContextPatch &&
         typeof conversationContextPatch === "object"

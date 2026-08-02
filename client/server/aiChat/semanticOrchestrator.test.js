@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildConversationContextUpdate } from "./conversationContext.js";
 import { routeKnowledge } from "./knowledgeRouter.js";
 import {
+  allowedTurnActions,
   buildModelUsageMetadata,
   buildNoSecondCallFallbackRoute,
   buildSemanticKnowledgeRoute,
@@ -11,6 +12,7 @@ import {
   isSafeLocalKnowledgeRoute,
   limitSemanticFaqItems,
   mergeSemanticContext,
+  normalizeTurnAction,
   shouldUseSemanticOrchestrator,
   validateSemanticResult,
 } from "./semanticOrchestrator.js";
@@ -232,6 +234,7 @@ describe("semantic orchestrator validation", () => {
 
   it("drops unknown context fields and keeps safe fields", () => {
     const result = validateSemanticResult({
+      turn_action: "request_quote",
       intent: "pricing",
       route: "collect_info",
       context_patch: {
@@ -246,10 +249,25 @@ describe("semantic orchestrator validation", () => {
     expect(result.rejected_fields).toContain("admin_note");
   });
 
+  it("accepts only finite turn actions", () => {
+    expect(allowedTurnActions.has("update_quote")).toBe(true);
+    expect(normalizeTurnAction("update_quote")).toBe("update_quote");
+    expect(normalizeTurnAction("invent_price")).toBe("");
+
+    expect(() =>
+      validateSemanticResult({
+        turn_action: "invent_price",
+        intent: "pricing",
+        route: "collect_info",
+      }),
+    ).toThrow("semantic_orchestrator_invalid_turn_action");
+  });
+
   it("rejects invalid or unavailable FAQ ids", () => {
     expect(() =>
       validateSemanticResult(
         {
+          turn_action: "ask_information",
           intent: "pricing",
           route: "grounded_reply",
           selected_faq_ids: ["faq-missing"],
@@ -261,6 +279,7 @@ describe("semantic orchestrator validation", () => {
     expect(() =>
       validateSemanticResult(
         {
+          turn_action: "ask_information",
           intent: "pricing",
           route: "grounded_reply",
           selected_faq_ids: ["faq-direct"],
@@ -272,6 +291,7 @@ describe("semantic orchestrator validation", () => {
 
   it("clears pet type while preserving an explicit no-pet count", () => {
     const semantic = validateSemanticResult({
+      turn_action: "request_quote",
       intent: "pricing",
       route: "collect_info",
       context_patch: { pet_count: 0 },
@@ -295,6 +315,7 @@ describe("semantic orchestrator validation", () => {
   it("blocks unsupported model-generated prices and routes to knowledge gap", () => {
     const semantic = validateSemanticResult(
       {
+        turn_action: "request_quote",
         intent: "pricing",
         route: "grounded_reply",
         context_patch: {},
@@ -336,6 +357,7 @@ describe("semantic orchestrator validation", () => {
   it("routes complete pricing context to knowledge gap when selected FAQ has no reliable price", () => {
     const semantic = validateSemanticResult(
       {
+        turn_action: "request_quote",
         intent: "pricing",
         route: "grounded_reply",
         context_patch: {},
@@ -419,6 +441,8 @@ describe("semantic prompt and cost metadata", () => {
     });
     const payload = JSON.parse(messages[1].content);
 
+    expect(messages[0].content).toContain('"turn_action"');
+    expect(messages[0].content).toContain("update_quote");
     expect(payload.recent_messages).toHaveLength(12);
     expect(payload.faq_candidates).toHaveLength(5);
     expect(limitSemanticFaqItems(payload.faq_candidates)).toHaveLength(5);
@@ -469,6 +493,7 @@ describe("semantic prompt and cost metadata", () => {
               finish_reason: "stop",
               message: {
                 content: JSON.stringify({
+                  turn_action: "update_quote",
                   intent: "pricing",
                   topic: "booking_price",
                   is_follow_up: true,
@@ -520,6 +545,9 @@ describe("semantic prompt and cost metadata", () => {
       cache_hit_tokens: 10,
       semantic_validator_result: "accepted",
       semantic_validator_accepted: true,
+      semantic_turn_action: "update_quote",
+      validated_turn_action: "update_quote",
+      turn_action_validator_result: "accepted",
       semantic_route: "collect_info",
       semantic_context_patch: { guest_count: 12 },
       semantic_selected_faq_ids: [],

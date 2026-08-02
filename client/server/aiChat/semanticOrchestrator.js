@@ -44,6 +44,21 @@ const allowedRoutes = new Set([
   "human_takeover",
 ]);
 
+export const allowedTurnActions = new Set([
+  "request_quote",
+  "update_quote",
+  "confirm_quote",
+  "explain_quote",
+  "lodging_only_quote",
+  "ask_information",
+  "switch_topic",
+  "acknowledge",
+  "human_takeover",
+  "reset_context",
+  "out_of_scope",
+  "knowledge_gap",
+]);
+
 const allowedIntents = new Set([
   "pricing",
   "booking",
@@ -334,12 +349,15 @@ function buildSemanticSystemInstruction() {
 1. 理解客人訊息是否承接目前 conversation_context。
 2. 抽取客人明確新增或修改的住宿需求條件。
 3. 只從提供的 FAQ 候選中選擇 selected_faq_ids。
-4. 產生繁體中文 reply_draft，但只能使用提供 FAQ 中明確寫出的民宿事實。
+4. 判斷本輪有限的 turn_action，讓後端執行固定、安全的業務流程。
+5. 產生繁體中文 reply_draft，但只能使用提供 FAQ 中明確寫出的民宿事實。
 
 不可自行推測或發明價格、房況、訂金、付款、退款、押金、寵物費、加人費或訂房是否成立。
+房價、加人費與正式報價只能由後端 verified pricing calculator 計算；你只負責理解客人想做什麼。
 
 輸出 schema：
 {
+  "turn_action": "request_quote|update_quote|confirm_quote|explain_quote|lodging_only_quote|ask_information|switch_topic|acknowledge|human_takeover|reset_context|out_of_scope|knowledge_gap",
   "intent": "pricing|booking|availability|facilities|pet_policy|house_rules|payment|refund|general|human_support|unknown",
   "topic": "string",
   "is_follow_up": true,
@@ -352,6 +370,20 @@ function buildSemanticSystemInstruction() {
   "reply_draft": "string",
   "confidence": 0.0
 }
+
+turn_action 定義：
+- request_quote：客人第一次詢問房價、總價、費用或報價。
+- update_quote：客人補充或修改上一筆價格需求，例如日期、人數、房型、寵物條件。
+- confirm_quote：客人確認上一則正式報價是否正確。
+- explain_quote：客人詢問報價怎麼算或要求明細。
+- lodging_only_quote：客人只問住宿小計，暫不含寵物或其他附加項目。
+- ask_information：客人問設施、入住退房、寵物規則、附近資訊等一般住宿資訊。
+- switch_topic：客人想重新問、換題或問別的，但不是清除所有資料。
+- acknowledge：客人只是在回覆好、謝謝、知道了、了解。
+- human_takeover：客人要求人工客服或管家回答。
+- reset_context：客人明確要求重新開始、全部重來、清除剛才資料。
+- out_of_scope：只有明確與慢慢蒔光住宿服務無關時才使用。
+- knowledge_gap：無法安全歸類或需要人工確認。
 
 context_patch 只可使用這些欄位：
 active_intent,current_topic,stay_type,check_in,check_out,guest_count,adult_count,child_count,pet_count,pet_type,room_count
@@ -537,6 +569,28 @@ function normalizeSelectedFaqIds(value, faqItems) {
   return { selectedFaqIds, invalidFaqIds };
 }
 
+function inferTurnAction(value) {
+  const route = String(value?.route || "").trim();
+  const intent = String(value?.intent || "unknown").trim();
+
+  if (route === "human_takeover" || intent === "human_support") {
+    return "human_takeover";
+  }
+  if (route === "knowledge_gap") return "knowledge_gap";
+  if (intent === "pricing") {
+    return route === "collect_info" ? "request_quote" : "request_quote";
+  }
+  if (route === "grounded_reply" || route === "collect_info") {
+    return "ask_information";
+  }
+  return "knowledge_gap";
+}
+
+export function normalizeTurnAction(value) {
+  const action = String(value || "").trim();
+  return allowedTurnActions.has(action) ? action : "";
+}
+
 export function validateSemanticResult(rawValue, { faqItems = [] } = {}) {
   const value =
     typeof rawValue === "string" ? parseJsonObject(rawValue) : rawValue || {};
@@ -553,6 +607,12 @@ export function validateSemanticResult(rawValue, { faqItems = [] } = {}) {
   if (!allowedIntents.has(intent)) {
     throw new Error("semantic_orchestrator_invalid_intent");
   }
+  const turnAction = normalizeTurnAction(
+    value.turn_action || inferTurnAction(value)
+  );
+  if (!turnAction) {
+    throw new Error("semantic_orchestrator_invalid_turn_action");
+  }
 
   const { patch, rejectedFields } = validateContextPatch(value.context_patch);
   const clearFields = normalizeClearFields(value.clear_fields);
@@ -566,6 +626,7 @@ export function validateSemanticResult(rawValue, { faqItems = [] } = {}) {
   }
 
   return {
+    turn_action: turnAction,
     intent,
     topic: String(value.topic || "").trim().slice(0, 80),
     is_follow_up: Boolean(value.is_follow_up),
@@ -822,6 +883,9 @@ function buildSemanticObservationMetadata(semanticResult) {
   return {
     semantic_validator_result: "accepted",
     semantic_validator_accepted: true,
+    semantic_turn_action: semanticResult.turn_action,
+    validated_turn_action: semanticResult.turn_action,
+    turn_action_validator_result: "accepted",
     semantic_route: semanticResult.route,
     semantic_intent: semanticResult.intent,
     ...(semanticResult.topic ? { semantic_topic: semanticResult.topic } : {}),

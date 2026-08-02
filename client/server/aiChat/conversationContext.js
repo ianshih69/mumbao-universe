@@ -312,7 +312,10 @@ function extractCounts(message) {
   if (roomCount !== null) extracted.room_count = roomCount;
   if (nights !== null) extracted.nights = nights;
 
-  if (/(不帶|沒有|無)(狗|狗狗|犬|貓|貓咪|寵物|毛孩)/.test(compact)) {
+  if (
+    /(不帶|沒有|無)(狗|狗狗|犬|貓|貓咪|寵物|毛孩)/.test(compact) ||
+    /(狗|狗狗|犬|貓|貓咪|寵物|毛孩)(不去|不來|不帶|沒去|沒有去)/.test(compact)
+  ) {
     extracted.pet_count = 0;
     extracted.pet_type = null;
     return extracted;
@@ -364,6 +367,11 @@ function hasFollowUpCue(compactMessage) {
   return /^(那|這樣|所以|請問|再問|改成|日期改|不帶|有|可以|能|多少|總共)/.test(compactMessage);
 }
 
+function hasDateChangeCue(message) {
+  const compact = normalizeCompactText(message);
+  return /日期改|改日期|改到|換日期|改入住|改退房/.test(compact);
+}
+
 function shouldResetConversationContext(message) {
   const compact = normalizeCompactText(message);
   return (
@@ -404,6 +412,9 @@ function mergeSingleMessage(previousContext, message, { baseDateText, nowIso } =
   if (dateRange) {
     extracted.check_in = dateRange.check_in;
     extracted.check_out = dateRange.check_out;
+  } else if (hasDateChangeCue(message)) {
+    extracted.check_in = null;
+    extracted.check_out = null;
   } else if (extracted.nights && base.check_in) {
     extracted.check_out = addDays(base.check_in, extracted.nights);
   }

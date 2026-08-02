@@ -145,7 +145,14 @@ describe("customer account view helpers", () => {
     expect(source).not.toContain("預設區域");
     expect(source).toContain("鑽石會員合作資料");
     expect(source).toContain("專屬優惠碼");
-    expect(source).toContain("目前積分");
+    expect(source).toContain("可兌換積分");
+    expect(source).toContain("待處理積分");
+    expect(source).toContain("申請兌換");
+    expect(source).toContain("積分紀錄");
+    expect(source).toContain("createCustomerPointRedemption");
+    expect(source).toContain("isDiamondMember ? (");
     expect(source).not.toContain("updateAdminMemberDiamondProfile");
+    expect(source).not.toContain("completeAdminPointRedemption");
+    expect(source).not.toContain("rejectAdminPointRedemption");
   });
 });

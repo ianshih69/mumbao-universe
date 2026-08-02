@@ -22,6 +22,7 @@ import Admin from "./pages/Admin";
 import AdminChats from "./pages/AdminChats";
 import AdminMemberDetail from "./pages/AdminMemberDetail";
 import AdminMembers from "./pages/AdminMembers";
+import AdminPointRedemptions from "./pages/AdminPointRedemptions";
 import AdminShopHome from "./pages/AdminShopHome";
 import AdminShopOrders from "./pages/AdminShopOrders";
 import AdminShopProducts from "./pages/AdminShopProducts";
@@ -62,6 +63,7 @@ function Router() {
       <Route path={"/admin/chats"} component={AdminChats} />
       <Route path={"/admin/members/:memberId"} component={AdminMemberDetail} />
       <Route path={"/admin/members"} component={AdminMembers} />
+      <Route path={"/admin/point-redemptions"} component={AdminPointRedemptions} />
       <Route path={"/admin/shop"} component={AdminShopHome} />
       <Route path={"/admin/shop/orders"} component={AdminShopOrders} />
       <Route path={"/admin/shop/products"} component={AdminShopProducts} />

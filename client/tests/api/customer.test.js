@@ -85,7 +85,13 @@ function customerProfile(overrides = {}) {
   };
 }
 
-function installFetchMock({ profileOverrides = {}, diamondProfileRows = [], pointsLedgerRows = [] } = {}) {
+function installFetchMock({
+  profileOverrides = {},
+  diamondProfileRows = [],
+  pointsLedgerRows = [],
+  redemptionRows = [],
+  createRedemptionResponse,
+} = {}) {
   const calls = [];
   const fetchMock = vi.fn(async (url, options = {}) => {
     const requestUrl = String(url);
@@ -105,6 +111,29 @@ function installFetchMock({ profileOverrides = {}, diamondProfileRows = [], poin
 
     if (requestUrl.includes("/rest/v1/member_points_ledger?customer_profile_id=eq.")) {
       return createJsonResponse(pointsLedgerRows);
+    }
+
+    if (requestUrl.includes("/rest/v1/member_points_redemption_requests?customer_profile_id=eq.")) {
+      return createJsonResponse(redemptionRows);
+    }
+
+    if (requestUrl.includes("/rest/v1/rpc/create_member_points_redemption_request")) {
+      return createJsonResponse(
+        createRedemptionResponse || {
+          id: "redemption-new",
+          customer_profile_id: profileId,
+          points: 300,
+          bank_name: "Bank",
+          account_holder: "Member",
+          account_number: "1234567890",
+          status: "pending",
+          requested_at: "2026-08-06T00:00:00.000Z",
+          completed_at: null,
+          rejected_at: null,
+          rejection_reason: null,
+          ledger_id: null,
+        },
+      );
     }
 
     if (requestUrl.includes("/rest/v1/shop_orders?customer_profile_id=eq.")) {
@@ -193,6 +222,7 @@ describe("customer account API", () => {
     expect(profileLookup.url).toContain(`auth_user_id=eq.${authUserId}`);
     expect(profileLookup.url).not.toContain("email=eq.");
     expect(calls.some((call) => call.url.includes("member_points_ledger"))).toBe(false);
+    expect(calls.some((call) => call.url.includes("member_points_redemption_requests"))).toBe(false);
   });
 
   it("returns diamond coupon and point balance only for diamond members", async () => {
@@ -214,6 +244,7 @@ describe("customer account API", () => {
           points: 2000,
           description: "Stay reward",
           source_order_id: "90000000-0000-4000-8000-000000000010",
+          source_type: "booking_stay_reward",
           created_at: "2026-08-03T00:00:00.000Z",
         },
         {
@@ -222,7 +253,24 @@ describe("customer account API", () => {
           points: -500,
           description: "Redemption",
           source_order_id: null,
+          source_type: "redemption",
           created_at: "2026-08-04T00:00:00.000Z",
+        },
+      ],
+      redemptionRows: [
+        {
+          id: "redemption-pending",
+          customer_profile_id: profileId,
+          points: 600,
+          bank_name: "Bank",
+          account_holder: "Member",
+          account_number: "9876543210",
+          status: "pending",
+          requested_at: "2026-08-05T00:00:00.000Z",
+          completed_at: null,
+          rejected_at: null,
+          rejection_reason: null,
+          ledger_id: null,
         },
       ],
     });
@@ -234,10 +282,102 @@ describe("customer account API", () => {
     expect(response.body.profile.diamond_profile).toMatchObject({
       exclusive_code: "PET001",
       points_balance: 1500,
+      pending_redemption_points: 600,
+      available_points: 900,
     });
     expect(response.body.profile.diamond_profile.points_ledger).toHaveLength(2);
+    expect(response.body.profile.diamond_profile.redemptions).toHaveLength(1);
+    expect(response.body.profile.diamond_profile.points_activity).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "redemption",
+          points: 600,
+          status: "pending",
+          description: "積分兌換申請",
+        }),
+      ]),
+    );
+    expect(JSON.stringify(response.body)).not.toContain("9876543210");
     expect(response.body.profile.diamond_profile).not.toHaveProperty("partner_name");
     expect(calls.some((call) => call.url.includes("member_points_ledger"))).toBe(true);
+    expect(calls.some((call) => call.url.includes("member_points_redemption_requests"))).toBe(true);
+  });
+
+  it("lets diamond members create a redemption request through the server RPC", async () => {
+    const { calls } = installFetchMock({
+      profileOverrides: { member_level: "diamond" },
+      diamondProfileRows: [
+        {
+          id: "diamond-profile-a",
+          customer_profile_id: profileId,
+          exclusive_code: "PET001",
+          partnership_status: "active",
+        },
+      ],
+      pointsLedgerRows: [
+        {
+          id: "ledger-a",
+          customer_profile_id: profileId,
+          points: 1000,
+          description: "Stay reward",
+          source_order_id: null,
+          source_type: "booking_stay_reward",
+          created_at: "2026-08-03T00:00:00.000Z",
+        },
+      ],
+    });
+
+    const response = await invoke({
+      method: "POST",
+      action: "point-redemption",
+      body: {
+        points: 300,
+        bankName: "  Bank  ",
+        accountHolder: "  Member  ",
+        accountNumber: "1234-567-890",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      ok: true,
+      code: "REDEMPTION_REQUEST_CREATED",
+      redemption: {
+        id: "redemption-new",
+        points: 300,
+        status: "pending",
+        account_last4: "****7890",
+      },
+    });
+    expect(JSON.stringify(response.body)).not.toContain("1234567890");
+    const rpcCall = calls.find((call) => call.url.includes("/rest/v1/rpc/create_member_points_redemption_request"));
+    expect(rpcCall).toBeTruthy();
+    expect(JSON.parse(rpcCall.options.body)).toMatchObject({
+      p_customer_profile_id: profileId,
+      p_points: 300,
+      p_bank_name: "Bank",
+      p_account_holder: "Member",
+      p_account_number: "1234567890",
+    });
+  });
+
+  it("rejects non-diamond customer redemption requests before calling the RPC", async () => {
+    const { calls } = installFetchMock({ profileOverrides: { member_level: "vip" } });
+
+    const response = await invoke({
+      method: "POST",
+      action: "point-redemption",
+      body: {
+        points: 300,
+        bankName: "Bank",
+        accountHolder: "Member",
+        accountNumber: "1234567890",
+      },
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe("REDEMPTION_DIAMOND_ONLY");
+    expect(calls.some((call) => call.url.includes("/rest/v1/rpc/create_member_points_redemption_request"))).toBe(false);
   });
 
   it("rejects attempts to update member-only fields before patching the profile", async () => {

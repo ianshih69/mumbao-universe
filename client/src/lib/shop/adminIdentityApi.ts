@@ -68,6 +68,38 @@ export type AdminMemberProfileStatus =
 
 export type AdminMemberLevel = "normal" | "vip" | "diamond";
 
+export type AdminPointRedemptionStatus = "pending" | "completed" | "rejected";
+
+export type AdminPointRedemption = {
+  id: string;
+  customer_profile_id: string;
+  member_name: string;
+  member_email: string;
+  partner_name: string;
+  exclusive_code: string;
+  points: number;
+  bank_name: string;
+  account_holder: string;
+  account_number_masked: string;
+  account_last4: string;
+  account_number?: string;
+  status: AdminPointRedemptionStatus;
+  requested_at?: string | null;
+  completed_at?: string | null;
+  rejected_at?: string | null;
+  rejection_reason?: string;
+  ledger_id?: string | null;
+};
+
+export type AdminPointRedemptionsResponse = {
+  ok: true;
+  redemptions: AdminPointRedemption[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
 export type AdminMember = {
   id: string;
   auth_user_id: string;
@@ -527,6 +559,51 @@ export function deleteAdminMember(
     method: "DELETE",
     body: JSON.stringify({ confirmEmail: confirmEmail.trim() }),
   });
+}
+
+export function fetchAdminPointRedemptions(
+  token: string,
+  filters: { page?: number; status?: string } = {},
+) {
+  const params = new URLSearchParams({ action: "admin-point-redemptions" });
+  if (filters.page) params.set("page", String(filters.page));
+  if (filters.status && filters.status !== "all") params.set("status", filters.status);
+  return requestAdminIdentity<AdminPointRedemptionsResponse>(
+    `/api/admin-shop?${params.toString()}`,
+    token,
+  );
+}
+
+export function fetchAdminPointRedemptionDetail(token: string, id: string) {
+  const params = new URLSearchParams({ action: "admin-point-redemptions", id });
+  return requestAdminIdentity<{ ok: true; redemption: AdminPointRedemption }>(
+    `/api/admin-shop?${params.toString()}`,
+    token,
+  );
+}
+
+export function completeAdminPointRedemption(token: string, id: string) {
+  const params = new URLSearchParams({ action: "admin-point-redemptions", id });
+  return requestAdminIdentity<{ ok: true; code: string; redemption: AdminPointRedemption }>(
+    `/api/admin-shop?${params.toString()}`,
+    token,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ action: "complete" }),
+    },
+  );
+}
+
+export function rejectAdminPointRedemption(token: string, id: string, reason: string) {
+  const params = new URLSearchParams({ action: "admin-point-redemptions", id });
+  return requestAdminIdentity<{ ok: true; code: string; redemption: AdminPointRedemption }>(
+    `/api/admin-shop?${params.toString()}`,
+    token,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ action: "reject", reason }),
+    },
+  );
 }
 
 export function createAdminUser(

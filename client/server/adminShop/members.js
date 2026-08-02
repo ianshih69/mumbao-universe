@@ -7,6 +7,7 @@ import {
   readBody,
   sendJson,
   supabaseRequest,
+  supabaseRpc,
 } from "../shopShared.js";
 import { requirePermission, writeAdminActivityLog } from "./core.js";
 import { withHandlerSafety } from "./withHandlerSafety.js";
@@ -1031,6 +1032,16 @@ async function fetchPointsLedger(profileId) {
   return (rows || []).map(normalizePointsLedgerRow);
 }
 
+async function fetchPendingRedemptionPoints(profileId) {
+  if (!profileId) return 0;
+  const rows = await restRows(
+    `/member_points_redemption_requests?customer_profile_id=eq.${encodeURIComponent(
+      profileId
+    )}&status=eq.pending&select=points&limit=1000`
+  );
+  return (rows || []).reduce((sum, row) => sum + Number(row.points || 0), 0);
+}
+
 function normalizePointsLedgerRow(row) {
   return {
     id: row.id,
@@ -1053,6 +1064,17 @@ async function insertPointsLedger(row) {
     }
   );
   return normalizePointsLedgerRow(Array.isArray(rows) ? rows[0] || {} : rows || {});
+}
+
+async function adjustPointsLedger(row) {
+  const ledger = await supabaseRpc("adjust_member_points_with_redemption_reserve", {
+    p_customer_profile_id: row.customer_profile_id,
+    p_points: row.points,
+    p_description: row.description,
+    p_source_order_id: row.source_order_id,
+    p_created_by_admin_id: row.created_by_admin_id,
+  });
+  return normalizePointsLedgerRow(ledger || {});
 }
 
 function isCompletedPaidShopOrder(order) {
@@ -1423,22 +1445,45 @@ async function adjustMemberPoints(req, res, deps, context, body, authUserId) {
 
   const currentPointsLedger = await deps.fetchPointsLedger(profile.id);
   const currentPointsBalance = getPointsBalance(currentPointsLedger);
-  if (currentPointsBalance + points < 0) {
+  const pendingRedemptionPoints = await deps.fetchPendingRedemptionPoints(profile.id);
+  if (currentPointsBalance + points < pendingRedemptionPoints) {
+    const hasPendingReserve = pendingRedemptionPoints > 0;
     return sendJson(res, 409, {
       ok: false,
-      code: "MEMBER_POINTS_BALANCE_NEGATIVE",
-      error: "積分扣除後不可低於 0。",
+      code: hasPendingReserve ? "MEMBER_POINTS_RESERVED_BALANCE_NEGATIVE" : "MEMBER_POINTS_BALANCE_NEGATIVE",
+      error: hasPendingReserve
+        ? "已有待處理兌換保留點數，人工扣點後可兌換積分不可低於 0。"
+        : "積分扣除後不可低於 0。",
       points_balance: currentPointsBalance,
+      pending_redemption_points: pendingRedemptionPoints,
     });
   }
 
-  const ledger = await deps.insertPointsLedger({
-    customer_profile_id: profile.id,
-    points,
-    description,
-    source_order_id: sourceOrderId,
-    created_by_admin_id: context?.profile?.id || null,
-  });
+  let ledger;
+  try {
+    ledger = await deps.adjustPointsLedger({
+      customer_profile_id: profile.id,
+      points,
+      description,
+      source_order_id: sourceOrderId,
+      created_by_admin_id: context?.profile?.id || null,
+    });
+  } catch (error) {
+    const message = String(error?.message || "");
+    if (message.includes("MEMBER_POINTS_RESERVED_BALANCE_NEGATIVE")) {
+      const hasPendingReserve = pendingRedemptionPoints > 0;
+      return sendJson(res, 409, {
+        ok: false,
+        code: hasPendingReserve ? "MEMBER_POINTS_RESERVED_BALANCE_NEGATIVE" : "MEMBER_POINTS_BALANCE_NEGATIVE",
+        error: hasPendingReserve
+          ? "已有待處理兌換保留點數，人工扣點後可兌換積分不可低於 0。"
+          : "積分扣除後不可低於 0。",
+        points_balance: currentPointsBalance,
+        pending_redemption_points: pendingRedemptionPoints,
+      });
+    }
+    throw error;
+  }
   const pointsLedger = await deps.fetchPointsLedger(profile.id);
   const pointsBalance = getPointsBalance(pointsLedger);
 
@@ -1755,7 +1800,9 @@ export function createAdminMembersHandler(dependencyOverrides = {}) {
     fetchAllDiamondProfiles,
     upsertDiamondProfile,
     fetchPointsLedger,
+    fetchPendingRedemptionPoints,
     insertPointsLedger,
+    adjustPointsLedger,
     writeAdminActivityLog,
     ...dependencyOverrides,
   };

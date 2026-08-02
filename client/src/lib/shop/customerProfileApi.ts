@@ -21,13 +21,44 @@ export type CustomerDiamondPointLedgerRow = {
   points: number;
   description: string;
   source_order_id?: string | null;
+  source_type?: string | null;
   created_at?: string | null;
+};
+
+export type CustomerPointRedemption = {
+  id: string;
+  points: number;
+  status: "pending" | "completed" | "rejected";
+  bank_name: string;
+  account_holder: string;
+  account_last4: string;
+  requested_at?: string | null;
+  completed_at?: string | null;
+  rejected_at?: string | null;
+  rejection_reason?: string;
+  ledger_id?: string | null;
+};
+
+export type CustomerPointActivityRow = {
+  id: string;
+  record_id: string;
+  type: "earned" | "redemption";
+  points: number;
+  description: string;
+  status: "completed" | "pending" | "rejected";
+  status_label: string;
+  created_at?: string | null;
+  rejection_reason?: string;
 };
 
 export type CustomerDiamondProfile = {
   exclusive_code: string;
   points_balance: number;
+  pending_redemption_points: number;
+  available_points: number;
   points_ledger: CustomerDiamondPointLedgerRow[];
+  redemptions: CustomerPointRedemption[];
+  points_activity: CustomerPointActivityRow[];
 } | null;
 
 export type CustomerProfileUpdatePayload = {
@@ -66,6 +97,15 @@ type CustomerProfileResponse = {
   profile?: CustomerProfile;
   error?: string;
   code?: string;
+};
+
+type CustomerRedemptionResponse = {
+  ok?: boolean;
+  code?: string;
+  message?: string;
+  redemption?: CustomerPointRedemption;
+  profile?: CustomerProfile;
+  error?: string;
 };
 
 type CustomerAdminAccessResponse = CustomerAdminAccess & {
@@ -135,6 +175,42 @@ export async function updateCustomerProfile(accessToken: string, payload: Custom
   });
 
   return parseCustomerProfileResponse(response);
+}
+
+export async function createCustomerPointRedemption(
+  accessToken: string,
+  payload: {
+    points: number;
+    bankName: string;
+    accountHolder: string;
+    accountNumber: string;
+  },
+) {
+  const response = await fetch("/api/customer?action=point-redemption", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  let data: CustomerRedemptionResponse = {};
+  try {
+    data = (await response.json()) as CustomerRedemptionResponse;
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    throw new CustomerProfileApiError(
+      getCustomerProfileErrorMessage(response.status, data.error),
+      response.status,
+      data.code,
+    );
+  }
+
+  return data;
 }
 
 export async function fetchCustomerAdminAccess(accessToken: string) {

@@ -448,6 +448,7 @@ function createDependencies(options = {}) {
     bookingRequestsData = bookingRequests,
     diamondProfilesData = diamondProfiles,
     pointsLedgerData = pointsLedger,
+    redemptionRequestsData = [],
     currentAdminAuthUserId = authUserAdmin,
     deleteRejects = false,
     deleteLeavesAuthUser = false,
@@ -604,10 +605,35 @@ function createDependencies(options = {}) {
       return next;
     }),
     fetchPointsLedger: vi.fn(async (profileId) => ledgerByProfileId.get(profileId) || []),
+    fetchPendingRedemptionPoints: vi.fn(async (profileId) =>
+      redemptionRequestsData
+        .filter((request) => request.customer_profile_id === profileId && request.status === "pending")
+        .reduce((sum, request) => sum + Number(request.points || 0), 0)
+    ),
     insertPointsLedger: vi.fn(async (row) => {
       const next = {
         id: `ledger-${Date.now()}`,
         ...row,
+        created_at: "2026-08-04T00:00:00.000Z",
+      };
+      const rows = ledgerByProfileId.get(row.customer_profile_id) || [];
+      rows.unshift(next);
+      ledgerByProfileId.set(row.customer_profile_id, rows);
+      return next;
+    }),
+    adjustPointsLedger: vi.fn(async (row) => {
+      const pendingPoints = redemptionRequestsData
+        .filter((request) => request.customer_profile_id === row.customer_profile_id && request.status === "pending")
+        .reduce((sum, request) => sum + Number(request.points || 0), 0);
+      const currentPoints = (ledgerByProfileId.get(row.customer_profile_id) || [])
+        .reduce((sum, ledger) => sum + Number(ledger.points || 0), 0);
+      if (row.points < 0 && currentPoints + row.points < pendingPoints) {
+        throw new Error("MEMBER_POINTS_RESERVED_BALANCE_NEGATIVE");
+      }
+      const next = {
+        id: `ledger-${Date.now()}`,
+        ...row,
+        source_type: row.source_type || null,
         created_at: "2026-08-04T00:00:00.000Z",
       };
       const rows = ledgerByProfileId.get(row.customer_profile_id) || [];
@@ -1018,7 +1044,7 @@ describe("admin members API", () => {
       code: "MEMBER_POINTS_ADJUSTED",
       points_balance: 2200,
     });
-    expect(deps.insertPointsLedger).toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.adjustPointsLedger).toHaveBeenCalledWith(expect.objectContaining({
       customer_profile_id: "profile-e",
       points: 500,
       description: "Manual reward",
@@ -1044,11 +1070,39 @@ describe("admin members API", () => {
       code: "MEMBER_POINTS_ADJUSTED",
       points_balance: 1400,
     });
-    expect(deps.insertPointsLedger).toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.adjustPointsLedger).toHaveBeenCalledWith(expect.objectContaining({
       customer_profile_id: "profile-e",
       points: -300,
       description: "Manual redemption",
     }));
+  });
+
+  it("rejects manual point deductions that would consume pending redemption reserves", async () => {
+    const deps = createDependencies({
+      redemptionRequestsData: [
+        {
+          id: "redemption-pending-a",
+          customer_profile_id: "profile-e",
+          points: 1000,
+          status: "pending",
+        },
+      ],
+    });
+    const handler = createAdminMembersHandler(deps);
+
+    const response = await invoke(handler, {
+      method: "PATCH",
+      query: { id: authUserE },
+      body: { action: "adjust-points", points: "-800", description: "Manual deduction" },
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      code: "MEMBER_POINTS_RESERVED_BALANCE_NEGATIVE",
+      points_balance: 1700,
+      pending_redemption_points: 1000,
+    });
+    expect(deps.adjustPointsLedger).not.toHaveBeenCalled();
   });
 
   it("rejects point deductions that would make a diamond member balance negative", async () => {
@@ -1066,7 +1120,7 @@ describe("admin members API", () => {
       code: "MEMBER_POINTS_BALANCE_NEGATIVE",
       points_balance: 1700,
     });
-    expect(deps.insertPointsLedger).not.toHaveBeenCalled();
+    expect(deps.adjustPointsLedger).not.toHaveBeenCalled();
   });
 
   it("does not allow point adjustment for non-diamond members", async () => {
@@ -1081,7 +1135,7 @@ describe("admin members API", () => {
 
     expect(response.status).toBe(409);
     expect(response.body.code).toBe("MEMBER_POINTS_DIAMOND_ONLY");
-    expect(deps.insertPointsLedger).not.toHaveBeenCalled();
+    expect(deps.adjustPointsLedger).not.toHaveBeenCalled();
   });
 
   it("does not allow member mutations for legacy Auth accounts without customer profiles", async () => {
@@ -1108,7 +1162,7 @@ describe("admin members API", () => {
     expect(noteResponse.status).toBe(409);
     expect(pointsResponse.status).toBe(409);
     expect(deps.updateCustomerProfile).not.toHaveBeenCalled();
-    expect(deps.insertPointsLedger).not.toHaveBeenCalled();
+    expect(deps.adjustPointsLedger).not.toHaveBeenCalled();
   });
 
   it("resends verification only for unverified members and writes audit log", async () => {

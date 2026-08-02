@@ -36,16 +36,34 @@ import {
   type CustomerOrderDetail,
   type CustomerOrdersPage,
 } from "@/lib/shop/customerOrdersApi";
-import { type CustomerProfile, type CustomerProfileUpdatePayload } from "@/lib/shop/customerProfileApi";
+import {
+  createCustomerPointRedemption,
+  type CustomerPointActivityRow,
+  type CustomerProfile,
+  type CustomerProfileUpdatePayload,
+} from "@/lib/shop/customerProfileApi";
 import { getOrderStatusLabel, getPaymentStatusLabel } from "@/lib/shop/labels";
 
 type ProfileFormState = Pick<Required<CustomerProfileUpdatePayload>, "name" | "phone" | "default_address">;
+type RedemptionFormState = {
+  points: string;
+  bankName: string;
+  accountHolder: string;
+  accountNumber: string;
+};
 
 const EMPTY_FORM: ProfileFormState = {
   name: "",
   phone: "",
   default_address: "",
 };
+const EMPTY_REDEMPTION_FORM: RedemptionFormState = {
+  points: "",
+  bankName: "",
+  accountHolder: "",
+  accountNumber: "",
+};
+const customerPointActivityPageSize = 10;
 
 function getProfileFormState(profile: CustomerProfile | null): ProfileFormState {
   if (!profile) return EMPTY_FORM;
@@ -66,6 +84,28 @@ function formatCurrency(value: number) {
 
 function formatPoints(value: number) {
   return `${Number(value || 0).toLocaleString("zh-TW")} 點`;
+}
+
+function getPointActivityTypeLabel(row: CustomerPointActivityRow) {
+  return row.type === "redemption" ? "兌換" : "得到";
+}
+
+function getPointActivityStatusClass(row: CustomerPointActivityRow) {
+  if (row.status === "completed") return "bg-emerald-50 text-emerald-700";
+  if (row.status === "rejected") return "bg-rose-50 text-rose-700";
+  return "bg-amber-50 text-amber-700";
+}
+
+function getPointActivityPointsClass(row: CustomerPointActivityRow) {
+  if (row.type === "redemption" && row.status === "pending") return "font-semibold text-amber-700";
+  return row.points >= 0 ? "font-semibold text-emerald-700" : "font-semibold text-rose-700";
+}
+
+function formatPointActivityPoints(row: CustomerPointActivityRow) {
+  const absolutePoints = Math.abs(Number(row.points || 0));
+  if (row.type === "redemption" && row.status === "pending") return formatPoints(absolutePoints);
+  if (row.points > 0) return `+${formatPoints(row.points)}`;
+  return formatPoints(row.points);
 }
 
 function formatDateTime(value?: string | null) {
@@ -155,13 +195,28 @@ export default function CustomerAccount() {
   const [selectedOrderNumber, setSelectedOrderNumber] = useState("");
   const [isOrderDetailLoading, setIsOrderDetailLoading] = useState(false);
   const [orderDetailError, setOrderDetailError] = useState("");
+  const [pointActivityPage, setPointActivityPage] = useState(1);
+  const [isRedemptionDialogOpen, setIsRedemptionDialogOpen] = useState(false);
+  const [redemptionForm, setRedemptionForm] = useState<RedemptionFormState>(EMPTY_REDEMPTION_FORM);
+  const [isSubmittingRedemption, setIsSubmittingRedemption] = useState(false);
+  const [redemptionMessage, setRedemptionMessage] = useState("");
+  const [redemptionError, setRedemptionError] = useState("");
 
   const readonlyEmail = useMemo(() => profile?.email || user?.email || "", [profile?.email, user?.email]);
   const memberLevel = profile?.member_level || "normal";
   const memberLevelLabel = getCustomerMemberLevelLabel(memberLevel);
   const isDiamondMember = memberLevel === "diamond";
   const diamondProfile = isDiamondMember ? profile?.diamond_profile : null;
-  const diamondPointsLedger = diamondProfile?.points_ledger || [];
+  const diamondPointActivity = diamondProfile?.points_activity || [];
+  const pointActivityTotalPages = getCustomerAccountTotalPages(
+    diamondPointActivity.length,
+    customerPointActivityPageSize,
+  );
+  const currentPointActivityPage = Math.min(pointActivityPage, pointActivityTotalPages);
+  const visiblePointActivity = diamondPointActivity.slice(
+    (currentPointActivityPage - 1) * customerPointActivityPageSize,
+    currentPointActivityPage * customerPointActivityPageSize,
+  );
   const emailVerified = Boolean(profile?.email_verified || getEmailVerifiedFromUser(user));
   const emailVerificationLabel = getCustomerEmailVerificationLabel(emailVerified);
   const displayName = getReadonlyValue(profile?.name || user?.user_metadata?.name || "");
@@ -197,11 +252,31 @@ export default function CustomerAccount() {
     return () => window.clearTimeout(timeoutId);
   }, [isEditUnlocked, profile, unlockExpiresAt]);
 
+  useEffect(() => {
+    if (!isDiamondMember) {
+      setPointActivityPage(1);
+      setIsRedemptionDialogOpen(false);
+      setRedemptionForm(EMPTY_REDEMPTION_FORM);
+      setRedemptionMessage("");
+      setRedemptionError("");
+      return;
+    }
+    if (pointActivityPage > pointActivityTotalPages) {
+      setPointActivityPage(pointActivityTotalPages);
+    }
+  }, [isDiamondMember, pointActivityPage, pointActivityTotalPages]);
+
   function updateField(field: keyof ProfileFormState, value: string) {
     if (!isEditUnlocked) return;
     setForm((current) => ({ ...current, [field]: value }));
     setMessage("");
     setError("");
+  }
+
+  function updateRedemptionField(field: keyof RedemptionFormState, value: string) {
+    setRedemptionForm((current) => ({ ...current, [field]: value }));
+    setRedemptionError("");
+    setRedemptionMessage("");
   }
 
   function lockProfileEditor() {
@@ -279,6 +354,52 @@ export default function CustomerAccount() {
     }
   }
 
+  async function handleSubmitRedemption(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!isDiamondMember || !session?.access_token) {
+      setRedemptionError("只有鑽石會員可以申請積分兌換。");
+      return;
+    }
+
+    const pointsText = redemptionForm.points.trim();
+    const points = /^\d+$/.test(pointsText) ? Number(pointsText) : 0;
+    if (!Number.isSafeInteger(points) || points <= 0) {
+      setRedemptionError("兌換積分必須為正整數。");
+      return;
+    }
+    if (points > (diamondProfile?.available_points || 0)) {
+      setRedemptionError("兌換積分不可超過可兌換積分。");
+      return;
+    }
+    if (!redemptionForm.bankName.trim() || !redemptionForm.accountHolder.trim() || !redemptionForm.accountNumber.trim()) {
+      setRedemptionError("銀行、戶名與帳號皆為必填。");
+      return;
+    }
+
+    setIsSubmittingRedemption(true);
+    setRedemptionError("");
+    setRedemptionMessage("");
+
+    try {
+      const result = await createCustomerPointRedemption(session.access_token, {
+        points,
+        bankName: redemptionForm.bankName.trim(),
+        accountHolder: redemptionForm.accountHolder.trim(),
+        accountNumber: redemptionForm.accountNumber.trim(),
+      });
+      await refreshProfile();
+      setPointActivityPage(1);
+      setRedemptionForm(EMPTY_REDEMPTION_FORM);
+      setIsRedemptionDialogOpen(false);
+      setRedemptionMessage(result.message || "兌換申請已送出，慢慢蒔光將於確認匯款後更新處理狀態。");
+    } catch (submitError) {
+      setRedemptionError(submitError instanceof Error ? submitError.message : "兌換申請送出失敗，請稍後再試。");
+    } finally {
+      setIsSubmittingRedemption(false);
+    }
+  }
+
   const loadOrders = useCallback(
     async (page = 1) => {
       if (!session?.access_token) return;
@@ -334,6 +455,11 @@ export default function CustomerAccount() {
       setSelectedOrder(null);
       setSelectedOrderNumber("");
       setOrderDetailError("");
+      setPointActivityPage(1);
+      setIsRedemptionDialogOpen(false);
+      setRedemptionForm(EMPTY_REDEMPTION_FORM);
+      setRedemptionMessage("");
+      setRedemptionError("");
       lockProfileEditor();
     }
   }, [isAuthenticated]);
@@ -556,39 +682,95 @@ export default function CustomerAccount() {
 
                 {isDiamondMember ? (
                   <section className="rounded-[8px] border border-sky-100 bg-[#fffdf8] p-6 shadow-sm shadow-stone-200/60">
-                    <div className="flex items-start gap-3">
-                      <span className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-700">
-                        <Gem className="h-5 w-5" />
-                      </span>
-                      <div>
-                        <p className="text-sm uppercase tracking-[0.18em] text-[#9f7868]">Diamond</p>
-                        <h2 className="mt-1 font-serif text-2xl text-stone-900">鑽石會員合作資料</h2>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex items-start gap-3">
+                        <span className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-700">
+                          <Gem className="h-5 w-5" />
+                        </span>
+                        <div>
+                          <p className="text-sm uppercase tracking-[0.18em] text-[#9f7868]">Diamond</p>
+                          <h2 className="mt-1 font-serif text-2xl text-stone-900">鑽石會員合作資料</h2>
+                        </div>
                       </div>
+                      <Button
+                        type="button"
+                        className="rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
+                        onClick={() => {
+                          setRedemptionError("");
+                          setRedemptionMessage("");
+                          setIsRedemptionDialogOpen(true);
+                        }}
+                        disabled={!diamondProfile || (diamondProfile.available_points || 0) <= 0}
+                      >
+                        申請兌換
+                      </Button>
                     </div>
-                    <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <dl className="mt-5 grid gap-3 sm:grid-cols-3">
                       <AccountField label="專屬優惠碼" value={diamondProfile?.exclusive_code || "尚未設定"} />
-                      <AccountField label="目前積分" value={formatPoints(diamondProfile?.points_balance || 0)} />
+                      <AccountField label="可兌換積分" value={formatPoints(diamondProfile?.available_points || 0)} />
+                      <AccountField label="待處理積分" value={formatPoints(diamondProfile?.pending_redemption_points || 0)} />
                     </dl>
-                    {diamondPointsLedger.length ? (
-                      <div className="mt-5">
-                        <h3 className="text-sm font-semibold text-stone-900">最近積分紀錄</h3>
+
+                    {redemptionMessage && <p className="mt-4 text-sm text-emerald-700">{redemptionMessage}</p>}
+                    {redemptionError && <p className="mt-4 text-sm text-red-700">{redemptionError}</p>}
+
+                    <div className="mt-6">
+                      <h3 className="text-sm font-semibold text-stone-900">積分紀錄</h3>
+                      {visiblePointActivity.length ? (
                         <div className="mt-3 grid gap-2">
-                          {diamondPointsLedger.slice(0, 10).map((row) => (
+                          {visiblePointActivity.map((row) => (
                             <div
                               key={row.id}
-                              className="grid gap-2 rounded-[8px] border border-[#f0e5d7] bg-white/70 px-3 py-2 text-sm sm:grid-cols-[8rem_7rem_minmax(0,1fr)] sm:items-center"
+                              className="grid gap-2 rounded-[8px] border border-[#f0e5d7] bg-white/70 px-3 py-2 text-sm sm:grid-cols-[8rem_5rem_7rem_minmax(0,1fr)_5rem] sm:items-center"
                             >
                               <span className="text-stone-500">{formatDateTime(row.created_at).slice(0, 10)}</span>
-                              <span className={row.points >= 0 ? "font-semibold text-emerald-700" : "font-semibold text-rose-700"}>
-                                {row.points >= 0 ? "+" : ""}
-                                {formatPoints(row.points)}
+                              <span className="text-stone-600">{getPointActivityTypeLabel(row)}</span>
+                              <span className={getPointActivityPointsClass(row)}>{formatPointActivityPoints(row)}</span>
+                              <span className="break-words text-stone-700">
+                                {row.description}
+                                {row.rejection_reason ? (
+                                  <span className="mt-1 block text-xs text-rose-700">原因：{row.rejection_reason}</span>
+                                ) : null}
                               </span>
-                              <span className="break-words text-stone-700">{row.description}</span>
+                              <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs ${getPointActivityStatusClass(row)}`}>
+                                {row.status_label}
+                              </span>
                             </div>
                           ))}
                         </div>
-                      </div>
-                    ) : null}
+                      ) : (
+                        <div className="mt-3 rounded-[8px] border border-dashed border-[#d7c6b5] bg-white/70 p-5 text-sm text-stone-500">
+                          目前沒有積分紀錄。
+                        </div>
+                      )}
+                      {diamondPointActivity.length > customerPointActivityPageSize ? (
+                        <div className="mt-4 flex flex-col gap-3 border-t border-[#eadfce] pt-4 text-sm text-stone-500 sm:flex-row sm:items-center sm:justify-between">
+                          <span>
+                            第 {currentPointActivityPage}／{pointActivityTotalPages} 頁
+                          </span>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-9 rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
+                              disabled={currentPointActivityPage <= 1}
+                              onClick={() => setPointActivityPage((current) => Math.max(1, current - 1))}
+                            >
+                              上一頁
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-9 rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
+                              disabled={currentPointActivityPage >= pointActivityTotalPages}
+                              onClick={() => setPointActivityPage((current) => Math.min(pointActivityTotalPages, current + 1))}
+                            >
+                              下一頁
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                   </section>
                 ) : null}
               </>
@@ -836,6 +1018,91 @@ export default function CustomerAccount() {
                 className="rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
               >
                 {isVerifyingPassword ? "確認中..." : "確認並解鎖"}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {isRedemptionDialogOpen && isDiamondMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 px-5 py-8 backdrop-blur-sm">
+          <form
+            className="w-full max-w-lg rounded-[8px] border border-[#eadfce] bg-[#fffdf8] p-6 shadow-xl"
+            onSubmit={handleSubmitRedemption}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-700">
+                <Gem className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="font-serif text-2xl text-stone-900">申請積分兌換</h2>
+                <p className="mt-2 text-sm leading-6 text-stone-500">
+                  可兌換積分為 {formatPoints(diamondProfile?.available_points || 0)}。送出後會列入待處理積分，慢慢蒔光確認匯款後會更新狀態。
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="grid gap-2 text-sm text-stone-600">
+                兌換積分
+                <input
+                  className={fieldClassName()}
+                  inputMode="numeric"
+                  value={redemptionForm.points}
+                  onChange={(event) => updateRedemptionField("points", event.target.value)}
+                />
+              </label>
+              <label className="grid gap-2 text-sm text-stone-600">
+                銀行名稱或銀行代碼
+                <input
+                  className={fieldClassName()}
+                  value={redemptionForm.bankName}
+                  maxLength={80}
+                  onChange={(event) => updateRedemptionField("bankName", event.target.value)}
+                />
+              </label>
+              <label className="grid gap-2 text-sm text-stone-600">
+                戶名
+                <input
+                  className={fieldClassName()}
+                  value={redemptionForm.accountHolder}
+                  maxLength={80}
+                  onChange={(event) => updateRedemptionField("accountHolder", event.target.value)}
+                />
+              </label>
+              <label className="grid gap-2 text-sm text-stone-600">
+                銀行帳號
+                <input
+                  className={fieldClassName()}
+                  inputMode="numeric"
+                  value={redemptionForm.accountNumber}
+                  maxLength={40}
+                  onChange={(event) => updateRedemptionField("accountNumber", event.target.value)}
+                />
+              </label>
+            </div>
+
+            {redemptionError && <p className="mt-4 text-sm text-red-700">{redemptionError}</p>}
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
+                onClick={() => {
+                  setIsRedemptionDialogOpen(false);
+                  setRedemptionForm(EMPTY_REDEMPTION_FORM);
+                  setRedemptionError("");
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSubmittingRedemption}
+                className="rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
+              >
+                {isSubmittingRedemption ? "送出中..." : "送出申請"}
               </Button>
             </div>
           </form>

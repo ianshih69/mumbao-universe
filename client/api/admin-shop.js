@@ -1,5 +1,6 @@
 const loadFallback = () => import("../server/adminShop/fallback.js");
 const loadMembers = () => import("../server/adminShop/members.js");
+const loadPointRedemptions = () => import("../server/adminShop/pointRedemptions.js");
 const loadWarehouseMedia = () => import("../server/adminShop/warehouseMedia.js");
 const loadUsersRoles = () => import("../server/adminShop/usersRoles.js");
 
@@ -11,6 +12,7 @@ const ROUTES = {
   "admin-bootstrap-status": loadFallback,
   "admin-session": loadFallback,
   "admin-members": loadMembers,
+  "admin-point-redemptions": loadPointRedemptions,
   "admin-users": loadUsersRoles,
   "admin-roles": loadUsersRoles,
   "admin-audit-logs": loadFallback,

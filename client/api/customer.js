@@ -3,6 +3,7 @@ import {
   getServerEnv,
   getSupabaseConfig,
   sendJson,
+  supabaseRpc,
   supabaseRequest,
 } from "../server/shopShared.js";
 
@@ -11,7 +12,9 @@ const PROFILE_SELECT =
 const DIAMOND_PROFILE_SELECT =
   "id,customer_profile_id,exclusive_code,partnership_status";
 const POINTS_LEDGER_SELECT =
-  "id,customer_profile_id,points,description,source_order_id,created_at";
+  "id,customer_profile_id,points,description,source_order_id,source_type,created_at";
+const POINTS_REDEMPTION_SELECT =
+  "id,customer_profile_id,points,bank_name,account_holder,account_number,status,requested_at,completed_at,rejected_at,rejection_reason,ledger_id";
 const CUSTOMER_ORDER_SELECT =
   "id,order_number,created_at,order_source,subtotal,shipping_fee,total,payment_status,order_status,shipping_carrier,tracking_number";
 const CUSTOMER_ORDER_DETAIL_SELECT =
@@ -188,12 +191,89 @@ function normalizeCustomerPointsLedger(row) {
     points: Number(row.points || 0),
     description: row.description || "",
     source_order_id: row.source_order_id || null,
+    source_type: row.source_type || null,
     created_at: row.created_at || null,
   };
 }
 
 function getPointsBalance(rows) {
   return (rows || []).reduce((sum, row) => sum + Number(row.points || 0), 0);
+}
+
+function maskBankAccount(accountNumber) {
+  const digits = String(accountNumber || "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.length <= 4 ? digits : `****${digits.slice(-4)}`;
+}
+
+function normalizeCustomerRedemption(row) {
+  const status = ["pending", "completed", "rejected"].includes(row.status) ? row.status : "pending";
+  return {
+    id: row.id,
+    points: Number(row.points || 0),
+    status,
+    bank_name: row.bank_name || "",
+    account_holder: row.account_holder || "",
+    account_last4: maskBankAccount(row.account_number),
+    requested_at: row.requested_at || null,
+    completed_at: row.completed_at || null,
+    rejected_at: row.rejected_at || null,
+    rejection_reason: row.rejection_reason || "",
+    ledger_id: row.ledger_id || null,
+  };
+}
+
+function getPendingRedemptionPoints(rows) {
+  return (rows || [])
+    .filter((row) => row.status === "pending")
+    .reduce((sum, row) => sum + Number(row.points || 0), 0);
+}
+
+function getRedemptionEventDate(row) {
+  if (row.status === "completed") return row.completed_at || row.requested_at;
+  if (row.status === "rejected") return row.rejected_at || row.requested_at;
+  return row.requested_at;
+}
+
+function buildCustomerPointActivity(pointsLedger, redemptions) {
+  const redemptionLedgerIds = new Set(
+    (redemptions || []).map((row) => row.ledger_id).filter(Boolean),
+  );
+  const ledgerActivity = (pointsLedger || [])
+    .filter((row) => !redemptionLedgerIds.has(row.id))
+    .map((row) => ({
+      id: `ledger:${row.id}`,
+      record_id: row.id,
+      type: Number(row.points || 0) >= 0 ? "earned" : "redemption",
+      points: Number(row.points || 0),
+      description: row.description || "",
+      status: "completed",
+      status_label: "已完成",
+      created_at: row.created_at || null,
+      rejection_reason: "",
+    }));
+
+  const redemptionActivity = (redemptions || []).map((row) => {
+    const completed = row.status === "completed";
+    const rejected = row.status === "rejected";
+    return {
+      id: `redemption:${row.id}`,
+      record_id: row.id,
+      type: "redemption",
+      points: completed ? -Math.abs(Number(row.points || 0)) : Math.abs(Number(row.points || 0)),
+      description: completed ? "合作回饋已匯款" : "積分兌換申請",
+      status: row.status,
+      status_label: completed ? "已完成" : rejected ? "未通過" : "待處理",
+      created_at: getRedemptionEventDate(row),
+      rejection_reason: row.rejection_reason || "",
+    };
+  });
+
+  return [...ledgerActivity, ...redemptionActivity].sort((a, b) => {
+    const aTime = Date.parse(a.created_at || "") || 0;
+    const bTime = Date.parse(b.created_at || "") || 0;
+    return bTime - aTime;
+  });
 }
 
 async function fetchCustomerDiamondProfile(profileId) {
@@ -221,6 +301,16 @@ async function fetchCustomerPointsLedger(profileId) {
   return Array.isArray(rows) ? rows.map(normalizeCustomerPointsLedger) : [];
 }
 
+async function fetchCustomerRedemptions(profileId) {
+  if (!profileId) return [];
+  const rows = await supabaseRequest(
+    `/member_points_redemption_requests?customer_profile_id=eq.${encodeURIComponent(
+      profileId,
+    )}&select=${POINTS_REDEMPTION_SELECT}&order=requested_at.desc&limit=200`,
+  );
+  return Array.isArray(rows) ? rows.map(normalizeCustomerRedemption) : [];
+}
+
 async function buildCustomerProfileResponse(row, user) {
   const profile = normalizeProfile(row, user);
   if (profile.member_level !== "diamond") {
@@ -230,17 +320,25 @@ async function buildCustomerProfileResponse(row, user) {
     };
   }
 
-  const [diamondProfile, pointsLedger] = await Promise.all([
+  const [diamondProfile, pointsLedger, redemptions] = await Promise.all([
     fetchCustomerDiamondProfile(profile.id),
     fetchCustomerPointsLedger(profile.id),
+    fetchCustomerRedemptions(profile.id),
   ]);
+  const pointsBalance = getPointsBalance(pointsLedger);
+  const pendingRedemptionPoints = getPendingRedemptionPoints(redemptions);
+  const availablePoints = Math.max(0, pointsBalance - pendingRedemptionPoints);
 
   return {
     ...profile,
     diamond_profile: {
       exclusive_code: diamondProfile?.exclusive_code || "",
-      points_balance: getPointsBalance(pointsLedger),
+      points_balance: pointsBalance,
+      pending_redemption_points: pendingRedemptionPoints,
+      available_points: availablePoints,
       points_ledger: pointsLedger,
+      redemptions,
+      points_activity: buildCustomerPointActivity(pointsLedger, redemptions),
     },
   };
 }
@@ -410,6 +508,108 @@ async function handleProfile(req, res, requestId) {
   }
 
   return sendJson(res, 405, { error: "method_not_allowed", requestId });
+}
+
+function parseRedemptionPoints(value) {
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) && value > 0 ? value : null;
+  }
+  const text = String(value || "").trim();
+  if (!/^\d+$/.test(text)) return null;
+  const points = Number(text);
+  return Number.isSafeInteger(points) && points > 0 ? points : null;
+}
+
+function normalizeRequiredText(value, maxLength, code) {
+  if (typeof value !== "string") {
+    throw createHttpError(400, "兌換資料不完整。", code);
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > maxLength) {
+    throw createHttpError(400, "兌換資料不完整。", code);
+  }
+  return trimmed;
+}
+
+function normalizeBankAccountNumber(value) {
+  const raw = normalizeRequiredText(value, 40, "REDEMPTION_ACCOUNT_REQUIRED");
+  if (!/^[0-9][0-9 -]*[0-9]$/.test(raw) && !/^[0-9]$/.test(raw)) {
+    throw createHttpError(400, "銀行帳號格式不正確。", "REDEMPTION_ACCOUNT_INVALID");
+  }
+  const digits = raw.replace(/[\s-]/g, "");
+  if (!/^\d{5,30}$/.test(digits)) {
+    throw createHttpError(400, "銀行帳號格式不正確。", "REDEMPTION_ACCOUNT_INVALID");
+  }
+  return digits;
+}
+
+function mapRedemptionRpcError(error) {
+  const message = String(error?.message || "");
+  if (message.includes("REDEMPTION_DIAMOND_ONLY")) {
+    return createHttpError(403, "只有鑽石會員可以申請積分兌換。", "REDEMPTION_DIAMOND_ONLY");
+  }
+  if (message.includes("REDEMPTION_POINTS_EXCEED_AVAILABLE")) {
+    return createHttpError(409, "兌換積分超過目前可兌換積分。", "REDEMPTION_POINTS_EXCEED_AVAILABLE");
+  }
+  if (message.includes("INVALID_REDEMPTION_POINTS")) {
+    return createHttpError(400, "兌換積分必須為正整數。", "INVALID_REDEMPTION_POINTS");
+  }
+  if (message.includes("REDEMPTION_BANK_FIELDS_REQUIRED")) {
+    return createHttpError(400, "銀行、戶名與帳號皆為必填。", "REDEMPTION_BANK_FIELDS_REQUIRED");
+  }
+  if (message.includes("MEMBER_PROFILE_NOT_FOUND")) {
+    return createHttpError(404, "找不到會員資料。", "CUSTOMER_PROFILE_NOT_FOUND");
+  }
+  return error;
+}
+
+async function handlePointRedemption(req, res, requestId) {
+  if (req.method !== "POST") {
+    return sendJson(res, 405, { error: "method_not_allowed", requestId });
+  }
+
+  const accessToken = getBearerToken(req);
+  const user = await getCustomerAuthUser(accessToken);
+  const profile = await ensureProfile(user);
+
+  if (profile.member_level !== "diamond") {
+    throw createHttpError(403, "只有鑽石會員可以申請積分兌換。", "REDEMPTION_DIAMOND_ONLY");
+  }
+
+  const body = await readLimitedJson(req);
+  const points = parseRedemptionPoints(body.points);
+  if (!points) {
+    throw createHttpError(400, "兌換積分必須為正整數。", "INVALID_REDEMPTION_POINTS");
+  }
+  const bankName = normalizeRequiredText(body.bankName || body.bank_name, 80, "REDEMPTION_BANK_REQUIRED");
+  const accountHolder = normalizeRequiredText(
+    body.accountHolder || body.account_holder,
+    80,
+    "REDEMPTION_ACCOUNT_HOLDER_REQUIRED",
+  );
+  const accountNumber = normalizeBankAccountNumber(body.accountNumber || body.account_number);
+
+  let request;
+  try {
+    request = await supabaseRpc("create_member_points_redemption_request", {
+      p_customer_profile_id: profile.id,
+      p_points: points,
+      p_bank_name: bankName,
+      p_account_holder: accountHolder,
+      p_account_number: accountNumber,
+    });
+  } catch (error) {
+    throw mapRedemptionRpcError(error);
+  }
+
+  return sendJson(res, 200, {
+    ok: true,
+    code: "REDEMPTION_REQUEST_CREATED",
+    message: "兌換申請已送出，慢慢蒔光將於確認匯款後更新處理狀態。",
+    redemption: normalizeCustomerRedemption(request),
+    profile: await buildCustomerProfileResponse(await findProfileByAuthUserId(user.id), user),
+    requestId,
+  });
 }
 
 async function handleAdminLinks(req, res, requestId) {
@@ -621,6 +821,10 @@ export default async function handler(req, res) {
   try {
     if (action === "profile") {
       return await handleProfile(req, res, requestId);
+    }
+
+    if (action === "point-redemption") {
+      return await handlePointRedemption(req, res, requestId);
     }
 
     if (action === "admin-links") {

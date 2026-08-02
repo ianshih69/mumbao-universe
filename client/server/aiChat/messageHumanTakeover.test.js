@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSessionModeBody,
   getAutoReplySupportStatus,
+  selectRetrievalMessageForRouting,
   shouldSkipAiReply,
 } from "./message.js";
 
@@ -76,5 +77,27 @@ describe("AI chat human takeover mode", () => {
         })
       ).toBe("ai_replying");
     }
+  });
+
+  it("uses the raw message for FAQ retrieval when no conversation context exists", () => {
+    expect(
+      selectRetrievalMessageForRouting(
+        {
+          hasContext: false,
+          retrievalText: "客人原句：幾點退房？",
+        },
+        "幾點退房？"
+      )
+    ).toBe("幾點退房？");
+
+    expect(
+      selectRetrievalMessageForRouting(
+        {
+          hasContext: true,
+          retrievalText: "查詢住宿價格；包棟；2027-07-26入住；客人原句：3隻狗",
+        },
+        "3隻狗"
+      )
+    ).toContain("查詢住宿價格");
   });
 });

@@ -67,6 +67,10 @@ export function normalizeText(value) {
     .trim();
 }
 
+function normalizeLooseQuestionText(value) {
+  return normalizeText(value).replace(/^(請問|想問|請教)/, "").replace(/(可以|需要|要|嗎|呢)/g, "");
+}
+
 function normalizeKeyword(value) {
   return normalizeText(value);
 }
@@ -243,6 +247,14 @@ function scoreFaqItem(item, normalizedQuestion) {
       isExactQuestionMatch = true;
       matchedFields.push("question_exact");
       score += 100;
+    } else if (
+      normalizeLooseQuestionText(question) ===
+        normalizeLooseQuestionText(normalizedQuestion) &&
+      normalizeLooseQuestionText(normalizedQuestion).length >= 4
+    ) {
+      isExactQuestionMatch = true;
+      matchedFields.push("question_loose_exact");
+      score += 92;
     } else if (
       question.includes(normalizedQuestion) ||
       normalizedQuestion.includes(question)

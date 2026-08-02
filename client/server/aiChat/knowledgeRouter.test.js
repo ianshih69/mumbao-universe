@@ -103,6 +103,71 @@ describe("strict knowledge router", () => {
     });
   });
 
+  it.each([
+    "9/26-27",
+    "9/26-9/27",
+    "7/26-7/27",
+    "9/30-10/1",
+    "12/31-1/1",
+    "9/26～27",
+    "9/26 至 9/27",
+    "2027/9/26-27",
+    "10人",
+    "3隻狗",
+    "兩晚",
+    "改成12人",
+    "不帶寵物了",
+  ])(
+    "keeps short lodging follow-up %s inside support scope when the session has pricing context",
+    async (message) => {
+      const result = await routeKnowledge({
+        message,
+        contextText: "user: 包棟價格\nassistant: 請提供入住日期、人數與寵物需求。",
+        faqItems: [],
+      });
+
+      expect(result.route).not.toBe("scope_guard");
+      expect(result).toMatchObject({
+        route: "knowledge_gap",
+        providerUsed: "knowledge_gap",
+      });
+    },
+  );
+
+  it.each([
+    "9/26-27",
+    "9/26-9/27",
+    "10人",
+    "兩晚",
+    "改成12人",
+  ])("does not treat fresh-session fragment %s as in scope by itself", async (message) => {
+    const result = await routeKnowledge({
+      message,
+      faqItems: [],
+    });
+
+    expect(result).toMatchObject({
+      route: "scope_guard",
+      providerUsed: "scope_guard",
+    });
+  });
+
+  it.each(["4000", "0912-345-678", "MV-00125"])(
+    "does not treat %s as a date follow-up even with pricing context",
+    async (message) => {
+      const result = await routeKnowledge({
+        message,
+        contextText: "user: 包棟價格\nassistant: 請提供入住日期、人數與寵物需求。",
+        faqItems: [],
+      });
+
+      expect(result).toMatchObject({
+        route: "scope_guard",
+        providerUsed: "scope_guard",
+      });
+    },
+  );
+
   it("answers greetings locally without DeepSeek or support escalation", async () => {
     const result = await routeKnowledge({ message: "hi" });
 
@@ -113,6 +178,18 @@ describe("strict knowledge router", () => {
       shouldMarkNeedsHuman: false,
     });
     expect(result.answer).toContain("嗨，我是慢寶");
+  });
+
+  it("routes the clear checkout-time FAQ locally", async () => {
+    const result = await routeKnowledge({ message: "幾點退房？" });
+
+    expect(result).toMatchObject({
+      route: "faq_direct",
+      providerUsed: "faq_direct",
+      matchedFaqIds: ["faq-077"],
+      shouldCallDeepSeek: false,
+      shouldMarkNeedsHuman: false,
+    });
   });
 
   it("honors answer_mode=ask_human without calling DeepSeek", async () => {

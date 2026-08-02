@@ -222,13 +222,39 @@ function hasSupportContext(text) {
 }
 
 function isDateOrPeopleFragment(text) {
-  const compactText = String(text || "").toLowerCase().replace(/\s+/g, "");
+  const compactText = String(text || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  const month = String.raw`(?:0?[1-9]|1[0-2])`;
+  const day = String.raw`(?:0?[1-9]|[12]\d|3[01])`;
+  const year = String.raw`20\d{2}`;
+  const monthDay = String.raw`${month}[\/.-]${day}`;
+  const yearMonthDay = String.raw`${year}[\/.-]${month}[\/.-]${day}`;
+  const dateRangeSeparator = String.raw`(?:-|~|～|〜|到|至)`;
+  const numericToken = String.raw`(?:\d+|[零〇一二兩两三四五六七八九十]+)`;
+  const singleDatePattern = new RegExp(
+    String.raw`^(?:${yearMonthDay}|${monthDay})$`
+  );
+  const dateRangePattern = new RegExp(
+    String.raw`^(?:${yearMonthDay}|${monthDay})${dateRangeSeparator}(?:(?:${year}[\/.-])?${month}[\/.-])?${day}$`
+  );
+  const peoplePattern = new RegExp(
+    String.raw`^(?:改成|改為|改|不是|總共|共)?${numericToken}(?:人|位|大人|小孩)$`
+  );
+  const petPattern = new RegExp(
+    String.raw`^${numericToken}(?:隻|只)?(?:狗|狗狗|犬|貓|貓咪|寵物|毛孩)$`
+  );
+  const nightsPattern = new RegExp(String.raw`^${numericToken}(?:晚|夜)$`);
 
   return (
-    /^\d{4}$/.test(compactText) ||
-    /^\d{1,2}[/-]\d{1,2}$/.test(compactText) ||
-    /\d+\s*(人|位|大人|小孩)/.test(compactText) ||
-    /[一二三四五六七八九十兩]+(人|位|大人|小孩)/.test(compactText) ||
+    new RegExp(String.raw`^${year}$`).test(compactText) ||
+    singleDatePattern.test(compactText) ||
+    dateRangePattern.test(compactText) ||
+    peoplePattern.test(compactText) ||
+    petPattern.test(compactText) ||
+    /^(?:不帶|沒有|無)(?:狗|狗狗|犬|貓|貓咪|寵物|毛孩)(?:了)?$/.test(compactText) ||
+    nightsPattern.test(compactText) ||
     /[一二三四五六七八九十]+月[一二三四五六七八九十]+/.test(compactText) ||
     /(週|周)[一二三四五六日天]/.test(compactText)
   );

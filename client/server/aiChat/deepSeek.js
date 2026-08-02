@@ -55,13 +55,18 @@ export async function runWithFailureStage(
   }
 }
 
-export function buildDeepSeekRequestPayload({ model, messages }) {
+export function buildDeepSeekRequestPayload({
+  model,
+  messages,
+  temperature = 0.7,
+  maxTokens = 500,
+}) {
   return {
     model,
     messages,
     stream: false,
-    temperature: 0.7,
-    max_tokens: 500,
+    temperature,
+    max_tokens: maxTokens,
     thinking: {
       type: "disabled",
     },
@@ -169,5 +174,19 @@ export function parseDeepSeekResponseBody({ ok, status, body }) {
     answer,
     finishReason,
     providerStatus: status,
+    ...(data?.usage
+      ? {
+          usage: {
+            prompt_tokens: Number(data.usage.prompt_tokens || 0),
+            completion_tokens: Number(data.usage.completion_tokens || 0),
+            total_tokens: Number(data.usage.total_tokens || 0),
+            cache_hit_tokens: Number(
+              data.usage.prompt_cache_hit_tokens ||
+                data.usage.cache_hit_tokens ||
+                0
+            ),
+          },
+        }
+      : {}),
   };
 }

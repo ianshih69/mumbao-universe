@@ -3,7 +3,7 @@ import { enforceAiChatRateLimit } from "./rateLimit.js";
 import { buildFaqPromptSection } from "./faqRetrieval.js";
 import {
   buildConversationContextUpdate,
-  buildContextualKnowledgeGapReply,
+  buildContextualKnowledgeRouteOverride,
   getConversationContextForStorage,
 } from "./conversationContext.js";
 import {
@@ -22,6 +22,16 @@ import {
   buildKnowledgeMetadata,
   routeKnowledge,
 } from "./knowledgeRouter.js";
+import {
+  buildModelUsageMetadata,
+  buildNoSecondCallFallbackRoute,
+  buildSemanticKnowledgeRoute,
+  callSemanticOrchestrator,
+  getSemanticRouterMode,
+  isSafeLocalKnowledgeRoute,
+  mergeSemanticContext,
+  shouldUseSemanticOrchestrator,
+} from "./semanticOrchestrator.js";
 import {
   buildSessionErrorBody,
   createInvalidSessionIdError,
@@ -1268,6 +1278,42 @@ function serializeSessionForClient(session) {
   };
 }
 
+function applyContextualRouteOverride(routeResult, conversationContext) {
+  const contextualKnowledgeRouteOverride = buildContextualKnowledgeRouteOverride(
+    conversationContext,
+    routeResult
+  );
+
+  if (!contextualKnowledgeRouteOverride) {
+    return routeResult;
+  }
+
+  return {
+    ...routeResult,
+    ...contextualKnowledgeRouteOverride,
+    reason: contextualKnowledgeRouteOverride.reason,
+  };
+}
+
+function buildRouteMetadata(routeResult, requestId, semanticMode) {
+  return {
+    ...buildKnowledgeMetadata(routeResult, requestId),
+    ...buildModelUsageMetadata({
+      mode: semanticMode,
+      routeResult,
+      modelCalled: routeResult?.shouldCallDeepSeek,
+      modelCallCount: routeResult?.shouldCallDeepSeek ? 1 : 0,
+      model: routeResult?.shouldCallDeepSeek ? getDeepSeekModelName() : "",
+    }),
+  };
+}
+
+export function selectRetrievalMessageForRouting(conversationContextUpdate, message) {
+  return conversationContextUpdate?.hasContext
+    ? conversationContextUpdate.retrievalText || message
+    : message;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -1342,6 +1388,10 @@ export default async function handler(req, res) {
     ]
       .filter(Boolean)
       .join("\n");
+    const retrievalMessageForRouting = selectRetrievalMessageForRouting(
+      conversationContextUpdate,
+      message
+    );
 
     if (shouldSkipAiReply(session)) {
       const userMessage = await insertUserMessage(session.id, message);
@@ -1376,34 +1426,147 @@ export default async function handler(req, res) {
       });
     }
 
-    let knowledgeRoute = await routeKnowledge({
+    const semanticMode = getSemanticRouterMode();
+    const rawKnowledgeRoute = await routeKnowledge({
       message,
-      retrievalMessage: conversationContextUpdate.retrievalText,
+      retrievalMessage: retrievalMessageForRouting,
       session,
       contextText,
       limit: 8,
     });
-    const contextualKnowledgeGapReply = knowledgeRoute.knowledgeGap
-      ? buildContextualKnowledgeGapReply(conversationContextUpdate.context)
-      : "";
-    if (contextualKnowledgeGapReply) {
-      knowledgeRoute = {
-        ...knowledgeRoute,
-        answer: contextualKnowledgeGapReply,
-        notice: contextualKnowledgeGapReply,
-        reason: `${knowledgeRoute.reason || "knowledge_gap"}_with_conversation_context`,
-        shouldMarkNeedsHuman: true,
-        knowledgeGap: true,
-        aiSkipped: true,
-      };
+    const legacyKnowledgeRoute = applyContextualRouteOverride(
+      rawKnowledgeRoute,
+      conversationContextUpdate.context
+    );
+    let knowledgeRoute = legacyKnowledgeRoute;
+    let finalConversationContext = conversationContextUpdate.context;
+    let finalConversationContextChanged = conversationContextUpdate.changed;
+    const semanticFaqItems = (
+      rawKnowledgeRoute.candidateFaqItems?.length
+        ? rawKnowledgeRoute.candidateFaqItems
+        : rawKnowledgeRoute.matchedFaqItems
+    ).slice(0, 5);
+    const canAnswerLocally = isSafeLocalKnowledgeRoute({
+      message,
+      routeResult: rawKnowledgeRoute,
+      context: conversationContextUpdate.context,
+    });
+
+    if (
+      shouldUseSemanticOrchestrator({
+        mode: semanticMode,
+        message,
+        routeResult: rawKnowledgeRoute,
+        context: conversationContextUpdate.context,
+      })
+    ) {
+      const semanticRateLimit = await enforceAiChatRateLimit(req, {
+        visitorId,
+        sessionId: session.id,
+        action: "semantic_router",
+        provider: "deepseek",
+        model: getDeepSeekModelName(),
+      });
+
+      if (!semanticRateLimit.allowed) {
+        const usageFailure =
+          semanticRateLimit.status === 503 &&
+          semanticRateLimit.reason === "rate_limit_unavailable";
+        const rateLimitedMetadata = buildRouteMetadata(
+          {
+            ...legacyKnowledgeRoute,
+            semanticMetadata: {
+              fallback_reason: semanticRateLimit.reason || "rate_limited",
+              ...(usageFailure ? { failureStage: "usage_event_failed" } : {}),
+            },
+          },
+          requestId,
+          semanticMode
+        );
+
+        return sendJson(res, semanticRateLimit.status || 429, {
+          error: semanticRateLimit.message,
+          reason: semanticRateLimit.reason,
+          metadata: rateLimitedMetadata,
+        });
+      }
+
+      try {
+        const semanticAttempt = await callSemanticOrchestrator({
+          message,
+          context: conversationContextUpdate.context,
+          recentMessages,
+          faqItems: semanticFaqItems,
+          dateInfo,
+          requestId,
+        });
+        const semanticContext = mergeSemanticContext(
+          conversationContextUpdate.context,
+          semanticAttempt.semanticResult,
+          new Date().toISOString()
+        );
+
+        if (semanticMode === "hybrid") {
+          finalConversationContext = semanticContext.context;
+          finalConversationContextChanged =
+            conversationContextUpdate.changed || semanticContext.changed;
+          knowledgeRoute = buildSemanticKnowledgeRoute({
+            semanticResult: semanticAttempt.semanticResult,
+            context: finalConversationContext,
+            faqItems: semanticFaqItems,
+            fallbackRoute: legacyKnowledgeRoute,
+            metadata: semanticAttempt.metadata,
+          });
+        } else {
+          knowledgeRoute = buildNoSecondCallFallbackRoute(
+            legacyKnowledgeRoute,
+            "semantic_shadow"
+          );
+          knowledgeRoute = {
+            ...knowledgeRoute,
+            modelCalled: true,
+            modelCallCount: 1,
+            semanticMetadata: {
+              ...(knowledgeRoute.semanticMetadata || {}),
+              ...semanticAttempt.metadata,
+              semantic_shadow: true,
+            },
+          };
+        }
+      } catch (error) {
+        console.warn("[ai-chat] semantic orchestrator fallback", {
+          requestId,
+          reason: error?.message || "semantic_orchestrator_failed",
+        });
+        knowledgeRoute = buildNoSecondCallFallbackRoute(
+          legacyKnowledgeRoute,
+          error?.message || "semantic_orchestrator_failed"
+        );
+        knowledgeRoute = {
+          ...knowledgeRoute,
+          modelCalled: true,
+          modelCallCount: 1,
+          semanticMetadata: {
+            ...(knowledgeRoute.semanticMetadata || {}),
+            ...(error?.semanticMetadata || {}),
+          },
+        };
+      }
     }
-    const routeMetadata = buildKnowledgeMetadata(knowledgeRoute, requestId);
+    const routeMetadata = buildRouteMetadata(
+      knowledgeRoute,
+      requestId,
+      semanticMode
+    );
     logChatDebug("knowledge route", {
       route: knowledgeRoute.route,
       reason: knowledgeRoute.reason,
       matchedFaqIds: knowledgeRoute.matchedFaqIds,
       topScore: knowledgeRoute.topScore,
       confidence: knowledgeRoute.confidence,
+      semanticMode,
+      canAnswerLocally,
+      modelCallCount: routeMetadata.model_call_count,
     });
 
     if (!knowledgeRoute.shouldCallDeepSeek) {
@@ -1422,10 +1585,10 @@ export default async function handler(req, res) {
         incrementUnread: true,
         supportStatus,
       });
-      if (conversationContextUpdate.changed) {
+      if (finalConversationContextChanged) {
         session = await persistConversationContext(
           session,
-          conversationContextUpdate.context
+          finalConversationContext
         );
       }
 
@@ -1482,10 +1645,10 @@ export default async function handler(req, res) {
       incrementUnread: true,
       supportStatus: autoReplySupportStatus,
     });
-    if (conversationContextUpdate.changed) {
+    if (finalConversationContextChanged) {
       session = await persistConversationContext(
         session,
-        conversationContextUpdate.context
+        finalConversationContext
       );
     }
 
@@ -1497,6 +1660,21 @@ export default async function handler(req, res) {
       requestId,
       conversationContextUpdate.promptContext
     );
+    const providerMetadata = {
+      ...routeMetadata,
+      ...buildModelUsageMetadata({
+        mode: semanticMode,
+        routeResult: knowledgeRoute,
+        modelCalled: true,
+        modelCallCount: 1,
+        model: getDeepSeekModelName(),
+        providerStatus: providerResult.providerStatus,
+        finishReason: providerResult.finishReason,
+        usage: providerResult.usage,
+      }),
+      providerStatus: providerResult.providerStatus,
+      finishReason: providerResult.finishReason,
+    };
     const aiMessage = await insertAssistantMessage(
       session.id,
       providerResult.answer,
@@ -1505,11 +1683,7 @@ export default async function handler(req, res) {
         providerStatus: providerResult.providerStatus,
         finishReason: providerResult.finishReason,
       },
-      {
-        ...routeMetadata,
-        providerStatus: providerResult.providerStatus,
-        finishReason: providerResult.finishReason,
-      }
+      providerMetadata
     );
     session = await updateSessionAfterMessage(session, aiMessage, {
       supportStatus: autoReplySupportStatus,
@@ -1524,11 +1698,7 @@ export default async function handler(req, res) {
       provider_used: knowledgeRoute.providerUsed,
       ai_skipped: false,
       knowledge_gap: false,
-      metadata: {
-        ...routeMetadata,
-        providerStatus: providerResult.providerStatus,
-        finishReason: providerResult.finishReason,
-      },
+      metadata: providerMetadata,
     });
   } catch (error) {
     const failureMetadata = buildFailureMetadata(requestId, error);

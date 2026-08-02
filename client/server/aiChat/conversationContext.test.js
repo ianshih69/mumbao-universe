@@ -4,6 +4,7 @@ import {
   buildConversationPromptContext,
   buildConversationRetrievalText,
   buildContextualKnowledgeGapReply,
+  buildContextualKnowledgeRouteOverride,
 } from "./conversationContext.js";
 
 const dateInfo = {
@@ -141,6 +142,48 @@ describe("AI chat conversation context", () => {
     expect(result.context.check_out).toBe("2027-09-27");
   });
 
+  it("infers a past yearless date range as the nearest future year", () => {
+    const result = buildConversationContextUpdate({
+      previousContext: { active_intent: "pricing", stay_type: "villa" },
+      message: "7/26-7/27",
+      dateInfo,
+      nowIso: "2026-08-02T08:00:00.000Z",
+    });
+
+    expect(result.context.check_in).toBe("2027-07-26");
+    expect(result.context.check_out).toBe("2027-07-27");
+  });
+
+  it("parses cross-month date fragments in the current future year", () => {
+    const result = update(
+      { active_intent: "pricing", stay_type: "villa" },
+      "9/30-10/1",
+    );
+
+    expect(result.context.check_in).toBe("2026-09-30");
+    expect(result.context.check_out).toBe("2026-10-01");
+  });
+
+  it("parses cross-year date fragments using checkout in the next year", () => {
+    const result = update(
+      { active_intent: "pricing", stay_type: "villa" },
+      "12/31-1/1",
+    );
+
+    expect(result.context.check_in).toBe("2026-12-31");
+    expect(result.context.check_out).toBe("2027-01-01");
+  });
+
+  it("parses year-qualified start dates with same-month checkout day", () => {
+    const result = update(
+      { active_intent: "pricing", stay_type: "villa" },
+      "2027/9/26-27",
+    );
+
+    expect(result.context.check_in).toBe("2027-09-26");
+    expect(result.context.check_out).toBe("2027-09-27");
+  });
+
   it("keeps stay conditions while switching between facilities and pricing topics", () => {
     const stayState = {
       active_intent: "pricing",
@@ -273,5 +316,149 @@ describe("AI chat conversation context", () => {
     expect(reply).toContain("攜帶3隻狗");
     expect(reply).toContain("實際房價及寵物安排仍需由管家確認");
     expect(reply).not.toContain("NT$");
+  });
+
+  it("overrides generic faq_direct answers and asks only for missing guest count", () => {
+    const stateAfterPets = update(
+      {
+        active_intent: "pricing",
+        stay_type: "villa",
+        check_in: "2027-07-26",
+        check_out: "2027-07-27",
+      },
+      "3隻狗",
+    ).context;
+    const override = buildContextualKnowledgeRouteOverride(stateAfterPets, {
+      route: "faq_direct",
+      providerUsed: "faq_direct",
+      answer: "請提供日期與人數。",
+      answerMode: "direct",
+      knowledgeGap: false,
+      aiSkipped: true,
+      matchedFaqItems: [
+        {
+          id: "faq-price-collect",
+          answer: "請提供日期、人數、寵物需求。",
+          answer_mode: "direct",
+        },
+      ],
+    });
+
+    expect(stateAfterPets).toMatchObject({
+      stay_type: "villa",
+      check_in: "2027-07-26",
+      check_out: "2027-07-27",
+      pet_count: 3,
+      pet_type: "dog",
+    });
+    expect(override).toMatchObject({
+      route: "faq_collect_info",
+      providerUsed: "faq_collect_info",
+      answerMode: "collect_info",
+      knowledgeGap: false,
+      shouldMarkNeedsHuman: false,
+    });
+    expect(override.answer).toContain("2027年7月26日入住");
+    expect(override.answer).toContain("2027年7月27日退房");
+    expect(override.answer).toContain("包棟");
+    expect(override.answer).toContain("攜帶3隻狗");
+    expect(override.answer).toContain("共有幾位入住");
+    expect(override.answer).not.toContain("入住日期");
+    expect(override.answer).not.toContain("是否攜帶寵物");
+  });
+
+  it("keeps complete villa date guest and dog context after short follow-ups", () => {
+    const first = update(null, "包棟價格");
+    const second = update(first.context, "7/26-27");
+    const third = update(second.context, "10人");
+    const fourth = update(third.context, "3隻狗");
+
+    expect(fourth.context).toMatchObject({
+      active_intent: "pricing",
+      stay_type: "villa",
+      check_in: "2027-07-26",
+      check_out: "2027-07-27",
+      guest_count: 10,
+      pet_count: 3,
+      pet_type: "dog",
+    });
+    expect(
+      buildContextualKnowledgeRouteOverride(fourth.context, {
+        route: "faq_direct",
+        providerUsed: "faq_direct",
+        answer: "請提供日期與人數。",
+        answerMode: "direct",
+        knowledgeGap: false,
+        aiSkipped: true,
+      }),
+    ).toMatchObject({
+      route: "knowledge_gap",
+      providerUsed: "knowledge_gap",
+      shouldMarkNeedsHuman: true,
+      knowledgeGap: true,
+    });
+  });
+
+  it("summarizes complete needs instead of returning generic collect_info when no reliable price exists", () => {
+    const override = buildContextualKnowledgeRouteOverride(
+      {
+        active_intent: "pricing",
+        stay_type: "villa",
+        check_in: "2027-07-26",
+        check_out: "2027-07-27",
+        guest_count: 10,
+        pet_count: 3,
+        pet_type: "dog",
+      },
+      {
+        route: "faq_collect_info",
+        providerUsed: "faq_collect_info",
+        answer: "請提供日期與人數。",
+        answerMode: "collect_info",
+        knowledgeGap: false,
+        aiSkipped: true,
+      },
+    );
+
+    expect(override).toMatchObject({
+      route: "knowledge_gap",
+      providerUsed: "knowledge_gap",
+      shouldMarkNeedsHuman: true,
+      knowledgeGap: true,
+    });
+    expect(override.answer).toContain("2027年7月26日入住");
+    expect(override.answer).toContain("10位入住");
+    expect(override.answer).toContain("攜帶3隻狗");
+    expect(override.answer).toContain("實際房價及寵物安排仍需由管家確認");
+    expect(override.answer).not.toContain("請提供日期");
+  });
+
+  it("does not use another session's collected fields for contextual FAQ overrides", () => {
+    const otherSessionState = {
+      active_intent: "pricing",
+      stay_type: "villa",
+      check_in: "2027-07-26",
+      check_out: "2027-07-27",
+      guest_count: 10,
+      pet_count: 3,
+      pet_type: "dog",
+    };
+    const freshSession = update(null, "多少錢？").context;
+    const override = buildContextualKnowledgeRouteOverride(freshSession, {
+      route: "faq_direct",
+      providerUsed: "faq_direct",
+      answer: "請提供日期與人數。",
+      answerMode: "direct",
+      knowledgeGap: false,
+      aiSkipped: true,
+    });
+
+    expect(otherSessionState.check_in).toBe("2027-07-26");
+    expect(freshSession.check_in).toBeNull();
+    expect(override.answer).toContain("入住日期");
+    expect(override.answer).toContain("共有幾位入住");
+    expect(override.answer).not.toContain("2027年7月26日");
+    expect(override.answer).not.toContain("10位入住");
+    expect(override.answer).not.toContain("3隻狗");
   });
 });

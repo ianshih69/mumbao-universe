@@ -198,6 +198,21 @@ function parseDateRange(message, baseDateText) {
 
   let match = text.match(
     new RegExp(
+      String.raw`(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})\s*${dateRangeSeparators}\s*(\d{1,2})(?!\d)`,
+    ),
+  );
+  if (match) {
+    return resolveDateRange({
+      startYear: Number(match[1]),
+      startMonth: Number(match[2]),
+      startDay: Number(match[3]),
+      endDay: Number(match[4]),
+      baseDateText,
+    });
+  }
+
+  match = text.match(
+    new RegExp(
       String.raw`(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})\s*${dateRangeSeparators}\s*(?:(\d{4})[\/.-])?(\d{1,2})[\/.-](\d{1,2})`,
     ),
   );
@@ -579,6 +594,114 @@ export function buildContextualKnowledgeGapReply(context) {
   }
 
   return `收到，目前需求是 ${summary}。實際房價及寵物安排仍需由管家確認，我已將完整需求整理好。`;
+}
+
+function hasPricingContext(context) {
+  const state = normalizeConversationContext(context);
+  return state.active_intent === "pricing" || state.current_topic === "booking_price";
+}
+
+export function getMissingBookingContextFields(context) {
+  const state = normalizeConversationContext(context);
+  const missing = [];
+
+  if (!state.stay_type) missing.push("stay_type");
+  if (!state.check_in || !state.check_out) missing.push("dates");
+  if (state.guest_count === null && state.adult_count === null && state.child_count === null) {
+    missing.push("guest_count");
+  }
+  if (state.pet_count === null) missing.push("pet_count");
+
+  return missing;
+}
+
+function missingFieldsToQuestion(missing) {
+  const labels = [];
+  if (missing.includes("stay_type")) labels.push("想包棟或訂單間");
+  if (missing.includes("dates")) labels.push("入住日期");
+  if (missing.includes("guest_count")) labels.push("共有幾位入住");
+  if (missing.includes("pet_count")) labels.push("是否攜帶寵物");
+  return labels;
+}
+
+function hasGenericCollectInfoCue(routeResult) {
+  const text = [
+    routeResult?.answer,
+    routeResult?.notice,
+    ...(routeResult?.matchedFaqItems || []).flatMap((item) => [
+      item?.question,
+      item?.answer,
+      ...(Array.isArray(item?.keywords) ? item.keywords : []),
+    ]),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return /請.{0,8}提供|入住日期|日期|人數|幾位|寵物|包棟|單間|房價|價格|費用/.test(text);
+}
+
+function buildContextualMissingFieldsReply(context) {
+  const state = normalizeConversationContext(context);
+  const missing = getMissingBookingContextFields(state);
+  if (!missing.length) return "";
+
+  const summary = buildStaySummary(state);
+  const questions = missingFieldsToQuestion(missing);
+  if (!questions.length) return "";
+
+  if (summary) {
+    return `收到，目前是 ${summary}。請問${questions.join("、")}呢？`;
+  }
+
+  return `收到，請問${questions.join("、")}呢？`;
+}
+
+export function buildContextualKnowledgeRouteOverride(context, routeResult) {
+  if (!hasPricingContext(context)) return null;
+
+  const eligibleRoute = [
+    "faq_direct",
+    "faq_collect_info",
+    "ask_human",
+    "knowledge_gap",
+  ].includes(routeResult?.route);
+  if (!eligibleRoute) return null;
+
+  const missingReply = buildContextualMissingFieldsReply(context);
+  if (missingReply) {
+    return {
+      route: "faq_collect_info",
+      providerUsed: "faq_collect_info",
+      answer: missingReply,
+      notice: "",
+      answerMode: "collect_info",
+      shouldCallDeepSeek: false,
+      shouldMarkNeedsHuman: false,
+      knowledgeGap: false,
+      aiSkipped: true,
+      reason: "conversation_context_missing_fields",
+    };
+  }
+
+  if (routeResult?.knowledgeGap || routeResult?.answerMode === "collect_info" || hasGenericCollectInfoCue(routeResult)) {
+    const summaryReply = buildContextualKnowledgeGapReply(context);
+    if (!summaryReply) return null;
+
+    return {
+      route: "knowledge_gap",
+      providerUsed: "knowledge_gap",
+      answer: summaryReply,
+      notice: summaryReply,
+      answerMode: null,
+      shouldCallDeepSeek: false,
+      shouldMarkNeedsHuman: true,
+      knowledgeGap: true,
+      aiSkipped: true,
+      reason: "conversation_context_complete_needs_human",
+    };
+  }
+
+  return null;
 }
 
 export function getConversationContextForStorage(context) {

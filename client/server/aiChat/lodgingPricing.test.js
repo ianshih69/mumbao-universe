@@ -209,7 +209,7 @@ describe("official lodging pricing", () => {
       knowledgeGap: false,
     });
     expect(override.answer).toContain("住宿房價為 NT$48,000");
-    expect(override.answer).toContain("不含寵物費的住宿小計");
+    expect(override.answer).toContain("不攜帶寵物");
     expect(override.answer).not.toContain("寵物費與安排需再由管家確認");
   });
 

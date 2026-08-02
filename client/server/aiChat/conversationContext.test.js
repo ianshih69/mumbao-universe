@@ -241,6 +241,32 @@ describe("AI chat conversation context", () => {
     expect(result.context.check_in).toBe("2026-09-26");
   });
 
+  it("keeps pending interaction inside the stored conversation context", () => {
+    const pending = {
+      action: "confirm_quote_dates",
+      proposed_values: {
+        check_in: "2026-08-04",
+        check_out: "2026-08-05",
+      },
+      required_response_type: "confirmation",
+      resume_action: "request_quote",
+      source_assistant_message_id: "request-1",
+      created_at: "2026-08-02T08:00:00.000Z",
+      expires_at: "2026-08-02T08:30:00.000Z",
+    };
+    const result = update({ pending_interaction: pending }, "對");
+
+    expect(result.previousContext.pending_interaction).toMatchObject({
+      action: "confirm_quote_dates",
+      proposed_values: {
+        check_in: "2026-08-04",
+        check_out: "2026-08-05",
+      },
+    });
+    expect(result.promptContext).toContain("pending_interaction");
+    expect(result.promptContext).toContain("confirm_quote_dates");
+  });
+
   it("resets context for explicit restart messages", () => {
     const result = update(
       {

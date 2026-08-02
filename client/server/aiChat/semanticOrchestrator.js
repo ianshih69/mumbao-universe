@@ -50,6 +50,10 @@ export const allowedTurnActions = new Set([
   "confirm_quote",
   "explain_quote",
   "lodging_only_quote",
+  "confirm_pending",
+  "reject_pending",
+  "modify_pending",
+  "answer_pending",
   "ask_information",
   "casual_conversation",
   "switch_topic",
@@ -174,7 +178,8 @@ function hasConversationStayContext(context) {
       state.adult_count !== null ||
       state.child_count !== null ||
       state.pet_count !== null ||
-      state.room_count !== null
+      state.room_count !== null ||
+      Boolean(state.pending_interaction)
   );
 }
 
@@ -260,7 +265,6 @@ export function isSafeLocalKnowledgeRoute({ message, routeResult, context }) {
     routeResult?.confidence === "high" &&
     answerMode === "direct" &&
     routeResult?.reason === "single_high_confidence_direct_faq" &&
-    !hasPricingContext(context) &&
     !isFollowUpOrCorrection(message) &&
     !hasMultipleQuestionParts(message) &&
     !hasHighRiskText(message, routeResult) &&
@@ -287,6 +291,28 @@ export function limitSemanticRecentMessages(recentMessages) {
       message: String(message?.message || "").slice(0, 500),
     }))
     .filter((message) => message.message.trim());
+}
+
+function buildLatestAssistantSemanticMetadata(recentMessages) {
+  const latestAssistant = [...(Array.isArray(recentMessages) ? recentMessages : [])]
+    .reverse()
+    .find((message) => String(message?.sender || "").toLowerCase() !== "user");
+  const metadata =
+    latestAssistant?.metadata && typeof latestAssistant.metadata === "object"
+      ? latestAssistant.metadata
+      : {};
+
+  return {
+    provider_used: String(latestAssistant?.provider_used || metadata.provider_used || "").slice(0, 80),
+    final_route: String(metadata.final_route || "").slice(0, 80),
+    validated_turn_action: String(metadata.validated_turn_action || "").slice(0, 80),
+    pricing_reply_mode: String(metadata.pricing_reply_mode || "").slice(0, 80),
+    lodging_price_status: String(metadata.lodging_price_status || "").slice(0, 80),
+    lodging_price_amount: Number.isInteger(metadata.lodging_price_amount)
+      ? metadata.lodging_price_amount
+      : null,
+    pricing_called: Boolean(metadata.pricing_called),
+  };
 }
 
 export function limitSemanticFaqItems(items) {
@@ -358,7 +384,7 @@ function buildSemanticSystemInstruction() {
 
 輸出 schema：
 {
-  "turn_action": "request_quote|update_quote|confirm_quote|explain_quote|lodging_only_quote|ask_information|casual_conversation|switch_topic|acknowledge|human_takeover|reset_context|out_of_scope|knowledge_gap",
+  "turn_action": "request_quote|update_quote|confirm_quote|explain_quote|lodging_only_quote|confirm_pending|reject_pending|modify_pending|answer_pending|ask_information|casual_conversation|switch_topic|acknowledge|human_takeover|reset_context|out_of_scope|knowledge_gap",
   "intent": "pricing|booking|availability|facilities|pet_policy|house_rules|payment|refund|general|human_support|unknown",
   "topic": "string",
   "is_follow_up": true,
@@ -381,6 +407,10 @@ turn_action 定義：
 - confirm_quote：客人確認上一則正式報價是否正確。
 - explain_quote：客人詢問報價怎麼算或要求明細。
 - lodging_only_quote：客人只問住宿小計，暫不含寵物或其他附加項目。
+- confirm_pending：客人正在確認 pending_interaction 的提議值，例如同意慢寶上一輪確認的日期。
+- reject_pending：客人否定 pending_interaction 的提議值。
+- modify_pending：客人修正 pending_interaction 的提議值，例如改成另一組日期。
+- answer_pending：客人回答 pending_interaction 正在等待的欄位，例如補上人數或寵物條件。
 - ask_information：客人問設施、入住退房、寵物規則、附近資訊等一般住宿資訊。
 - casual_conversation：客人問慢寶本身、打招呼或輕鬆聊天；不可發明真人年齡或民宿事實。
 - switch_topic：客人想重新問、換題或問別的，但不是清除所有資料。
@@ -418,7 +448,12 @@ export function buildSemanticMessages({
           current_date: dateInfo?.currentDate || "",
           timezone: dateInfo?.timeZone || "Asia/Taipei",
           conversation_context: normalizeConversationContext(context),
+          pending_interaction:
+            normalizeConversationContext(context).pending_interaction || null,
           recent_messages: limitSemanticRecentMessages(recentMessages),
+          latest_assistant_metadata: buildLatestAssistantSemanticMetadata(
+            recentMessages
+          ),
           current_message: String(message || ""),
           faq_candidates: limitSemanticFaqItems(faqItems),
           strict_rules: [

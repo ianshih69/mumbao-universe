@@ -243,6 +243,26 @@ export function applyContextFreshnessGuard({
   const staleFieldsBlocked = new Set();
   const metaTouchedFields = new Set();
 
+  if (
+    semanticResult?.turn_action === "request_quote" &&
+    semanticResult?.is_follow_up === false
+  ) {
+    for (const field of pricingFreshnessFields) {
+      if (mentionedFields.includes(field)) continue;
+      if (Object.prototype.hasOwnProperty.call(semanticResult?.context_patch || {}, field)) {
+        continue;
+      }
+      if (field === "pet_type" && guarded.pet_count === 0) {
+        continue;
+      }
+      if (guarded[field] !== null && guarded[field] !== undefined) {
+        staleFieldsBlocked.add(field);
+        guarded[field] = null;
+        metaTouchedFields.add(field);
+      }
+    }
+  }
+
   for (const [field, value] of Object.entries(relativePatch.patch)) {
     if (!dateFieldSet.has(field)) continue;
     if (previous[field] !== value) staleFieldsBlocked.add(field);

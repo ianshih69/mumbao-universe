@@ -1589,6 +1589,8 @@ export default async function handler(req, res) {
       previousContext: conversationContextUpdate.previousContext,
       recentMessages,
       freshnessGuard,
+      nowIso: new Date().toISOString(),
+      sourceMessageId: requestId,
     });
     if (actionRoute) {
       const { conversationContextPatch, ...routeOverride } =

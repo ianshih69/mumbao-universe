@@ -424,7 +424,7 @@ export function buildOfficialPricingReply(context, pricingResolution) {
   }
 
   if (pricingResolution.pet_fee?.status === "not_applicable") {
-    return `收到，目前是 ${dateSummary}，${lodgingSummary}，住宿房價為 ${lodgingAmount}。這是不含寵物費的住宿小計。`;
+    return `收到，目前是 ${dateSummary}，${lodgingSummary}，不攜帶寵物，住宿房價為 ${lodgingAmount}。`;
   }
 
   return `收到，目前是 ${dateSummary}，${lodgingSummary}，住宿房價為 ${lodgingAmount}。`;

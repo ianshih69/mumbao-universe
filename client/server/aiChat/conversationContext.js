@@ -27,6 +27,7 @@ const nullContext = Object.freeze({
   current_topic: null,
   last_updated_at: null,
   slot_meta: {},
+  pending_interaction: null,
 });
 
 const chineseNumberValues = new Map([
@@ -49,7 +50,7 @@ const dateRangeSeparators = String.raw`(?:-|~|～|到|至)`;
 const numericTokenPattern = String.raw`(?:\d+|[零〇一二兩两三四五六七八九十]+)`;
 
 function cloneNullContext() {
-  return { ...nullContext };
+  return { ...nullContext, slot_meta: {}, pending_interaction: null };
 }
 
 function normalizeText(value) {
@@ -383,14 +384,6 @@ function shouldResetConversationContext(message) {
   );
 }
 
-function hasMeaningfulContext(context) {
-  return contextFields.some((field) => field !== "last_updated_at" && context?.[field] !== null && context?.[field] !== undefined);
-}
-
-function contextsEqual(a, b) {
-  return contextFields.every((field) => a?.[field] === b?.[field]);
-}
-
 function normalizeContextPatch(value) {
   return Object.fromEntries(
     Object.entries(value || {}).filter(([, entry]) => entry !== undefined),
@@ -422,6 +415,62 @@ function normalizeSlotMeta(value) {
   }
 
   return normalized;
+}
+
+function normalizePendingProposedValues(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+
+  const normalized = normalizeConversationContext(value);
+  const proposed = {};
+  for (const field of contextFields) {
+    if (!Object.prototype.hasOwnProperty.call(value, field)) continue;
+    if (field === "last_updated_at") continue;
+    proposed[field] = normalized[field];
+  }
+
+  return proposed;
+}
+
+export function normalizePendingInteraction(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const action = normalizeNullableText(value.action);
+  const requiredResponseType = normalizeNullableText(value.required_response_type);
+  const resumeAction = normalizeNullableText(value.resume_action);
+  if (!action || !requiredResponseType || !resumeAction) return null;
+
+  const requiredFields = Array.isArray(value.required_fields)
+    ? value.required_fields
+        .map((field) => String(field || "").trim())
+        .filter((field, index, fields) => contextFields.includes(field) && fields.indexOf(field) === index)
+    : [];
+
+  return {
+    action: action.slice(0, 80),
+    proposed_values: normalizePendingProposedValues(value.proposed_values),
+    required_response_type: requiredResponseType.slice(0, 80),
+    resume_action: resumeAction.slice(0, 80),
+    ...(requiredFields.length ? { required_fields: requiredFields } : {}),
+    source_assistant_message_id:
+      normalizeNullableText(value.source_assistant_message_id)?.slice(0, 80) || null,
+    created_at: normalizeNullableText(value.created_at),
+    expires_at: normalizeNullableText(value.expires_at),
+  };
+}
+
+function hasMeaningfulContext(context) {
+  return (
+    contextFields.some((field) => field !== "last_updated_at" && context?.[field] !== null && context?.[field] !== undefined) ||
+    Boolean(normalizePendingInteraction(context?.pending_interaction))
+  );
+}
+
+function contextsEqual(a, b) {
+  return (
+    contextFields.every((field) => a?.[field] === b?.[field]) &&
+    JSON.stringify(normalizePendingInteraction(a?.pending_interaction)) ===
+      JSON.stringify(normalizePendingInteraction(b?.pending_interaction))
+  );
 }
 
 function writeSlotMeta(context, fields, { source, sourceMessageId, updatedAt, confidence } = {}) {
@@ -530,6 +579,7 @@ export function normalizeConversationContext(value) {
   context.current_topic = normalizeNullableText(source.current_topic);
   context.last_updated_at = normalizeNullableText(source.last_updated_at);
   context.slot_meta = normalizeSlotMeta(source.slot_meta);
+  context.pending_interaction = normalizePendingInteraction(source.pending_interaction);
 
   return context;
 }
@@ -602,6 +652,7 @@ export function buildConversationPromptContext(context) {
   for (const field of contextFields) {
     lines.push(`${field}: ${state[field] === null ? "null" : state[field]}`);
   }
+  lines.push(`pending_interaction: ${state.pending_interaction ? JSON.stringify(state.pending_interaction) : "null"}`);
 
   lines.push("</customer_request_context>");
   return lines.join("\n");

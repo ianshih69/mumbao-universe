@@ -1,6 +1,7 @@
 import {
   buildContextualKnowledgeRouteOverride,
   getMissingBookingContextFields,
+  normalizePendingInteraction,
   normalizeConversationContext,
 } from "./conversationContext.js";
 import {
@@ -70,6 +71,62 @@ function formatDisplayDate(value) {
   return `${Number(year)}年${Number(month)}月${Number(day)}日`;
 }
 
+function addMinutes(isoText, minutes) {
+  const base = Date.parse(isoText || "");
+  const time = Number.isFinite(base) ? base : Date.now();
+  return new Date(time + minutes * 60 * 1000).toISOString();
+}
+
+function isPendingExpired(pending, nowIso) {
+  const expiresAt = Date.parse(pending?.expires_at || "");
+  if (!Number.isFinite(expiresAt)) return false;
+  const now = Date.parse(nowIso || "");
+  return expiresAt <= (Number.isFinite(now) ? now : Date.now());
+}
+
+function buildPendingInteraction({
+  action,
+  proposedValues = {},
+  requiredResponseType,
+  resumeAction,
+  requiredFields = [],
+  sourceMessageId = "",
+  nowIso,
+}) {
+  return {
+    action,
+    proposed_values: proposedValues,
+    required_response_type: requiredResponseType,
+    resume_action: resumeAction,
+    ...(requiredFields.length ? { required_fields: requiredFields } : {}),
+    source_assistant_message_id: sourceMessageId || null,
+    created_at: nowIso,
+    expires_at: addMinutes(nowIso, 30),
+  };
+}
+
+function clearPendingPatch() {
+  return { pending_interaction: null };
+}
+
+function buildConfirmedDateSummary(context) {
+  const state = normalizeConversationContext(context);
+  if (!state.check_in || !state.check_out) return "";
+  const stayLabel = state.stay_type === "villa" ? "包棟" : "住宿";
+  return `${formatDisplayDate(state.check_in)}入住、${formatDisplayDate(
+    state.check_out
+  )}退房的${stayLabel}需求`;
+}
+
+function buildMissingFieldsQuestion(context, prefix = "收到") {
+  const missingFields = getMissingBookingContextFields(context);
+  const labels = expandMissingContextFields(missingFields)
+    .map((field) => pricingFieldLabels[field])
+    .filter(Boolean);
+  if (!labels.length) return "";
+  return `${prefix}請問${labels.join("、")}呢？`;
+}
+
 function getLatestAssistantMessage(recentMessages = []) {
   return [...(Array.isArray(recentMessages) ? recentMessages : [])]
     .reverse()
@@ -115,6 +172,7 @@ function buildResetContextPatch() {
     pet_type: null,
     room_count: null,
     current_topic: null,
+    pending_interaction: null,
   };
 }
 
@@ -153,7 +211,10 @@ function buildControlRoute(
   );
 }
 
-function buildCollectInfoRoute(routeResult, { answer, reason, metadata }) {
+function buildCollectInfoRoute(
+  routeResult,
+  { answer, reason, metadata, contextPatch = null }
+) {
   return addExecutorMetadata(
     {
       ...routeResult,
@@ -167,12 +228,23 @@ function buildCollectInfoRoute(routeResult, { answer, reason, metadata }) {
       knowledgeGap: false,
       aiSkipped: true,
       reason,
+      conversationContextPatch: contextPatch,
     },
     metadata
   );
 }
 
-function buildMissingFieldsRoute(routeResult, context, metadata) {
+function buildMissingFieldsRoute(routeResult, context, metadata, options = {}) {
+  const missingFields = getMissingBookingContextFields(context);
+  const pendingInteraction = buildCollectQuoteFieldsPending({
+    missingFields,
+    resumeAction: metadata?.resumed_turn_action || metadata?.validated_turn_action || "request_quote",
+    nowIso: options.nowIso || new Date().toISOString(),
+    sourceMessageId: options.sourceMessageId || "",
+  });
+  const pendingPatch = pendingInteraction
+    ? { pending_interaction: pendingInteraction }
+    : null;
   const contextual = buildContextualKnowledgeRouteOverride(context, {
     ...routeResult,
     route: "knowledge_gap",
@@ -189,6 +261,7 @@ function buildMissingFieldsRoute(routeResult, context, metadata) {
         ...routeResult,
         ...contextual,
         reason: contextual.reason,
+        conversationContextPatch: pendingPatch,
       },
       metadata
     );
@@ -198,6 +271,7 @@ function buildMissingFieldsRoute(routeResult, context, metadata) {
     answer: "收到，已先記下目前資訊。請問想了解房價、房況或其他住宿資訊呢？",
     reason: "turn_action_collect_info_missing_quote_context",
     metadata,
+    contextPatch: pendingPatch,
   });
 }
 
@@ -210,10 +284,38 @@ function buildNeedsClarificationRoute(routeResult, metadata) {
   });
 }
 
-function buildFreshnessGuardRoute(routeResult, context, freshnessGuard, metadata) {
+function expandMissingContextFields(missingFields) {
+  const fields = [];
+  for (const field of missingFields || []) {
+    if (field === "dates") {
+      fields.push("check_in", "check_out");
+    } else {
+      fields.push(field);
+    }
+  }
+  return [...new Set(fields.filter((field) => pricingGuardFields.has(field)))];
+}
+
+function buildCollectQuoteFieldsPending({ missingFields, resumeAction, nowIso, sourceMessageId }) {
+  const requiredFields = expandMissingContextFields(missingFields);
+  if (!requiredFields.length) return null;
+
+  return buildPendingInteraction({
+    action: "collect_quote_fields",
+    proposedValues: {},
+    requiredResponseType: "fields",
+    resumeAction,
+    requiredFields,
+    sourceMessageId,
+    nowIso,
+  });
+}
+
+function buildFreshnessGuardRoute(routeResult, context, freshnessGuard, metadata, options = {}) {
   const state = normalizeConversationContext(context);
   const uncertainFields = freshnessGuard?.uncertain_fields || [];
   let answer = "";
+  let contextPatch = null;
 
   if (uncertainFields.includes("guest_count")) {
     answer = "收到，人數要調整。請問新的入住人數是幾位呢？";
@@ -223,6 +325,22 @@ function buildFreshnessGuardRoute(routeResult, context, freshnessGuard, metadata
     answer = `收到，你想詢問${checkIn}的${
       state.stay_type === "villa" ? "包棟" : "住宿"
     }價格。請問是${checkIn}入住、${nextDate}退房嗎？`;
+    contextPatch = {
+      pending_interaction: buildPendingInteraction({
+        action: "confirm_quote_dates",
+        proposedValues: {
+          active_intent: "pricing",
+          current_topic: "booking_price",
+          stay_type: state.stay_type,
+          check_in: state.check_in,
+          check_out: addDays(state.check_in, 1),
+        },
+        requiredResponseType: "confirmation",
+        resumeAction: metadata?.validated_turn_action || "request_quote",
+        sourceMessageId: options.sourceMessageId || "",
+        nowIso: options.nowIso || new Date().toISOString(),
+      }),
+    };
   } else if (
     uncertainFields.includes("check_in") ||
     uncertainFields.includes("check_out")
@@ -247,6 +365,7 @@ function buildFreshnessGuardRoute(routeResult, context, freshnessGuard, metadata
       action_executor_result: "freshness_guard_blocked_pricing",
       pricing_called: false,
     },
+    contextPatch,
   });
 }
 
@@ -285,9 +404,14 @@ function resolveAction({
   context,
   previousContext,
   recentMessages,
+  pendingInteraction,
 }) {
   const semanticAction = normalizeTurnAction(semanticResult?.turn_action);
   if (semanticAction) return semanticAction;
+
+  if (pendingInteraction) {
+    return "answer_pending";
+  }
 
   return inferFallbackTurnAction({
     message,
@@ -298,6 +422,132 @@ function resolveAction({
   });
 }
 
+async function executePendingAction({
+  action,
+  pendingInteraction,
+  context,
+  previousContext,
+  recentMessages,
+  routeResult,
+  message,
+  metadata,
+  nowIso,
+  sourceMessageId,
+}) {
+  const pending = normalizePendingInteraction(pendingInteraction);
+  if (!pending) {
+    return buildCollectInfoRoute(routeResult, {
+      answer: "我目前沒有正在等待確認的內容。請把想了解的問題再告訴我一次。",
+      reason: "pending_action_without_pending",
+      metadata: {
+        ...metadata,
+        pending_resolution: "missing",
+        action_executor_result: "pending_missing",
+      },
+      contextPatch: clearPendingPatch(),
+    });
+  }
+
+  const pendingMetadata = {
+    ...metadata,
+    pending_action_before: pending.action,
+    pending_source_message_id: pending.source_assistant_message_id,
+  };
+
+  if (isPendingExpired(pending, nowIso)) {
+    return buildCollectInfoRoute(routeResult, {
+      answer: "剛剛等待確認的內容已過期，我們重新確認一次。請告訴我最新的入住日期、人數與寵物需求。",
+      reason: "pending_interaction_expired",
+      metadata: {
+        ...pendingMetadata,
+        pending_resolution: "expired",
+        action_executor_result: "pending_expired",
+      },
+      contextPatch: clearPendingPatch(),
+    });
+  }
+
+  if (action === "reject_pending") {
+    return buildCollectInfoRoute(routeResult, {
+      answer: "好的，先不套用剛剛的資料。請告訴我正確的入住日期、人數或寵物需求。",
+      reason: "pending_interaction_rejected",
+      metadata: {
+        ...pendingMetadata,
+        pending_resolution: "rejected",
+        action_executor_result: "pending_rejected",
+      },
+      contextPatch: clearPendingPatch(),
+    });
+  }
+
+  const resumeAction = normalizeTurnAction(pending.resume_action) || "request_quote";
+  const proposedValues = pending.proposed_values || {};
+  const nextContext = normalizeConversationContext({
+    ...context,
+    ...(action === "confirm_pending" ? proposedValues : {}),
+    pending_interaction: null,
+  });
+  const changedFields = getPricingRelevantChangedFields(context, nextContext);
+  const resumedMetadata = {
+    ...pendingMetadata,
+    pending_resolution:
+      action === "confirm_pending"
+        ? "confirmed"
+        : action === "modify_pending"
+          ? "modified"
+          : "answered",
+    resumed_turn_action: resumeAction,
+  };
+
+  const resumedRoute = await executePricingAction({
+    action: resumeAction,
+    context: nextContext,
+    previousContext: action === "confirm_pending" ? context : previousContext,
+    recentMessages,
+    routeResult,
+    message,
+    metadata: resumedMetadata,
+    changedFields,
+    freshnessGuard: null,
+    nowIso,
+    sourceMessageId,
+  });
+
+  const conversationContextPatch = {
+    ...(action === "confirm_pending" ? proposedValues : {}),
+    pending_interaction: null,
+    ...(resumedRoute.conversationContextPatch || {}),
+  };
+
+  if (
+    action === "confirm_pending" &&
+    pending.action === "confirm_quote_dates" &&
+    resumedRoute.route === "faq_collect_info"
+  ) {
+    const summary = buildConfirmedDateSummary(nextContext);
+    const question = buildMissingFieldsQuestion(nextContext, "");
+    return {
+      ...resumedRoute,
+      answer: summary && question ? `好的，已確認為${summary}。${question}` : resumedRoute.answer,
+      notice: summary && question ? `好的，已確認為${summary}。${question}` : resumedRoute.notice,
+      conversationContextPatch,
+      semanticMetadata: {
+        ...resumedMetadata,
+        ...(resumedRoute.semanticMetadata || {}),
+      },
+    };
+  }
+
+  return {
+    ...resumedRoute,
+    conversationContextPatch,
+    semanticMetadata: {
+      ...resumedMetadata,
+      ...(resumedRoute.semanticMetadata || {}),
+    },
+  };
+}
+
 function isPricingAction(action) {
   return [
     "request_quote",
@@ -305,6 +555,15 @@ function isPricingAction(action) {
     "confirm_quote",
     "explain_quote",
     "lodging_only_quote",
+  ].includes(action);
+}
+
+function isPendingAction(action) {
+  return [
+    "confirm_pending",
+    "reject_pending",
+    "modify_pending",
+    "answer_pending",
   ].includes(action);
 }
 
@@ -318,6 +577,8 @@ async function executePricingAction({
   metadata,
   changedFields,
   freshnessGuard,
+  nowIso,
+  sourceMessageId,
 }) {
   const missingFields = getMissingBookingContextFields(context);
   const uncertainPricingFields = (freshnessGuard?.uncertain_fields || []).filter((field) =>
@@ -338,7 +599,7 @@ async function executePricingAction({
     return buildMissingFieldsRoute(routeResult, context, {
       ...metadata,
       action_executor_result: `${action}_missing_verified_pricing`,
-    });
+    }, { nowIso, sourceMessageId });
   }
 
   if (action === "update_quote") {
@@ -352,14 +613,14 @@ async function executePricingAction({
       return buildMissingFieldsRoute(routeResult, context, {
         ...metadata,
         action_executor_result: "update_quote_without_pricing_session",
-      });
+      }, { nowIso, sourceMessageId });
     }
 
     if (!changedFields.length) {
       return buildMissingFieldsRoute(routeResult, context, {
         ...metadata,
         action_executor_result: "update_quote_without_changed_fields",
-      });
+      }, { nowIso, sourceMessageId });
     }
   }
 
@@ -370,14 +631,14 @@ async function executePricingAction({
     return buildFreshnessGuardRoute(routeResult, context, freshnessGuard, {
       ...metadata,
       uncertain_fields: uncertainPricingFields,
-    });
+    }, { nowIso, sourceMessageId });
   }
 
   if (missingFields.length) {
     return buildMissingFieldsRoute(routeResult, context, {
       ...metadata,
       action_executor_result: `${action}_missing_fields`,
-    });
+    }, { nowIso, sourceMessageId });
   }
 
   const pricingRoute = await buildOfficialPricingRouteOverride(context, routeResult, {
@@ -392,7 +653,7 @@ async function executePricingAction({
       ...metadata,
       action_executor_result: `${action}_pricing_unresolved`,
       pricing_called: true,
-    });
+    }, { nowIso, sourceMessageId });
   }
 
   return addExecutorMetadata(pricingRoute, {
@@ -410,7 +671,10 @@ export async function executeTurnAction({
   previousContext,
   recentMessages = [],
   freshnessGuard = null,
+  nowIso = new Date().toISOString(),
+  sourceMessageId = "",
 } = {}) {
+  const pendingInteraction = normalizePendingInteraction(context?.pending_interaction);
   const action = resolveAction({
     semanticResult,
     message,
@@ -418,6 +682,7 @@ export async function executeTurnAction({
     context,
     previousContext,
     recentMessages,
+    pendingInteraction,
   });
   const changedFields = getPricingRelevantChangedFields(previousContext, context);
   const metadata = {
@@ -429,6 +694,8 @@ export async function executeTurnAction({
     changed_fields: changedFields,
     freshness_guard_result: freshnessGuard?.freshness_guard_result || "not_applied",
     stale_fields_blocked: freshnessGuard?.stale_fields_blocked || [],
+    pending_action_before: pendingInteraction?.action || null,
+    pending_source_message_id: pendingInteraction?.source_assistant_message_id || null,
     uses_relative_date:
       freshnessGuard?.uses_relative_date || semanticResult?.uses_relative_date || false,
     pricing_called: false,
@@ -443,6 +710,35 @@ export async function executeTurnAction({
     });
   }
 
+  if (action === "reset_context") {
+    return buildControlRoute(routeResult, {
+      action,
+      answer: "好的，我們重新開始。請問你想了解什麼呢？",
+      reason: "turn_action_reset_context",
+      contextPatch: buildResetContextPatch(),
+      metadata: {
+        ...metadata,
+        pending_resolution: pendingInteraction ? "cleared_by_reset" : null,
+        action_executor_result: "context_reset",
+      },
+    });
+  }
+
+  if (isPendingAction(action)) {
+    return executePendingAction({
+      action,
+      pendingInteraction,
+      context,
+      previousContext,
+      recentMessages,
+      routeResult,
+      message,
+      metadata,
+      nowIso,
+      sourceMessageId,
+    });
+  }
+
   if (isPricingAction(action)) {
     return executePricingAction({
       action,
@@ -454,6 +750,8 @@ export async function executeTurnAction({
       metadata,
       changedFields,
       freshnessGuard,
+      nowIso,
+      sourceMessageId,
     });
   }
 
@@ -478,9 +776,11 @@ export async function executeTurnAction({
       contextPatch: {
         active_intent: null,
         current_topic: null,
+        pending_interaction: null,
       },
       metadata: {
         ...metadata,
+        pending_resolution: pendingInteraction ? "cleared_by_switch_topic" : null,
         action_executor_result: "switch_topic_acknowledged",
       },
     });
@@ -494,19 +794,6 @@ export async function executeTurnAction({
       metadata: {
         ...metadata,
         action_executor_result: "acknowledge_replied",
-      },
-    });
-  }
-
-  if (action === "reset_context") {
-    return buildControlRoute(routeResult, {
-      action,
-      answer: "好的，我們重新開始。請問你想了解什麼呢？",
-      reason: "turn_action_reset_context",
-      contextPatch: buildResetContextPatch(),
-      metadata: {
-        ...metadata,
-        action_executor_result: "context_reset",
       },
     });
   }

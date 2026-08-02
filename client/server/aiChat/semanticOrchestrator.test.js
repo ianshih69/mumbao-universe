@@ -224,6 +224,31 @@ describe("semantic orchestrator routing decisions", () => {
     })).toBe(true);
   });
 
+  it("does not let scope guard bypass pending interaction resolution", () => {
+    expect(shouldUseSemanticOrchestrator({
+      mode: "hybrid",
+      message: "對",
+      routeResult: {
+        route: "scope_guard",
+        providerUsed: "scope_guard",
+        reason: "out_of_scope",
+      },
+      context: {
+        pending_interaction: {
+          action: "confirm_quote_dates",
+          proposed_values: {
+            check_in: "2026-08-04",
+            check_out: "2026-08-05",
+          },
+          required_response_type: "confirmation",
+          resume_action: "request_quote",
+          created_at: "2026-08-02T08:00:00.000Z",
+          expires_at: "2026-08-02T08:30:00.000Z",
+        },
+      },
+    })).toBe(true);
+  });
+
   it("keeps hybrid disabled unless the server-side env explicitly enables it", () => {
     vi.stubEnv("AI_SEMANTIC_ROUTER_MODE", "");
     expect(getSemanticRouterMode()).toBe("legacy");
@@ -263,6 +288,8 @@ describe("semantic orchestrator validation", () => {
 
   it("accepts only finite turn actions", () => {
     expect(allowedTurnActions.has("update_quote")).toBe(true);
+    expect(allowedTurnActions.has("confirm_pending")).toBe(true);
+    expect(allowedTurnActions.has("answer_pending")).toBe(true);
     expect(allowedTurnActions.has("casual_conversation")).toBe(true);
     expect(normalizeTurnAction("update_quote")).toBe("update_quote");
     expect(normalizeTurnAction("invent_price")).toBe("");
@@ -472,6 +499,15 @@ describe("semantic prompt and cost metadata", () => {
       recentMessages: Array.from({ length: 14 }, (_, index) => ({
         sender: index % 2 ? "ai" : "user",
         message: `m-${index}`,
+        metadata:
+          index === 13
+            ? {
+                final_route: "quote_confirmation",
+                validated_turn_action: "confirm_quote",
+                lodging_price_amount: 48000,
+                raw_user_meta_data: { secret: true },
+              }
+            : undefined,
       })),
       faqItems: Array.from({ length: 7 }, (_, index) =>
         faq({ id: `faq-${index}`, question: `問題 ${index}` }),
@@ -484,9 +520,20 @@ describe("semantic prompt and cost metadata", () => {
     expect(messages[0].content).toContain('"mentioned_fields"');
     expect(messages[0].content).toContain('"uncertain_fields"');
     expect(messages[0].content).toContain('"uses_relative_date"');
+    expect(messages[0].content).toContain("confirm_pending");
     expect(messages[0].content).toContain("update_quote");
     expect(payload.recent_messages).toHaveLength(12);
     expect(payload.faq_candidates).toHaveLength(5);
+    expect(payload).toHaveProperty("pending_interaction");
+    expect(payload).toHaveProperty("latest_assistant_metadata");
+    expect(payload.latest_assistant_metadata).toMatchObject({
+      final_route: "quote_confirmation",
+      validated_turn_action: "confirm_quote",
+      lodging_price_amount: 48000,
+    });
+    expect(JSON.stringify(payload.latest_assistant_metadata)).not.toContain(
+      "raw_user_meta_data"
+    );
     expect(limitSemanticFaqItems(payload.faq_candidates)).toHaveLength(5);
   });
 

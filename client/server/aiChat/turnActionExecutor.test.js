@@ -34,6 +34,21 @@ const repricedNoPetContext = {
   last_updated_at: "2026-08-02T08:00:00.000Z",
 };
 
+const oldQuoteContext = {
+  active_intent: "pricing",
+  stay_type: "villa",
+  check_in: "2026-10-01",
+  check_out: "2026-10-02",
+  guest_count: 15,
+  adult_count: null,
+  child_count: null,
+  pet_count: 0,
+  pet_type: null,
+  room_count: null,
+  current_topic: "booking_price",
+  last_updated_at: null,
+};
+
 const previousPricingAssistant = {
   sender: "ai",
   message:
@@ -232,6 +247,216 @@ describe("turn action executor", () => {
       pricing_called: false,
       action_executor_result: "freshness_guard_blocked_pricing",
     });
+    expect(result.conversationContextPatch.pending_interaction).toMatchObject({
+      action: "confirm_quote_dates",
+      proposed_values: {
+        check_in: "2026-08-04",
+        check_out: "2026-08-05",
+      },
+      required_response_type: "confirmation",
+    });
+  });
+
+  it("handles the quote date pending flow before pricing", async () => {
+    const initialSemantic = semantic("request_quote", {
+      is_follow_up: false,
+      mentioned_fields: ["check_in", "stay_type"],
+      context_patch: {
+        active_intent: "pricing",
+        stay_type: "villa",
+      },
+      uncertain_fields: ["check_out"],
+      uses_relative_date: true,
+    });
+    const initialGuard = applyContextFreshnessGuard({
+      oldContext: oldQuoteContext,
+      context: oldQuoteContext,
+      semanticResult: initialSemantic,
+      currentMessage: "後天包棟多少錢",
+      dateInfo,
+      nowIso: "2026-08-02T08:00:00.000Z",
+      sourceMessageId: "request-a",
+    });
+    const initial = await executeTurnAction({
+      message: "後天包棟多少錢",
+      semanticResult: initialSemantic,
+      routeResult: route(),
+      context: initialGuard.context,
+      previousContext: oldQuoteContext,
+      recentMessages: [previousPricingAssistant],
+      freshnessGuard: initialGuard,
+      nowIso: "2026-08-02T08:00:00.000Z",
+      sourceMessageId: "request-a",
+    });
+    const afterInitial = {
+      ...initialGuard.context,
+      ...(initial.conversationContextPatch || {}),
+    };
+
+    expect(initial.answer).toContain("2026年8月4日");
+    expect(initial.answer).not.toContain("NT$37,500");
+    expect(afterInitial.guest_count).toBeNull();
+    expect(afterInitial.pet_count).toBeNull();
+    expect(afterInitial.pending_interaction.action).toBe("confirm_quote_dates");
+
+    const confirm = await executeTurnAction({
+      message: "對",
+      semanticResult: semantic("confirm_pending", {
+        intent: "pricing",
+        topic: "booking_price",
+        route: "collect_info",
+      }),
+      routeResult: route(),
+      context: afterInitial,
+      previousContext: initialGuard.context,
+      recentMessages: [],
+      nowIso: "2026-08-02T08:01:00.000Z",
+      sourceMessageId: "request-b",
+    });
+    const afterConfirm = {
+      ...afterInitial,
+      ...(confirm.conversationContextPatch || {}),
+    };
+
+    expect(confirm.route).toBe("faq_collect_info");
+    expect(confirm.answer).toContain("已確認為2026年8月4日入住、2026年8月5日退房");
+    expect(confirm.answer).toContain("共有幾位入住");
+    expect(confirm.answer).toContain("是否攜帶寵物");
+    expect(confirm.answer).not.toContain("NT$37,500");
+    expect(afterConfirm.check_in).toBe("2026-08-04");
+    expect(afterConfirm.check_out).toBe("2026-08-05");
+    expect(afterConfirm.pending_interaction.action).toBe("collect_quote_fields");
+
+    const answeredContext = {
+      ...afterConfirm,
+      guest_count: 15,
+      pet_count: 0,
+      pet_type: null,
+    };
+    const answered = await executeTurnAction({
+      message: "15人，不帶狗",
+      semanticResult: semantic("answer_pending", {
+        intent: "pricing",
+        topic: "booking_price",
+        mentioned_fields: ["guest_count", "pet_count", "pet_type"],
+        context_patch: {
+          guest_count: 15,
+          pet_count: 0,
+        },
+        clear_fields: ["pet_type"],
+      }),
+      routeResult: route(),
+      context: answeredContext,
+      previousContext: afterConfirm,
+      recentMessages: [],
+      nowIso: "2026-08-02T08:02:00.000Z",
+      sourceMessageId: "request-c",
+    });
+
+    expect(answered.providerUsed).toBe("official_pricing");
+    expect(answered.answer).toContain("15 位包棟");
+    expect(answered.answer).toContain("住宿房價");
+    expect(answered.answer).not.toContain("寵物費");
+    expect(answered.conversationContextPatch.pending_interaction).toBeNull();
+    expect(answered.semanticMetadata).toMatchObject({
+      pending_action_before: "collect_quote_fields",
+      pending_resolution: "answered",
+      resumed_turn_action: "request_quote",
+      pricing_called: true,
+    });
+  });
+
+  it("rejects and modifies pending values without applying stale proposals", async () => {
+    const pending = {
+      action: "confirm_quote_dates",
+      proposed_values: {
+        check_in: "2026-08-04",
+        check_out: "2026-08-05",
+        stay_type: "villa",
+      },
+      required_response_type: "confirmation",
+      resume_action: "request_quote",
+      source_assistant_message_id: "assistant-a",
+      created_at: "2026-08-02T08:00:00.000Z",
+      expires_at: "2026-08-02T08:30:00.000Z",
+    };
+    const contextWithPending = {
+      ...oldQuoteContext,
+      guest_count: null,
+      pet_count: null,
+      pending_interaction: pending,
+    };
+    const rejected = await executeTurnAction({
+      message: "不是",
+      semanticResult: semantic("reject_pending"),
+      routeResult: route(),
+      context: contextWithPending,
+      previousContext: oldQuoteContext,
+      recentMessages: [],
+      nowIso: "2026-08-02T08:01:00.000Z",
+    });
+
+    expect(rejected.answer).toContain("先不套用");
+    expect(rejected.conversationContextPatch.pending_interaction).toBeNull();
+    expect(rejected.semanticMetadata.pending_resolution).toBe("rejected");
+
+    const modifiedContext = {
+      ...contextWithPending,
+      check_in: "2026-08-06",
+      check_out: "2026-08-07",
+    };
+    const modified = await executeTurnAction({
+      message: "不是，是8/6到8/7",
+      semanticResult: semantic("modify_pending", {
+        context_patch: {
+          check_in: "2026-08-06",
+          check_out: "2026-08-07",
+        },
+        mentioned_fields: ["check_in", "check_out"],
+      }),
+      routeResult: route(),
+      context: modifiedContext,
+      previousContext: contextWithPending,
+      recentMessages: [],
+      nowIso: "2026-08-02T08:01:00.000Z",
+    });
+
+    expect(modified.route).toBe("faq_collect_info");
+    expect(modified.answer).toContain("2026年8月6日");
+    expect(modified.answer).toContain("共有幾位入住");
+    expect(modified.conversationContextPatch.pending_interaction.action).toBe(
+      "collect_quote_fields"
+    );
+    expect(modified.semanticMetadata.pending_resolution).toBe("modified");
+  });
+
+  it("does not apply expired pending interactions", async () => {
+    const result = await executeTurnAction({
+      message: "對",
+      semanticResult: semantic("confirm_pending"),
+      routeResult: route(),
+      context: {
+        ...oldQuoteContext,
+        pending_interaction: {
+          action: "confirm_quote_dates",
+          proposed_values: {
+            check_in: "2026-08-04",
+            check_out: "2026-08-05",
+          },
+          required_response_type: "confirmation",
+          resume_action: "request_quote",
+          created_at: "2026-08-02T08:00:00.000Z",
+          expires_at: "2026-08-02T08:10:00.000Z",
+        },
+      },
+      previousContext: oldQuoteContext,
+      recentMessages: [],
+      nowIso: "2026-08-02T08:31:00.000Z",
+    });
+
+    expect(result.answer).toContain("已過期");
+    expect(result.conversationContextPatch.pending_interaction).toBeNull();
+    expect(result.semanticMetadata.pending_resolution).toBe("expired");
   });
 
   it("does not reuse stale guest count when the customer only says the count changed", async () => {

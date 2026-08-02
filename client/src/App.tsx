@@ -20,6 +20,7 @@ import NewsDetail from "./pages/NewsDetail";
 import Mumbao from "./pages/Mumbao";
 import Admin from "./pages/Admin";
 import AdminChats from "./pages/AdminChats";
+import AdminMemberDetail from "./pages/AdminMemberDetail";
 import AdminMembers from "./pages/AdminMembers";
 import AdminShopHome from "./pages/AdminShopHome";
 import AdminShopOrders from "./pages/AdminShopOrders";
@@ -59,6 +60,7 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path={"/admin"} component={Admin} />
       <Route path={"/admin/chats"} component={AdminChats} />
+      <Route path={"/admin/members/:memberId"} component={AdminMemberDetail} />
       <Route path={"/admin/members"} component={AdminMembers} />
       <Route path={"/admin/shop"} component={AdminShopHome} />
       <Route path={"/admin/shop/orders"} component={AdminShopOrders} />

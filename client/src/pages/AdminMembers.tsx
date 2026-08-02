@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { AlertTriangle, ChevronLeft, ChevronRight, RefreshCw, Search, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, Search } from "lucide-react";
+import { useLocation } from "wouter";
 import AdminShopHeaderLinks from "@/components/shop/AdminShopHeaderLinks";
 import AdminShopNav from "@/components/shop/AdminShopNav";
 import {
@@ -13,15 +14,26 @@ import {
   type AdminAuthStatus,
 } from "@/lib/shop/adminAuth";
 import {
-  deleteAdminMember,
-  fetchAdminMemberDetail,
   fetchAdminMembers,
   fetchAdminSession,
   type AdminMember,
-  type AdminMemberDetailResponse,
 } from "@/lib/shop/adminIdentityApi";
 
-const pageSize = 20;
+const pageSize = 10;
+
+const memberLevelOptions = [
+  { value: "all", label: "全部" },
+  { value: "normal", label: "普通會員" },
+  { value: "vip", label: "VIP會員" },
+  { value: "diamond", label: "鑽石會員" },
+];
+
+const profileStatusOptions = [
+  { value: "all", label: "全部" },
+  { value: "normal", label: "正常" },
+  { value: "email_not_verified", label: "尚未驗證" },
+  { value: "missing_profile", label: "資料不完整" },
+];
 
 function inputClassName(extra = "") {
   return `w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-800 outline-none transition focus:border-[#9a7a63] focus:ring-2 focus:ring-[#ead8c8] ${extra}`;
@@ -38,12 +50,7 @@ function formatDate(value?: string | null) {
   });
 }
 
-function normalizeEmail(value: string) {
-  return value.trim().toLowerCase();
-}
-
 function getStatusClassName(member: AdminMember) {
-  if (member.profile_status === "admin_user") return "bg-sky-100 text-sky-700";
   if (member.profile_status === "normal") return "bg-emerald-100 text-emerald-700";
   if (member.profile_status === "email_not_verified") return "bg-amber-100 text-amber-700";
   if (member.profile_status === "missing_profile") return "bg-rose-100 text-rose-700";
@@ -56,16 +63,14 @@ function getVerifiedClassName(member: AdminMember) {
     : "bg-amber-100 text-amber-700";
 }
 
-type DeleteDialogState = {
-  member: AdminMember;
-  detail: AdminMemberDetailResponse | null;
-  confirmEmail: string;
-  isLoading: boolean;
-  isDeleting: boolean;
-  error: string;
-};
+function getMemberLevelClassName(member: AdminMember) {
+  if (member.member_level === "diamond") return "bg-sky-100 text-sky-700";
+  if (member.member_level === "vip") return "bg-purple-100 text-purple-700";
+  return "bg-stone-100 text-stone-700";
+}
 
 export default function AdminMembers() {
+  const [, setLocation] = useLocation();
   const [authStatus, setAuthStatus] = useState<AdminAuthStatus>("checking");
   const [token, setToken] = useState("");
   const [members, setMembers] = useState<AdminMember[]>([]);
@@ -74,10 +79,13 @@ export default function AdminMembers() {
   const [total, setTotal] = useState(0);
   const [searchInput, setSearchInput] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
+  const [memberLevel, setMemberLevel] = useState("all");
+  const [profileStatus, setProfileStatus] = useState("all");
+  const [activeMemberLevel, setActiveMemberLevel] = useState("all");
+  const [activeProfileStatus, setActiveProfileStatus] = useState("all");
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [searchLimited, setSearchLimited] = useState(false);
-  const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(null);
   const identity = getAdminIdentity();
 
   useEffect(() => {
@@ -86,7 +94,13 @@ export default function AdminMembers() {
     setAuthStatus(getInitialAdminAuthStatus());
   }, []);
 
-  async function load(nextToken = token, nextPage = page, search = activeSearch) {
+  async function load(
+    nextToken = token,
+    nextPage = page,
+    search = activeSearch,
+    level = activeMemberLevel,
+    status = activeProfileStatus
+  ) {
     if (!nextToken) return;
     setIsLoading(true);
     setNotice("");
@@ -101,6 +115,8 @@ export default function AdminMembers() {
         page: nextPage,
         pageSize,
         search,
+        memberLevel: level,
+        profileStatus: status,
       });
       setMembers(data.members || []);
       setPage(data.page || nextPage);
@@ -112,15 +128,17 @@ export default function AdminMembers() {
         clearAdminToken();
         setAuthStatus("loggedOut");
       }
-      setNotice(error instanceof Error ? error.message : "讀取會員列表失敗。");
+      setNotice(error instanceof Error ? error.message : "會員資料暫時無法讀取，請稍後再試。");
     } finally {
       setIsLoading(false);
     }
   }
 
   useEffect(() => {
-    if (authStatus === "loggedIn" && token) void load(token, page, activeSearch);
-  }, [authStatus, token, page, activeSearch]);
+    if (authStatus === "loggedIn" && token) {
+      void load(token, page, activeSearch, activeMemberLevel, activeProfileStatus);
+    }
+  }, [authStatus, token, page, activeSearch, activeMemberLevel, activeProfileStatus]);
 
   const visibleRange = useMemo(() => {
     if (!total) return "0";
@@ -129,8 +147,30 @@ export default function AdminMembers() {
     return `${start}-${end}`;
   }, [page, total]);
 
+  function handleSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPage(1);
+    setActiveSearch(searchInput.trim());
+    setActiveMemberLevel(memberLevel);
+    setActiveProfileStatus(profileStatus);
+  }
+
+  function clearFilters() {
+    setSearchInput("");
+    setActiveSearch("");
+    setMemberLevel("all");
+    setProfileStatus("all");
+    setActiveMemberLevel("all");
+    setActiveProfileStatus("all");
+    setPage(1);
+  }
+
+  function openMemberDetail(member: AdminMember) {
+    setLocation(`/admin/members/${encodeURIComponent(member.auth_user_id)}`);
+  }
+
   if (authStatus === "checking") {
-    return <main className="min-h-screen bg-[#f7f1e9] p-8 text-stone-600">確認登入狀態中...</main>;
+    return <main className="min-h-screen bg-[#f7f1e9] p-8 text-stone-600">確認登入狀態...</main>;
   }
 
   if (authStatus === "loggedOut") {
@@ -150,74 +190,6 @@ export default function AdminMembers() {
     );
   }
 
-  function handleSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setPage(1);
-    setActiveSearch(searchInput.trim());
-  }
-
-  async function openDeleteDialog(member: AdminMember) {
-    setDeleteDialog({
-      member,
-      detail: null,
-      confirmEmail: "",
-      isLoading: true,
-      isDeleting: false,
-      error: "",
-    });
-    try {
-      const detail = await fetchAdminMemberDetail(token, member.auth_user_id);
-      setDeleteDialog((current) =>
-        current?.member.auth_user_id === member.auth_user_id
-          ? { ...current, detail, isLoading: false }
-          : current
-      );
-    } catch (error) {
-      setDeleteDialog((current) =>
-        current?.member.auth_user_id === member.auth_user_id
-          ? {
-              ...current,
-              isLoading: false,
-              error: error instanceof Error ? error.message : "讀取會員刪除資訊失敗。",
-            }
-          : current
-      );
-    }
-  }
-
-  async function confirmDelete() {
-    if (!deleteDialog || !deleteDialog.detail) return;
-    const currentMember = deleteDialog.detail.member;
-    setDeleteDialog({ ...deleteDialog, isDeleting: true, error: "" });
-    try {
-      const result = await deleteAdminMember(
-        token,
-        currentMember.auth_user_id,
-        deleteDialog.confirmEmail
-      );
-      setNotice(result.message || "會員帳號已刪除。");
-      setDeleteDialog(null);
-      await load(token, page, activeSearch);
-    } catch (error) {
-      setDeleteDialog((current) =>
-        current
-          ? {
-              ...current,
-              isDeleting: false,
-              error: error instanceof Error ? error.message : "會員帳號刪除失敗，請稍後再試。",
-            }
-          : current
-      );
-    }
-  }
-
-  const canDeleteSelected =
-    Boolean(deleteDialog?.detail) &&
-    Boolean(deleteDialog?.detail?.deletion.can_delete) &&
-    !deleteDialog?.detail?.deletion.hasBusinessRecords &&
-    normalizeEmail(deleteDialog?.confirmEmail || "") ===
-      normalizeEmail(deleteDialog?.detail?.member.email || "");
-
   return (
     <main className="min-h-screen bg-[#f7f1e9]">
       <AdminShopNav current="members" />
@@ -227,8 +199,8 @@ export default function AdminMembers() {
             <p className="text-xs uppercase tracking-[0.28em] text-[#b08d73]">MEMBERS</p>
             <h1 className="mt-2 text-3xl font-semibold text-stone-900">會員管理</h1>
             <p className="mt-2 text-sm text-stone-600">
-              目前登入：{identity?.display_name || "後台使用者"}，角色：
-              {identity?.role_name || identity?.role_code || "管理員"}
+              目前管理員：{identity?.display_name || "後台使用者"}，權限：
+              {identity?.role_name || identity?.role_code || "Admin"}
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -252,8 +224,8 @@ export default function AdminMembers() {
         ) : null}
 
         <section className="mt-6 rounded-[24px] border border-stone-200 bg-white/90 p-5 shadow-sm">
-          <form className="flex flex-col gap-3 md:flex-row md:items-center" onSubmit={handleSearch}>
-            <div className="relative flex-1">
+          <form className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_auto_auto]" onSubmit={handleSearch}>
+            <div className="relative">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
               <input
                 className={inputClassName("pl-11")}
@@ -262,6 +234,28 @@ export default function AdminMembers() {
                 onChange={(event) => setSearchInput(event.target.value)}
               />
             </div>
+            <select
+              className={inputClassName()}
+              value={memberLevel}
+              onChange={(event) => setMemberLevel(event.target.value)}
+            >
+              {memberLevelOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  會員等級：{option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className={inputClassName()}
+              value={profileStatus}
+              onChange={(event) => setProfileStatus(event.target.value)}
+            >
+              {profileStatusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  會員狀態：{option.label}
+                </option>
+              ))}
+            </select>
             <button
               className="inline-flex h-11 items-center justify-center rounded-full bg-[#8b6f5b] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isLoading}
@@ -269,65 +263,68 @@ export default function AdminMembers() {
             >
               搜尋
             </button>
-            {activeSearch ? (
-              <button
-                className="inline-flex h-11 items-center justify-center rounded-full border border-stone-200 bg-white px-5 text-sm font-semibold text-stone-600"
-                type="button"
-                onClick={() => {
-                  setSearchInput("");
-                  setActiveSearch("");
-                  setPage(1);
-                }}
-              >
-                清除
-              </button>
-            ) : null}
+            <button
+              className="inline-flex h-11 items-center justify-center rounded-full border border-stone-200 bg-white px-5 text-sm font-semibold text-stone-600"
+              type="button"
+              onClick={clearFilters}
+            >
+              清除
+            </button>
           </form>
           <div className="mt-4 flex flex-col gap-2 text-sm text-stone-500 md:flex-row md:items-center md:justify-between">
             <p>
-              {activeSearch ? `搜尋「${activeSearch}」` : "全部會員"}，顯示 {visibleRange}，共 {total} 筆
+              {activeSearch || activeMemberLevel !== "all" || activeProfileStatus !== "all"
+                ? "篩選結果"
+                : "全部會員"}
+              ，共 {total} 筆；目前顯示 {visibleRange}
             </p>
             {searchLimited ? (
-              <p className="text-amber-700">搜尋結果已達本次掃描上限，請縮小關鍵字。</p>
+              <p className="text-amber-700">搜尋已達安全掃描上限，若資料很多請縮小條件。</p>
             ) : null}
           </div>
         </section>
 
         <section className="mt-6 overflow-hidden rounded-[24px] border border-stone-200 bg-white/90 shadow-sm">
-          <div className="hidden grid-cols-[1.1fr_1.5fr_1fr_0.8fr_1fr_1fr_1.1fr_0.7fr] gap-3 border-b border-stone-100 bg-[#fffaf4] px-5 py-3 text-xs font-semibold text-stone-500 md:grid">
+          <div className="hidden grid-cols-[1fr_1.35fr_0.9fr_0.85fr_0.9fr_1fr_1fr_1fr_0.85fr] gap-3 border-b border-stone-100 bg-[#fffaf4] px-5 py-3 text-xs font-semibold text-stone-500 md:grid">
             <span>姓名</span>
             <span>Email</span>
             <span>手機</span>
+            <span>會員等級</span>
             <span>Email 驗證</span>
             <span>註冊日期</span>
             <span>最後登入</span>
             <span>會員資料狀態</span>
-            <span>操作</span>
+            <span>查看詳情</span>
           </div>
 
           {isLoading ? <p className="px-5 py-8 text-sm text-stone-500">讀取中...</p> : null}
 
           {!isLoading && members.length === 0 ? (
             <div className="px-5 py-12 text-center">
-              <p className="text-base font-semibold text-stone-800">沒有符合條件的會員</p>
-              <p className="mt-2 text-sm text-stone-500">請調整搜尋條件後再試一次。</p>
+              <p className="text-base font-semibold text-stone-800">沒有符合條件的會員。</p>
+              <p className="mt-2 text-sm text-stone-500">請調整搜尋字或篩選條件。</p>
             </div>
           ) : null}
 
           <div className="divide-y divide-stone-100">
             {members.map((member) => (
-              <div
+              <button
                 key={member.auth_user_id}
-                className="grid gap-3 px-5 py-4 text-sm text-stone-700 md:grid-cols-[1.1fr_1.5fr_1fr_0.8fr_1fr_1fr_1.1fr_0.7fr] md:items-center"
+                className="grid w-full gap-3 px-5 py-4 text-left text-sm text-stone-700 transition hover:bg-[#fffaf4] md:grid-cols-[1fr_1.35fr_0.9fr_0.85fr_0.9fr_1fr_1fr_1fr_0.85fr] md:items-center"
+                onClick={() => openMemberDetail(member)}
+                type="button"
               >
                 <div>
-                  <p className="font-semibold text-stone-900">{member.name || "未填寫"}</p>
+                  <p className="font-semibold text-stone-900">{member.name || "未填姓名"}</p>
                   {!member.has_profile ? (
                     <p className="mt-1 text-xs text-rose-600">會員資料不完整</p>
                   ) : null}
                 </div>
                 <p className="break-all text-stone-700">{member.email || "-"}</p>
                 <p>{member.phone || "-"}</p>
+                <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${getMemberLevelClassName(member)}`}>
+                  {member.member_level_label}
+                </span>
                 <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${getVerifiedClassName(member)}`}>
                   {member.email_verified_label}
                 </span>
@@ -336,22 +333,16 @@ export default function AdminMembers() {
                 <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${getStatusClassName(member)}`}>
                   {member.profile_status_label}
                 </span>
-                <button
-                  className="inline-flex h-10 w-fit items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={Boolean(member.is_admin_user)}
-                  onClick={() => void openDeleteDialog(member)}
-                  type="button"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  {member.is_admin_user ? "不可刪除" : "刪除"}
-                </button>
-              </div>
+                <span className="inline-flex h-10 w-fit items-center justify-center rounded-full border border-stone-200 bg-white px-3 text-sm font-semibold text-[#765d4a]">
+                  查看詳情
+                </span>
+              </button>
             ))}
           </div>
 
           <div className="flex flex-col gap-3 border-t border-stone-100 px-5 py-4 text-sm text-stone-600 md:flex-row md:items-center md:justify-between">
             <p>
-              第 {page} / {totalPages} 頁
+              第 {page}／{totalPages} 頁
             </p>
             <div className="flex gap-2">
               <button
@@ -376,97 +367,6 @@ export default function AdminMembers() {
           </div>
         </section>
       </div>
-
-      {deleteDialog ? (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-stone-950/45 px-4 py-8">
-          <div className="w-full max-w-lg rounded-[24px] border border-stone-200 bg-white p-6 shadow-2xl">
-            <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-700">
-                <AlertTriangle className="h-5 w-5" />
-              </span>
-              <div>
-                <h2 className="text-xl font-semibold text-stone-900">刪除會員</h2>
-                <p className="mt-1 text-sm text-stone-600">此操作不可復原。</p>
-              </div>
-            </div>
-
-            <div className="mt-5 space-y-3 rounded-2xl bg-[#fffaf4] p-4 text-sm text-stone-700">
-              <div className="flex justify-between gap-4">
-                <span className="text-stone-500">姓名</span>
-                <span className="font-medium text-stone-900">{deleteDialog.member.name || "未填寫"}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-stone-500">Email</span>
-                <span className="break-all font-medium text-stone-900">{deleteDialog.member.email}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-stone-500">註冊日期</span>
-                <span className="font-medium text-stone-900">{formatDate(deleteDialog.member.registered_at)}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-stone-500">是否已有訂單</span>
-                <span className="font-medium text-stone-900">
-                  {deleteDialog.isLoading
-                    ? "確認中"
-                    : deleteDialog.detail?.deletion.hasBusinessRecords
-                      ? "是"
-                      : "否"}
-                </span>
-              </div>
-              {!deleteDialog.member.has_profile ? (
-                <p className="rounded-xl bg-rose-50 px-3 py-2 text-rose-700">會員資料不完整。</p>
-              ) : null}
-              {deleteDialog.detail?.deletion.hasBusinessRecords ? (
-                <p className="rounded-xl bg-amber-50 px-3 py-2 text-amber-800">
-                  此會員已有訂單或交易紀錄，為保留帳務資料，目前不能直接刪除。
-                </p>
-              ) : null}
-              {deleteDialog.detail && !deleteDialog.detail.deletion.can_delete && !deleteDialog.detail.deletion.hasBusinessRecords ? (
-                <p className="rounded-xl bg-sky-50 px-3 py-2 text-sky-800">
-                  後台管理員帳號不可從會員管理刪除。
-                </p>
-              ) : null}
-            </div>
-
-            <label className="mt-5 block text-sm font-medium text-stone-700">
-              請輸入完整 Email 確認刪除
-              <input
-                className={inputClassName("mt-2")}
-                value={deleteDialog.confirmEmail}
-                onChange={(event) =>
-                  setDeleteDialog((current) =>
-                    current ? { ...current, confirmEmail: event.target.value, error: "" } : current
-                  )
-                }
-              />
-            </label>
-
-            {deleteDialog.error ? (
-              <p className="mt-3 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                {deleteDialog.error}
-              </p>
-            ) : null}
-
-            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <button
-                className="inline-flex h-11 items-center justify-center rounded-full border border-stone-200 bg-white px-5 text-sm font-semibold text-stone-700"
-                onClick={() => setDeleteDialog(null)}
-                type="button"
-              >
-                取消
-              </button>
-              <button
-                className="inline-flex h-11 items-center justify-center rounded-full bg-rose-700 px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={deleteDialog.isLoading || deleteDialog.isDeleting || !canDeleteSelected}
-                onClick={() => void confirmDelete()}
-                type="button"
-              >
-                {deleteDialog.isDeleting ? "刪除中..." : "確認刪除會員"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </main>
   );
 }

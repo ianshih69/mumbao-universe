@@ -66,6 +66,8 @@ export type AdminMemberProfileStatus =
   | "inactive"
   | "admin_user";
 
+export type AdminMemberLevel = "normal" | "vip" | "diamond";
+
 export type AdminMember = {
   id: string;
   auth_user_id: string;
@@ -74,11 +76,13 @@ export type AdminMember = {
   email: string;
   phone?: string | null;
   email_verified: boolean;
-  email_verified_label: "已驗證" | "尚未驗證";
+  email_verified_label: string;
   registered_at?: string | null;
   last_login_at?: string | null;
   profile_status: AdminMemberProfileStatus;
   profile_status_label: string;
+  member_level: AdminMemberLevel;
+  member_level_label: string;
   is_admin_user?: boolean;
   admin_profile_id?: string | null;
   member_type?: "customer" | "admin";
@@ -86,6 +90,13 @@ export type AdminMember = {
   profile_is_active?: boolean | null;
   profile_created_at?: string | null;
   profile_updated_at?: string | null;
+  admin_note?: string | null;
+  admin_note_updated_at?: string | null;
+  admin_note_updated_by?: string | null;
+  coupon?: {
+    code: string;
+    bound_at?: string | null;
+  } | null;
 };
 
 export type AdminMemberBusinessBlocker = {
@@ -109,13 +120,105 @@ export type AdminMembersResponse = {
   totalPages: number;
   hasMore: boolean;
   search?: string;
+  memberLevel?: string;
+  profileStatus?: string;
   searchLimited?: boolean;
   source?: string;
+};
+
+export type AdminMemberConsumptionSummary = {
+  cumulative_spend: number;
+  completed_stay_count: number;
+  shop_order_count: number;
+  recent_consumption_at?: string | null;
+  recent_shop_consumption_at?: string | null;
+  limitations?: string[];
+};
+
+export type AdminMemberBookingRecord = {
+  id: string;
+  booking_number: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  check_in?: string | null;
+  check_out?: string | null;
+  stay_type: "villa" | "room";
+  stay_type_label: string;
+  guest_count: number;
+  adults: number;
+  children: number;
+  room_count?: number | null;
+  status: string;
+  lodging_amount?: number | null;
+  paid_amount?: number | null;
+  source?: string | null;
+  source_label: string;
+};
+
+export type AdminMemberShopOrderItem = {
+  id: string;
+  product_name: string;
+  product_slug?: string | null;
+  product_image_url?: string | null;
+  variant_name?: string | null;
+  variant_option?: string | null;
+  variant_price: number;
+  unit_price: number;
+  quantity: number;
+  line_total: number;
+};
+
+export type AdminMemberShopOrder = {
+  id: string;
+  order_number: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  customer_profile_id?: string | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  customer_email?: string | null;
+  subtotal: number;
+  shipping_fee: number;
+  total: number;
+  payment_method: string;
+  payment_status: string;
+  order_status: string;
+  order_source: string;
+  shipping_carrier?: string | null;
+  tracking_number?: string | null;
+  items_summary: string;
+  item_count: number;
+  total_quantity: number;
+  items: AdminMemberShopOrderItem[];
+};
+
+export type AdminMemberDiamondProfile = {
+  id?: string | null;
+  customer_profile_id?: string | null;
+  partner_name?: string | null;
+  exclusive_code?: string | null;
+  partnership_status?: string | null;
+  points_balance: number;
+} | null;
+
+export type AdminMemberPointsLedgerRow = {
+  id: string;
+  customer_profile_id: string;
+  points: number;
+  description: string;
+  source_order_id?: string | null;
+  created_by_admin_id?: string | null;
+  created_at?: string | null;
 };
 
 export type AdminMemberDetailResponse = {
   member: AdminMember;
   deletion: AdminMemberDeletionInfo;
+  consumption_summary: AdminMemberConsumptionSummary;
+  booking_records: AdminMemberBookingRecord[];
+  shop_orders: AdminMemberShopOrder[];
+  diamond_profile: AdminMemberDiamondProfile;
+  points_ledger: AdminMemberPointsLedgerRow[];
 };
 
 export type AdminAuditLogsResponse = {
@@ -134,7 +237,7 @@ export async function loginAdminAccount(email: string, password: string) {
     body: JSON.stringify({ email: email.trim(), password: password.trim() }),
   });
   const data = await parseJson(response);
-  if (!response.ok) throw new Error(data.error || "\u767b\u5165\u5931\u6557\uff0c\u8acb\u78ba\u8a8d Email \u8207\u5bc6\u78bc\u3002");
+  if (!response.ok) throw new Error(data.error || "登入失敗，請確認 Email 與密碼。");
   setAdminSession({
     accessToken: data.accessToken,
     refreshToken: data.refreshToken,
@@ -176,7 +279,6 @@ export async function refreshAdminSession() {
 }
 
 export async function ensureFreshAdminSession(currentToken: string) {
-  const identity = getAdminIdentity();
   const storedToken = getAdminToken() || currentToken;
   if (!storedToken) return storedToken;
 
@@ -249,13 +351,25 @@ export function fetchAdminUsers(token: string) {
 
 export function fetchAdminMembers(
   token: string,
-  filters: { page?: number; pageSize?: number; search?: string } = {}
+  filters: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    memberLevel?: string;
+    profileStatus?: string;
+  } = {}
 ) {
   const params = new URLSearchParams({ action: "admin-members" });
   if (filters.page) params.set("page", String(filters.page));
   if (filters.pageSize) params.set("pageSize", String(filters.pageSize));
   const search = filters.search?.trim();
   if (search) params.set("search", search);
+  if (filters.memberLevel && filters.memberLevel !== "all") {
+    params.set("memberLevel", filters.memberLevel);
+  }
+  if (filters.profileStatus && filters.profileStatus !== "all") {
+    params.set("profileStatus", filters.profileStatus);
+  }
   return requestAdminIdentity<AdminMembersResponse>(
     `/api/admin-shop?${params.toString()}`,
     token
@@ -271,6 +385,94 @@ export function fetchAdminMemberDetail(token: string, authUserId: string) {
     `/api/admin-shop?${params.toString()}`,
     token
   );
+}
+
+export function updateAdminMemberLevel(
+  token: string,
+  authUserId: string,
+  memberLevel: AdminMemberLevel
+) {
+  const params = new URLSearchParams({
+    action: "admin-members",
+    id: authUserId,
+  });
+  return requestAdminIdentity<{
+    ok: true;
+    code: string;
+    member: AdminMember;
+    previous_member_level?: AdminMemberLevel;
+    next_member_level?: AdminMemberLevel;
+  }>(`/api/admin-shop?${params.toString()}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({
+      action: "update-member-level",
+      memberLevel,
+    }),
+  });
+}
+
+export function updateAdminMemberNote(
+  token: string,
+  authUserId: string,
+  adminNote: string
+) {
+  const params = new URLSearchParams({
+    action: "admin-members",
+    id: authUserId,
+  });
+  return requestAdminIdentity<{
+    ok: true;
+    code: string;
+    member: AdminMember;
+  }>(`/api/admin-shop?${params.toString()}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({
+      action: "update-admin-note",
+      adminNote,
+    }),
+  });
+}
+
+export function adjustAdminMemberPoints(
+  token: string,
+  authUserId: string,
+  payload: { points: number; description: string; sourceOrderId?: string }
+) {
+  const params = new URLSearchParams({
+    action: "admin-members",
+    id: authUserId,
+  });
+  return requestAdminIdentity<{
+    ok: true;
+    code: string;
+    ledger: AdminMemberPointsLedgerRow;
+    points_ledger: AdminMemberPointsLedgerRow[];
+    points_balance: number;
+  }>(`/api/admin-shop?${params.toString()}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({
+      action: "adjust-points",
+      ...payload,
+    }),
+  });
+}
+
+export function resendAdminMemberVerification(token: string, authUserId: string) {
+  const params = new URLSearchParams({
+    action: "admin-members",
+    id: authUserId,
+  });
+  return requestAdminIdentity<{
+    ok: true;
+    code: string;
+    message: string;
+    cooldownSeconds?: number;
+  }>(`/api/admin-shop?${params.toString()}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({
+      action: "resend-verification",
+    }),
+  });
 }
 
 export function deleteAdminMember(

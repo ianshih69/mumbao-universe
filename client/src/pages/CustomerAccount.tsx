@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   CheckCircle2,
+  Gem,
   LockKeyhole,
   LogOut,
   PackageSearch,
@@ -19,11 +20,12 @@ import { Button } from "@/components/ui/button";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { getCustomerSupabaseClient, normalizeCustomerEmail } from "@/lib/shop/customerAuthClient";
 import {
-  buildCustomerProfileUpdatePayload,
+  buildCustomerFullAddressUpdatePayload,
   customerProfileUnlockMs,
   getCustomerAccountOrderSummary,
   getCustomerAccountOrderTypeLabel,
   getCustomerAccountTotalPages,
+  getCustomerDefaultFullAddress,
   getCustomerEmailVerificationLabel,
   getCustomerMemberLevelLabel,
   hasDefaultShippingProfile,
@@ -37,14 +39,11 @@ import {
 import { type CustomerProfile, type CustomerProfileUpdatePayload } from "@/lib/shop/customerProfileApi";
 import { getOrderStatusLabel, getPaymentStatusLabel } from "@/lib/shop/labels";
 
-type ProfileFormState = Required<CustomerProfileUpdatePayload>;
+type ProfileFormState = Pick<Required<CustomerProfileUpdatePayload>, "name" | "phone" | "default_address">;
 
 const EMPTY_FORM: ProfileFormState = {
   name: "",
   phone: "",
-  default_postal_code: "",
-  default_city: "",
-  default_district: "",
   default_address: "",
 };
 
@@ -53,10 +52,7 @@ function getProfileFormState(profile: CustomerProfile | null): ProfileFormState 
   return {
     name: profile.name || "",
     phone: profile.phone || "",
-    default_postal_code: profile.default_postal_code || "",
-    default_city: profile.default_city || "",
-    default_district: profile.default_district || "",
-    default_address: profile.default_address || "",
+    default_address: getCustomerDefaultFullAddress(profile),
   };
 }
 
@@ -66,6 +62,10 @@ function fieldClassName() {
 
 function formatCurrency(value: number) {
   return `NT$${Number(value || 0).toLocaleString("zh-TW")}`;
+}
+
+function formatPoints(value: number) {
+  return `${Number(value || 0).toLocaleString("zh-TW")} 點`;
 }
 
 function formatDateTime(value?: string | null) {
@@ -159,6 +159,9 @@ export default function CustomerAccount() {
   const readonlyEmail = useMemo(() => profile?.email || user?.email || "", [profile?.email, user?.email]);
   const memberLevel = profile?.member_level || "normal";
   const memberLevelLabel = getCustomerMemberLevelLabel(memberLevel);
+  const isDiamondMember = memberLevel === "diamond";
+  const diamondProfile = isDiamondMember ? profile?.diamond_profile : null;
+  const diamondPointsLedger = diamondProfile?.points_ledger || [];
   const emailVerified = Boolean(profile?.email_verified || getEmailVerifiedFromUser(user));
   const emailVerificationLabel = getCustomerEmailVerificationLabel(emailVerified);
   const displayName = getReadonlyValue(profile?.name || user?.user_metadata?.name || "");
@@ -263,7 +266,7 @@ export default function CustomerAccount() {
     setError("");
 
     try {
-      const payload = buildCustomerProfileUpdatePayload(form);
+      const payload = buildCustomerFullAddressUpdatePayload(form);
       const updatedProfile = await updateProfile(payload);
       setForm(getProfileFormState(updatedProfile));
       setIsEditUnlocked(false);
@@ -466,10 +469,7 @@ export default function CustomerAccount() {
                       <AccountField label="會員等級" value={memberLevelLabel} />
                       <AccountField label="Email 驗證狀態" value={emailVerificationLabel} />
                       <AccountField label="加入日期" value={formatDateTime(profile.created_at)} />
-                      <AccountField label="預設郵遞區號" value={getReadonlyValue(profile.default_postal_code)} />
-                      <AccountField label="預設縣市" value={getReadonlyValue(profile.default_city)} />
-                      <AccountField label="預設區域" value={getReadonlyValue(profile.default_district)} />
-                      <AccountField label="預設收件地址" value={getDefaultShippingLine(profile)} />
+                      <AccountField label="預設地址" value={getDefaultShippingLine(profile)} />
                     </dl>
                   )}
 
@@ -502,35 +502,8 @@ export default function CustomerAccount() {
                             onChange={(event) => updateField("phone", event.target.value)}
                           />
                         </label>
-                        <label className="grid gap-2 text-sm text-stone-600">
-                          預設郵遞區號
-                          <input
-                            className={fieldClassName()}
-                            value={form.default_postal_code}
-                            maxLength={20}
-                            onChange={(event) => updateField("default_postal_code", event.target.value)}
-                          />
-                        </label>
-                        <label className="grid gap-2 text-sm text-stone-600">
-                          預設縣市
-                          <input
-                            className={fieldClassName()}
-                            value={form.default_city}
-                            maxLength={80}
-                            onChange={(event) => updateField("default_city", event.target.value)}
-                          />
-                        </label>
-                        <label className="grid gap-2 text-sm text-stone-600">
-                          預設區域
-                          <input
-                            className={fieldClassName()}
-                            value={form.default_district}
-                            maxLength={80}
-                            onChange={(event) => updateField("default_district", event.target.value)}
-                          />
-                        </label>
                         <label className="grid gap-2 text-sm text-stone-600 sm:col-span-2">
-                          預設收件地址
+                          預設地址
                           <input
                             className={fieldClassName()}
                             value={form.default_address}
@@ -580,6 +553,44 @@ export default function CustomerAccount() {
                   {!isEditUnlocked && message && <p className="mt-4 text-sm text-emerald-700">{message}</p>}
                   {!isEditUnlocked && error && <p className="mt-4 text-sm text-red-700">{error}</p>}
                 </section>
+
+                {isDiamondMember ? (
+                  <section className="rounded-[8px] border border-sky-100 bg-[#fffdf8] p-6 shadow-sm shadow-stone-200/60">
+                    <div className="flex items-start gap-3">
+                      <span className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-700">
+                        <Gem className="h-5 w-5" />
+                      </span>
+                      <div>
+                        <p className="text-sm uppercase tracking-[0.18em] text-[#9f7868]">Diamond</p>
+                        <h2 className="mt-1 font-serif text-2xl text-stone-900">鑽石會員合作資料</h2>
+                      </div>
+                    </div>
+                    <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+                      <AccountField label="專屬優惠碼" value={diamondProfile?.exclusive_code || "尚未設定"} />
+                      <AccountField label="目前積分" value={formatPoints(diamondProfile?.points_balance || 0)} />
+                    </dl>
+                    {diamondPointsLedger.length ? (
+                      <div className="mt-5">
+                        <h3 className="text-sm font-semibold text-stone-900">最近積分紀錄</h3>
+                        <div className="mt-3 grid gap-2">
+                          {diamondPointsLedger.slice(0, 10).map((row) => (
+                            <div
+                              key={row.id}
+                              className="grid gap-2 rounded-[8px] border border-[#f0e5d7] bg-white/70 px-3 py-2 text-sm sm:grid-cols-[8rem_7rem_minmax(0,1fr)] sm:items-center"
+                            >
+                              <span className="text-stone-500">{formatDateTime(row.created_at).slice(0, 10)}</span>
+                              <span className={row.points >= 0 ? "font-semibold text-emerald-700" : "font-semibold text-rose-700"}>
+                                {row.points >= 0 ? "+" : ""}
+                                {formatPoints(row.points)}
+                              </span>
+                              <span className="break-words text-stone-700">{row.description}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </section>
+                ) : null}
               </>
             )}
 

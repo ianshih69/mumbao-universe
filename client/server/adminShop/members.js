@@ -81,6 +81,13 @@ const bookingRequestSelect = [
   "check_out",
   "guest_count",
   "status",
+  "customer_profile_id",
+  "final_lodging_amount",
+  "completed_at",
+  "completed_by_admin_id",
+  "partner_points_awarded_at",
+  "partner_points_awarded_to_profile_id",
+  "partner_points_ledger_id",
   "stay_type",
   "adults",
   "children",
@@ -97,7 +104,7 @@ const bookingRequestSelect = [
 const diamondProfileSelect =
   "id,customer_profile_id,partner_name,exclusive_code,partnership_status,created_at,updated_at";
 const pointsLedgerSelect =
-  "id,customer_profile_id,points,description,source_order_id,created_by_admin_id,created_at";
+  "id,customer_profile_id,points,description,source_order_id,source_type,created_by_admin_id,created_at";
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const memberLevels = new Set(["normal", "vip", "diamond"]);
@@ -107,6 +114,7 @@ const memberStatusFilters = new Set([
   "missing_profile",
   "inactive",
 ]);
+const diamondPartnershipStatuses = new Set(["active", "paused", "ended"]);
 const memberLevelLabels = {
   normal: "普通會員",
   vip: "VIP會員",
@@ -918,7 +926,14 @@ function normalizeBookingRequestRecord(row) {
     children,
     room_count: row.room_count == null ? null : Number(row.room_count),
     status: row.status || "pending_review",
-    lodging_amount: null,
+    customer_profile_id: row.customer_profile_id || null,
+    final_lodging_amount: row.final_lodging_amount == null ? null : Number(row.final_lodging_amount),
+    completed_at: row.completed_at || null,
+    completed_by_admin_id: row.completed_by_admin_id || null,
+    partner_points_awarded_at: row.partner_points_awarded_at || null,
+    partner_points_awarded_to_profile_id: row.partner_points_awarded_to_profile_id || null,
+    partner_points_ledger_id: row.partner_points_ledger_id || null,
+    lodging_amount: row.final_lodging_amount == null ? null : Number(row.final_lodging_amount),
     paid_amount: null,
     source: row.source || "",
     source_label: getBookingSourceLabel(row.source),
@@ -976,6 +991,36 @@ async function fetchDiamondProfile(profileId) {
   return normalizeDiamondProfile(Array.isArray(rows) ? rows[0] || null : null);
 }
 
+async function fetchAllDiamondProfiles() {
+  return restRows(`/member_diamond_profiles?select=${diamondProfileSelect}&limit=1000`);
+}
+
+function isDiamondExclusiveCodeConflict(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    message.includes("23505") ||
+    message.includes("duplicate") ||
+    message.includes("member_diamond_profiles_exclusive_code_unique_idx")
+  );
+}
+
+async function upsertDiamondProfile(profileId, patch) {
+  const existing = await fetchDiamondProfile(profileId);
+  const payload = {
+    customer_profile_id: profileId,
+    ...patch,
+  };
+
+  const pathname = existing?.id
+    ? `/member_diamond_profiles?id=eq.${encodeURIComponent(existing.id)}&select=${diamondProfileSelect}`
+    : `/member_diamond_profiles?select=${diamondProfileSelect}`;
+  const rows = await supabaseRequest(pathname, {
+    method: existing?.id ? "PATCH" : "POST",
+    body: JSON.stringify(payload),
+  });
+  return normalizeDiamondProfile(Array.isArray(rows) ? rows[0] || null : rows || null);
+}
+
 async function fetchPointsLedger(profileId) {
   if (!profileId) return [];
   const rows = await restRows(
@@ -993,6 +1038,7 @@ function normalizePointsLedgerRow(row) {
     points: Number(row.points || 0),
     description: row.description || "",
     source_order_id: row.source_order_id || null,
+    source_type: row.source_type || null,
     created_by_admin_id: row.created_by_admin_id || null,
     created_at: row.created_at || null,
   };
@@ -1263,6 +1309,82 @@ async function updateAdminNote(req, res, deps, context, body, authUserId) {
   });
 }
 
+async function updateDiamondProfile(req, res, deps, context, body, authUserId) {
+  const partnerName = cleanLimitedText(body?.partnerName ?? body?.partner_name, 120);
+  const exclusiveCode = normalizeDiamondExclusiveCode(body?.exclusiveCode ?? body?.exclusive_code);
+  const partnershipStatus = cleanText((body?.partnershipStatus ?? body?.partnership_status) || "active").toLowerCase();
+  const { profile, member } = await loadMemberRecord(authUserId, deps);
+  requireMutableCustomerProfile({ member, profile });
+
+  if (member.member_level !== "diamond") {
+    return sendJson(res, 409, {
+      ok: false,
+      code: "DIAMOND_PROFILE_DIAMOND_ONLY",
+      error: "只有鑽石會員可以設定合作店家資料。",
+    });
+  }
+  if (!diamondPartnershipStatuses.has(partnershipStatus)) {
+    return sendJson(res, 400, {
+      ok: false,
+      code: "INVALID_PARTNERSHIP_STATUS",
+      error: "合作狀態不正確。",
+    });
+  }
+  if (exclusiveCode.length > 80) {
+    return sendJson(res, 400, {
+      ok: false,
+      code: "EXCLUSIVE_CODE_TOO_LONG",
+      error: "專屬優惠碼長度不可超過 80 個字元。",
+    });
+  }
+
+  const beforeDiamondProfile = await deps.fetchDiamondProfile(profile.id);
+  try {
+    const existingProfiles = await deps.fetchAllDiamondProfiles();
+    assertDiamondExclusiveCodeAvailable(existingProfiles, exclusiveCode, profile.id);
+    const diamondProfile = await deps.upsertDiamondProfile(profile.id, {
+      partner_name: partnerName || null,
+      exclusive_code: exclusiveCode || null,
+      partnership_status: partnershipStatus,
+    });
+    const pointsLedger = await deps.fetchPointsLedger(profile.id);
+    const pointsBalance = getPointsBalance(pointsLedger);
+
+    await writeMemberAudit({
+      deps,
+      req,
+      context,
+      action: "update_customer_member_diamond_profile",
+      member,
+      description: `更新鑽石會員合作資料：${member.email}`,
+      beforeData: {
+        diamond_profile: beforeDiamondProfile,
+      },
+      afterData: {
+        diamond_profile: diamondProfile,
+      },
+    });
+
+    return sendJson(res, 200, {
+      ok: true,
+      code: "DIAMOND_PROFILE_UPDATED",
+      diamond_profile: {
+        ...diamondProfile,
+        points_balance: pointsBalance,
+      },
+    });
+  } catch (error) {
+    if (isDiamondExclusiveCodeConflict(error) || error?.status === 409) {
+      return sendJson(res, 409, {
+        ok: false,
+        code: "DIAMOND_EXCLUSIVE_CODE_DUPLICATE",
+        error: diamondExclusiveCodeDuplicateMessage,
+      });
+    }
+    throw error;
+  }
+}
+
 async function adjustMemberPoints(req, res, deps, context, body, authUserId) {
   const points = Number.parseInt(String(body?.points || ""), 10);
   const description = cleanLimitedText(body?.description, 300);
@@ -1453,6 +1575,9 @@ async function patchMember(req, res, deps) {
   if (action === "update-admin-note") {
     return updateAdminNote(req, res, deps, context, body, authUserId);
   }
+  if (action === "update-diamond-profile") {
+    return updateDiamondProfile(req, res, deps, context, body, authUserId);
+  }
   if (action === "adjust-points") {
     return adjustMemberPoints(req, res, deps, context, body, authUserId);
   }
@@ -1627,6 +1752,8 @@ export function createAdminMembersHandler(dependencyOverrides = {}) {
     fetchShopOrdersForMember,
     fetchBookingRequestsForMember,
     fetchDiamondProfile,
+    fetchAllDiamondProfiles,
+    upsertDiamondProfile,
     fetchPointsLedger,
     insertPointsLedger,
     writeAdminActivityLog,
@@ -1649,6 +1776,7 @@ export const __testing = {
   getDiamondExclusiveCodeKey,
   hasDuplicateDiamondExclusiveCode,
   hasNormalizedEmailInRows,
+  isDiamondExclusiveCodeConflict,
   isCompletedStay,
   isEstablishedShopOrder,
   isFullyRefundedShopOrder,

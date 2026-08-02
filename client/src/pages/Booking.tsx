@@ -13,6 +13,7 @@ import {
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import {
   DEFAULT_BOOKING_SETTINGS,
   type PublicBookingSettings,
@@ -265,6 +266,7 @@ function Stepper({
 }
 
 export default function Booking() {
+  const { session } = useCustomerAuth();
   const [form, setForm] = useState<BookingForm>(() => getInitialBookingForm());
   const [settings, setSettings] = useState<PublicBookingSettings>(() => ({ ...DEFAULT_BOOKING_SETTINGS }));
   const [bookingCopy, setBookingCopy] = useState<BookingCmsCopy>(fallbackBookingCopy);
@@ -436,7 +438,7 @@ export default function Booking() {
         room_count: form.stay_type === "villa" ? settings.totalRoomCount : form.room_count,
         has_pets: settings.allowPets ? form.has_pets : false,
       };
-      const result = await submitBookingRequest(payload);
+      const result = await submitBookingRequest(payload, session?.access_token || null);
       setSubmittedRequestId(result.request.id);
       setMessage(bookingCopy.successMessage);
       setUnavailableDates((current) => {

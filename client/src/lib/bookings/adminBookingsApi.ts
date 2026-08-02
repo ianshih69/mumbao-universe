@@ -62,6 +62,10 @@ export type BookingRequest = {
   guest_count?: number | null;
   notes?: string | null;
   source?: string | null;
+  customer_profile_id?: string | null;
+  final_lodging_amount?: number | null;
+  completed_at?: string | null;
+  partner_points_ledger_id?: string | null;
   created_at: string;
   updated_at?: string | null;
 };
@@ -200,5 +204,29 @@ export function handleBookingAlert(token: string, payload: { id: string; notes?:
   return adminBookingRequest<{ alert: BookingAlert }>(token, "?action=alert", {
     method: "PATCH",
     body: JSON.stringify(payload),
+  });
+}
+
+export function completeBookingStay(
+  token: string,
+  payload: { id: string; finalLodgingAmount: number }
+) {
+  return adminBookingRequest<{
+    ok: true;
+    code: string;
+    booking: BookingRequest;
+    points_award: {
+      awarded: boolean;
+      reason: string;
+      points: number;
+      ledger_id?: string | null;
+      diamond_customer_profile_id?: string | null;
+    };
+  }>(token, "?action=complete-stay", {
+    method: "POST",
+    body: JSON.stringify({
+      id: payload.id,
+      finalLodgingAmount: payload.finalLodgingAmount,
+    }),
   });
 }

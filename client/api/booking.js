@@ -1,5 +1,7 @@
 import {
   firstQueryValue,
+  getServerEnv,
+  getSupabaseConfig,
   readBody,
   sendJson,
   supabaseRequest,
@@ -29,6 +31,36 @@ function httpError(status, message, code = "request_failed") {
 function cleanText(value, maxLength = 500) {
   if (typeof value !== "string") return "";
   return value.trim().slice(0, maxLength);
+}
+
+function getOptionalBearerToken(req) {
+  const header = req.headers?.authorization || req.headers?.Authorization || "";
+  const match = String(header).match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : "";
+}
+
+async function getOptionalCustomerProfile(req) {
+  const accessToken = getOptionalBearerToken(req);
+  if (!accessToken) return null;
+
+  const { serviceRoleKey } = getSupabaseConfig();
+  const supabaseUrl = getServerEnv("SUPABASE_URL").replace(/\/$/, "");
+  const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  if (!response.ok) return null;
+  const user = await response.json().catch(() => null);
+  if (!user?.id) return null;
+
+  const rows = await supabaseRequest(
+    `/shop_customer_profiles?auth_user_id=eq.${encodeURIComponent(
+      user.id,
+    )}&select=id,email,coupon_code&limit=1`,
+  );
+  return Array.isArray(rows) ? rows[0] || null : null;
 }
 
 function parseInteger(value, fallback = null) {
@@ -317,10 +349,12 @@ async function handleRequest(req, res, requestId) {
       message: "這段日期目前無法預約，請重新選擇日期。",
     });
   }
+  const customerProfile = await getOptionalCustomerProfile(req);
 
   const rows = await supabaseRequest("/booking_requests", {
     method: "POST",
     body: JSON.stringify({
+      customer_profile_id: customerProfile?.id || null,
       guest_name: guestName,
       guest_email: guestEmail || null,
       guest_phone: guestPhone || null,

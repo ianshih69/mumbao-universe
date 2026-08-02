@@ -10,10 +10,25 @@ export type CustomerProfile = {
   default_city: string;
   default_district: string;
   default_address: string;
+  diamond_profile?: CustomerDiamondProfile | null;
   is_active: boolean;
   created_at: string | null;
   updated_at: string | null;
 };
+
+export type CustomerDiamondPointLedgerRow = {
+  id: string;
+  points: number;
+  description: string;
+  source_order_id?: string | null;
+  created_at?: string | null;
+};
+
+export type CustomerDiamondProfile = {
+  exclusive_code: string;
+  points_balance: number;
+  points_ledger: CustomerDiamondPointLedgerRow[];
+} | null;
 
 export type CustomerProfileUpdatePayload = {
   name?: string;

@@ -8,6 +8,10 @@ import {
 
 const PROFILE_SELECT =
   "id,auth_user_id,email,name,phone,member_level,default_postal_code,default_city,default_district,default_address,is_active,created_at,updated_at";
+const DIAMOND_PROFILE_SELECT =
+  "id,customer_profile_id,exclusive_code,partnership_status";
+const POINTS_LEDGER_SELECT =
+  "id,customer_profile_id,points,description,source_order_id,created_at";
 const CUSTOMER_ORDER_SELECT =
   "id,order_number,created_at,order_source,subtotal,shipping_fee,total,payment_status,order_status,shipping_carrier,tracking_number";
 const CUSTOMER_ORDER_DETAIL_SELECT =
@@ -178,6 +182,69 @@ function normalizeProfile(row, user = null) {
   };
 }
 
+function normalizeCustomerPointsLedger(row) {
+  return {
+    id: row.id,
+    points: Number(row.points || 0),
+    description: row.description || "",
+    source_order_id: row.source_order_id || null,
+    created_at: row.created_at || null,
+  };
+}
+
+function getPointsBalance(rows) {
+  return (rows || []).reduce((sum, row) => sum + Number(row.points || 0), 0);
+}
+
+async function fetchCustomerDiamondProfile(profileId) {
+  if (!profileId) return null;
+  const rows = await supabaseRequest(
+    `/member_diamond_profiles?customer_profile_id=eq.${encodeURIComponent(
+      profileId,
+    )}&select=${DIAMOND_PROFILE_SELECT}&limit=1`,
+  );
+  const row = Array.isArray(rows) ? rows[0] || null : null;
+  if (!row) return null;
+  return {
+    exclusive_code: String(row.exclusive_code || "").trim(),
+    partnership_status: row.partnership_status || "active",
+  };
+}
+
+async function fetchCustomerPointsLedger(profileId) {
+  if (!profileId) return [];
+  const rows = await supabaseRequest(
+    `/member_points_ledger?customer_profile_id=eq.${encodeURIComponent(
+      profileId,
+    )}&select=${POINTS_LEDGER_SELECT}&order=created_at.desc&limit=200`,
+  );
+  return Array.isArray(rows) ? rows.map(normalizeCustomerPointsLedger) : [];
+}
+
+async function buildCustomerProfileResponse(row, user) {
+  const profile = normalizeProfile(row, user);
+  if (profile.member_level !== "diamond") {
+    return {
+      ...profile,
+      diamond_profile: null,
+    };
+  }
+
+  const [diamondProfile, pointsLedger] = await Promise.all([
+    fetchCustomerDiamondProfile(profile.id),
+    fetchCustomerPointsLedger(profile.id),
+  ]);
+
+  return {
+    ...profile,
+    diamond_profile: {
+      exclusive_code: diamondProfile?.exclusive_code || "",
+      points_balance: getPointsBalance(pointsLedger),
+      points_ledger: pointsLedger,
+    },
+  };
+}
+
 async function getCustomerAuthUser(accessToken) {
   const { serviceRoleKey } = getSupabaseConfig();
   const supabaseUrl = getServerEnv("SUPABASE_URL").replace(/\/$/, "");
@@ -309,7 +376,7 @@ async function handleProfile(req, res, requestId) {
 
   if (req.method === "GET") {
     const profile = await ensureProfile(user);
-    return sendJson(res, 200, { profile: normalizeProfile(profile, user), requestId });
+    return sendJson(res, 200, { profile: await buildCustomerProfileResponse(profile, user), requestId });
   }
 
   if (req.method === "PATCH") {
@@ -319,7 +386,7 @@ async function handleProfile(req, res, requestId) {
 
     if (!Object.keys(payload).length) {
       const profile = await findProfileByAuthUserId(user.id);
-      return sendJson(res, 200, { profile: normalizeProfile(profile, user), requestId });
+      return sendJson(res, 200, { profile: await buildCustomerProfileResponse(profile, user), requestId });
     }
 
     const rows = await supabaseRequest(
@@ -339,7 +406,7 @@ async function handleProfile(req, res, requestId) {
       throw createHttpError(403, "此會員帳號目前已停用，請聯絡客服。", "CUSTOMER_DISABLED");
     }
 
-    return sendJson(res, 200, { profile: normalizeProfile(profile, user), requestId });
+    return sendJson(res, 200, { profile: await buildCustomerProfileResponse(profile, user), requestId });
   }
 
   return sendJson(res, 405, { error: "method_not_allowed", requestId });

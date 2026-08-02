@@ -3,8 +3,10 @@ import {
   getServerEnv,
   readBody,
   sendJson,
+  supabaseRpc,
   supabaseRequest,
 } from "../server/shopShared.js";
+import { requirePermission } from "../server/adminShop/core.js";
 
 const requestIdHeader = "x-request-id";
 const villaAliases = ["慢慢蒔光", "stime villa", "mumbao"];
@@ -16,6 +18,32 @@ const defaultBookingSettings = {
   total_room_count: 5,
   allow_pets: true,
 };
+const bookingRequestCompletionSelect = [
+  "id",
+  "guest_name",
+  "guest_email",
+  "guest_phone",
+  "check_in",
+  "check_out",
+  "status",
+  "source",
+  "customer_profile_id",
+  "final_lodging_amount",
+  "completed_at",
+  "completed_by_admin_id",
+  "partner_points_awarded_at",
+  "partner_points_awarded_to_profile_id",
+  "partner_points_ledger_id",
+].join(",");
+const customerProfileSelectForPoints =
+  "id,auth_user_id,email,name,coupon_code,member_level";
+const diamondProfileSelectForPoints =
+  "id,customer_profile_id,partner_name,exclusive_code,partnership_status";
+const pointsLedgerSelectForBookingRewards =
+  "id,customer_profile_id,points,description,source_order_id,source_type,created_by_admin_id,created_at";
+const directBookingRewardSources = new Set(["official_site", "website", "line", "phone", "manual", "admin"]);
+const maxFinalLodgingAmount = 10000000;
+const sourceNotEligibleMessage = "此訂單來源不符合合作回饋資格。";
 
 function makeRequestId() {
   return `booking-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -266,6 +294,162 @@ function parseMoney(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0) return null;
   return Math.round(number * 100) / 100;
+}
+
+function normalizeEmail(value) {
+  return cleanText(value, 300).toLowerCase();
+}
+
+function normalizeCouponCode(value) {
+  return cleanText(value, 80);
+}
+
+function getCouponCodeKey(value) {
+  return normalizeCouponCode(value).toLowerCase();
+}
+
+function normalizeDirectSource(source) {
+  return cleanText(source, 80).toLowerCase();
+}
+
+function isDirectBookingSource(source) {
+  const normalized = normalizeDirectSource(source);
+  if (!normalized) return false;
+  return directBookingRewardSources.has(normalized);
+}
+
+function parseFinalLodgingAmount(value) {
+  let parsed;
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value)) return null;
+    parsed = value;
+  } else if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!/^\d+$/.test(trimmed)) return null;
+    parsed = Number(trimmed);
+  } else {
+    return null;
+  }
+  if (!Number.isSafeInteger(parsed) || parsed <= 0 || parsed > maxFinalLodgingAmount) return null;
+  return Math.floor(parsed);
+}
+
+function calculatePartnerRewardPoints(finalLodgingAmount) {
+  return Math.floor(Number(finalLodgingAmount || 0) * 5 / 100);
+}
+
+function formatAmountForDescription(amount) {
+  return `NT$${Number(amount || 0).toLocaleString("zh-TW")}`;
+}
+
+function getBookingDisplayNumber(booking) {
+  return booking?.reference_number || booking?.booking_number || booking?.id || "booking";
+}
+
+async function fetchBookingRequestById(id) {
+  const rows = await supabaseRequest(
+    `/booking_requests?id=eq.${encodeURIComponent(id)}&select=${bookingRequestCompletionSelect}&limit=1`
+  );
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+async function fetchCustomerProfileForBooking(booking) {
+  if (booking?.customer_profile_id) {
+    const rows = await supabaseRequest(
+      `/shop_customer_profiles?id=eq.${encodeURIComponent(
+        booking.customer_profile_id
+      )}&select=${customerProfileSelectForPoints}&limit=1`
+    );
+    const profile = Array.isArray(rows) ? rows[0] || null : null;
+    if (profile) return profile;
+  }
+
+  const email = normalizeEmail(booking?.guest_email);
+  if (!email) return null;
+  const rows = await supabaseRequest(
+    `/shop_customer_profiles?email=ilike.${encodeURIComponent(`*${email}*`)}&select=${customerProfileSelectForPoints}&limit=20`
+  );
+  return (Array.isArray(rows) ? rows : []).find((row) => normalizeEmail(row.email) === email) || null;
+}
+
+async function fetchActiveDiamondProfileByCouponCode(couponCode) {
+  const key = getCouponCodeKey(couponCode);
+  if (!key) return null;
+  const rows = await supabaseRequest(
+    `/member_diamond_profiles?exclusive_code=ilike.${encodeURIComponent(
+      `*${key}*`
+    )}&partnership_status=eq.active&select=${diamondProfileSelectForPoints}&limit=50`
+  );
+  const match = (Array.isArray(rows) ? rows : []).find(
+    (row) => getCouponCodeKey(row.exclusive_code) === key
+  );
+  if (!match?.customer_profile_id) return null;
+
+  const profiles = await supabaseRequest(
+    `/shop_customer_profiles?id=eq.${encodeURIComponent(
+      match.customer_profile_id
+    )}&member_level=eq.diamond&select=id,member_level&limit=1`
+  );
+  return Array.isArray(profiles) && profiles[0]?.id ? match : null;
+}
+
+async function fetchExistingBookingRewardLedger(bookingId) {
+  const rows = await supabaseRequest(
+    `/member_points_ledger?source_order_id=eq.${encodeURIComponent(
+      bookingId
+    )}&source_type=eq.booking_stay_reward&select=${pointsLedgerSelectForBookingRewards}&limit=1`
+  );
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+function buildPartnerPointsEligibility({ booking, customerProfile, diamondProfile, finalLodgingAmount, existingLedger }) {
+  if (!booking) return { eligible: false, reason: "booking_not_found" };
+  if (!isDirectBookingSource(booking.source)) return { eligible: false, reason: "source_not_eligible" };
+  if (!finalLodgingAmount) return { eligible: false, reason: "missing_final_lodging_amount" };
+  if (!customerProfile?.id) return { eligible: false, reason: "missing_customer_profile" };
+  if (!normalizeCouponCode(customerProfile.coupon_code)) return { eligible: false, reason: "missing_coupon_code" };
+  if (!diamondProfile?.customer_profile_id) return { eligible: false, reason: "invalid_or_inactive_coupon_code" };
+  if (booking.partner_points_ledger_id || existingLedger?.id) return { eligible: false, reason: "already_awarded" };
+  const points = calculatePartnerRewardPoints(finalLodgingAmount);
+  if (points <= 0) return { eligible: false, reason: "zero_reward_points" };
+  return { eligible: true, reason: "eligible", points };
+}
+
+function normalizeCompleteStayRpcResult(result) {
+  if (Array.isArray(result)) {
+    return normalizeCompleteStayRpcResult(result[0]);
+  }
+  return result?.complete_booking_stay_with_partner_points || result || {};
+}
+
+function mapCompleteStayRpcError(error) {
+  const message = String(error?.message || "");
+  const lowerMessage = message.toLowerCase();
+  if (message.includes("找不到此住宿訂單")) {
+    return httpError(404, "找不到此住宿訂單。", "booking_not_found");
+  }
+  if (message.includes("找不到執行操作的管理員")) {
+    return httpError(403, "找不到執行操作的管理員。", "admin_not_found");
+  }
+  if (message.includes(sourceNotEligibleMessage)) {
+    return httpError(409, sourceNotEligibleMessage, "source_not_eligible");
+  }
+  if (message.includes("最終住宿房費") || message.includes("合作回饋積分計算結果")) {
+    return httpError(400, message, "invalid_final_lodging_amount");
+  }
+  if (message.includes("找不到此訂單對應的會員資料")) {
+    return httpError(409, "找不到此訂單對應的會員資料。", "missing_customer_profile");
+  }
+  if (message.includes("尚未綁定有效合作優惠碼")) {
+    return httpError(409, "此會員尚未綁定有效合作優惠碼。", "missing_coupon_code");
+  }
+  if (message.includes("合作優惠碼目前無效")) {
+    return httpError(409, "此合作優惠碼目前無效或未啟用。", "invalid_or_inactive_coupon_code");
+  }
+  if (message.includes("已發放過合作回饋積分") || lowerMessage.includes("duplicate") || lowerMessage.includes("23505")) {
+    return httpError(409, "此住宿訂單已發放過合作回饋積分。", "partner_points_already_awarded");
+  }
+  return error;
 }
 
 function parseGuestCount(value) {
@@ -962,6 +1146,101 @@ async function handleRequests(req, res, requestId) {
   sendJson(res, 200, { ok: true, requestId, requests: requests || [] });
 }
 
+async function handleCompleteStay(req, res, requestId) {
+  const context = await requirePermission(req, "users.update");
+  const admin = {
+    authUserId: context.actorAuthUserId,
+    email: context.actorEmail,
+    name: context.actorName || context.actorEmail || "Admin",
+  };
+  const body = sanitizePayload(await readBody(req));
+  const bookingId = cleanText(body.id || body.booking_id, 80);
+  if (!bookingId) throw httpError(400, "Missing booking id.", "missing_booking_id");
+
+  const booking = await fetchBookingRequestById(bookingId);
+  if (!booking) throw httpError(404, "找不到此住宿訂單。", "booking_not_found");
+  if (booking.completed_at) {
+    return sendJson(res, 200, {
+      ok: true,
+      requestId,
+      code: "BOOKING_STAY_ALREADY_COMPLETED",
+      booking,
+      points_award: {
+        awarded: false,
+        reason: "already_completed",
+        points: 0,
+        ledger_id: booking.partner_points_ledger_id || null,
+        diamond_customer_profile_id: booking.partner_points_awarded_to_profile_id || null,
+      },
+    });
+  }
+
+  const finalLodgingAmount = parseFinalLodgingAmount(
+    body.final_lodging_amount ?? body.finalLodgingAmount ?? booking.final_lodging_amount
+  );
+  if (!finalLodgingAmount) {
+    throw httpError(
+      400,
+      "請輸入大於 0 且不超過 NT$10,000,000 的整數住宿房費。",
+      "invalid_final_lodging_amount"
+    );
+  }
+
+  let completionResult;
+  try {
+    completionResult = normalizeCompleteStayRpcResult(
+      await supabaseRpc("complete_booking_stay_with_partner_points", {
+        p_booking_id: booking.id,
+        p_final_lodging_amount: finalLodgingAmount,
+        p_completed_by_admin_id: context.profile?.id || null,
+      })
+    );
+  } catch (error) {
+    throw mapCompleteStayRpcError(error);
+  }
+
+  const updatedBooking = (await fetchBookingRequestById(booking.id)) || booking;
+  const pointsAward = completionResult.points_award || {
+    awarded: false,
+    reason: completionResult.code === "BOOKING_STAY_ALREADY_COMPLETED" ? "already_completed" : "not_awarded",
+    points: 0,
+    ledger_id: null,
+    diamond_customer_profile_id: null,
+  };
+
+  if (completionResult.code === "BOOKING_STAY_ALREADY_COMPLETED") {
+    return sendJson(res, 200, {
+      ok: true,
+      requestId,
+      code: "BOOKING_STAY_ALREADY_COMPLETED",
+      booking: updatedBooking,
+      points_award: pointsAward,
+    });
+  }
+
+  await writeBookingAuditLog({
+    req,
+    requestId,
+    admin,
+    action: "complete_booking_stay",
+    targetType: "booking_request",
+    targetId: booking.id,
+    description: `確認完成住宿：${getBookingDisplayNumber(updatedBooking || booking)}`,
+    beforeData: booking,
+    afterData: {
+      booking: updatedBooking,
+      points_award: pointsAward,
+    },
+  });
+
+  sendJson(res, 200, {
+    ok: true,
+    requestId,
+    code: completionResult.code || "BOOKING_STAY_COMPLETED",
+    booking: updatedBooking,
+    points_award: pointsAward,
+  });
+}
 async function dispatch(req, res, requestId) {
   const action = firstQueryValue(req.query?.action) || "dashboard";
   if (req.method === "GET" && action === "dashboard") return handleDashboard(req, res, requestId);
@@ -975,6 +1254,7 @@ async function dispatch(req, res, requestId) {
   if (req.method === "POST" && action === "settings") return handleSettingsPost(req, res, requestId);
   if (req.method === "POST" && action === "sync-ical") return handleSyncIcal(req, res, requestId);
   if (req.method === "PATCH" && action === "alert") return handleAlertPatch(req, res, requestId);
+  if (req.method === "POST" && action === "complete-stay") return handleCompleteStay(req, res, requestId);
   throw httpError(404, "Unknown booking action.", "unknown_action");
 }
 
@@ -1000,3 +1280,12 @@ export default async function handler(req, res) {
     });
   }
 }
+
+export const __testing = {
+  buildPartnerPointsEligibility,
+  calculatePartnerRewardPoints,
+  getCouponCodeKey,
+  isDirectBookingSource,
+  normalizeCouponCode,
+  parseFinalLodgingAmount,
+};

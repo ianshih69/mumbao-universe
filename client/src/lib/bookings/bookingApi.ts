@@ -69,9 +69,13 @@ export function fetchBookingCalendar(from: string) {
   return bookingRequest<BookingCalendarResult & { ok: boolean }>(`?${params.toString()}`);
 }
 
-export function submitBookingRequest(payload: BookingRequestPayload) {
+export function submitBookingRequest(payload: BookingRequestPayload, customerAccessToken?: string | null) {
   return bookingRequest<{ ok: boolean; request: { id: string; status: string; check_in: string; check_out: string } }>(
     "?action=request",
-    { method: "POST", body: JSON.stringify(payload) }
+    {
+      method: "POST",
+      headers: customerAccessToken ? { Authorization: `Bearer ${customerAccessToken}` } : undefined,
+      body: JSON.stringify(payload),
+    }
   );
 }

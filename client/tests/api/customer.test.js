@@ -85,7 +85,7 @@ function customerProfile(overrides = {}) {
   };
 }
 
-function installFetchMock() {
+function installFetchMock({ profileOverrides = {}, diamondProfileRows = [], pointsLedgerRows = [] } = {}) {
   const calls = [];
   const fetchMock = vi.fn(async (url, options = {}) => {
     const requestUrl = String(url);
@@ -96,7 +96,15 @@ function installFetchMock() {
     }
 
     if (requestUrl.includes("/rest/v1/shop_customer_profiles?auth_user_id=eq.")) {
-      return createJsonResponse([customerProfile()]);
+      return createJsonResponse([customerProfile(profileOverrides)]);
+    }
+
+    if (requestUrl.includes("/rest/v1/member_diamond_profiles?customer_profile_id=eq.")) {
+      return createJsonResponse(diamondProfileRows);
+    }
+
+    if (requestUrl.includes("/rest/v1/member_points_ledger?customer_profile_id=eq.")) {
+      return createJsonResponse(pointsLedgerRows);
     }
 
     if (requestUrl.includes("/rest/v1/shop_orders?customer_profile_id=eq.")) {
@@ -184,6 +192,52 @@ describe("customer account API", () => {
     const profileLookup = calls.find((call) => call.url.includes("/rest/v1/shop_customer_profiles?auth_user_id=eq."));
     expect(profileLookup.url).toContain(`auth_user_id=eq.${authUserId}`);
     expect(profileLookup.url).not.toContain("email=eq.");
+    expect(calls.some((call) => call.url.includes("member_points_ledger"))).toBe(false);
+  });
+
+  it("returns diamond coupon and point balance only for diamond members", async () => {
+    const { calls } = installFetchMock({
+      profileOverrides: { member_level: "diamond" },
+      diamondProfileRows: [
+        {
+          id: "diamond-profile-a",
+          customer_profile_id: profileId,
+          exclusive_code: " PET001 ",
+          partnership_status: "active",
+          partner_name: "Partner name should not be returned",
+        },
+      ],
+      pointsLedgerRows: [
+        {
+          id: "ledger-a",
+          customer_profile_id: profileId,
+          points: 2000,
+          description: "Stay reward",
+          source_order_id: "90000000-0000-4000-8000-000000000010",
+          created_at: "2026-08-03T00:00:00.000Z",
+        },
+        {
+          id: "ledger-b",
+          customer_profile_id: profileId,
+          points: -500,
+          description: "Redemption",
+          source_order_id: null,
+          created_at: "2026-08-04T00:00:00.000Z",
+        },
+      ],
+    });
+
+    const response = await invoke();
+
+    expect(response.status).toBe(200);
+    expect(response.body.profile.member_level).toBe("diamond");
+    expect(response.body.profile.diamond_profile).toMatchObject({
+      exclusive_code: "PET001",
+      points_balance: 1500,
+    });
+    expect(response.body.profile.diamond_profile.points_ledger).toHaveLength(2);
+    expect(response.body.profile.diamond_profile).not.toHaveProperty("partner_name");
+    expect(calls.some((call) => call.url.includes("member_points_ledger"))).toBe(true);
   });
 
   it("rejects attempts to update member-only fields before patching the profile", async () => {

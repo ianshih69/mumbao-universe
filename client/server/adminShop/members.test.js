@@ -458,7 +458,7 @@ function createDependencies(options = {}) {
   const profileByAuthUserId = new Map(profilesData.map((profile) => [profile.auth_user_id, { ...profile }]));
   const profileById = new Map(profilesData.map((profile) => [profile.id, { ...profile }]));
   const adminProfileByAuthUserId = new Map(adminProfilesData.map((profile) => [profile.auth_user_id, profile]));
-  const diamondProfileByProfileId = new Map(diamondProfilesData.map((profile) => [profile.customer_profile_id, profile]));
+  const diamondProfileByProfileId = new Map(diamondProfilesData.map((profile) => [profile.customer_profile_id, { ...profile }]));
   const ledgerByProfileId = new Map();
   for (const row of pointsLedgerData) {
     const rows = ledgerByProfileId.get(row.customer_profile_id) || [];
@@ -588,6 +588,21 @@ function createDependencies(options = {}) {
         }));
     }),
     fetchDiamondProfile: vi.fn(async (profileId) => diamondProfileByProfileId.get(profileId) || null),
+    fetchAllDiamondProfiles: vi.fn(async () => Array.from(diamondProfileByProfileId.values())),
+    upsertDiamondProfile: vi.fn(async (profileId, patch) => {
+      const existing = diamondProfileByProfileId.get(profileId);
+      const next = {
+        id: existing?.id || `diamond-${profileId}`,
+        customer_profile_id: profileId,
+        partner_name: patch.partner_name || null,
+        exclusive_code: patch.exclusive_code || null,
+        partnership_status: patch.partnership_status || "active",
+        created_at: existing?.created_at || "2026-08-04T00:00:00.000Z",
+        updated_at: "2026-08-05T00:00:00.000Z",
+      };
+      diamondProfileByProfileId.set(profileId, next);
+      return next;
+    }),
     fetchPointsLedger: vi.fn(async (profileId) => ledgerByProfileId.get(profileId) || []),
     insertPointsLedger: vi.fn(async (row) => {
       const next = {
@@ -835,6 +850,96 @@ describe("admin members API", () => {
     expect(__testing.hasDuplicateDiamondExclusiveCode(rows, null, "profile-d")).toBe(false);
     expect(__testing.hasDuplicateDiamondExclusiveCode(rows, "", "profile-d")).toBe(false);
     expect(__testing.hasDuplicateDiamondExclusiveCode(rows, "   ", "profile-d")).toBe(false);
+  });
+
+  it("updates diamond partner profile with normalized exclusive code and audit logging", async () => {
+    const deps = createDependencies();
+    const handler = createAdminMembersHandler(deps);
+
+    const response = await invoke(handler, {
+      method: "PATCH",
+      query: { id: authUserE },
+      body: {
+        action: "update-diamond-profile",
+        partnerName: "  Partner Shop  ",
+        exclusiveCode: "  PET001  ",
+        partnershipStatus: "active",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      code: "DIAMOND_PROFILE_UPDATED",
+      diamond_profile: {
+        partner_name: "Partner Shop",
+        exclusive_code: "PET001",
+        partnership_status: "active",
+        points_balance: 1700,
+      },
+    });
+    expect(deps.upsertDiamondProfile).toHaveBeenCalledWith("profile-e", expect.objectContaining({
+      partner_name: "Partner Shop",
+      exclusive_code: "PET001",
+      partnership_status: "active",
+    }));
+    expect(deps.writeAdminActivityLog).toHaveBeenCalledWith(expect.objectContaining({
+      action: "update_customer_member_diamond_profile",
+    }));
+  });
+
+  it("does not allow non-diamond members to set diamond exclusive codes", async () => {
+    const deps = createDependencies();
+    const handler = createAdminMembersHandler(deps);
+
+    const response = await invoke(handler, {
+      method: "PATCH",
+      query: { id: authUserF },
+      body: {
+        action: "update-diamond-profile",
+        partnerName: "VIP Shop",
+        exclusiveCode: "VIP001",
+        partnershipStatus: "active",
+      },
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe("DIAMOND_PROFILE_DIAMOND_ONLY");
+    expect(deps.upsertDiamondProfile).not.toHaveBeenCalled();
+  });
+
+  it("returns a safe duplicate error when another diamond partner already owns the exclusive code", async () => {
+    const deps = createDependencies({
+      diamondProfilesData: [
+        ...diamondProfiles,
+        {
+          id: "diamond-profile-other",
+          customer_profile_id: "profile-other",
+          partner_name: "Other Partner",
+          exclusive_code: " pet001 ",
+          partnership_status: "active",
+          created_at: "2026-08-02T00:00:00.000Z",
+          updated_at: "2026-08-02T00:00:00.000Z",
+        },
+      ],
+    });
+    const handler = createAdminMembersHandler(deps);
+
+    const response = await invoke(handler, {
+      method: "PATCH",
+      query: { id: authUserE },
+      body: {
+        action: "update-diamond-profile",
+        partnerName: "Partner Shop",
+        exclusiveCode: "PET001",
+        partnershipStatus: "active",
+      },
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe("DIAMOND_EXCLUSIVE_CODE_DUPLICATE");
+    expect(response.body.error).toBeTruthy();
+    expect(response.body.error).not.toContain("member_diamond_profiles_exclusive_code_unique_idx");
+    expect(deps.upsertDiamondProfile).not.toHaveBeenCalled();
   });
 
   it("updates member level with users.update permission and writes audit log", async () => {
@@ -1329,5 +1434,42 @@ describe("admin members API", () => {
     expect(membershipSql).toContain("drop trigger if exists set_member_diamond_profiles_updated_at on public.member_diamond_profiles");
     expect(membershipSql).toContain("create trigger set_member_diamond_profiles_updated_at");
     expect(membershipSql).toContain("execute function public.set_shop_warehouse_updated_at()");
+  });
+
+  it("keeps booking stay reward migration minimal and prevents duplicate automatic point awards", () => {
+    const sql = readFileSync(new URL("../../supabase/migrations/2026-08-02-booking-stay-completion-partner-points.sql", import.meta.url), "utf8").toLowerCase();
+
+    expect(sql).toContain("add column if not exists customer_profile_id uuid");
+    expect(sql).toContain("add column if not exists final_lodging_amount integer");
+    expect(sql).toContain("add column if not exists completed_at timestamptz");
+    expect(sql).toContain("add column if not exists completed_by_admin_id uuid");
+    expect(sql).toContain("constraint booking_requests_completed_by_admin_id_fkey");
+    expect(sql).toContain("drop constraint booking_requests_completed_by_admin_id_fkey");
+    expect(sql).toContain("confupdtype = 'c'");
+    expect(sql).toContain("confdeltype = 'n'");
+    expect(sql).toContain("references public.admin_profiles(id)");
+    expect(sql).toContain("on update cascade");
+    expect(sql).toContain("on delete set null");
+    expect(sql).toContain("add column if not exists partner_points_ledger_id uuid");
+    expect(sql).toContain("references public.member_points_ledger(id) on update cascade on delete restrict");
+    expect(sql).toContain("add column if not exists source_type text");
+    expect(sql).toContain("check (source_type is null or source_type in ('booking_stay_reward'))");
+    expect(sql).toContain("create unique index if not exists member_points_ledger_booking_reward_source_unique_idx");
+    expect(sql).toContain("where source_type = 'booking_stay_reward'");
+    expect(sql).toContain("create or replace function public.complete_booking_stay_with_partner_points");
+    expect(sql).toContain("returns jsonb");
+    expect(sql).toContain("security definer");
+    expect(sql).toContain("set search_path = public");
+    expect(sql).toContain("for update");
+    expect(sql).toContain("if v_source not in ('official_site', 'website', 'line', 'phone', 'manual', 'admin')");
+    expect(sql).toContain("raise exception '此訂單來源不符合合作回饋資格。'");
+    expect(sql).toContain("v_points := floor(p_final_lodging_amount * 5 / 100)");
+    expect(sql).toContain("insert into public.member_points_ledger");
+    expect(sql).toContain("update public.booking_requests");
+    expect(sql).toContain("revoke execute on function public.complete_booking_stay_with_partner_points(uuid, integer, uuid)\n  from public");
+    expect(sql).toContain("revoke execute on function public.complete_booking_stay_with_partner_points(uuid, integer, uuid)\n  from anon");
+    expect(sql).toContain("revoke execute on function public.complete_booking_stay_with_partner_points(uuid, integer, uuid)\n  from authenticated");
+    expect(sql).toContain("grant execute on function public.complete_booking_stay_with_partner_points(uuid, integer, uuid)");
+    expect(sql).toContain("to service_role");
   });
 });

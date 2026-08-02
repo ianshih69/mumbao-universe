@@ -13,6 +13,7 @@ import {
 import { Link, useLocation, useRoute } from "wouter";
 import AdminShopHeaderLinks from "@/components/shop/AdminShopHeaderLinks";
 import AdminShopNav from "@/components/shop/AdminShopNav";
+import { completeBookingStay } from "@/lib/bookings/adminBookingsApi";
 import {
   adminAuthExpiredMessage,
   clearAdminToken,
@@ -26,6 +27,7 @@ import {
   fetchAdminMemberDetail,
   fetchAdminSession,
   resendAdminMemberVerification,
+  updateAdminMemberDiamondProfile,
   updateAdminMemberLevel,
   updateAdminMemberNote,
   type AdminMemberDetailResponse,
@@ -48,6 +50,20 @@ const tabs = [
 ] as const;
 
 type TabKey = (typeof tabs)[number]["key"];
+
+const maxFinalLodgingAmount = 10000000;
+
+function parseFinalLodgingAmountInput(value: string) {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const amount = Number(trimmed);
+  if (!Number.isSafeInteger(amount) || amount <= 0 || amount > maxFinalLodgingAmount) return null;
+  return amount;
+}
+
+function estimatePartnerRewardPoints(finalLodgingAmount: number) {
+  return Math.floor(finalLodgingAmount * 5 / 100);
+}
 
 type DeleteDialogState = {
   confirmEmail: string;
@@ -154,10 +170,17 @@ export default function AdminMemberDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingLevel, setIsSavingLevel] = useState(false);
   const [isSavingNote, setIsSavingNote] = useState(false);
+  const [isSavingDiamondProfile, setIsSavingDiamondProfile] = useState(false);
   const [isAdjustingPoints, setIsAdjustingPoints] = useState(false);
+  const [completingBookingId, setCompletingBookingId] = useState("");
   const [isResending, setIsResending] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState<AdminMemberLevel>("normal");
   const [adminNote, setAdminNote] = useState("");
+  const [diamondProfileForm, setDiamondProfileForm] = useState({
+    partnerName: "",
+    exclusiveCode: "",
+    partnershipStatus: "active",
+  });
   const [pointsForm, setPointsForm] = useState({ points: "", description: "" });
   const [activeTab, setActiveTab] = useState<TabKey>("bookings");
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(null);
@@ -172,6 +195,11 @@ export default function AdminMemberDetail() {
       setDetail(data);
       setSelectedLevel(data.member.member_level);
       setAdminNote(data.member.admin_note || "");
+      setDiamondProfileForm({
+        partnerName: data.diamond_profile?.partner_name || "",
+        exclusiveCode: data.diamond_profile?.exclusive_code || "",
+        partnershipStatus: data.diamond_profile?.partnership_status || "active",
+      });
       if (data.member.member_level !== "diamond" && activeTab === "points") {
         setActiveTab("bookings");
       }
@@ -246,6 +274,22 @@ export default function AdminMemberDetail() {
     }
   }
 
+  async function saveDiamondProfile() {
+    if (!detail || !token || detail.member.member_level !== "diamond") return;
+    setIsSavingDiamondProfile(true);
+    setNotice("");
+    setError("");
+    try {
+      await updateAdminMemberDiamondProfile(token, detail.member.auth_user_id, diamondProfileForm);
+      setNotice("鑽石會員合作資料已儲存。");
+      await loadDetail(token);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "鑽石會員合作資料儲存失敗，請稍後再試。");
+    } finally {
+      setIsSavingDiamondProfile(false);
+    }
+  }
+
   async function adjustPoints() {
     if (!detail || !token) return;
     setIsAdjustingPoints(true);
@@ -263,6 +307,50 @@ export default function AdminMemberDetail() {
       setError(saveError instanceof Error ? saveError.message : "積分調整失敗，請稍後再試。");
     } finally {
       setIsAdjustingPoints(false);
+    }
+  }
+
+  async function confirmBookingStayCompleted(record: AdminMemberDetailResponse["booking_records"][number]) {
+    if (!detail || !token) return;
+    const defaultAmount = record.final_lodging_amount ? String(record.final_lodging_amount) : "";
+    const rawAmount = window.prompt("請輸入此筆訂單的最終住宿房費。", defaultAmount);
+    if (rawAmount == null) return;
+    const finalLodgingAmount = parseFinalLodgingAmountInput(rawAmount);
+    if (!finalLodgingAmount) {
+      setError("請輸入大於 0 的最終住宿房費。");
+      return;
+    }
+    const estimatedPoints = estimatePartnerRewardPoints(finalLodgingAmount);
+    const confirmed = window.confirm(
+      [
+        `訂單：${record.booking_number}`,
+        `客人：${member.name || member.email}`,
+        `最終住宿房費：${formatPrice(finalLodgingAmount)}`,
+        `綁定優惠碼：${member.coupon?.code || "未綁定"}`,
+        `預計發放積分：${formatPoints(estimatedPoints)}`,
+        "確認完成住宿後，同一筆訂單不可重複發放合作積分。確定執行嗎？",
+      ].join("\n")
+    );
+    if (!confirmed) return;
+
+    setCompletingBookingId(record.id);
+    setNotice("");
+    setError("");
+    try {
+      const result = await completeBookingStay(token, {
+        id: record.id,
+        finalLodgingAmount,
+      });
+      setNotice(
+        result.points_award.awarded
+          ? `住宿已完成，已發放 ${formatPoints(result.points_award.points)}。`
+          : `住宿已完成，未發放合作積分（${result.points_award.reason}）。`
+      );
+      await loadDetail(token);
+    } catch (completeError) {
+      setError(completeError instanceof Error ? completeError.message : "確認完成住宿失敗，請稍後再試。");
+    } finally {
+      setCompletingBookingId("");
     }
   }
 
@@ -463,11 +551,60 @@ export default function AdminMemberDetail() {
                 <p className="mt-1 text-sm text-stone-500">只在鑽石會員顯示。</p>
               </div>
             </div>
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="合作店家名稱" value={detail.diamond_profile?.partner_name || "-"} />
-              <Field label="專屬優惠碼" value={detail.diamond_profile?.exclusive_code || "-"} />
-              <Field label="目前積分" value={formatPoints(detail.diamond_profile?.points_balance || 0)} />
-              <Field label="合作狀態" value={detail.diamond_profile?.partnership_status || "-"} />
+            <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_14rem]">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="grid gap-2 text-sm font-medium text-stone-700">
+                  合作店家名稱
+                  <input
+                    className={inputClassName()}
+                    disabled={!canEditProfile || isSavingDiamondProfile}
+                    maxLength={120}
+                    value={diamondProfileForm.partnerName}
+                    onChange={(event) =>
+                      setDiamondProfileForm((form) => ({ ...form, partnerName: event.target.value }))
+                    }
+                  />
+                </label>
+                <label className="grid gap-2 text-sm font-medium text-stone-700">
+                  專屬優惠碼
+                  <input
+                    className={inputClassName()}
+                    disabled={!canEditProfile || isSavingDiamondProfile}
+                    maxLength={80}
+                    value={diamondProfileForm.exclusiveCode}
+                    onChange={(event) =>
+                      setDiamondProfileForm((form) => ({ ...form, exclusiveCode: event.target.value }))
+                    }
+                  />
+                </label>
+                <label className="grid gap-2 text-sm font-medium text-stone-700">
+                  合作狀態
+                  <select
+                    className={inputClassName()}
+                    disabled={!canEditProfile || isSavingDiamondProfile}
+                    value={diamondProfileForm.partnershipStatus}
+                    onChange={(event) =>
+                      setDiamondProfileForm((form) => ({ ...form, partnershipStatus: event.target.value }))
+                    }
+                  >
+                    <option value="active">合作中</option>
+                    <option value="paused">暫停合作</option>
+                    <option value="ended">已結束</option>
+                  </select>
+                </label>
+                <Field label="目前積分" value={formatPoints(detail.diamond_profile?.points_balance || 0)} />
+              </div>
+              <div className="flex items-end">
+                <button
+                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[#8b6f5b] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!canEditProfile || isSavingDiamondProfile}
+                  onClick={() => void saveDiamondProfile()}
+                  type="button"
+                >
+                  <Save className="h-4 w-4" />
+                  {isSavingDiamondProfile ? "儲存中..." : "儲存合作資料"}
+                </button>
+              </div>
             </div>
           </section>
         ) : null}
@@ -496,10 +633,9 @@ export default function AdminMemberDetail() {
               ) : (
                 <div className="grid gap-3">
                   {detail.booking_records.map((record) => (
-                    <a
+                    <article
                       key={record.id}
                       className="rounded-[12px] border border-stone-200 bg-[#fffaf4] p-4 text-sm text-stone-700 transition hover:border-[#b99aa2] hover:bg-[#f4ece2]"
-                      href="/admin/bookings"
                     >
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div>
@@ -515,8 +651,25 @@ export default function AdminMemberDetail() {
                         <Field label="住宿金額" value={record.lodging_amount == null ? "-" : formatPrice(record.lodging_amount)} />
                         <Field label="已付款金額" value={record.paid_amount == null ? "-" : formatPrice(record.paid_amount)} />
                         <Field label="訂房來源" value={record.source_label} />
+                        <Field label="完成住宿時間" value={record.completed_at ? formatDate(record.completed_at) : "-"} />
+                        <Field label="合作積分" value={record.partner_points_ledger_id ? "已發放" : "尚未發放"} />
                       </div>
-                    </a>
+                      {record.status === "confirmed" && !record.completed_at ? (
+                        <div className="mt-4">
+                          <button
+                            className="inline-flex h-10 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={completingBookingId === record.id}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              void confirmBookingStayCompleted(record);
+                            }}
+                            type="button"
+                          >
+                            {completingBookingId === record.id ? "確認中..." : "確認完成住宿"}
+                          </button>
+                        </div>
+                      ) : null}
+                    </article>
                   ))}
                 </div>
               )}

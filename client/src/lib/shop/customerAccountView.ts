@@ -57,14 +57,37 @@ export function buildCustomerProfileUpdatePayload(
   }, {});
 }
 
+export function getCustomerDefaultFullAddress(
+  profile: Pick<CustomerProfile, "default_postal_code" | "default_city" | "default_district" | "default_address"> | null | undefined,
+) {
+  if (!profile) return "";
+  return [
+    profile.default_postal_code,
+    profile.default_city,
+    profile.default_district,
+    profile.default_address,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+export function buildCustomerFullAddressUpdatePayload(
+  form: Pick<CustomerProfileUpdatePayload, "name" | "phone" | "default_address">,
+): CustomerProfileUpdatePayload {
+  return buildCustomerProfileUpdatePayload({
+    name: form.name || "",
+    phone: form.phone || "",
+    default_postal_code: "",
+    default_city: "",
+    default_district: "",
+    default_address: form.default_address || "",
+  });
+}
+
 export function hasDefaultShippingProfile(profile: Pick<CustomerProfile, "default_postal_code" | "default_city" | "default_district" | "default_address"> | null | undefined) {
   if (!profile) return false;
-  return Boolean(
-    profile.default_postal_code ||
-      profile.default_city ||
-      profile.default_district ||
-      profile.default_address,
-  );
+  return Boolean(getCustomerDefaultFullAddress(profile));
 }
 
 export function getCustomerAccountOrderTypeLabel(orderType: "shop" | "booking") {

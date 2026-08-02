@@ -1,12 +1,14 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  buildCustomerFullAddressUpdatePayload,
   buildCustomerProfileUpdatePayload,
   customerAccountOrderPageSize,
   customerProfileUnlockMs,
   getCustomerAccountOrderSummary,
   getCustomerAccountOrderTypeLabel,
   getCustomerAccountTotalPages,
+  getCustomerDefaultFullAddress,
   getCustomerEmailVerificationLabel,
   getCustomerMemberLevelLabel,
   hasDefaultShippingProfile,
@@ -79,6 +81,31 @@ describe("customer account view helpers", () => {
     ).toBe(true);
   });
 
+  it("shows legacy split address fields as one full address and saves future edits into default_address", () => {
+    const legacyProfile = {
+      default_postal_code: "220",
+      default_city: "新北市",
+      default_district: "板橋區",
+      default_address: "文化路一段100號5樓",
+    };
+
+    expect(getCustomerDefaultFullAddress(legacyProfile)).toBe("220 新北市 板橋區 文化路一段100號5樓");
+    expect(
+      buildCustomerFullAddressUpdatePayload({
+        name: "Mumbao",
+        phone: "0912345678",
+        default_address: "新北市板橋區文化路一段100號5樓",
+      }),
+    ).toEqual({
+      name: "Mumbao",
+      phone: "0912345678",
+      default_postal_code: "",
+      default_city: "",
+      default_district: "",
+      default_address: "新北市板橋區文化路一段100號5樓",
+    });
+  });
+
   it("labels current account order sources and summaries", () => {
     expect(getCustomerAccountOrderTypeLabel("shop")).toBe("商品");
     expect(getCustomerAccountOrderTypeLabel("booking")).toBe("住宿");
@@ -107,5 +134,18 @@ describe("customer account view helpers", () => {
     expect(source).not.toContain("localStorage.setItem");
     expect(source).not.toContain("sessionStorage.setItem");
     expect(source).not.toContain("console.");
+  });
+
+  it("keeps the member account address and diamond card member-facing only", () => {
+    const source = readFileSync(new URL("../../pages/CustomerAccount.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("預設地址");
+    expect(source).not.toContain("預設郵遞區號");
+    expect(source).not.toContain("預設縣市");
+    expect(source).not.toContain("預設區域");
+    expect(source).toContain("鑽石會員合作資料");
+    expect(source).toContain("專屬優惠碼");
+    expect(source).toContain("目前積分");
+    expect(source).not.toContain("updateAdminMemberDiamondProfile");
   });
 });

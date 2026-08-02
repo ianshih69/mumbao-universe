@@ -10,6 +10,7 @@ import { CartLineItem } from "@/components/shop/CartLineItem";
 import { CheckoutSummary } from "@/components/shop/CheckoutSummary";
 import { createShopOrder } from "@/lib/shop/api";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import { getCustomerDefaultFullAddress } from "@/lib/shop/customerAccountView";
 import {
   clearCartItems,
   readCartItems,
@@ -127,10 +128,7 @@ function hasProfileCheckoutDefaults(profile: ReturnType<typeof useCustomerAuth>[
   return Boolean(
     profile.name ||
       profile.phone ||
-      profile.default_postal_code ||
-      profile.default_city ||
-      profile.default_district ||
-      profile.default_address,
+      getCustomerDefaultFullAddress(profile),
   );
 }
 
@@ -173,6 +171,7 @@ export default function Checkout() {
 
   useEffect(() => {
     if (!isAuthenticated || !profile) return;
+    const defaultFullAddress = getCustomerDefaultFullAddress(profile);
 
     setCustomer((current) => ({
       ...current,
@@ -189,20 +188,20 @@ export default function Checkout() {
           ? profile.email || current.email
           : current.email,
       postalCode:
-        !touchedFieldsRef.current.has("postalCode") && !current.postalCode.trim()
+        !defaultFullAddress && !touchedFieldsRef.current.has("postalCode") && !current.postalCode.trim()
           ? profile.default_postal_code || current.postalCode
           : current.postalCode,
       city:
-        !touchedFieldsRef.current.has("city") && !current.city.trim()
+        !defaultFullAddress && !touchedFieldsRef.current.has("city") && !current.city.trim()
           ? profile.default_city || current.city
           : current.city,
       district:
-        !touchedFieldsRef.current.has("district") && !current.district.trim()
+        !defaultFullAddress && !touchedFieldsRef.current.has("district") && !current.district.trim()
           ? profile.default_district || current.district
           : current.district,
       detailAddress:
         !touchedFieldsRef.current.has("detailAddress") && !current.detailAddress.trim()
-          ? profile.default_address || current.detailAddress
+          ? defaultFullAddress || current.detailAddress
           : current.detailAddress,
     }));
   }, [isAuthenticated, profile]);
@@ -267,10 +266,10 @@ export default function Checkout() {
           await updateProfile({
             name: customer.name,
             phone: customer.phone,
-            default_postal_code: customer.postalCode,
-            default_city: customer.city,
-            default_district: customer.district,
-            default_address: customer.detailAddress,
+            default_postal_code: "",
+            default_city: "",
+            default_district: "",
+            default_address: buildShippingAddress(customer),
           });
           savedDefaultProfile = true;
         } catch {

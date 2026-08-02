@@ -149,6 +149,13 @@ export type AdminMemberBookingRecord = {
   children: number;
   room_count?: number | null;
   status: string;
+  customer_profile_id?: string | null;
+  final_lodging_amount?: number | null;
+  completed_at?: string | null;
+  completed_by_admin_id?: string | null;
+  partner_points_awarded_at?: string | null;
+  partner_points_awarded_to_profile_id?: string | null;
+  partner_points_ledger_id?: string | null;
   lodging_amount?: number | null;
   paid_amount?: number | null;
   source?: string | null;
@@ -207,6 +214,7 @@ export type AdminMemberPointsLedgerRow = {
   points: number;
   description: string;
   source_order_id?: string | null;
+  source_type?: string | null;
   created_by_admin_id?: string | null;
   created_at?: string | null;
 };
@@ -429,6 +437,32 @@ export function updateAdminMemberNote(
     body: JSON.stringify({
       action: "update-admin-note",
       adminNote,
+    }),
+  });
+}
+
+export function updateAdminMemberDiamondProfile(
+  token: string,
+  authUserId: string,
+  payload: {
+    partnerName: string;
+    exclusiveCode: string;
+    partnershipStatus: string;
+  }
+) {
+  const params = new URLSearchParams({
+    action: "admin-members",
+    id: authUserId,
+  });
+  return requestAdminIdentity<{
+    ok: true;
+    code: string;
+    diamond_profile: NonNullable<AdminMemberDiamondProfile>;
+  }>(`/api/admin-shop?${params.toString()}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({
+      action: "update-diamond-profile",
+      ...payload,
     }),
   });
 }

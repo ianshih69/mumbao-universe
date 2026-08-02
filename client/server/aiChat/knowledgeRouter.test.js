@@ -225,4 +225,46 @@ describe("strict knowledge router", () => {
       shouldCallDeepSeek: false,
     });
   });
+
+  it("uses normalized conversation context for FAQ retrieval", async () => {
+    const normalizedRequest =
+      "查詢住宿價格；包棟；2026-09-26入住；2026-09-27退房；10人；3隻狗；客人原句：費用多少";
+    const result = await routeKnowledge({
+      message: "包棟費用多少",
+      retrievalMessage: normalizedRequest,
+      contextText: "user: 包棟價格\nuser: 9/26-27",
+      faqItems: [
+        faq({
+          id: "faq-context-price",
+          question: normalizedRequest,
+          answer: "請由管家依完整需求確認實際房價。",
+          keywords: ["2026-09-26入住", "10人", "3隻狗"],
+          answer_mode: "direct",
+        }),
+      ],
+    });
+
+    expect(result).toMatchObject({
+      route: "faq_direct",
+      matchedFaqIds: ["faq-context-price"],
+      shouldCallDeepSeek: false,
+    });
+  });
+
+  it("does not bypass strict knowledge mode when normalized context has no approved FAQ", async () => {
+    const result = await routeKnowledge({
+      message: "包棟費用多少",
+      retrievalMessage: "查詢住宿價格；包棟；2026-09-26入住；2026-09-27退房；10人；3隻狗",
+      contextText: "user: 包棟價格\nuser: 9/26-27",
+      faqItems: [],
+    });
+
+    expect(result).toMatchObject({
+      route: "knowledge_gap",
+      providerUsed: "knowledge_gap",
+      shouldCallDeepSeek: false,
+      shouldMarkNeedsHuman: true,
+      knowledgeGap: true,
+    });
+  });
 });

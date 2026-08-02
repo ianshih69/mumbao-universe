@@ -3,8 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildCustomerFullAddressUpdatePayload,
   buildCustomerProfileUpdatePayload,
+  clampCustomerAccountPage,
   customerAccountOrderPageSize,
+  customerAccountPointActivityPageSize,
   customerProfileUnlockMs,
+  getCustomerAccountPageSlice,
   getCustomerAccountOrderSummary,
   getCustomerAccountOrderTypeLabel,
   getCustomerAccountTotalPages,
@@ -28,12 +31,54 @@ describe("customer account view helpers", () => {
     expect(getCustomerEmailVerificationLabel(false)).toBe("尚未驗證");
   });
 
-  it("keeps account order pagination fixed at 10 per page", () => {
-    expect(customerAccountOrderPageSize).toBe(10);
+  it("keeps account order pagination fixed at 5 per page", () => {
+    expect(customerAccountOrderPageSize).toBe(5);
     expect(getCustomerAccountTotalPages(0)).toBe(1);
-    expect(getCustomerAccountTotalPages(10)).toBe(1);
-    expect(getCustomerAccountTotalPages(11)).toBe(2);
-    expect(getCustomerAccountTotalPages(37)).toBe(4);
+    expect(getCustomerAccountTotalPages(5)).toBe(1);
+    expect(getCustomerAccountTotalPages(6)).toBe(2);
+    expect(getCustomerAccountTotalPages(11)).toBe(3);
+  });
+
+  it("keeps account point activity pagination fixed at 5 per page", () => {
+    expect(customerAccountPointActivityPageSize).toBe(5);
+    expect(getCustomerAccountTotalPages(0, customerAccountPointActivityPageSize)).toBe(1);
+    expect(getCustomerAccountTotalPages(5, customerAccountPointActivityPageSize)).toBe(1);
+    expect(getCustomerAccountTotalPages(6, customerAccountPointActivityPageSize)).toBe(2);
+    expect(getCustomerAccountTotalPages(12, customerAccountPointActivityPageSize)).toBe(3);
+  });
+
+  it("slices point activity pages without duplicates or omissions", () => {
+    const rows = Array.from({ length: 12 }, (_, index) => `point-${index + 1}`);
+
+    expect(getCustomerAccountPageSlice(rows, 1, customerAccountPointActivityPageSize)).toMatchObject({
+      items: ["point-1", "point-2", "point-3", "point-4", "point-5"],
+      page: 1,
+      totalPages: 3,
+    });
+    expect(getCustomerAccountPageSlice(rows, 2, customerAccountPointActivityPageSize).items).toEqual([
+      "point-6",
+      "point-7",
+      "point-8",
+      "point-9",
+      "point-10",
+    ]);
+    expect(getCustomerAccountPageSlice(rows, 3, customerAccountPointActivityPageSize).items).toEqual([
+      "point-11",
+      "point-12",
+    ]);
+  });
+
+  it("clamps independent account pagination states to their own valid page ranges", () => {
+    const pointPage = clampCustomerAccountPage(3, getCustomerAccountTotalPages(12, customerAccountPointActivityPageSize));
+    const orderPage = clampCustomerAccountPage(1, getCustomerAccountTotalPages(4, customerAccountOrderPageSize));
+
+    expect(pointPage).toBe(3);
+    expect(orderPage).toBe(1);
+    expect(getCustomerAccountPageSlice([], 99, customerAccountPointActivityPageSize)).toMatchObject({
+      page: 1,
+      totalPages: 1,
+      items: [],
+    });
   });
 
   it("only sends member-editable profile fields", () => {

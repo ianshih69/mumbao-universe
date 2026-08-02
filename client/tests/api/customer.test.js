@@ -153,7 +153,7 @@ function installFetchMock({
             tracking_number: null,
           },
         ],
-        { headers: { "Content-Range": "0-9/11" } },
+        { headers: { "Content-Range": "0-4/11" } },
       );
     }
 
@@ -396,7 +396,7 @@ describe("customer account API", () => {
     expect(calls.some((call) => call.options?.method === "PATCH")).toBe(false);
   });
 
-  it("loads customer orders by the logged-in customer profile with a 10 item page", async () => {
+  it("loads customer orders by the logged-in customer profile with a 5 item page", async () => {
     const { calls } = installFetchMock();
 
     const response = await invoke({
@@ -407,9 +407,9 @@ describe("customer account API", () => {
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
       page: 1,
-      pageSize: 10,
+      pageSize: 5,
       total: 11,
-      totalPages: 2,
+      totalPages: 3,
     });
     expect(response.body.items).toHaveLength(1);
     expect(response.body.items[0]).toMatchObject({
@@ -419,7 +419,7 @@ describe("customer account API", () => {
 
     const orderLookup = calls.find((call) => call.url.includes("/rest/v1/shop_orders?customer_profile_id=eq."));
     expect(orderLookup.url).toContain(`customer_profile_id=eq.${profileId}`);
-    expect(orderLookup.options.headers.Range).toBe("0-9");
+    expect(orderLookup.options.headers.Range).toBe("0-4");
     expect(calls.some((call) => call.url.includes("booking_requests"))).toBe(false);
   });
 });

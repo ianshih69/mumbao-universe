@@ -1,4 +1,5 @@
 import type { CreatedOrder } from "./types";
+import { customerAccountOrderPageSize } from "./customerAccountView";
 
 export type CustomerOrderListItem = {
   order_number: string;
@@ -92,7 +93,7 @@ async function parseJson<T>(response: Response) {
 }
 
 export async function fetchCustomerOrders(accessToken: string, page = 1) {
-  const response = await fetch(`/api/customer?action=orders&page=${page}&pageSize=10`, {
+  const response = await fetch(`/api/customer?action=orders&page=${page}&pageSize=${customerAccountOrderPageSize}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -111,7 +112,7 @@ export async function fetchCustomerOrders(accessToken: string, page = 1) {
   return {
     items: data.items || [],
     page: data.page || page,
-    pageSize: data.pageSize || 10,
+    pageSize: data.pageSize || customerAccountOrderPageSize,
     total: data.total || 0,
     totalPages: data.totalPages || 1,
   };

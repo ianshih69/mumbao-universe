@@ -19,6 +19,7 @@ const CUSTOMER_ORDER_SELECT =
   "id,order_number,created_at,order_source,subtotal,shipping_fee,total,payment_status,order_status,shipping_carrier,tracking_number";
 const CUSTOMER_ORDER_DETAIL_SELECT =
   "id,order_number,created_at,order_source,customer_name,customer_phone,customer_email,shipping_address,subtotal,shipping_fee,total,payment_status,order_status,shipping_carrier,tracking_number";
+const CUSTOMER_ORDER_PAGE_SIZE = 5;
 const ORDER_NUMBER_PATTERN = /^[A-Za-z0-9_-]{3,64}$/;
 const ADMIN_LINKS_BY_ROLE = {
   super_admin: [
@@ -735,7 +736,7 @@ async function handleOrders(req, res, requestId) {
 
   const profile = await getAuthenticatedProfile(req);
   const page = getPositiveIntegerQuery(req.query?.page, 1, 100000);
-  const pageSize = getPositiveIntegerQuery(req.query?.pageSize, 10, 10);
+  const pageSize = getPositiveIntegerQuery(req.query?.pageSize, CUSTOMER_ORDER_PAGE_SIZE, CUSTOMER_ORDER_PAGE_SIZE);
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 

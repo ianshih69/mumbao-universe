@@ -21,9 +21,11 @@ import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { getCustomerSupabaseClient, normalizeCustomerEmail } from "@/lib/shop/customerAuthClient";
 import {
   buildCustomerFullAddressUpdatePayload,
+  customerAccountPointActivityPageSize,
   customerProfileUnlockMs,
   getCustomerAccountOrderSummary,
   getCustomerAccountOrderTypeLabel,
+  getCustomerAccountPageSlice,
   getCustomerAccountTotalPages,
   getCustomerDefaultFullAddress,
   getCustomerEmailVerificationLabel,
@@ -63,7 +65,6 @@ const EMPTY_REDEMPTION_FORM: RedemptionFormState = {
   accountHolder: "",
   accountNumber: "",
 };
-const customerPointActivityPageSize = 10;
 
 function getProfileFormState(profile: CustomerProfile | null): ProfileFormState {
   if (!profile) return EMPTY_FORM;
@@ -208,15 +209,14 @@ export default function CustomerAccount() {
   const isDiamondMember = memberLevel === "diamond";
   const diamondProfile = isDiamondMember ? profile?.diamond_profile : null;
   const diamondPointActivity = diamondProfile?.points_activity || [];
-  const pointActivityTotalPages = getCustomerAccountTotalPages(
-    diamondPointActivity.length,
-    customerPointActivityPageSize,
+  const pointActivityPageData = getCustomerAccountPageSlice(
+    diamondPointActivity,
+    pointActivityPage,
+    customerAccountPointActivityPageSize,
   );
-  const currentPointActivityPage = Math.min(pointActivityPage, pointActivityTotalPages);
-  const visiblePointActivity = diamondPointActivity.slice(
-    (currentPointActivityPage - 1) * customerPointActivityPageSize,
-    currentPointActivityPage * customerPointActivityPageSize,
-  );
+  const pointActivityTotalPages = pointActivityPageData.totalPages;
+  const currentPointActivityPage = pointActivityPageData.page;
+  const visiblePointActivity = pointActivityPageData.items;
   const emailVerified = Boolean(profile?.email_verified || getEmailVerifiedFromUser(user));
   const emailVerificationLabel = getCustomerEmailVerificationLabel(emailVerified);
   const displayName = getReadonlyValue(profile?.name || user?.user_metadata?.name || "");
@@ -408,7 +408,10 @@ export default function CustomerAccount() {
       setOrdersError("");
 
       try {
-        const nextData = await fetchCustomerOrders(session.access_token, page);
+        let nextData = await fetchCustomerOrders(session.access_token, page);
+        if (nextData.page > nextData.totalPages) {
+          nextData = await fetchCustomerOrders(session.access_token, nextData.totalPages);
+        }
         setOrdersData(nextData);
         setOrdersPage(nextData.page);
         setSelectedOrder(null);
@@ -743,33 +746,31 @@ export default function CustomerAccount() {
                           目前沒有積分紀錄。
                         </div>
                       )}
-                      {diamondPointActivity.length > customerPointActivityPageSize ? (
-                        <div className="mt-4 flex flex-col gap-3 border-t border-[#eadfce] pt-4 text-sm text-stone-500 sm:flex-row sm:items-center sm:justify-between">
-                          <span>
-                            第 {currentPointActivityPage}／{pointActivityTotalPages} 頁
-                          </span>
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-9 rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
-                              disabled={currentPointActivityPage <= 1}
-                              onClick={() => setPointActivityPage((current) => Math.max(1, current - 1))}
-                            >
-                              上一頁
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-9 rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
-                              disabled={currentPointActivityPage >= pointActivityTotalPages}
-                              onClick={() => setPointActivityPage((current) => Math.min(pointActivityTotalPages, current + 1))}
-                            >
-                              下一頁
-                            </Button>
-                          </div>
+                      <div className="mt-4 flex flex-col gap-3 border-t border-[#eadfce] pt-4 text-sm text-stone-500 sm:flex-row sm:items-center sm:justify-between">
+                        <span>
+                          第 {currentPointActivityPage}／{pointActivityTotalPages} 頁
+                        </span>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-9 rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
+                            disabled={currentPointActivityPage <= 1}
+                            onClick={() => setPointActivityPage((current) => Math.max(1, current - 1))}
+                          >
+                            上一頁
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-9 rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
+                            disabled={currentPointActivityPage >= pointActivityTotalPages}
+                            onClick={() => setPointActivityPage((current) => Math.min(pointActivityTotalPages, current + 1))}
+                          >
+                            下一頁
+                          </Button>
                         </div>
-                      ) : null}
+                      </div>
                     </div>
                   </section>
                 ) : null}
@@ -845,34 +846,36 @@ export default function CustomerAccount() {
                       </div>
                     </article>
                   ))}
-
-                  <div className="flex flex-col gap-3 border-t border-[#eadfce] pt-4 text-sm text-stone-500 sm:flex-row sm:items-center sm:justify-between">
-                    <span>
-                      第 {ordersData.page}／{totalOrderPages} 頁
-                    </span>
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-9 rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
-                        disabled={isOrdersLoading || ordersData.page <= 1}
-                        onClick={() => void loadOrders(Math.max(1, ordersData.page - 1))}
-                      >
-                        上一頁
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-9 rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
-                        disabled={isOrdersLoading || ordersData.page >= totalOrderPages}
-                        onClick={() => void loadOrders(Math.min(totalOrderPages, ordersData.page + 1))}
-                      >
-                        下一頁
-                      </Button>
-                    </div>
-                  </div>
                 </div>
               )}
+
+              {!isOrdersLoading && !ordersError && ordersData ? (
+                <div className="mt-4 flex flex-col gap-3 border-t border-[#eadfce] pt-4 text-sm text-stone-500 sm:flex-row sm:items-center sm:justify-between">
+                  <span>
+                    第 {ordersData.page}／{totalOrderPages} 頁
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
+                      disabled={isOrdersLoading || ordersData.page <= 1}
+                      onClick={() => void loadOrders(Math.max(1, ordersData.page - 1))}
+                    >
+                      上一頁
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 rounded-full border-[#eadfce] bg-white hover:bg-[#f3eadf]"
+                      disabled={isOrdersLoading || ordersData.page >= totalOrderPages}
+                      onClick={() => void loadOrders(Math.min(totalOrderPages, ordersData.page + 1))}
+                    >
+                      下一頁
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </section>
 
             {(isOrderDetailLoading || orderDetailError || selectedOrder) && (

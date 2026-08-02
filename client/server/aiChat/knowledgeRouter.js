@@ -385,6 +385,7 @@ export async function routeKnowledge({
   message,
   session = null,
   contextText = message,
+  retrievalMessage = message,
   faqItems,
   limit = 8,
 } = {}) {
@@ -433,7 +434,7 @@ export async function routeKnowledge({
     });
   }
 
-  const matchedFaqItems = await retrieveFaqItems(message, {
+  const matchedFaqItems = await retrieveFaqItems(retrievalMessage || message, {
     limit,
     maxLimit: limit,
     items: faqItems,

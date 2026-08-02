@@ -1,7 +1,8 @@
 import type { CustomerOrderListItem } from "./customerOrdersApi";
 import type { CustomerProfile, CustomerProfileUpdatePayload } from "./customerProfileApi";
 
-export const customerAccountOrderPageSize = 10;
+export const customerAccountOrderPageSize = 5;
+export const customerAccountPointActivityPageSize = 5;
 export const customerProfileUnlockMs = 10 * 60 * 1000;
 
 export type CustomerAccountMemberLevel = "normal" | "vip" | "diamond";
@@ -44,6 +45,25 @@ export function clampCustomerAccountPage(page: number, totalPages: number) {
   const safeTotalPages = Math.max(1, Number.isFinite(totalPages) ? Math.floor(totalPages) : 1);
   const safePage = Math.max(1, Number.isFinite(page) ? Math.floor(page) : 1);
   return Math.min(safePage, safeTotalPages);
+}
+
+export function getCustomerAccountPageSlice<T>(
+  items: T[] | null | undefined,
+  page: number,
+  pageSize = customerAccountOrderPageSize,
+) {
+  const safeItems = Array.isArray(items) ? items : [];
+  const safePageSize = Math.max(1, Number.isFinite(pageSize) ? Math.floor(pageSize) : customerAccountOrderPageSize);
+  const totalPages = getCustomerAccountTotalPages(safeItems.length, safePageSize);
+  const currentPage = clampCustomerAccountPage(page, totalPages);
+  const start = (currentPage - 1) * safePageSize;
+  return {
+    items: safeItems.slice(start, start + safePageSize),
+    page: currentPage,
+    pageSize: safePageSize,
+    total: safeItems.length,
+    totalPages,
+  };
 }
 
 export function buildCustomerProfileUpdatePayload(

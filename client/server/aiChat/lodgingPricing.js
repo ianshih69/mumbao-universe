@@ -4,6 +4,12 @@ import { loadGuesthouseKnowledge } from "./guesthouseKnowledge.js";
 const officialPricingSource = "client/api/knowledge/guesthouse-rules.md";
 const supportedDirectPricingRoute = "existing_official_pricing";
 const maxStayNights = 30;
+const pricingReplyModes = new Set([
+  "initial_quote",
+  "quote_confirmation",
+  "quote_breakdown",
+  "lodging_only_quote",
+]);
 
 const dateTypeLabels = {
   weekday: "平日（日～四）",
@@ -158,6 +164,10 @@ function calculateNightAmountForGuestCount(rule, guestCount) {
   if (guestCount <= 10) {
     return {
       amount: rule.tenPersonAmount,
+      base_guest_count: 10,
+      base_amount: rule.tenPersonAmount,
+      extra_guest_count: 0,
+      extra_guest_unit_amount: rule.tenPersonUnitAmount,
       approximate: false,
       formula: "ten_person_minimum",
     };
@@ -167,6 +177,10 @@ function calculateNightAmountForGuestCount(rule, guestCount) {
     return {
       amount:
         rule.tenPersonAmount + (guestCount - 10) * rule.tenPersonUnitAmount,
+      base_guest_count: 10,
+      base_amount: rule.tenPersonAmount,
+      extra_guest_count: guestCount - 10,
+      extra_guest_unit_amount: rule.tenPersonUnitAmount,
       approximate: false,
       formula: "ten_person_base_plus_extra_guests",
     };
@@ -175,6 +189,10 @@ function calculateNightAmountForGuestCount(rule, guestCount) {
   if (guestCount === 18) {
     return {
       amount: rule.eighteenPersonAmount,
+      base_guest_count: 18,
+      base_amount: rule.eighteenPersonAmount,
+      extra_guest_count: 0,
+      extra_guest_unit_amount: rule.eighteenPersonUnitAmount,
       approximate: false,
       formula: "eighteen_person_package",
     };
@@ -185,6 +203,10 @@ function calculateNightAmountForGuestCount(rule, guestCount) {
       rule.eighteenPersonAmount +
         (guestCount - 18) * rule.eighteenPersonUnitAmount
     ),
+    base_guest_count: 18,
+    base_amount: rule.eighteenPersonAmount,
+    extra_guest_count: guestCount - 18,
+    extra_guest_unit_amount: rule.eighteenPersonUnitAmount,
     approximate: Boolean(rule.eighteenPersonUnitIsApproximate),
     formula: "eighteen_person_base_plus_extra_guests",
   };
@@ -259,6 +281,10 @@ export function calculateVillaLodgingPriceFromKnowledge(context, markdown) {
       date_type: dateType.label,
       date_type_basis: dateType.basis,
       amount: nightPrice.amount,
+      base_guest_count: nightPrice.base_guest_count,
+      base_amount: nightPrice.base_amount,
+      extra_guest_count: nightPrice.extra_guest_count,
+      extra_guest_unit_amount: nightPrice.extra_guest_unit_amount,
       formula: nightPrice.formula,
       approximate: nightPrice.approximate,
     });
@@ -347,20 +373,32 @@ function formatPetSummary(context) {
   return `${state.pet_count} 隻${petLabel}`;
 }
 
-export function buildOfficialPricingReply(context, pricingResolution) {
+function buildPricingSummary(context, pricingResolution) {
   const state = normalizeConversationContext(context);
   const lodgingPrice = pricingResolution?.lodging_price;
-  if (lodgingPrice?.status !== "resolved") {
-    return buildContextualKnowledgeGapReply(state);
-  }
-
   const dateSummary = `${formatDisplayDate(state.check_in)}入住、${formatDisplayDate(
     state.check_out
   )}退房`;
   const guestCount = getEffectiveGuestCount(state);
-  const lodgingSummary = `${guestCount} 位包棟`;
-  const lodgingAmount = formatMoney(lodgingPrice.amount);
-  const petSummary = formatPetSummary(state);
+
+  return {
+    state,
+    lodgingPrice,
+    dateSummary,
+    guestCount,
+    lodgingSummary: `${guestCount} 位包棟`,
+    lodgingAmount: formatMoney(lodgingPrice?.amount),
+    petSummary: formatPetSummary(state),
+    firstNight: lodgingPrice?.nightly?.[0] || null,
+  };
+}
+
+export function buildOfficialPricingReply(context, pricingResolution) {
+  const { state, lodgingPrice, dateSummary, lodgingSummary, lodgingAmount, petSummary } =
+    buildPricingSummary(context, pricingResolution);
+  if (lodgingPrice?.status !== "resolved") {
+    return buildContextualKnowledgeGapReply(state);
+  }
 
   if (pricingResolution.pet_fee?.status === "unresolved" && petSummary) {
     return `收到，目前是 ${dateSummary}，${lodgingSummary}，住宿房價為 ${lodgingAmount}。另會攜帶 ${petSummary}，目前房價尚未包含寵物相關費用，寵物費與安排需再由管家確認。`;
@@ -371,6 +409,86 @@ export function buildOfficialPricingReply(context, pricingResolution) {
   }
 
   return `收到，目前是 ${dateSummary}，${lodgingSummary}，住宿房價為 ${lodgingAmount}。`;
+}
+
+export function buildOfficialPricingConfirmationReply(context, pricingResolution) {
+  const {
+    state,
+    lodgingPrice,
+    dateSummary,
+    guestCount,
+    lodgingAmount,
+    petSummary,
+    firstNight,
+  } = buildPricingSummary(context, pricingResolution);
+
+  if (lodgingPrice?.status !== "resolved") {
+    return buildContextualKnowledgeGapReply(state);
+  }
+
+  const basePart =
+    firstNight?.base_guest_count && firstNight?.base_amount
+      ? `${firstNight.base_guest_count} 人包棟為 ${formatMoney(firstNight.base_amount)}`
+      : "依目前價目表試算";
+  const extraPart =
+    firstNight?.extra_guest_count > 0 && firstNight?.extra_guest_unit_amount
+      ? `；增加 ${firstNight.extra_guest_count} 人，每人 ${formatMoney(
+          firstNight.extra_guest_unit_amount
+        )}`
+      : "";
+  const dateTypePart = firstNight?.date_type
+    ? `${formatDisplayDate(firstNight.date)}屬於${firstNight.date_type}`
+    : dateSummary;
+  const petPart =
+    pricingResolution.pet_fee?.status === "unresolved" && petSummary
+      ? `。此金額尚未包含 ${petSummary}的寵物費用，寵物部分仍需由管家確認`
+      : "";
+
+  return `是的，依目前價目表試算，${dateTypePart}，${basePart}${extraPart}，因此 ${guestCount} 人住宿費為 ${lodgingAmount}${petPart}。`;
+}
+
+export function buildOfficialPricingBreakdownReply(context, pricingResolution) {
+  const { state, lodgingPrice, guestCount, lodgingAmount, petSummary } =
+    buildPricingSummary(context, pricingResolution);
+
+  if (lodgingPrice?.status !== "resolved") {
+    return buildContextualKnowledgeGapReply(state);
+  }
+
+  const lines = lodgingPrice.nightly.map((night) => {
+    const basePart =
+      night.base_guest_count && night.base_amount
+        ? `${night.base_guest_count} 人包棟 ${formatMoney(night.base_amount)}`
+        : formatMoney(night.amount);
+    const extraPart =
+      night.extra_guest_count > 0 && night.extra_guest_unit_amount
+        ? `，加 ${night.extra_guest_count} 人 × ${formatMoney(
+            night.extra_guest_unit_amount
+          )}`
+        : "";
+    return `${formatDisplayDate(night.date)}（${night.date_type}）：${basePart}${extraPart}，小計 ${formatMoney(night.amount)}`;
+  });
+  const petPart =
+    pricingResolution.pet_fee?.status === "unresolved" && petSummary
+      ? `目前會攜帶 ${petSummary}，上述住宿費尚未包含寵物費，寵物費與安排需再由管家確認。`
+      : "";
+
+  return `這筆住宿費是依正式價目表試算：${lines.join("；")}。因此 ${guestCount} 人住宿費合計 ${lodgingAmount}。${petPart}`.trim();
+}
+
+export function buildOfficialLodgingOnlyReply(context, pricingResolution) {
+  const { state, lodgingPrice, dateSummary, lodgingSummary, lodgingAmount, petSummary } =
+    buildPricingSummary(context, pricingResolution);
+
+  if (lodgingPrice?.status !== "resolved") {
+    return buildContextualKnowledgeGapReply(state);
+  }
+
+  const petPart = petSummary
+    ? `這是不含 ${petSummary}寵物費的住宿小計。`
+    : "這是不含寵物費的住宿小計。";
+
+  return `${dateSummary}，${lodgingSummary}的住宿小計是 ${lodgingAmount}。${petPart}`;
 }
 
 export function buildOfficialPricingMetadata(pricingResolution) {
@@ -402,7 +520,166 @@ function hasCompletePricingContext(context) {
   );
 }
 
-export async function buildOfficialPricingRouteOverride(context, routeResult) {
+function normalizeCompactText(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+function isNewQuestionAcknowledgement(message) {
+  const text = normalizeCompactText(message);
+  if (!text) return false;
+  if (/重新開始|全部重來|清除剛才|清掉剛才/.test(text)) return false;
+  return /重新問|重問|問別的|想問別的|換個問題|換一題/.test(text);
+}
+
+function isCasualAcknowledgement(message) {
+  const text = normalizeCompactText(message);
+  return /^(好|好的|好喔|好哦|了解|知道了|收到|謝謝|謝啦|感謝|thanks|thankyou|ok|okay|嗯|恩)$/.test(
+    text
+  );
+}
+
+function isQuoteConfirmation(message) {
+  const text = normalizeCompactText(message);
+  return /^(確定嗎|真的嗎|這價格對嗎|價格對嗎|對嗎|沒錯嗎|是這樣嗎|確定\?|真的\?)$/.test(
+    text
+  );
+}
+
+function isQuoteBreakdown(message) {
+  return /怎麼算|如何算|怎麼計算|為什麼是|列明細|明細|計算方式|算式/.test(
+    normalizeCompactText(message)
+  );
+}
+
+function isLodgingOnlyQuote(message) {
+  const text = normalizeCompactText(message);
+  return /不含.*(狗|寵物)|光住宿|住宿小計|不含狗狗|不含狗|不含寵物/.test(text);
+}
+
+function isInitialQuoteRequest(message) {
+  const text = normalizeCompactText(message);
+  if (!text) return false;
+  if (/烤肉|麻將|入住時間|退房|早餐|停車|附近|地址|設施|有提供|可以帶/.test(text)) {
+    return false;
+  }
+  return /房價|價格|總價|總共|多少錢|費用|報價|多少/.test(text);
+}
+
+function getLatestAssistantMessage(recentMessages = []) {
+  return [...recentMessages].reverse().find((message) => message?.sender === "ai");
+}
+
+function hasPreviousPricingReply(recentMessages = []) {
+  const latestAssistant = getLatestAssistantMessage(recentMessages);
+  const metadata = latestAssistant?.metadata;
+  if (!metadata || typeof metadata !== "object") return false;
+
+  return (
+    metadata.lodging_price_status === "resolved" ||
+    metadata.price_calculation_route === supportedDirectPricingRoute ||
+    metadata.pricing_override_applied === true
+  );
+}
+
+export function classifyPricingReplyIntent({
+  message,
+  recentMessages = [],
+} = {}) {
+  if (isNewQuestionAcknowledgement(message)) return "new_question_acknowledgement";
+  if (isCasualAcknowledgement(message)) return "casual_acknowledgement";
+  if (isLodgingOnlyQuote(message)) return "lodging_only_quote";
+  if (isQuoteBreakdown(message)) return "quote_breakdown";
+  if (isQuoteConfirmation(message)) {
+    return hasPreviousPricingReply(recentMessages)
+      ? "quote_confirmation"
+      : "quote_confirmation_missing_context";
+  }
+  if (isInitialQuoteRequest(message)) return "initial_quote";
+  return "unrelated_or_new_topic";
+}
+
+function buildControlRoute(routeResult, { answer, intent, reason, contextPatch = null }) {
+  return {
+    ...routeResult,
+    route: intent,
+    providerUsed: "local_intent",
+    answer,
+    notice: answer,
+    answerMode: "direct",
+    shouldCallDeepSeek: false,
+    shouldMarkNeedsHuman: false,
+    knowledgeGap: false,
+    aiSkipped: true,
+    reason,
+    conversationContextPatch: contextPatch,
+    semanticMetadata: {
+      ...(routeResult?.semanticMetadata || {}),
+      pricing_reply_mode: intent,
+      pricing_override_applied: false,
+      pricing_override_reason: reason,
+      current_turn_intent: intent,
+      final_route: intent,
+      needs_human: false,
+    },
+  };
+}
+
+function selectPricingReply({ intent, context, pricingResolution }) {
+  if (intent === "quote_confirmation") {
+    return buildOfficialPricingConfirmationReply(context, pricingResolution);
+  }
+  if (intent === "quote_breakdown") {
+    return buildOfficialPricingBreakdownReply(context, pricingResolution);
+  }
+  if (intent === "lodging_only_quote") {
+    return buildOfficialLodgingOnlyReply(context, pricingResolution);
+  }
+  return buildOfficialPricingReply(context, pricingResolution);
+}
+
+export async function buildOfficialPricingRouteOverride(
+  context,
+  routeResult,
+  options = {}
+) {
+  const currentTurnIntent = classifyPricingReplyIntent({
+    message: options.message,
+    recentMessages: options.recentMessages,
+  });
+
+  if (currentTurnIntent === "new_question_acknowledgement") {
+    return buildControlRoute(routeResult, {
+      answer: "好的，請問你想重新了解哪個問題呢？",
+      intent: currentTurnIntent,
+      reason: "current_turn_new_question_acknowledgement",
+      contextPatch: {
+        active_intent: null,
+        current_topic: null,
+      },
+    });
+  }
+
+  if (currentTurnIntent === "casual_acknowledgement") {
+    return buildControlRoute(routeResult, {
+      answer: "好的，需要再確認住宿、寵物或設施資訊時，都可以再問我喔。",
+      intent: currentTurnIntent,
+      reason: "current_turn_casual_acknowledgement",
+    });
+  }
+
+  if (currentTurnIntent === "quote_confirmation_missing_context") {
+    return buildControlRoute(routeResult, {
+      answer: "想確認哪一項資訊呢？你可以把問題再告訴我，我再幫你確認。",
+      intent: currentTurnIntent,
+      reason: "quote_confirmation_without_previous_pricing_reply",
+    });
+  }
+
+  if (!pricingReplyModes.has(currentTurnIntent)) return null;
   if (!hasCompletePricingContext(context)) return null;
 
   const pricingResolution = await buildOfficialPricingResolution(context);
@@ -411,28 +688,44 @@ export async function buildOfficialPricingRouteOverride(context, routeResult) {
   }
 
   const hasUnresolvedItems = pricingResolution.unresolved_price_items.length > 0;
-  const answer = buildOfficialPricingReply(context, pricingResolution);
+  const answer = selectPricingReply({
+    intent: currentTurnIntent,
+    context,
+    pricingResolution,
+  });
+  const shouldMarkNeedsHuman =
+    currentTurnIntent === "lodging_only_quote" ? false : hasUnresolvedItems;
   const metadata = {
     ...buildOfficialPricingMetadata(pricingResolution),
-    needs_human: hasUnresolvedItems,
+    pricing_reply_mode: currentTurnIntent,
+    pricing_override_applied: true,
+    pricing_override_reason: `official_pricing_${currentTurnIntent}`,
+    current_turn_intent: currentTurnIntent,
+    needs_human: shouldMarkNeedsHuman,
   };
 
   return {
     ...routeResult,
-    route: hasUnresolvedItems
-      ? "partial_grounded_reply"
-      : "grounded_reply",
+    route:
+      currentTurnIntent === "initial_quote"
+        ? hasUnresolvedItems
+          ? "partial_grounded_reply"
+          : "grounded_reply"
+        : currentTurnIntent,
     providerUsed: "official_pricing",
     answer,
     notice: answer,
     answerMode: "direct",
     shouldCallDeepSeek: false,
-    shouldMarkNeedsHuman: hasUnresolvedItems,
+    shouldMarkNeedsHuman,
     knowledgeGap: false,
     aiSkipped: true,
-    reason: hasUnresolvedItems
-      ? "official_lodging_price_resolved_with_unresolved_items"
-      : "official_lodging_price_resolved",
+    reason:
+      currentTurnIntent === "initial_quote"
+        ? hasUnresolvedItems
+          ? "official_lodging_price_resolved_with_unresolved_items"
+          : "official_lodging_price_resolved"
+        : `official_pricing_${currentTurnIntent}`,
     semanticMetadata: {
       ...(routeResult?.semanticMetadata || {}),
       ...metadata,

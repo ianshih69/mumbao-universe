@@ -742,7 +742,7 @@ function sortMessagesByCreatedAt(messages) {
 async function loadRecentMessages(sessionId) {
   const encodedSessionId = encodeURIComponent(sessionId);
   const messages = await supabaseRequest(
-    `/chat_messages?session_id=eq.${encodedSessionId}&deleted_at=is.null&select=sender,message,created_at&order=created_at.desc&limit=${recentMessagesLimit}`
+    `/chat_messages?session_id=eq.${encodedSessionId}&deleted_at=is.null&select=sender,message,provider_used,metadata,created_at&order=created_at.desc&limit=${recentMessagesLimit}`
   );
 
   return sortMessagesByCreatedAt(messages || []).filter((message) =>
@@ -764,6 +764,11 @@ function normalizeRecentMessage(message) {
   return {
     sender,
     message: content,
+    provider_used: String(message?.provider_used || message?.provider || "").trim() || undefined,
+    metadata:
+      message?.metadata && typeof message.metadata === "object"
+        ? message.metadata
+        : undefined,
     created_at: createdAt || undefined,
   };
 }
@@ -1558,10 +1563,27 @@ export default async function handler(req, res) {
 
     const officialPricingRouteOverride = await buildOfficialPricingRouteOverride(
       finalConversationContext,
-      knowledgeRoute
+      knowledgeRoute,
+      {
+        message,
+        recentMessages,
+      }
     );
     if (officialPricingRouteOverride) {
-      knowledgeRoute = officialPricingRouteOverride;
+      const { conversationContextPatch, ...routeOverride } =
+        officialPricingRouteOverride;
+      if (
+        conversationContextPatch &&
+        typeof conversationContextPatch === "object"
+      ) {
+        finalConversationContext = {
+          ...finalConversationContext,
+          ...conversationContextPatch,
+          last_updated_at: new Date().toISOString(),
+        };
+        finalConversationContextChanged = true;
+      }
+      knowledgeRoute = routeOverride;
     }
     const routeMetadata = buildRouteMetadata(
       knowledgeRoute,

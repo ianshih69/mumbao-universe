@@ -22,6 +22,7 @@ import {
   buildKnowledgeMetadata,
   routeKnowledge,
 } from "./knowledgeRouter.js";
+import { buildOfficialPricingRouteOverride } from "./lodgingPricing.js";
 import {
   buildModelUsageMetadata,
   buildNoSecondCallFallbackRoute,
@@ -1553,6 +1554,14 @@ export default async function handler(req, res) {
           },
         };
       }
+    }
+
+    const officialPricingRouteOverride = await buildOfficialPricingRouteOverride(
+      finalConversationContext,
+      knowledgeRoute
+    );
+    if (officialPricingRouteOverride) {
+      knowledgeRoute = officialPricingRouteOverride;
     }
     const routeMetadata = buildRouteMetadata(
       knowledgeRoute,

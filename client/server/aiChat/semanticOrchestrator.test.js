@@ -503,18 +503,26 @@ describe("semantic prompt and cost metadata", () => {
       faqItems: [],
       dateInfo,
       requestId: "request-1",
+      mode: "shadow",
       fetchImpl,
     });
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(result.semanticResult.context_patch).toEqual({ guest_count: 12 });
     expect(result.metadata).toMatchObject({
+      semantic_mode: "shadow",
       model_called: true,
       model_call_count: 1,
+      provider: "deepseek",
       model: "deepseek-v4-flash",
       prompt_tokens: 100,
       completion_tokens: 50,
       cache_hit_tokens: 10,
+      semantic_validator_result: "accepted",
+      semantic_validator_accepted: true,
+      semantic_route: "collect_info",
+      semantic_context_patch: { guest_count: 12 },
+      semantic_selected_faq_ids: [],
     });
     const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
     expect(body).toMatchObject({
@@ -523,6 +531,56 @@ describe("semantic prompt and cost metadata", () => {
       thinking: { type: "disabled" },
       temperature: 0.2,
       max_tokens: 500,
+    });
+  });
+
+  it("records safe validator rejection metadata without saving raw model output", async () => {
+    vi.stubEnv("AI_MODE", "cloud_only");
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_BASE_URL", "https://deepseek.test");
+    vi.stubEnv("DEEPSEEK_MODEL", "deepseek-v4-flash");
+
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: { content: "not json" },
+            },
+          ],
+          usage: {
+            prompt_tokens: 20,
+            completion_tokens: 5,
+          },
+        }),
+    }));
+
+    await expect(
+      callSemanticOrchestrator({
+        message: "那多少錢？",
+        context: { active_intent: "pricing", stay_type: "villa" },
+        recentMessages: [],
+        faqItems: [],
+        dateInfo,
+        requestId: "request-invalid",
+        mode: "shadow",
+        fetchImpl,
+      }),
+    ).rejects.toMatchObject({
+      semanticMetadata: {
+        semantic_mode: "shadow",
+        model_called: true,
+        model_call_count: 1,
+        provider: "deepseek",
+        model: "deepseek-v4-flash",
+        prompt_tokens: 20,
+        completion_tokens: 5,
+        semantic_validator_result: "rejected",
+        semantic_validator_accepted: false,
+      },
     });
   });
 

@@ -784,6 +784,7 @@ export function buildNoSecondCallFallbackRoute(routeResult, fallbackReason) {
 export function buildModelUsageMetadata({
   mode,
   routeResult,
+  provider = "",
   modelCalled = false,
   modelCallCount = 0,
   model = "",
@@ -793,12 +794,14 @@ export function buildModelUsageMetadata({
   latencyMs = null,
   fallbackReason = "",
 } = {}) {
+  const providerName = provider || routeResult?.providerUsed || "";
+
   return {
     semantic_mode: getSemanticRouterMode(mode),
     model_called: Boolean(modelCalled || routeResult?.modelCalled),
     model_call_count: Number(routeResult?.modelCallCount ?? modelCallCount) || 0,
     final_route: routeResult?.route || "",
-    provider: routeResult?.providerUsed || "",
+    ...(providerName ? { provider: providerName } : {}),
     ...(model ? { model } : {}),
     ...(Number.isInteger(providerStatus) ? { provider_status: providerStatus } : {}),
     ...(finishReason ? { finish_reason: finishReason } : {}),
@@ -815,6 +818,26 @@ export function buildModelUsageMetadata({
   };
 }
 
+function buildSemanticObservationMetadata(semanticResult) {
+  return {
+    semantic_validator_result: "accepted",
+    semantic_validator_accepted: true,
+    semantic_route: semanticResult.route,
+    semantic_intent: semanticResult.intent,
+    ...(semanticResult.topic ? { semantic_topic: semanticResult.topic } : {}),
+    semantic_is_follow_up: semanticResult.is_follow_up,
+    semantic_context_patch: semanticResult.context_patch || {},
+    semantic_clear_fields: semanticResult.clear_fields || [],
+    semantic_selected_faq_ids: semanticResult.selected_faq_ids || [],
+    semantic_missing_fields: semanticResult.missing_fields || [],
+    semantic_needs_human: semanticResult.needs_human,
+    semantic_confidence: semanticResult.confidence,
+    ...(semanticResult.rejected_fields?.length
+      ? { semantic_rejected_fields: semanticResult.rejected_fields }
+      : {}),
+  };
+}
+
 export async function callSemanticOrchestrator({
   message,
   context,
@@ -822,6 +845,7 @@ export async function callSemanticOrchestrator({
   faqItems,
   dateInfo,
   requestId,
+  mode = "legacy",
   fetchImpl = fetch,
 }) {
   const { apiKey, baseUrl, model } = getDeepSeekConfig();
@@ -841,6 +865,7 @@ export async function callSemanticOrchestrator({
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 20000);
   const startedAt = Date.now();
+  let providerResult = null;
 
   try {
     const response = await fetchImpl(
@@ -856,7 +881,7 @@ export async function callSemanticOrchestrator({
       }
     );
     const body = await response.text();
-    const providerResult = parseDeepSeekResponseBody({
+    providerResult = parseDeepSeekResponseBody({
       ok: response.ok,
       status: response.status,
       body,
@@ -870,27 +895,44 @@ export async function callSemanticOrchestrator({
       semanticResult,
       providerResult,
       model,
-      metadata: buildModelUsageMetadata({
-        mode: "hybrid",
-        modelCalled: true,
-        modelCallCount: 1,
-        model,
-        providerStatus: providerResult.providerStatus,
-        finishReason: providerResult.finishReason,
-        usage: providerResult.usage,
-        latencyMs,
-      }),
+      metadata: {
+        ...buildModelUsageMetadata({
+          mode,
+          provider: "deepseek",
+          modelCalled: true,
+          modelCallCount: 1,
+          model,
+          providerStatus: providerResult.providerStatus,
+          finishReason: providerResult.finishReason,
+          usage: providerResult.usage,
+          latencyMs,
+        }),
+        ...buildSemanticObservationMetadata(semanticResult),
+      },
     };
   } catch (error) {
     const latencyMs = Date.now() - startedAt;
-    error.semanticMetadata = buildModelUsageMetadata({
-      mode: "hybrid",
-      modelCalled: true,
-      modelCallCount: 1,
-      model,
-      latencyMs,
-      fallbackReason: error?.message || "semantic_orchestrator_failed",
-    });
+    const fallbackReason = error?.message || "semantic_orchestrator_failed";
+    const validatorRejected = fallbackReason.startsWith(
+      "semantic_orchestrator_invalid"
+    );
+
+    error.semanticMetadata = {
+      ...buildModelUsageMetadata({
+        mode,
+        provider: "deepseek",
+        modelCalled: true,
+        modelCallCount: 1,
+        model,
+        providerStatus: providerResult?.providerStatus,
+        finishReason: providerResult?.finishReason,
+        usage: providerResult?.usage,
+        latencyMs,
+        fallbackReason,
+      }),
+      semantic_validator_result: validatorRejected ? "rejected" : "not_run",
+      semantic_validator_accepted: false,
+    };
     error.requestId = requestId;
     throw error;
   } finally {

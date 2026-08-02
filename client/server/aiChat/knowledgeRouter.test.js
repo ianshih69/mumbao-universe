@@ -190,6 +190,7 @@ describe("strict knowledge router", () => {
       shouldCallDeepSeek: false,
       shouldMarkNeedsHuman: false,
     });
+    expect(result.answer).toContain("中午 12:00 前");
   });
 
   it("honors answer_mode=ask_human without calling DeepSeek", async () => {

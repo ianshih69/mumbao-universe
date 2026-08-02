@@ -1499,6 +1499,7 @@ export default async function handler(req, res) {
           faqItems: semanticFaqItems,
           dateInfo,
           requestId,
+          mode: semanticMode,
         });
         const semanticContext = mergeSemanticContext(
           conversationContextUpdate.context,

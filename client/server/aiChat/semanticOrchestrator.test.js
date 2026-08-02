@@ -212,6 +212,18 @@ describe("semantic orchestrator routing decisions", () => {
     },
   );
 
+  it("sends casual natural language to the semantic planner instead of local scope guard", async () => {
+    const route = await routeKnowledge({ message: "你多大", faqItems: [] });
+
+    expect(route.route).toBe("scope_guard");
+    expect(shouldUseSemanticOrchestrator({
+      mode: "hybrid",
+      message: "你多大",
+      routeResult: route,
+      context: {},
+    })).toBe(true);
+  });
+
   it("keeps hybrid disabled unless the server-side env explicitly enables it", () => {
     vi.stubEnv("AI_SEMANTIC_ROUTER_MODE", "");
     expect(getSemanticRouterMode()).toBe("legacy");
@@ -251,6 +263,7 @@ describe("semantic orchestrator validation", () => {
 
   it("accepts only finite turn actions", () => {
     expect(allowedTurnActions.has("update_quote")).toBe(true);
+    expect(allowedTurnActions.has("casual_conversation")).toBe(true);
     expect(normalizeTurnAction("update_quote")).toBe("update_quote");
     expect(normalizeTurnAction("invent_price")).toBe("");
 
@@ -261,6 +274,32 @@ describe("semantic orchestrator validation", () => {
         route: "collect_info",
       }),
     ).toThrow("semantic_orchestrator_invalid_turn_action");
+  });
+
+  it("keeps mentioned and uncertain fields for freshness validation", () => {
+    const result = validateSemanticResult({
+      turn_action: "request_quote",
+      intent: "pricing",
+      route: "collect_info",
+      mentioned_fields: ["check_in", "check_out", "guest_count", "admin_note"],
+      uncertain_fields: ["check_out", "admin_note"],
+      uses_relative_date: true,
+      context_patch: {
+        check_in: "2026-08-04",
+        stay_type: "villa",
+        active_intent: "pricing",
+      },
+      clear_fields: [],
+      selected_faq_ids: [],
+    });
+
+    expect(result.mentioned_fields).toEqual([
+      "check_in",
+      "check_out",
+      "guest_count",
+    ]);
+    expect(result.uncertain_fields).toEqual(["check_out"]);
+    expect(result.uses_relative_date).toBe(true);
   });
 
   it("rejects invalid or unavailable FAQ ids", () => {
@@ -442,6 +481,9 @@ describe("semantic prompt and cost metadata", () => {
     const payload = JSON.parse(messages[1].content);
 
     expect(messages[0].content).toContain('"turn_action"');
+    expect(messages[0].content).toContain('"mentioned_fields"');
+    expect(messages[0].content).toContain('"uncertain_fields"');
+    expect(messages[0].content).toContain('"uses_relative_date"');
     expect(messages[0].content).toContain("update_quote");
     expect(payload.recent_messages).toHaveLength(12);
     expect(payload.faq_candidates).toHaveLength(5);
@@ -497,8 +539,11 @@ describe("semantic prompt and cost metadata", () => {
                   intent: "pricing",
                   topic: "booking_price",
                   is_follow_up: true,
+                  mentioned_fields: ["guest_count"],
                   context_patch: { guest_count: 12 },
                   clear_fields: [],
+                  uncertain_fields: [],
+                  uses_relative_date: false,
                   selected_faq_ids: [],
                   missing_fields: [],
                   route: "collect_info",
@@ -548,6 +593,9 @@ describe("semantic prompt and cost metadata", () => {
       semantic_turn_action: "update_quote",
       validated_turn_action: "update_quote",
       turn_action_validator_result: "accepted",
+      mentioned_fields: ["guest_count"],
+      uncertain_fields: [],
+      uses_relative_date: false,
       semantic_route: "collect_info",
       semantic_context_patch: { guest_count: 12 },
       semantic_selected_faq_ids: [],

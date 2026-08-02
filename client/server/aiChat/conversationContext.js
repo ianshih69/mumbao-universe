@@ -26,6 +26,7 @@ const nullContext = Object.freeze({
   room_count: null,
   current_topic: null,
   last_updated_at: null,
+  slot_meta: {},
 });
 
 const chineseNumberValues = new Map([
@@ -396,6 +397,54 @@ function normalizeContextPatch(value) {
   );
 }
 
+function normalizeSlotMeta(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+
+  const normalized = {};
+  for (const [field, rawMeta] of Object.entries(value)) {
+    if (!contextFields.includes(field)) continue;
+    if (!rawMeta || typeof rawMeta !== "object" || Array.isArray(rawMeta)) continue;
+
+    const meta = {};
+    const source = normalizeNullableText(rawMeta.source);
+    const sourceMessageId = normalizeNullableText(rawMeta.source_message_id);
+    const updatedAt = normalizeNullableText(rawMeta.updated_at);
+    const confidence = Number(rawMeta.confidence);
+
+    if (source) meta.source = source.slice(0, 40);
+    if (sourceMessageId) meta.source_message_id = sourceMessageId.slice(0, 80);
+    if (updatedAt) meta.updated_at = updatedAt;
+    if (Number.isFinite(confidence)) {
+      meta.confidence = Math.max(0, Math.min(confidence, 1));
+    }
+
+    if (Object.keys(meta).length) normalized[field] = meta;
+  }
+
+  return normalized;
+}
+
+function writeSlotMeta(context, fields, { source, sourceMessageId, updatedAt, confidence } = {}) {
+  const next = {
+    ...context,
+    slot_meta: {
+      ...(context?.slot_meta || {}),
+    },
+  };
+
+  for (const field of fields || []) {
+    if (!contextFields.includes(field)) continue;
+    next.slot_meta[field] = {
+      source: source || "deterministic",
+      ...(sourceMessageId ? { source_message_id: sourceMessageId } : {}),
+      updated_at: updatedAt || new Date().toISOString(),
+      ...(Number.isFinite(confidence) ? { confidence } : {}),
+    };
+  }
+
+  return next;
+}
+
 function mergeSingleMessage(previousContext, message, { baseDateText, nowIso } = {}) {
   let base = normalizeConversationContext(previousContext);
   const originalBase = { ...base };
@@ -430,11 +479,19 @@ function mergeSingleMessage(previousContext, message, { baseDateText, nowIso } =
     context.last_updated_at = nowIso || new Date().toISOString();
   }
 
+  const contextWithMeta = Object.keys(normalizedPatch).length
+    ? writeSlotMeta(context, Object.keys(normalizedPatch), {
+        source: "deterministic",
+        updatedAt: context.last_updated_at,
+        confidence: 0.7,
+      })
+    : context;
+
   return {
-    context,
+    context: contextWithMeta,
     extracted: normalizedPatch,
     reset: shouldResetConversationContext(message),
-    changed: !contextsEqual(originalBase, context),
+    changed: !contextsEqual(originalBase, contextWithMeta),
   };
 }
 
@@ -472,6 +529,7 @@ export function normalizeConversationContext(value) {
   context.room_count = normalizeInteger(source.room_count);
   context.current_topic = normalizeNullableText(source.current_topic);
   context.last_updated_at = normalizeNullableText(source.last_updated_at);
+  context.slot_meta = normalizeSlotMeta(source.slot_meta);
 
   return context;
 }

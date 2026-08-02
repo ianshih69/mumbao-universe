@@ -6,6 +6,7 @@ import {
   buildContextualKnowledgeRouteOverride,
   getConversationContextForStorage,
 } from "./conversationContext.js";
+import { applyContextFreshnessGuard } from "./contextFreshnessGuard.js";
 import {
   buildCustomerSessionPatch,
   isSessionOwnedByCustomer,
@@ -1511,7 +1512,10 @@ export default async function handler(req, res) {
         const semanticContext = mergeSemanticContext(
           conversationContextUpdate.context,
           semanticAttempt.semanticResult,
-          new Date().toISOString()
+          {
+            nowIso: new Date().toISOString(),
+            sourceMessageId: requestId,
+          }
         );
 
         if (semanticMode === "hybrid") {
@@ -1563,6 +1567,20 @@ export default async function handler(req, res) {
       }
     }
 
+    const freshnessGuard = applyContextFreshnessGuard({
+      oldContext: conversationContextUpdate.previousContext,
+      context: finalConversationContext,
+      semanticResult: semanticResultForAction,
+      currentMessage: message,
+      dateInfo,
+      nowIso: new Date().toISOString(),
+      sourceMessageId: requestId,
+    });
+    if (freshnessGuard.changed) {
+      finalConversationContext = freshnessGuard.context;
+      finalConversationContextChanged = true;
+    }
+
     const actionRoute = await executeTurnAction({
       message,
       semanticResult: semanticResultForAction,
@@ -1570,6 +1588,7 @@ export default async function handler(req, res) {
       context: finalConversationContext,
       previousContext: conversationContextUpdate.previousContext,
       recentMessages,
+      freshnessGuard,
     });
     if (actionRoute) {
       const { conversationContextPatch, ...routeOverride } =

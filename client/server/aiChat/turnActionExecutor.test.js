@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildConversationContextUpdate } from "./conversationContext.js";
+import { applyContextFreshnessGuard } from "./contextFreshnessGuard.js";
 import { executeTurnAction } from "./turnActionExecutor.js";
 
 const dateInfo = {
@@ -69,6 +70,9 @@ function semantic(turnAction, overrides = {}) {
     is_follow_up: true,
     context_patch: {},
     clear_fields: [],
+    mentioned_fields: [],
+    uncertain_fields: [],
+    uses_relative_date: false,
     selected_faq_ids: [],
     missing_fields: [],
     route: "collect_info",
@@ -182,6 +186,86 @@ describe("turn action executor", () => {
     expect(result.semanticMetadata.action_executor_result).toBe(
       "update_quote_without_pricing_session"
     );
+  });
+
+  it("does not reuse stale dates when the current turn mentions a relative date", async () => {
+    const freshnessGuard = applyContextFreshnessGuard({
+      oldContext: repricedNoPetContext,
+      context: repricedNoPetContext,
+      semanticResult: semantic("request_quote", {
+        mentioned_fields: ["check_in", "stay_type"],
+        context_patch: {
+          active_intent: "pricing",
+          stay_type: "villa",
+        },
+        uncertain_fields: ["check_out"],
+        uses_relative_date: true,
+      }),
+      currentMessage: "後天包棟多少錢",
+      dateInfo,
+      nowIso: "2026-08-02T08:00:00.000Z",
+      sourceMessageId: "request-relative-date",
+    });
+
+    const result = await executeTurnAction({
+      message: "後天包棟多少錢",
+      semanticResult: semantic("request_quote", {
+        mentioned_fields: ["check_in", "stay_type"],
+        uncertain_fields: ["check_out"],
+        uses_relative_date: true,
+      }),
+      routeResult: route(),
+      context: freshnessGuard.context,
+      previousContext: repricedNoPetContext,
+      recentMessages: [previousPricingAssistant],
+      freshnessGuard,
+    });
+
+    expect(result.route).toBe("faq_collect_info");
+    expect(result.answer).toContain("2026年8月4日");
+    expect(result.answer).toContain("2026年8月5日");
+    expect(result.answer).not.toContain("NT$37,500");
+    expect(result.semanticMetadata).toMatchObject({
+      freshness_guard_result: "blocked_stale_fields",
+      stale_fields_blocked: expect.arrayContaining(["check_in", "check_out"]),
+      uncertain_fields: expect.arrayContaining(["check_out"]),
+      pricing_called: false,
+      action_executor_result: "freshness_guard_blocked_pricing",
+    });
+  });
+
+  it("does not reuse stale guest count when the customer only says the count changed", async () => {
+    const freshnessGuard = applyContextFreshnessGuard({
+      oldContext: completeDogContext,
+      context: completeDogContext,
+      semanticResult: semantic("update_quote", {
+        mentioned_fields: ["guest_count"],
+        uncertain_fields: ["guest_count"],
+      }),
+      currentMessage: "人數要改",
+      dateInfo,
+      nowIso: "2026-08-02T08:00:00.000Z",
+    });
+
+    const result = await executeTurnAction({
+      message: "人數要改",
+      semanticResult: semantic("update_quote", {
+        mentioned_fields: ["guest_count"],
+        uncertain_fields: ["guest_count"],
+      }),
+      routeResult: route(),
+      context: freshnessGuard.context,
+      previousContext: completeDogContext,
+      recentMessages: [previousPricingAssistant],
+      freshnessGuard,
+    });
+
+    expect(result.route).toBe("faq_collect_info");
+    expect(result.answer).toContain("新的入住人數");
+    expect(result.answer).not.toContain("15");
+    expect(result.answer).not.toContain("NT$48,000");
+    expect(result.semanticMetadata.stale_fields_blocked).toContain("guest_count");
+    expect(result.semanticMetadata.pricing_called).toBe(false);
   });
 
   it("confirms and explains only the latest same-session verified quote", async () => {
@@ -300,6 +384,30 @@ describe("turn action executor", () => {
     expect(acknowledge.route).toBe("acknowledge");
     expect(acknowledge.answer).toContain("可以再問我");
     expect(acknowledge.answer).not.toContain("NT$48,000");
+  });
+
+  it("handles casual conversation without scope guard wording", async () => {
+    const result = await executeTurnAction({
+      message: "你多大",
+      semanticResult: semantic("casual_conversation", {
+        intent: "general",
+        topic: "about_mumbao",
+        route: "grounded_reply",
+      }),
+      routeResult: route({
+        route: "scope_guard",
+        providerUsed: "scope_guard",
+        answer: "慢寶目前主要協助回答慢慢蒔光住宿問題喔。",
+      }),
+      context: {},
+      previousContext: {},
+      recentMessages: [],
+    });
+
+    expect(result.route).toBe("casual_conversation");
+    expect(result.answer).toContain("我是慢寶");
+    expect(result.answer).toContain("沒有真正的年齡");
+    expect(result.answer).not.toContain("主要協助回答");
   });
 
   it("uses deterministic fallback actions consistently in legacy and shadow", async () => {

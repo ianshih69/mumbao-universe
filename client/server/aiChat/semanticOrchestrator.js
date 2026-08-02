@@ -51,6 +51,7 @@ export const allowedTurnActions = new Set([
   "explain_quote",
   "lodging_only_quote",
   "ask_information",
+  "casual_conversation",
   "switch_topic",
   "acknowledge",
   "human_takeover",
@@ -357,12 +358,15 @@ function buildSemanticSystemInstruction() {
 
 輸出 schema：
 {
-  "turn_action": "request_quote|update_quote|confirm_quote|explain_quote|lodging_only_quote|ask_information|switch_topic|acknowledge|human_takeover|reset_context|out_of_scope|knowledge_gap",
+  "turn_action": "request_quote|update_quote|confirm_quote|explain_quote|lodging_only_quote|ask_information|casual_conversation|switch_topic|acknowledge|human_takeover|reset_context|out_of_scope|knowledge_gap",
   "intent": "pricing|booking|availability|facilities|pet_policy|house_rules|payment|refund|general|human_support|unknown",
   "topic": "string",
   "is_follow_up": true,
+  "mentioned_fields": [],
   "context_patch": {},
   "clear_fields": [],
+  "uncertain_fields": [],
+  "uses_relative_date": false,
   "selected_faq_ids": [],
   "missing_fields": [],
   "route": "grounded_reply|collect_info|knowledge_gap|human_takeover",
@@ -378,6 +382,7 @@ turn_action 定義：
 - explain_quote：客人詢問報價怎麼算或要求明細。
 - lodging_only_quote：客人只問住宿小計，暫不含寵物或其他附加項目。
 - ask_information：客人問設施、入住退房、寵物規則、附近資訊等一般住宿資訊。
+- casual_conversation：客人問慢寶本身、打招呼或輕鬆聊天；不可發明真人年齡或民宿事實。
 - switch_topic：客人想重新問、換題或問別的，但不是清除所有資料。
 - acknowledge：客人只是在回覆好、謝謝、知道了、了解。
 - human_takeover：客人要求人工客服或管家回答。
@@ -388,6 +393,9 @@ turn_action 定義：
 context_patch 只可使用這些欄位：
 active_intent,current_topic,stay_type,check_in,check_out,guest_count,adult_count,child_count,pet_count,pet_type,room_count
 
+mentioned_fields 代表客人本輪明確提到或試圖修改的欄位，即使值不確定也要列出。
+uncertain_fields 代表客人提到該欄位但你無法安全解析成值；不要沿用舊值。
+若客人使用今天、明天、後天、下週、下個月底、往後一天、改成星期五等相對日期，uses_relative_date 必須為 true。相對日期必須以 user payload 的 current_date 與 Asia/Taipei 解析，不可使用模型訓練日期。
 需要清除舊值時只使用 clear_fields，不要用 null 代表未提到。`;
 }
 
@@ -549,6 +557,17 @@ function normalizeClearFields(value) {
   return value.filter((field) => semanticContextFields.has(String(field)));
 }
 
+function normalizeFieldList(value) {
+  if (!Array.isArray(value)) return [];
+  const fields = [];
+  for (const field of value.map((entry) => String(entry || "").trim())) {
+    if (semanticContextFields.has(field) && !fields.includes(field)) {
+      fields.push(field);
+    }
+  }
+  return fields;
+}
+
 function normalizeSelectedFaqIds(value, faqItems) {
   if (!Array.isArray(value)) {
     return { selectedFaqIds: [], invalidFaqIds: [] };
@@ -577,6 +596,7 @@ function inferTurnAction(value) {
     return "human_takeover";
   }
   if (route === "knowledge_gap") return "knowledge_gap";
+  if (intent === "general" && route === "grounded_reply") return "casual_conversation";
   if (intent === "pricing") {
     return route === "collect_info" ? "request_quote" : "request_quote";
   }
@@ -632,6 +652,9 @@ export function validateSemanticResult(rawValue, { faqItems = [] } = {}) {
     is_follow_up: Boolean(value.is_follow_up),
     context_patch: patch,
     clear_fields: clearFields,
+    mentioned_fields: normalizeFieldList(value.mentioned_fields),
+    uncertain_fields: normalizeFieldList(value.uncertain_fields),
+    uses_relative_date: Boolean(value.uses_relative_date),
     rejected_fields: rejectedFields,
     selected_faq_ids: selectedFaqIds,
     missing_fields: Array.isArray(value.missing_fields)
@@ -644,12 +667,41 @@ export function validateSemanticResult(rawValue, { faqItems = [] } = {}) {
   };
 }
 
-export function mergeSemanticContext(baseContext, semanticResult, nowIso = new Date().toISOString()) {
+function writeSemanticSlotMeta(context, fields, { nowIso, sourceMessageId, confidence }) {
+  const slotMeta = {
+    ...(context?.slot_meta || {}),
+  };
+
+  for (const field of fields || []) {
+    if (!semanticContextFields.has(field)) continue;
+    slotMeta[field] = {
+      source: "semantic",
+      ...(sourceMessageId ? { source_message_id: sourceMessageId } : {}),
+      updated_at: nowIso,
+      ...(Number.isFinite(confidence) ? { confidence } : {}),
+    };
+  }
+
+  return {
+    ...context,
+    slot_meta: slotMeta,
+  };
+}
+
+export function mergeSemanticContext(baseContext, semanticResult, options = {}) {
+  const nowIso =
+    typeof options === "string"
+      ? options
+      : options?.nowIso || new Date().toISOString();
+  const sourceMessageId =
+    typeof options === "string" ? "" : String(options?.sourceMessageId || "");
   const context = normalizeConversationContext(baseContext);
+  const touchedFields = new Set();
 
   for (const field of semanticResult.clear_fields || []) {
     if (semanticContextFields.has(field)) {
       context[field] = null;
+      touchedFields.add(field);
     }
   }
 
@@ -657,16 +709,26 @@ export function mergeSemanticContext(baseContext, semanticResult, nowIso = new D
     ...context,
     ...(semanticResult.context_patch || {}),
   });
+  for (const field of Object.keys(semanticResult.context_patch || {})) {
+    if (semanticContextFields.has(field)) touchedFields.add(field);
+  }
+  const withSlotMeta = touchedFields.size
+    ? writeSemanticSlotMeta(merged, [...touchedFields], {
+        nowIso,
+        sourceMessageId,
+        confidence: semanticResult.confidence,
+      })
+    : merged;
   const changed =
     JSON.stringify(getConversationContextForStorage(baseContext)) !==
-    JSON.stringify(merged);
+    JSON.stringify(withSlotMeta);
 
   if (changed) {
-    merged.last_updated_at = nowIso;
+    withSlotMeta.last_updated_at = nowIso;
   }
 
   return {
-    context: merged,
+    context: withSlotMeta,
     changed,
   };
 }
@@ -890,6 +952,9 @@ function buildSemanticObservationMetadata(semanticResult) {
     semantic_intent: semanticResult.intent,
     ...(semanticResult.topic ? { semantic_topic: semanticResult.topic } : {}),
     semantic_is_follow_up: semanticResult.is_follow_up,
+    mentioned_fields: semanticResult.mentioned_fields || [],
+    uncertain_fields: semanticResult.uncertain_fields || [],
+    uses_relative_date: semanticResult.uses_relative_date || false,
     semantic_context_patch: semanticResult.context_patch || {},
     semantic_clear_fields: semanticResult.clear_fields || [],
     semantic_selected_faq_ids: semanticResult.selected_faq_ids || [],

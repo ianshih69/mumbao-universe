@@ -21,6 +21,55 @@ const pricingIntentToTurnAction = new Map([
   ["casual_acknowledgement", "acknowledge"],
 ]);
 
+const pricingFieldLabels = {
+  stay_type: "想包棟或訂單間",
+  check_in: "入住日期",
+  check_out: "退房日期",
+  guest_count: "共有幾位入住",
+  adult_count: "大人人數",
+  child_count: "小孩人數",
+  room_count: "需要幾間房",
+  pet_count: "是否攜帶寵物",
+  pet_type: "寵物種類",
+};
+
+const pricingGuardFields = new Set([
+  "stay_type",
+  "check_in",
+  "check_out",
+  "guest_count",
+  "adult_count",
+  "child_count",
+  "room_count",
+  "pet_count",
+  "pet_type",
+]);
+
+function toDateOnly(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : "";
+}
+
+function addDays(dateText, days) {
+  const base = toDateOnly(dateText);
+  if (!base) return "";
+  const date = new Date(`${base}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setUTCDate(date.getUTCDate() + days);
+  return [
+    String(date.getUTCFullYear()).padStart(4, "0"),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function formatDisplayDate(value) {
+  const date = toDateOnly(value);
+  if (!date) return "";
+  const [year, month, day] = date.split("-");
+  return `${Number(year)}年${Number(month)}月${Number(day)}日`;
+}
+
 function getLatestAssistantMessage(recentMessages = []) {
   return [...(Array.isArray(recentMessages) ? recentMessages : [])]
     .reverse()
@@ -161,6 +210,46 @@ function buildNeedsClarificationRoute(routeResult, metadata) {
   });
 }
 
+function buildFreshnessGuardRoute(routeResult, context, freshnessGuard, metadata) {
+  const state = normalizeConversationContext(context);
+  const uncertainFields = freshnessGuard?.uncertain_fields || [];
+  let answer = "";
+
+  if (uncertainFields.includes("guest_count")) {
+    answer = "收到，人數要調整。請問新的入住人數是幾位呢？";
+  } else if (uncertainFields.includes("check_out") && state.check_in) {
+    const checkIn = formatDisplayDate(state.check_in);
+    const nextDate = formatDisplayDate(addDays(state.check_in, 1));
+    answer = `收到，你想詢問${checkIn}的${
+      state.stay_type === "villa" ? "包棟" : "住宿"
+    }價格。請問是${checkIn}入住、${nextDate}退房嗎？`;
+  } else if (
+    uncertainFields.includes("check_in") ||
+    uncertainFields.includes("check_out")
+  ) {
+    answer = "收到，日期要調整。請問新的入住與退房日期是什麼時候呢？";
+  } else if (uncertainFields.includes("pet_count")) {
+    answer = "收到，寵物條件要調整。請問這次是否會攜帶寵物呢？";
+  } else {
+    const labels = uncertainFields
+      .map((field) => pricingFieldLabels[field])
+      .filter(Boolean);
+    answer = labels.length
+      ? `收到，請再確認${labels.join("、")}。`
+      : "收到，這次條件有調整，我需要再確認一下細節。";
+  }
+
+  return buildCollectInfoRoute(routeResult, {
+    answer,
+    reason: "context_freshness_guard_blocked_pricing",
+    metadata: {
+      ...metadata,
+      action_executor_result: "freshness_guard_blocked_pricing",
+      pricing_called: false,
+    },
+  });
+}
+
 function inferFallbackTurnAction({
   message,
   routeResult,
@@ -228,8 +317,12 @@ async function executePricingAction({
   message,
   metadata,
   changedFields,
+  freshnessGuard,
 }) {
   const missingFields = getMissingBookingContextFields(context);
+  const uncertainPricingFields = (freshnessGuard?.uncertain_fields || []).filter((field) =>
+    pricingGuardFields.has(field)
+  );
 
   if (action === "confirm_quote" && !hasLatestVerifiedPricingReply(recentMessages)) {
     return buildNeedsClarificationRoute(routeResult, {
@@ -270,6 +363,16 @@ async function executePricingAction({
     }
   }
 
+  if (
+    ["request_quote", "update_quote"].includes(action) &&
+    uncertainPricingFields.length
+  ) {
+    return buildFreshnessGuardRoute(routeResult, context, freshnessGuard, {
+      ...metadata,
+      uncertain_fields: uncertainPricingFields,
+    });
+  }
+
   if (missingFields.length) {
     return buildMissingFieldsRoute(routeResult, context, {
       ...metadata,
@@ -288,12 +391,14 @@ async function executePricingAction({
     return buildMissingFieldsRoute(routeResult, context, {
       ...metadata,
       action_executor_result: `${action}_pricing_unresolved`,
+      pricing_called: true,
     });
   }
 
   return addExecutorMetadata(pricingRoute, {
     ...metadata,
     action_executor_result: `${action}_pricing_resolved`,
+    pricing_called: true,
   });
 }
 
@@ -304,6 +409,7 @@ export async function executeTurnAction({
   context,
   previousContext,
   recentMessages = [],
+  freshnessGuard = null,
 } = {}) {
   const action = resolveAction({
     semanticResult,
@@ -318,7 +424,14 @@ export async function executeTurnAction({
     ...(semanticResult?.turn_action ? { semantic_turn_action: semanticResult.turn_action } : {}),
     validated_turn_action: action,
     turn_action_validator_result: normalizeTurnAction(action) ? "accepted" : "rejected",
+    mentioned_fields: freshnessGuard?.mentioned_fields || semanticResult?.mentioned_fields || [],
+    uncertain_fields: freshnessGuard?.uncertain_fields || semanticResult?.uncertain_fields || [],
     changed_fields: changedFields,
+    freshness_guard_result: freshnessGuard?.freshness_guard_result || "not_applied",
+    stale_fields_blocked: freshnessGuard?.stale_fields_blocked || [],
+    uses_relative_date:
+      freshnessGuard?.uses_relative_date || semanticResult?.uses_relative_date || false,
+    pricing_called: false,
   };
 
   if (!normalizeTurnAction(action)) {
@@ -340,6 +453,20 @@ export async function executeTurnAction({
       message,
       metadata,
       changedFields,
+      freshnessGuard,
+    });
+  }
+
+  if (action === "casual_conversation") {
+    return buildControlRoute(routeResult, {
+      action,
+      answer:
+        "我是慢寶，沒有真正的年齡喔！我是慢慢蒔光裡陪你認識住宿與慢寶宇宙的小幫手。",
+      reason: "turn_action_casual_conversation",
+      metadata: {
+        ...metadata,
+        action_executor_result: "casual_conversation_replied",
+      },
     });
   }
 

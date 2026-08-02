@@ -4,6 +4,8 @@ export type CustomerProfile = {
   email: string;
   name: string;
   phone: string;
+  member_level: "normal" | "vip" | "diamond" | string | null;
+  email_verified: boolean;
   default_postal_code: string;
   default_city: string;
   default_district: string;

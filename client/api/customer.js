@@ -7,7 +7,7 @@ import {
 } from "../server/shopShared.js";
 
 const PROFILE_SELECT =
-  "id,auth_user_id,email,name,phone,default_postal_code,default_city,default_district,default_address,is_active,created_at,updated_at";
+  "id,auth_user_id,email,name,phone,member_level,default_postal_code,default_city,default_district,default_address,is_active,created_at,updated_at";
 const CUSTOMER_ORDER_SELECT =
   "id,order_number,created_at,order_source,subtotal,shipping_fee,total,payment_status,order_status,shipping_carrier,tracking_number";
 const CUSTOMER_ORDER_DETAIL_SELECT =
@@ -57,6 +57,8 @@ const FIELD_LIMITS = {
   default_district: 80,
   default_address: 300,
 };
+
+const CUSTOMER_MEMBER_LEVELS = new Set(["normal", "vip", "diamond"]);
 
 function createRequestId() {
   return `customer_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -153,13 +155,19 @@ function normalizeOptionalText(value, field) {
   return trimmed || null;
 }
 
-function normalizeProfile(row) {
+function normalizeProfile(row, user = null) {
+  const memberLevel = CUSTOMER_MEMBER_LEVELS.has(String(row.member_level || ""))
+    ? String(row.member_level)
+    : "normal";
+
   return {
     id: row.id,
     auth_user_id: row.auth_user_id,
     email: row.email || "",
     name: row.name || "",
     phone: row.phone || "",
+    member_level: memberLevel,
+    email_verified: Boolean(user?.email_confirmed_at || user?.confirmed_at),
     default_postal_code: row.default_postal_code || "",
     default_city: row.default_city || "",
     default_district: row.default_district || "",
@@ -301,7 +309,7 @@ async function handleProfile(req, res, requestId) {
 
   if (req.method === "GET") {
     const profile = await ensureProfile(user);
-    return sendJson(res, 200, { profile: normalizeProfile(profile), requestId });
+    return sendJson(res, 200, { profile: normalizeProfile(profile, user), requestId });
   }
 
   if (req.method === "PATCH") {
@@ -311,7 +319,7 @@ async function handleProfile(req, res, requestId) {
 
     if (!Object.keys(payload).length) {
       const profile = await findProfileByAuthUserId(user.id);
-      return sendJson(res, 200, { profile: normalizeProfile(profile), requestId });
+      return sendJson(res, 200, { profile: normalizeProfile(profile, user), requestId });
     }
 
     const rows = await supabaseRequest(
@@ -331,7 +339,7 @@ async function handleProfile(req, res, requestId) {
       throw createHttpError(403, "此會員帳號目前已停用，請聯絡客服。", "CUSTOMER_DISABLED");
     }
 
-    return sendJson(res, 200, { profile: normalizeProfile(profile), requestId });
+    return sendJson(res, 200, { profile: normalizeProfile(profile, user), requestId });
   }
 
   return sendJson(res, 405, { error: "method_not_allowed", requestId });

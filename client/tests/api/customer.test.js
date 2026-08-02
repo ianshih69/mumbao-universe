@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import handler from "./customer.js";
+import handler from "../../api/customer.js";
 
 const authUserId = "11111111-1111-4111-8111-111111111111";
 const profileId = "profile-a";

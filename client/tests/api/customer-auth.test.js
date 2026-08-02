@@ -4,8 +4,8 @@ import {
   customerAuthResponseCodes,
   customerAuthSiteOrigin,
   customerVerificationRedirectPath,
-} from "./customer-auth.js";
-import { getCustomerPasswordErrors } from "../server/customerPasswordPolicy.js";
+} from "../../api/customer-auth.js";
+import { getCustomerPasswordErrors } from "../../server/customerPasswordPolicy.js";
 
 const testNow = Date.parse("2026-08-01T00:00:00.000Z");
 const freshCreatedAt = "2026-08-01T00:00:00.000Z";

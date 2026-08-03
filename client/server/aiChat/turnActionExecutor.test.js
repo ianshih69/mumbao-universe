@@ -62,6 +62,21 @@ const previousPricingAssistant = {
   },
 };
 
+const septemberVillaDogDetails = {
+  active_intent: null,
+  stay_type: "villa",
+  check_in: "2026-09-09",
+  check_out: "2026-09-10",
+  guest_count: 10,
+  adult_count: null,
+  child_count: null,
+  pet_count: 3,
+  pet_type: "dog",
+  room_count: null,
+  current_topic: null,
+  last_updated_at: null,
+};
+
 function route(overrides = {}) {
   return {
     route: "knowledge_gap",
@@ -105,6 +120,28 @@ function contextUpdate(previousContext, message) {
     message,
     dateInfo,
     nowIso: "2026-08-02T08:00:00.000Z",
+  });
+}
+
+function expectSeptemberPartialQuote(result, expectedRoute = "partial_grounded_reply") {
+  expect(result).toMatchObject({
+    route: expectedRoute,
+    providerUsed: "official_pricing",
+    shouldMarkNeedsHuman: true,
+    knowledgeGap: false,
+  });
+  expect(result.answer).toContain("NT$25,000");
+  expect(result.answer).toContain("3 隻狗");
+  expect(result.answer).not.toContain("實際房價及寵物安排仍需由管家確認");
+  expect(result.answer).not.toContain("實際房價需由管家確認");
+  expect(result.semanticMetadata).toMatchObject({
+    pricing_called: true,
+    lodging_price_status: "resolved",
+    lodging_price_amount: 25000,
+    pet_fee_status: "unresolved",
+    unresolved_price_items: ["pet_fee"],
+    final_route: expectedRoute,
+    needs_human: true,
   });
 }
 
@@ -364,6 +401,159 @@ describe("turn action executor", () => {
       resumed_turn_action: "request_quote",
       pricing_called: true,
     });
+  });
+
+  it("resumes request_quote from confirm_pending and calculates partial lodging price", async () => {
+    const result = await executeTurnAction({
+      message: "YES",
+      semanticResult: semantic("confirm_pending", {
+        intent: "pricing",
+        topic: "booking_price",
+      }),
+      routeResult: route(),
+      context: {
+        ...septemberVillaDogDetails,
+        check_in: null,
+        check_out: null,
+        pending_interaction: {
+          action: "confirm_quote_dates",
+          proposed_values: {
+            check_in: "2026-09-09",
+            check_out: "2026-09-10",
+          },
+          required_response_type: "confirmation",
+          resume_action: "request_quote",
+          source_assistant_message_id: "assistant-september",
+          created_at: "2026-08-02T08:00:00.000Z",
+          expires_at: "2026-08-02T08:30:00.000Z",
+        },
+      },
+      previousContext: {
+        ...septemberVillaDogDetails,
+        check_in: null,
+        check_out: null,
+      },
+      recentMessages: [],
+      nowIso: "2026-08-02T08:01:00.000Z",
+      sourceMessageId: "request-september-confirm",
+    });
+
+    expectSeptemberPartialQuote(result);
+    expect(result.answer).toContain("已確認為");
+    expect(result.conversationContextPatch).toMatchObject({
+      check_in: "2026-09-09",
+      check_out: "2026-09-10",
+      pending_interaction: null,
+    });
+    expect(result.semanticMetadata).toMatchObject({
+      pending_action_before: "confirm_quote_dates",
+      pending_resolution: "confirmed",
+      resumed_turn_action: "request_quote",
+      action_executor_result: "request_quote_pricing_resolved",
+    });
+  });
+
+  it("uses the same pricing capability for direct request_quote with complete context", async () => {
+    const result = await executeTurnAction({
+      message: "那房價呢",
+      semanticResult: semantic("request_quote"),
+      routeResult: route(),
+      context: septemberVillaDogDetails,
+      previousContext: septemberVillaDogDetails,
+      recentMessages: [],
+    });
+
+    expectSeptemberPartialQuote(result);
+    expect(result.semanticMetadata).toMatchObject({
+      semantic_turn_action: "request_quote",
+      validated_turn_action: "request_quote",
+      action_executor_result: "request_quote_pricing_resolved",
+    });
+  });
+
+  it("resumes request_quote after answer_pending supplies the final guest count", async () => {
+    const result = await executeTurnAction({
+      message: "10人",
+      semanticResult: semantic("answer_pending", {
+        context_patch: { guest_count: 10 },
+        mentioned_fields: ["guest_count"],
+      }),
+      routeResult: route(),
+      context: {
+        ...septemberVillaDogDetails,
+        pending_interaction: {
+          action: "collect_quote_fields",
+          required_response_type: "fields",
+          required_fields: ["guest_count"],
+          resume_action: "request_quote",
+          source_assistant_message_id: "assistant-collect",
+          created_at: "2026-08-02T08:00:00.000Z",
+          expires_at: "2026-08-02T08:30:00.000Z",
+        },
+      },
+      previousContext: {
+        ...septemberVillaDogDetails,
+        guest_count: null,
+      },
+      recentMessages: [],
+      nowIso: "2026-08-02T08:01:00.000Z",
+      sourceMessageId: "request-september-answer",
+    });
+
+    expectSeptemberPartialQuote(result);
+    expect(result.conversationContextPatch.pending_interaction).toBeNull();
+    expect(result.semanticMetadata).toMatchObject({
+      pending_action_before: "collect_quote_fields",
+      pending_resolution: "answered",
+      resumed_turn_action: "request_quote",
+      action_executor_result: "request_quote_pricing_resolved",
+    });
+  });
+
+  it("uses the same pricing handler after update_quote changes the date", async () => {
+    const result = await executeTurnAction({
+      message: "改成9月9到10號",
+      semanticResult: semantic("update_quote", {
+        context_patch: {
+          check_in: "2026-09-09",
+          check_out: "2026-09-10",
+        },
+        mentioned_fields: ["check_in", "check_out"],
+      }),
+      routeResult: route(),
+      context: septemberVillaDogDetails,
+      previousContext: {
+        ...septemberVillaDogDetails,
+        check_in: "2026-10-01",
+        check_out: "2026-10-02",
+      },
+      recentMessages: [previousPricingAssistant],
+    });
+
+    expectSeptemberPartialQuote(result, "reprice_after_context_change");
+    expect(result.route).toBe("reprice_after_context_change");
+    expect(result.semanticMetadata).toMatchObject({
+      validated_turn_action: "update_quote",
+      action_executor_result: "update_quote_pricing_resolved",
+    });
+  });
+
+  it("keeps pricing capability results consistent across semantic modes", async () => {
+    for (const semanticMode of ["legacy", "shadow", "hybrid"]) {
+      const result = await executeTurnAction({
+        message: "那房價呢",
+        semanticResult: semantic("request_quote"),
+        routeResult: route({
+          semanticMetadata: { semantic_mode: semanticMode },
+        }),
+        context: septemberVillaDogDetails,
+        previousContext: septemberVillaDogDetails,
+        recentMessages: [],
+      });
+
+      expectSeptemberPartialQuote(result);
+      expect(result.semanticMetadata.semantic_mode).toBe(semanticMode);
+    }
   });
 
   it("rejects and modifies pending values without applying stale proposals", async () => {

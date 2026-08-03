@@ -581,6 +581,10 @@ function hasPricingSessionContext(context, recentMessages = []) {
   );
 }
 
+function isPricingTurnAction(turnAction) {
+  return turnActionToPricingReplyMode.has(turnAction);
+}
+
 export function getPricingRelevantChangedFields(previousContext, context) {
   const before = normalizeConversationContext(previousContext);
   const after = normalizeConversationContext(context);
@@ -768,7 +772,9 @@ export async function buildOfficialPricingRouteOverride(
   }
 
   if (!pricingReplyModes.has(currentTurnIntent)) return null;
-  if (currentTurnIntent === "reprice_after_context_change") {
+  if (isPricingTurnAction(options.turnAction)) {
+    if (!hasCompletePricingDetails(context)) return null;
+  } else if (currentTurnIntent === "reprice_after_context_change") {
     if (
       !hasPricingSessionContext(context, options.recentMessages) ||
       !hasCompletePricingDetails(context)
@@ -785,6 +791,12 @@ export async function buildOfficialPricingRouteOverride(
   }
 
   const hasUnresolvedItems = pricingResolution.unresolved_price_items.length > 0;
+  const finalRoute =
+    currentTurnIntent === "initial_quote"
+      ? hasUnresolvedItems
+        ? "partial_grounded_reply"
+        : "grounded_reply"
+      : currentTurnIntent;
   const answer = selectPricingReply({
     intent: currentTurnIntent,
     context,
@@ -798,17 +810,13 @@ export async function buildOfficialPricingRouteOverride(
     pricing_override_applied: true,
     pricing_override_reason: `official_pricing_${currentTurnIntent}`,
     current_turn_intent: currentTurnIntent,
+    final_route: finalRoute,
     needs_human: shouldMarkNeedsHuman,
   };
 
   return {
     ...routeResult,
-    route:
-      currentTurnIntent === "initial_quote"
-        ? hasUnresolvedItems
-          ? "partial_grounded_reply"
-          : "grounded_reply"
-        : currentTurnIntent,
+    route: finalRoute,
     providerUsed: "official_pricing",
     answer,
     notice: answer,

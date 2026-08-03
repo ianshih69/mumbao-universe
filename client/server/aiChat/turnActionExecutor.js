@@ -538,6 +538,27 @@ async function executePendingAction({
     };
   }
 
+  if (
+    action === "confirm_pending" &&
+    pending.action === "confirm_quote_dates" &&
+    resumedRoute.providerUsed === "official_pricing"
+  ) {
+    const answer = String(resumedRoute.answer || "").startsWith("收到，目前是")
+      ? String(resumedRoute.answer).replace("收到，目前是", "已確認為")
+      : `已確認，${resumedRoute.answer || ""}`;
+
+    return {
+      ...resumedRoute,
+      answer,
+      notice: answer,
+      conversationContextPatch,
+      semanticMetadata: {
+        ...resumedMetadata,
+        ...(resumedRoute.semanticMetadata || {}),
+      },
+    };
+  }
+
   return {
     ...resumedRoute,
     conversationContextPatch,

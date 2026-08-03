@@ -118,8 +118,14 @@ function buildConfirmedDateSummary(context) {
   )}退房的${stayLabel}需求`;
 }
 
-function buildMissingFieldsQuestion(context, prefix = "收到") {
-  const missingFields = getMissingBookingContextFields(context);
+function buildMissingFieldsQuestion(
+  context,
+  prefix = "收到",
+  missingFieldsOverride = null
+) {
+  const missingFields = Array.isArray(missingFieldsOverride)
+    ? missingFieldsOverride
+    : getMissingBookingContextFields(context);
   const labels = expandMissingContextFields(missingFields)
     .map((field) => pricingFieldLabels[field])
     .filter(Boolean);
@@ -235,7 +241,11 @@ function buildCollectInfoRoute(
 }
 
 function buildMissingFieldsRoute(routeResult, context, metadata, options = {}) {
-  const missingFields = getMissingBookingContextFields(context);
+  const missingFields = Array.isArray(options.missingFields)
+    ? options.missingFields
+    : Array.isArray(metadata?.final_missing_fields)
+      ? metadata.final_missing_fields
+      : getMissingBookingContextFields(context);
   const pendingInteraction = buildCollectQuoteFieldsPending({
     missingFields,
     resumeAction: metadata?.resumed_turn_action || metadata?.validated_turn_action || "request_quote",
@@ -245,15 +255,19 @@ function buildMissingFieldsRoute(routeResult, context, metadata, options = {}) {
   const pendingPatch = pendingInteraction
     ? { pending_interaction: pendingInteraction }
     : null;
-  const contextual = buildContextualKnowledgeRouteOverride(context, {
-    ...routeResult,
-    route: "knowledge_gap",
-    answer: routeResult?.answer || "",
-    notice: routeResult?.notice || "",
-    answerMode: null,
-    knowledgeGap: true,
-    shouldMarkNeedsHuman: true,
-  });
+  const contextual = buildContextualKnowledgeRouteOverride(
+    context,
+    {
+      ...routeResult,
+      route: "knowledge_gap",
+      answer: routeResult?.answer || "",
+      notice: routeResult?.notice || "",
+      answerMode: null,
+      knowledgeGap: true,
+      shouldMarkNeedsHuman: true,
+    },
+    { missingFields }
+  );
 
   if (contextual) {
     return addExecutorMetadata(
@@ -397,7 +411,79 @@ function inferFallbackTurnAction({
   return "ask_information";
 }
 
-function resolveAction({
+function normalizeCompactProtocolText(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+function hasProtocolAffirmation(message) {
+  const text = normalizeCompactProtocolText(message);
+  if (!text) return false;
+  return /^(?:對|是|好|好的|可以|沒錯|正確|yes|y|ok|okay)(?:，|,|。|\.|！|!|、)?/.test(text);
+}
+
+function hasProtocolRejection(message) {
+  const text = normalizeCompactProtocolText(message);
+  if (!text) return false;
+  return /^(?:不是|不對|否|no|n)(?:，|,|。|\.|！|!|、)?/.test(text);
+}
+
+function hasPendingProposalConflict({ pendingInteraction, context }) {
+  const pending = normalizePendingInteraction(pendingInteraction);
+  if (!pending) return false;
+  const state = normalizeConversationContext(context);
+  for (const [field, proposedValue] of Object.entries(pending.proposed_values || {})) {
+    if (!pricingGuardFields.has(field)) continue;
+    const currentValue = state[field];
+    if (currentValue !== null && currentValue !== undefined && currentValue !== proposedValue) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function inferPendingProtocolAction({ pendingInteraction, message, context }) {
+  const pending = normalizePendingInteraction(pendingInteraction);
+  if (!pending) return null;
+
+  if (pending.required_response_type === "confirmation") {
+    if (hasProtocolRejection(message) || hasPendingProposalConflict({ pendingInteraction: pending, context })) {
+      return "modify_pending";
+    }
+    if (hasProtocolAffirmation(message)) {
+      return "confirm_pending";
+    }
+    return "answer_pending";
+  }
+
+  if (pending.required_response_type === "fields") {
+    return "answer_pending";
+  }
+
+  return "answer_pending";
+}
+
+function buildResolvedContextSummary(context) {
+  const state = normalizeConversationContext(context);
+  const parts = [];
+  if (state.active_intent) parts.push(`intent:${state.active_intent}`);
+  if (state.current_topic) parts.push(`topic:${state.current_topic}`);
+  if (state.stay_type) parts.push(`stay_type:${state.stay_type}`);
+  if (state.check_in) parts.push(`check_in:${state.check_in}`);
+  if (state.check_out) parts.push(`check_out:${state.check_out}`);
+  if (state.guest_count !== null) parts.push(`guest_count:${state.guest_count}`);
+  if (state.adult_count !== null) parts.push(`adult_count:${state.adult_count}`);
+  if (state.child_count !== null) parts.push(`child_count:${state.child_count}`);
+  if (state.room_count !== null) parts.push(`room_count:${state.room_count}`);
+  if (state.pet_count !== null) parts.push(`pet_count:${state.pet_count}`);
+  if (state.pet_type) parts.push(`pet_type:${state.pet_type}`);
+  return parts.join("; ");
+}
+
+function resolveTurnState({
   semanticResult,
   message,
   routeResult,
@@ -405,21 +491,61 @@ function resolveAction({
   previousContext,
   recentMessages,
   pendingInteraction,
+  nowIso,
 }) {
   const semanticAction = normalizeTurnAction(semanticResult?.turn_action);
-  if (semanticAction) return semanticAction;
-
-  if (pendingInteraction) {
-    return "answer_pending";
-  }
-
-  return inferFallbackTurnAction({
-    message,
-    routeResult,
-    context,
-    previousContext,
-    recentMessages,
+  const protocolAction = semanticAction
+    ? null
+    : inferPendingProtocolAction({ pendingInteraction, message, context });
+  const fallbackAction =
+    semanticAction ||
+    protocolAction ||
+    inferFallbackTurnAction({
+      message,
+      routeResult,
+      context,
+      previousContext,
+      recentMessages,
+    });
+  const resolvedTurnAction = normalizeTurnAction(fallbackAction) || fallbackAction;
+  const pending = normalizePendingInteraction(pendingInteraction);
+  const proposedValues = pending?.proposed_values || {};
+  const shouldApplyPendingProposal =
+    resolvedTurnAction === "confirm_pending" &&
+    pending &&
+    !isPendingExpired(pending, nowIso);
+  const resolvedContext = normalizeConversationContext({
+    ...context,
+    ...(shouldApplyPendingProposal ? proposedValues : {}),
+    ...(pending && isPendingAction(resolvedTurnAction) ? { pending_interaction: null } : {}),
   });
+  const finalMissingFields = isPricingAction(resolvedTurnAction) || isPendingAction(resolvedTurnAction)
+    ? getMissingBookingContextFields(resolvedContext)
+    : [];
+
+  return {
+    resolvedContext,
+    resolvedPendingInteraction: pending,
+    resolvedTurnAction,
+    pendingProtocolFallback: protocolAction,
+    resumedTurnAction:
+      pending && isPendingAction(resolvedTurnAction)
+        ? normalizeTurnAction(pending.resume_action) || "request_quote"
+        : null,
+    pendingResolution:
+      resolvedTurnAction === "confirm_pending"
+        ? "confirmed"
+        : resolvedTurnAction === "reject_pending"
+          ? "rejected"
+          : resolvedTurnAction === "modify_pending"
+            ? "modified"
+            : resolvedTurnAction === "answer_pending"
+              ? "answered"
+              : null,
+    changedFields: getPricingRelevantChangedFields(previousContext, resolvedContext),
+    finalMissingFields,
+    resolvedContextSummary: buildResolvedContextSummary(resolvedContext),
+  };
 }
 
 async function executePendingAction({
@@ -525,7 +651,12 @@ async function executePendingAction({
     resumedRoute.route === "faq_collect_info"
   ) {
     const summary = buildConfirmedDateSummary(nextContext);
-    const question = buildMissingFieldsQuestion(nextContext, "");
+    const question = buildMissingFieldsQuestion(
+      nextContext,
+      "",
+      resumedRoute.semanticMetadata?.final_missing_fields ||
+        resumedMetadata.final_missing_fields
+    );
     return {
       ...resumedRoute,
       answer: summary && question ? `好的，已確認為${summary}。${question}` : resumedRoute.answer,
@@ -696,7 +827,7 @@ export async function executeTurnAction({
   sourceMessageId = "",
 } = {}) {
   const pendingInteraction = normalizePendingInteraction(context?.pending_interaction);
-  const action = resolveAction({
+  const resolvedTurnState = resolveTurnState({
     semanticResult,
     message,
     routeResult,
@@ -704,8 +835,11 @@ export async function executeTurnAction({
     previousContext,
     recentMessages,
     pendingInteraction,
+    nowIso,
   });
-  const changedFields = getPricingRelevantChangedFields(previousContext, context);
+  const action = resolvedTurnState.resolvedTurnAction;
+  const executorContext = resolvedTurnState.resolvedContext;
+  const changedFields = resolvedTurnState.changedFields;
   const metadata = {
     ...(semanticResult?.turn_action ? { semantic_turn_action: semanticResult.turn_action } : {}),
     validated_turn_action: action,
@@ -717,6 +851,17 @@ export async function executeTurnAction({
     stale_fields_blocked: freshnessGuard?.stale_fields_blocked || [],
     pending_action_before: pendingInteraction?.action || null,
     pending_source_message_id: pendingInteraction?.source_assistant_message_id || null,
+    ...(resolvedTurnState.pendingProtocolFallback
+      ? { pending_protocol_fallback: resolvedTurnState.pendingProtocolFallback }
+      : {}),
+    ...(resolvedTurnState.pendingResolution
+      ? { pending_resolution: resolvedTurnState.pendingResolution }
+      : {}),
+    ...(resolvedTurnState.resumedTurnAction
+      ? { resumed_turn_action: resolvedTurnState.resumedTurnAction }
+      : {}),
+    resolved_context_summary: resolvedTurnState.resolvedContextSummary,
+    final_missing_fields: resolvedTurnState.finalMissingFields,
     uses_relative_date:
       freshnessGuard?.uses_relative_date || semanticResult?.uses_relative_date || false,
     pricing_called: false,
@@ -749,7 +894,7 @@ export async function executeTurnAction({
     return executePendingAction({
       action,
       pendingInteraction,
-      context,
+      context: executorContext,
       previousContext,
       recentMessages,
       routeResult,
@@ -763,7 +908,7 @@ export async function executeTurnAction({
   if (isPricingAction(action)) {
     return executePricingAction({
       action,
-      context,
+      context: executorContext,
       previousContext,
       recentMessages,
       routeResult,

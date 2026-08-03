@@ -760,9 +760,11 @@ function hasGenericCollectInfoCue(routeResult) {
   return /請.{0,8}提供|入住日期|日期|人數|幾位|寵物|包棟|單間|房價|價格|費用/.test(text);
 }
 
-function buildContextualMissingFieldsReply(context) {
+function buildContextualMissingFieldsReply(context, missingFieldsOverride = null) {
   const state = normalizeConversationContext(context);
-  const missing = getMissingBookingContextFields(state);
+  const missing = Array.isArray(missingFieldsOverride)
+    ? missingFieldsOverride
+    : getMissingBookingContextFields(state);
   if (!missing.length) return "";
 
   const summary = buildStaySummary(state);
@@ -776,7 +778,11 @@ function buildContextualMissingFieldsReply(context) {
   return `收到，請問${questions.join("、")}呢？`;
 }
 
-export function buildContextualKnowledgeRouteOverride(context, routeResult) {
+export function buildContextualKnowledgeRouteOverride(
+  context,
+  routeResult,
+  options = {}
+) {
   if (!hasPricingContext(context)) return null;
 
   const eligibleRoute = [
@@ -787,7 +793,10 @@ export function buildContextualKnowledgeRouteOverride(context, routeResult) {
   ].includes(routeResult?.route);
   if (!eligibleRoute) return null;
 
-  const missingReply = buildContextualMissingFieldsReply(context);
+  const missingReply = buildContextualMissingFieldsReply(
+    context,
+    options.missingFields
+  );
   if (missingReply) {
     return {
       route: "faq_collect_info",

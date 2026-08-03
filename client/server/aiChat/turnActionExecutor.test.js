@@ -77,6 +77,33 @@ const septemberVillaDogDetails = {
   last_updated_at: null,
 };
 
+const octoberPendingContext = {
+  active_intent: "pricing",
+  stay_type: "villa",
+  check_in: "2026-10-10",
+  check_out: null,
+  guest_count: null,
+  adult_count: null,
+  child_count: null,
+  pet_count: null,
+  pet_type: null,
+  room_count: null,
+  current_topic: "booking_price",
+  last_updated_at: "2026-08-03T09:50:00.000Z",
+  pending_interaction: {
+    action: "confirm_quote_dates",
+    proposed_values: {
+      check_in: "2026-10-10",
+      check_out: "2026-10-11",
+    },
+    required_response_type: "confirmation",
+    resume_action: "request_quote",
+    source_assistant_message_id: "assistant-october",
+    created_at: "2026-08-03T09:50:00.000Z",
+    expires_at: "2026-08-03T10:20:00.000Z",
+  },
+};
+
 function route(overrides = {}) {
   return {
     route: "knowledge_gap",
@@ -120,6 +147,18 @@ function contextUpdate(previousContext, message) {
     message,
     dateInfo,
     nowIso: "2026-08-02T08:00:00.000Z",
+  });
+}
+
+function staleMissingDateRoute() {
+  return route({
+    route: "faq_collect_info",
+    providerUsed: "faq_collect_info",
+    shouldMarkNeedsHuman: false,
+    knowledgeGap: false,
+    answer:
+      "收到，目前是 2026年10月10日入住，包棟，10位入住。請問入住日期、是否攜帶寵物呢？",
+    reason: "conversation_context_missing_fields",
   });
 }
 
@@ -450,6 +489,111 @@ describe("turn action executor", () => {
       pending_resolution: "confirmed",
       resumed_turn_action: "request_quote",
       action_executor_result: "request_quote_pricing_resolved",
+    });
+  });
+
+  it("resolves pending dates before missing fields when semantic is unavailable", async () => {
+    const result = await executeTurnAction({
+      message: "對，10人",
+      semanticResult: null,
+      routeResult: staleMissingDateRoute(),
+      context: {
+        ...octoberPendingContext,
+        guest_count: 10,
+      },
+      previousContext: octoberPendingContext,
+      recentMessages: [],
+      nowIso: "2026-08-03T10:00:00.000Z",
+      sourceMessageId: "request-october-fallback",
+    });
+
+    expect(result.route).toBe("faq_collect_info");
+    expect(result.answer).toContain("已確認為2026年10月10日入住、2026年10月11日退房");
+    expect(result.answer).toContain("是否攜帶寵物");
+    expect(result.answer).not.toContain("請問入住日期");
+    expect(result.conversationContextPatch).toMatchObject({
+      check_in: "2026-10-10",
+      check_out: "2026-10-11",
+    });
+    expect(result.conversationContextPatch.pending_interaction).toMatchObject({
+      action: "collect_quote_fields",
+      required_fields: ["pet_count"],
+      resume_action: "request_quote",
+    });
+    expect(result.semanticMetadata).toMatchObject({
+      validated_turn_action: "confirm_pending",
+      pending_protocol_fallback: "confirm_pending",
+      pending_action_before: "confirm_quote_dates",
+      pending_resolution: "confirmed",
+      resumed_turn_action: "request_quote",
+      action_executor_result: "request_quote_missing_fields",
+      pricing_called: false,
+      final_missing_fields: ["pet_count"],
+    });
+    expect(result.semanticMetadata.resolved_context_summary).toContain("check_out:2026-10-11");
+    expect(result.semanticMetadata.resolved_context_summary).toContain("guest_count:10");
+  });
+
+  it("uses the same resolvedTurnState when semantic validation fails", async () => {
+    const result = await executeTurnAction({
+      message: "對，10人",
+      semanticResult: {
+        turn_action: "invalid_action",
+        mentioned_fields: ["guest_count"],
+        context_patch: { guest_count: 10 },
+        clear_fields: [],
+        uncertain_fields: [],
+      },
+      routeResult: staleMissingDateRoute(),
+      context: {
+        ...octoberPendingContext,
+        guest_count: 10,
+      },
+      previousContext: octoberPendingContext,
+      recentMessages: [],
+      nowIso: "2026-08-03T10:00:00.000Z",
+      sourceMessageId: "request-october-validator-fallback",
+    });
+
+    expect(result.answer).toContain("2026年10月10日入住、2026年10月11日退房");
+    expect(result.answer).not.toContain("請問入住日期");
+    expect(result.semanticMetadata).toMatchObject({
+      semantic_turn_action: "invalid_action",
+      validated_turn_action: "confirm_pending",
+      pending_protocol_fallback: "confirm_pending",
+      final_missing_fields: ["pet_count"],
+    });
+  });
+
+  it("does not apply proposed dates when a confirmation pending only receives field data", async () => {
+    const result = await executeTurnAction({
+      message: "10人",
+      semanticResult: null,
+      routeResult: staleMissingDateRoute(),
+      context: {
+        ...octoberPendingContext,
+        guest_count: 10,
+      },
+      previousContext: octoberPendingContext,
+      recentMessages: [],
+      nowIso: "2026-08-03T10:00:00.000Z",
+      sourceMessageId: "request-october-field-only",
+    });
+
+    expect(result.answer).toContain("請問入住日期");
+    expect(result.answer).toContain("是否攜帶寵物");
+    expect(result.conversationContextPatch.pending_interaction).toMatchObject({
+      action: "collect_quote_fields",
+      required_fields: ["check_in", "check_out", "pet_count"],
+    });
+    expect(result.conversationContextPatch).not.toMatchObject({
+      check_out: "2026-10-11",
+    });
+    expect(result.semanticMetadata).toMatchObject({
+      validated_turn_action: "answer_pending",
+      pending_protocol_fallback: "answer_pending",
+      pending_resolution: "answered",
+      final_missing_fields: ["dates", "pet_count"],
     });
   });
 

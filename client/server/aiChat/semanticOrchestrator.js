@@ -3,6 +3,7 @@ import {
   buildContextualKnowledgeRouteOverride,
   getConversationContextForStorage,
   getMissingBookingContextFields,
+  normalizePendingInteraction,
   normalizeConversationContext,
 } from "./conversationContext.js";
 import {
@@ -62,6 +63,29 @@ export const allowedTurnActions = new Set([
   "reset_context",
   "out_of_scope",
   "knowledge_gap",
+]);
+
+export const allowedPendingResolutionActions = new Set([
+  "none",
+  "confirm",
+  "reject",
+  "modify",
+  "answer_field",
+  "unrelated",
+]);
+
+const legacyPendingActionToResolution = new Map([
+  ["confirm_pending", "confirm"],
+  ["reject_pending", "reject"],
+  ["modify_pending", "modify"],
+  ["answer_pending", "answer_field"],
+]);
+
+const pendingResolutionToTurnAction = new Map([
+  ["confirm", "confirm_pending"],
+  ["reject", "reject_pending"],
+  ["modify", "modify_pending"],
+  ["answer_field", "answer_pending"],
 ]);
 
 const allowedIntents = new Set([
@@ -143,6 +167,168 @@ function normalizeCompact(value) {
     .normalize("NFKC")
     .toLowerCase()
     .replace(/\s+/g, "");
+}
+
+export function normalizePendingResolutionAction(value) {
+  const action = String(value || "").trim();
+  return allowedPendingResolutionActions.has(action) ? action : "";
+}
+
+export function pendingResolutionToLegacyTurnAction(value) {
+  return pendingResolutionToTurnAction.get(normalizePendingResolutionAction(value)) || "";
+}
+
+function normalizeCompactProtocolText(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+function hasPendingConfirmationSignal(message) {
+  const text = normalizeCompactProtocolText(message);
+  if (!text) return false;
+  return /^(?:對|是|好|好的|可以|沒錯|正確|yes|y|ok|okay)(?:，|,|。|\.|！|!|、)?/.test(text);
+}
+
+function hasPendingRejectionSignal(message) {
+  const text = normalizeCompactProtocolText(message);
+  if (!text) return false;
+  return /^(?:不是|不對|否|no|n)(?:，|,|。|\.|！|!|、)?/.test(text);
+}
+
+function contextPatchTouchesProposedField(contextPatch, pendingInteraction) {
+  const pending = normalizePendingInteraction(pendingInteraction);
+  if (!pending) return false;
+  const patch = contextPatch && typeof contextPatch === "object" ? contextPatch : {};
+  return Object.keys(pending.proposed_values || {}).some((field) =>
+    Object.prototype.hasOwnProperty.call(patch, field)
+  );
+}
+
+function inferNormalTurnActionForPending({
+  rawTurnAction,
+  route,
+  intent,
+  pendingInteraction,
+}) {
+  const action = normalizeTurnAction(rawTurnAction);
+  const pending = normalizePendingInteraction(pendingInteraction);
+  if (legacyPendingActionToResolution.has(action)) {
+    return normalizeTurnAction(pending?.resume_action) || inferTurnAction({ route, intent });
+  }
+  return action || inferTurnAction({ route, intent });
+}
+
+export function validateAndNormalizeSemanticTurn({
+  semanticResult,
+  pendingInteraction = null,
+  currentMessage = "",
+  deterministicPatch = null,
+} = {}) {
+  const semantic =
+    semanticResult && typeof semanticResult === "object" && !Array.isArray(semanticResult)
+      ? semanticResult
+      : {};
+  const pending = normalizePendingInteraction(pendingInteraction);
+  const contextPatch =
+    semantic.context_patch && typeof semantic.context_patch === "object"
+      ? semantic.context_patch
+      : deterministicPatch && typeof deterministicPatch === "object"
+        ? deterministicPatch
+        : {};
+  const rawTurnAction = String(
+    semantic.semantic_turn_action_raw || semantic.turn_action || ""
+  ).trim();
+  const rawPendingResolution = String(
+    semantic.semantic_pending_resolution_raw ||
+      (semantic.pending_resolution_action &&
+      semantic.pending_resolution_action !== "none"
+        ? semantic.pending_resolution_action
+        : "") ||
+      ""
+  ).trim();
+  const route = String(semantic.route || "").trim();
+  const intent = String(semantic.intent || "unknown").trim();
+  const validationErrors = [];
+  let normalizationReason = "";
+
+  let pendingResolution = rawPendingResolution
+    ? normalizePendingResolutionAction(rawPendingResolution) || "none"
+    : legacyPendingActionToResolution.get(normalizeTurnAction(rawTurnAction)) ||
+      "none";
+
+  if (!pending) {
+    if (pendingResolution !== "none") {
+      validationErrors.push("pending_resolution_without_pending");
+      normalizationReason = "pending_resolution_without_pending";
+      pendingResolution = "none";
+    }
+  } else if (pending.required_response_type === "confirmation") {
+    const hasConfirmation = hasPendingConfirmationSignal(currentMessage);
+    const hasRejection = hasPendingRejectionSignal(currentMessage);
+    const touchesProposal = contextPatchTouchesProposedField(contextPatch, pending);
+
+    if (pendingResolution === "answer_field") {
+      if (hasConfirmation) {
+        pendingResolution = "confirm";
+        normalizationReason = "confirmation_pending_with_additional_field";
+      } else if (hasRejection) {
+        pendingResolution = touchesProposal ? "modify" : "reject";
+        normalizationReason = touchesProposal
+          ? "rejection_pending_with_replacement_fields"
+          : "rejection_pending_without_replacement_fields";
+      } else {
+        normalizationReason = "confirmation_pending_answered_field_only";
+      }
+    } else if (pendingResolution === "none") {
+      if (hasConfirmation) {
+        pendingResolution = "confirm";
+        normalizationReason = "pending_protocol_confirm";
+      } else if (hasRejection) {
+        pendingResolution = touchesProposal ? "modify" : "reject";
+        normalizationReason = touchesProposal
+          ? "pending_protocol_modify"
+          : "pending_protocol_reject";
+      }
+    } else if (pendingResolution === "modify" && !touchesProposal && !hasRejection) {
+      validationErrors.push("modify_pending_without_replacement");
+      normalizationReason = "modify_pending_without_replacement";
+      pendingResolution = "answer_field";
+    }
+  } else if (pending.required_response_type === "fields") {
+    if (["confirm", "reject", "modify"].includes(pendingResolution)) {
+      normalizationReason = "field_pending_resolution_normalized_to_answer_field";
+      pendingResolution = "answer_field";
+    }
+  }
+
+  const normalizedTurnAction =
+    inferNormalTurnActionForPending({
+      rawTurnAction,
+      route,
+      intent,
+      pendingInteraction: pending,
+    }) || "ask_information";
+
+  return {
+    accepted: Boolean(normalizedTurnAction),
+    normalizedPendingResolutionAction: pendingResolution,
+    normalizedTurnAction,
+    normalizedContextPatch: contextPatch,
+    normalizationReason,
+    validationErrors,
+    semanticResult: {
+      ...semantic,
+      turn_action: normalizedTurnAction,
+      pending_resolution_action: pendingResolution,
+      semantic_turn_action_raw: rawTurnAction,
+      semantic_pending_resolution_raw: rawPendingResolution,
+      pending_protocol_normalization_reason: normalizationReason,
+      semantic_validation_errors: validationErrors,
+    },
+  };
 }
 
 function includesAny(text, terms) {
@@ -384,6 +570,7 @@ function buildSemanticSystemInstruction() {
 
 輸出 schema：
 {
+  "pending_resolution_action": "none|confirm|reject|modify|answer_field|unrelated",
   "turn_action": "request_quote|update_quote|confirm_quote|explain_quote|lodging_only_quote|confirm_pending|reject_pending|modify_pending|answer_pending|ask_information|casual_conversation|switch_topic|acknowledge|human_takeover|reset_context|out_of_scope|knowledge_gap",
   "intent": "pricing|booking|availability|facilities|pet_policy|house_rules|payment|refund|general|human_support|unknown",
   "topic": "string",
@@ -460,6 +647,10 @@ export function buildSemanticMessages({
             "FAQ and approved database facts are the only trusted lodging facts.",
             "Do not invent prices, availability, fees, payment, refund or booking confirmation.",
             "Use selected_faq_ids only from faq_candidates.",
+            "Use pending_resolution_action for pending_interaction resolution and turn_action for the business action after pending is resolved.",
+            "One message can confirm pending values and add fields in context_patch. For pending date confirmation plus '對，10人', use pending_resolution_action=confirm, turn_action=request_quote, context_patch.guest_count=10.",
+            "For pending date confirmation plus only '10人', use pending_resolution_action=answer_field and do not confirm proposed dates.",
+            "For pending date confirmation plus '不是，是10/12到10/13，10人', use pending_resolution_action=modify and include replacement dates plus guest_count in context_patch.",
           ],
         },
         null,
@@ -646,7 +837,15 @@ export function normalizeTurnAction(value) {
   return allowedTurnActions.has(action) ? action : "";
 }
 
-export function validateSemanticResult(rawValue, { faqItems = [] } = {}) {
+export function validateSemanticResult(
+  rawValue,
+  {
+    faqItems = [],
+    pendingInteraction = null,
+    currentMessage = "",
+    deterministicPatch = null,
+  } = {}
+) {
   const value =
     typeof rawValue === "string" ? parseJsonObject(rawValue) : rawValue || {};
 
@@ -680,11 +879,18 @@ export function validateSemanticResult(rawValue, { faqItems = [] } = {}) {
     throw new Error("semantic_orchestrator_invalid_faq_id");
   }
 
-  return {
+  const semanticResult = {
     turn_action: turnAction,
     intent,
     topic: String(value.topic || "").trim().slice(0, 80),
     is_follow_up: Boolean(value.is_follow_up),
+    pending_resolution_action: normalizePendingResolutionAction(
+      value.pending_resolution_action
+    ) || "none",
+    semantic_turn_action_raw: String(value.turn_action || "").trim(),
+    semantic_pending_resolution_raw: String(
+      value.pending_resolution_action || ""
+    ).trim(),
     context_patch: patch,
     clear_fields: clearFields,
     mentioned_fields: normalizeFieldList(value.mentioned_fields),
@@ -700,6 +906,13 @@ export function validateSemanticResult(rawValue, { faqItems = [] } = {}) {
     reply_draft: String(value.reply_draft || "").trim().slice(0, 900),
     confidence: Math.max(0, Math.min(Number(value.confidence || 0), 1)),
   };
+
+  return validateAndNormalizeSemanticTurn({
+    semanticResult,
+    pendingInteraction,
+    currentMessage,
+    deterministicPatch,
+  }).semanticResult;
 }
 
 function writeSemanticSlotMeta(context, fields, { nowIso, sourceMessageId, confidence }) {
@@ -980,8 +1193,16 @@ function buildSemanticObservationMetadata(semanticResult) {
   return {
     semantic_validator_result: "accepted",
     semantic_validator_accepted: true,
+    semantic_turn_action_raw:
+      semanticResult.semantic_turn_action_raw || semanticResult.turn_action,
+    semantic_pending_resolution_raw:
+      semanticResult.semantic_pending_resolution_raw || "",
     semantic_turn_action: semanticResult.turn_action,
     validated_turn_action: semanticResult.turn_action,
+    normalized_pending_resolution:
+      semanticResult.pending_resolution_action || "none",
+    pending_protocol_normalization_reason:
+      semanticResult.pending_protocol_normalization_reason || "",
     turn_action_validator_result: "accepted",
     semantic_route: semanticResult.route,
     semantic_intent: semanticResult.intent,
@@ -998,6 +1219,9 @@ function buildSemanticObservationMetadata(semanticResult) {
     semantic_confidence: semanticResult.confidence,
     ...(semanticResult.rejected_fields?.length
       ? { semantic_rejected_fields: semanticResult.rejected_fields }
+      : {}),
+    ...(semanticResult.semantic_validation_errors?.length
+      ? { semantic_validation_errors: semanticResult.semantic_validation_errors }
       : {}),
   };
 }
@@ -1052,6 +1276,8 @@ export async function callSemanticOrchestrator({
     });
     const semanticResult = validateSemanticResult(providerResult.answer, {
       faqItems,
+      pendingInteraction: normalizeConversationContext(context).pending_interaction,
+      currentMessage: message,
     });
     const latencyMs = Date.now() - startedAt;
 

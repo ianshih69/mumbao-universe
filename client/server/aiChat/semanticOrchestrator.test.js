@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildConversationContextUpdate } from "./conversationContext.js";
 import { routeKnowledge } from "./knowledgeRouter.js";
 import {
+  allowedPendingResolutionActions,
   allowedTurnActions,
   buildModelUsageMetadata,
   buildNoSecondCallFallbackRoute,
@@ -22,6 +23,18 @@ const dateInfo = {
   currentYear: 2026,
   nextYear: 2027,
   timeZone: "Asia/Taipei",
+};
+
+const pendingDateConfirmation = {
+  action: "confirm_quote_dates",
+  proposed_values: {
+    check_in: "2026-10-10",
+    check_out: "2026-10-11",
+  },
+  required_response_type: "confirmation",
+  resume_action: "request_quote",
+  created_at: "2026-08-03T10:00:00.000Z",
+  expires_at: "2026-08-03T10:30:00.000Z",
 };
 
 function faq(overrides = {}) {
@@ -287,6 +300,8 @@ describe("semantic orchestrator validation", () => {
   });
 
   it("accepts only finite turn actions", () => {
+    expect(allowedPendingResolutionActions.has("confirm")).toBe(true);
+    expect(allowedPendingResolutionActions.has("answer_field")).toBe(true);
     expect(allowedTurnActions.has("update_quote")).toBe(true);
     expect(allowedTurnActions.has("confirm_pending")).toBe(true);
     expect(allowedTurnActions.has("answer_pending")).toBe(true);
@@ -301,6 +316,104 @@ describe("semantic orchestrator validation", () => {
         route: "collect_info",
       }),
     ).toThrow("semantic_orchestrator_invalid_turn_action");
+  });
+
+  it("accepts split pending confirmation schema with additional context fields", () => {
+    const result = validateSemanticResult(
+      {
+        pending_resolution_action: "confirm",
+        turn_action: "request_quote",
+        intent: "pricing",
+        route: "collect_info",
+        context_patch: { guest_count: 10 },
+        selected_faq_ids: [],
+      },
+      {
+        pendingInteraction: pendingDateConfirmation,
+        currentMessage: "對，10人",
+      },
+    );
+
+    expect(result).toMatchObject({
+      pending_resolution_action: "confirm",
+      turn_action: "request_quote",
+      context_patch: { guest_count: 10 },
+      pending_protocol_normalization_reason: "",
+    });
+  });
+
+  it("normalizes legacy answer_pending into confirm when the message confirms pending dates", () => {
+    const result = validateSemanticResult(
+      {
+        turn_action: "answer_pending",
+        intent: "pricing",
+        route: "collect_info",
+        context_patch: { guest_count: 10 },
+        selected_faq_ids: [],
+      },
+      {
+        pendingInteraction: pendingDateConfirmation,
+        currentMessage: "對，10人",
+      },
+    );
+
+    expect(result).toMatchObject({
+      semantic_turn_action_raw: "answer_pending",
+      semantic_pending_resolution_raw: "",
+      pending_resolution_action: "confirm",
+      turn_action: "request_quote",
+      context_patch: { guest_count: 10 },
+      pending_protocol_normalization_reason:
+        "confirmation_pending_with_additional_field",
+    });
+  });
+
+  it("keeps field-only answers separate from confirming pending dates", () => {
+    const result = validateSemanticResult(
+      {
+        turn_action: "answer_pending",
+        intent: "pricing",
+        route: "collect_info",
+        context_patch: { guest_count: 10 },
+        selected_faq_ids: [],
+      },
+      {
+        pendingInteraction: pendingDateConfirmation,
+        currentMessage: "10人",
+      },
+    );
+
+    expect(result).toMatchObject({
+      pending_resolution_action: "answer_field",
+      turn_action: "request_quote",
+      context_patch: { guest_count: 10 },
+      pending_protocol_normalization_reason:
+        "confirmation_pending_answered_field_only",
+    });
+  });
+
+  it("normalizes pending actions to none when there is no pending interaction", () => {
+    const result = validateSemanticResult({
+      turn_action: "modify_pending",
+      intent: "pricing",
+      route: "collect_info",
+      context_patch: {
+        check_in: "2026-10-12",
+        check_out: "2026-10-13",
+      },
+      selected_faq_ids: [],
+    });
+
+    expect(result).toMatchObject({
+      semantic_turn_action_raw: "modify_pending",
+      pending_resolution_action: "none",
+      turn_action: "request_quote",
+      pending_protocol_normalization_reason:
+        "pending_resolution_without_pending",
+    });
+    expect(result.semantic_validation_errors).toContain(
+      "pending_resolution_without_pending"
+    );
   });
 
   it("keeps mentioned and uncertain fields for freshness validation", () => {

@@ -9,7 +9,12 @@ import {
   classifyPricingReplyIntent,
   getPricingRelevantChangedFields,
 } from "./lodgingPricing.js";
-import { normalizeTurnAction } from "./semanticOrchestrator.js";
+import {
+  normalizePendingResolutionAction,
+  normalizeTurnAction,
+  pendingResolutionToLegacyTurnAction,
+  validateAndNormalizeSemanticTurn,
+} from "./semanticOrchestrator.js";
 
 const pricingIntentToTurnAction = new Map([
   ["initial_quote", "request_quote"],
@@ -445,25 +450,25 @@ function hasPendingProposalConflict({ pendingInteraction, context }) {
   return false;
 }
 
-function inferPendingProtocolAction({ pendingInteraction, message, context }) {
+function inferPendingProtocolResolution({ pendingInteraction, message, context }) {
   const pending = normalizePendingInteraction(pendingInteraction);
   if (!pending) return null;
 
   if (pending.required_response_type === "confirmation") {
     if (hasProtocolRejection(message) || hasPendingProposalConflict({ pendingInteraction: pending, context })) {
-      return "modify_pending";
+      return "modify";
     }
     if (hasProtocolAffirmation(message)) {
-      return "confirm_pending";
+      return "confirm";
     }
-    return "answer_pending";
+    return "answer_field";
   }
 
   if (pending.required_response_type === "fields") {
-    return "answer_pending";
+    return "answer_field";
   }
 
-  return "answer_pending";
+  return "answer_field";
 }
 
 function buildResolvedContextSummary(context) {
@@ -483,6 +488,24 @@ function buildResolvedContextSummary(context) {
   return parts.join("; ");
 }
 
+function buildPendingConfirmationReply(context, pendingInteraction) {
+  const state = normalizeConversationContext(context);
+  const pending = normalizePendingInteraction(pendingInteraction);
+  const proposed = pending?.proposed_values || {};
+  const parts = [];
+  if (state.guest_count !== null) parts.push(`入住人數為${state.guest_count}位`);
+  if (state.pet_count !== null) {
+    parts.push(state.pet_count === 0 ? "不攜帶寵物" : `會攜帶${state.pet_count}隻寵物`);
+  }
+  const acknowledged = parts.length ? `收到，${parts.join("，")}。` : "收到。";
+  if (proposed.check_in && proposed.check_out) {
+    return `${acknowledged}請問日期是${formatDisplayDate(
+      proposed.check_in
+    )}入住、${formatDisplayDate(proposed.check_out)}退房嗎？`;
+  }
+  return `${acknowledged}請問剛才慢寶整理的資訊是否正確呢？`;
+}
+
 function resolveTurnState({
   semanticResult,
   message,
@@ -493,13 +516,38 @@ function resolveTurnState({
   pendingInteraction,
   nowIso,
 }) {
-  const semanticAction = normalizeTurnAction(semanticResult?.turn_action);
-  const protocolAction = semanticAction
-    ? null
-    : inferPendingProtocolAction({ pendingInteraction, message, context });
+  const pending = normalizePendingInteraction(pendingInteraction);
+  const hasSemanticSignal = Boolean(
+    normalizeTurnAction(semanticResult?.turn_action) ||
+      normalizePendingResolutionAction(semanticResult?.pending_resolution_action)
+  );
+  const normalizedSemanticTurn = hasSemanticSignal
+    ? validateAndNormalizeSemanticTurn({
+        semanticResult,
+        pendingInteraction: pending,
+        currentMessage: message,
+        deterministicPatch: semanticResult?.context_patch,
+      })
+    : null;
+  const normalizedSemanticResult = normalizedSemanticTurn?.semanticResult || null;
+  const semanticAction = normalizeTurnAction(normalizedSemanticResult?.turn_action);
+  const semanticPendingResolution = normalizePendingResolutionAction(
+    normalizedSemanticResult?.pending_resolution_action
+  );
+  const protocolPendingResolution =
+    semanticPendingResolution && semanticPendingResolution !== "none"
+      ? null
+      : inferPendingProtocolResolution({ pendingInteraction: pending, message, context });
+  const resolvedPendingResolution =
+    semanticPendingResolution && semanticPendingResolution !== "none"
+      ? semanticPendingResolution
+      : protocolPendingResolution || "none";
+  const pendingExecutorAction = pendingResolutionToLegacyTurnAction(
+    resolvedPendingResolution
+  );
   const fallbackAction =
+    pendingExecutorAction ||
     semanticAction ||
-    protocolAction ||
     inferFallbackTurnAction({
       message,
       routeResult,
@@ -508,16 +556,25 @@ function resolveTurnState({
       recentMessages,
     });
   const resolvedTurnAction = normalizeTurnAction(fallbackAction) || fallbackAction;
-  const pending = normalizePendingInteraction(pendingInteraction);
+  const businessTurnAction =
+    pendingExecutorAction
+      ? semanticAction || normalizeTurnAction(pending?.resume_action) || "request_quote"
+      : resolvedTurnAction;
   const proposedValues = pending?.proposed_values || {};
   const shouldApplyPendingProposal =
-    resolvedTurnAction === "confirm_pending" &&
+    resolvedPendingResolution === "confirm" &&
     pending &&
     !isPendingExpired(pending, nowIso);
+  const shouldKeepConfirmationPending =
+    pending &&
+    pending.required_response_type === "confirmation" &&
+    resolvedPendingResolution === "answer_field";
   const resolvedContext = normalizeConversationContext({
     ...context,
     ...(shouldApplyPendingProposal ? proposedValues : {}),
-    ...(pending && isPendingAction(resolvedTurnAction) ? { pending_interaction: null } : {}),
+    ...(pending && isPendingAction(resolvedTurnAction) && !shouldKeepConfirmationPending
+      ? { pending_interaction: null }
+      : {}),
   });
   const finalMissingFields = isPricingAction(resolvedTurnAction) || isPendingAction(resolvedTurnAction)
     ? getMissingBookingContextFields(resolvedContext)
@@ -527,21 +584,29 @@ function resolveTurnState({
     resolvedContext,
     resolvedPendingInteraction: pending,
     resolvedTurnAction,
-    pendingProtocolFallback: protocolAction,
+    businessTurnAction,
+    normalizedSemanticResult,
+    pendingProtocolFallback: protocolPendingResolution,
+    normalizedPendingResolution: resolvedPendingResolution,
+    pendingProtocolNormalizationReason:
+      normalizedSemanticResult?.pending_protocol_normalization_reason || "",
+    semanticValidationErrors: normalizedSemanticResult?.semantic_validation_errors || [],
     resumedTurnAction:
       pending && isPendingAction(resolvedTurnAction)
-        ? normalizeTurnAction(pending.resume_action) || "request_quote"
+        ? normalizeTurnAction(pending.resume_action) || semanticAction || "request_quote"
         : null,
     pendingResolution:
-      resolvedTurnAction === "confirm_pending"
+      resolvedPendingResolution === "confirm"
         ? "confirmed"
-        : resolvedTurnAction === "reject_pending"
+        : resolvedPendingResolution === "reject"
           ? "rejected"
-          : resolvedTurnAction === "modify_pending"
+          : resolvedPendingResolution === "modify"
             ? "modified"
-            : resolvedTurnAction === "answer_pending"
+            : resolvedPendingResolution === "answer_field"
               ? "answered"
-              : null,
+              : resolvedPendingResolution === "unrelated"
+                ? "unrelated"
+                : null,
     changedFields: getPricingRelevantChangedFields(previousContext, resolvedContext),
     finalMissingFields,
     resolvedContextSummary: buildResolvedContextSummary(resolvedContext),
@@ -603,6 +668,23 @@ async function executePendingAction({
         action_executor_result: "pending_rejected",
       },
       contextPatch: clearPendingPatch(),
+    });
+  }
+
+  if (
+    action === "answer_pending" &&
+    pending.required_response_type === "confirmation"
+  ) {
+    const answer = buildPendingConfirmationReply(context, pending);
+    return buildCollectInfoRoute(routeResult, {
+      answer,
+      reason: "pending_confirmation_field_answered",
+      metadata: {
+        ...pendingMetadata,
+        pending_resolution: "answered",
+        action_executor_result: "pending_confirmation_field_answered",
+      },
+      contextPatch: { pending_interaction: pending },
     });
   }
 
@@ -840,9 +922,33 @@ export async function executeTurnAction({
   const action = resolvedTurnState.resolvedTurnAction;
   const executorContext = resolvedTurnState.resolvedContext;
   const changedFields = resolvedTurnState.changedFields;
+  const normalizedSemanticResult = resolvedTurnState.normalizedSemanticResult;
   const metadata = {
-    ...(semanticResult?.turn_action ? { semantic_turn_action: semanticResult.turn_action } : {}),
-    validated_turn_action: action,
+    ...(semanticResult?.semantic_turn_action_raw || semanticResult?.turn_action
+      ? {
+          semantic_turn_action_raw:
+            semanticResult.semantic_turn_action_raw || semanticResult.turn_action,
+        }
+      : {}),
+    ...(semanticResult?.semantic_pending_resolution_raw ||
+    semanticResult?.pending_resolution_action
+      ? {
+          semantic_pending_resolution_raw:
+            semanticResult.semantic_pending_resolution_raw ||
+            semanticResult.pending_resolution_action,
+        }
+      : {}),
+    ...(normalizedSemanticResult?.turn_action
+      ? { semantic_turn_action: normalizedSemanticResult.turn_action }
+      : {}),
+    validated_turn_action: resolvedTurnState.businessTurnAction,
+    pending_executor_action: isPendingAction(action) ? action : null,
+    normalized_pending_resolution: resolvedTurnState.normalizedPendingResolution,
+    pending_protocol_normalization_reason:
+      resolvedTurnState.pendingProtocolNormalizationReason,
+    ...(resolvedTurnState.semanticValidationErrors?.length
+      ? { semantic_validation_errors: resolvedTurnState.semanticValidationErrors }
+      : {}),
     turn_action_validator_result: normalizeTurnAction(action) ? "accepted" : "rejected",
     mentioned_fields: freshnessGuard?.mentioned_fields || semanticResult?.mentioned_fields || [],
     uncertain_fields: freshnessGuard?.uncertain_fields || semanticResult?.uncertain_fields || [],

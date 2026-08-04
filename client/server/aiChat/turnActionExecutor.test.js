@@ -521,8 +521,10 @@ describe("turn action executor", () => {
       resume_action: "request_quote",
     });
     expect(result.semanticMetadata).toMatchObject({
-      validated_turn_action: "confirm_pending",
-      pending_protocol_fallback: "confirm_pending",
+      validated_turn_action: "request_quote",
+      pending_executor_action: "confirm_pending",
+      normalized_pending_resolution: "confirm",
+      pending_protocol_fallback: "confirm",
       pending_action_before: "confirm_quote_dates",
       pending_resolution: "confirmed",
       resumed_turn_action: "request_quote",
@@ -558,9 +560,11 @@ describe("turn action executor", () => {
     expect(result.answer).toContain("2026年10月10日入住、2026年10月11日退房");
     expect(result.answer).not.toContain("請問入住日期");
     expect(result.semanticMetadata).toMatchObject({
-      semantic_turn_action: "invalid_action",
-      validated_turn_action: "confirm_pending",
-      pending_protocol_fallback: "confirm_pending",
+      semantic_turn_action_raw: "invalid_action",
+      validated_turn_action: "request_quote",
+      pending_executor_action: "confirm_pending",
+      normalized_pending_resolution: "confirm",
+      pending_protocol_fallback: "confirm",
       final_missing_fields: ["pet_count"],
     });
   });
@@ -580,21 +584,201 @@ describe("turn action executor", () => {
       sourceMessageId: "request-october-field-only",
     });
 
-    expect(result.answer).toContain("請問入住日期");
-    expect(result.answer).toContain("是否攜帶寵物");
+    expect(result.answer).toContain("入住人數為10位");
+    expect(result.answer).toContain("請問日期是2026年10月10日入住、2026年10月11日退房嗎");
     expect(result.conversationContextPatch.pending_interaction).toMatchObject({
-      action: "collect_quote_fields",
-      required_fields: ["check_in", "check_out", "pet_count"],
+      action: "confirm_quote_dates",
+      proposed_values: {
+        check_in: "2026-10-10",
+        check_out: "2026-10-11",
+      },
     });
     expect(result.conversationContextPatch).not.toMatchObject({
       check_out: "2026-10-11",
     });
     expect(result.semanticMetadata).toMatchObject({
-      validated_turn_action: "answer_pending",
-      pending_protocol_fallback: "answer_pending",
+      validated_turn_action: "request_quote",
+      pending_executor_action: "answer_pending",
+      normalized_pending_resolution: "answer_field",
+      pending_protocol_fallback: "answer_field",
       pending_resolution: "answered",
+      action_executor_result: "pending_confirmation_field_answered",
       final_missing_fields: ["dates", "pet_count"],
     });
+  });
+
+  it("accepts the split semantic schema for confirming pending dates and adding a guest count", async () => {
+    const result = await executeTurnAction({
+      message: "對，10人",
+      semanticResult: semantic("request_quote", {
+        pending_resolution_action: "confirm",
+        context_patch: { guest_count: 10 },
+        mentioned_fields: ["guest_count"],
+      }),
+      routeResult: staleMissingDateRoute(),
+      context: {
+        ...octoberPendingContext,
+        guest_count: 10,
+      },
+      previousContext: octoberPendingContext,
+      recentMessages: [],
+      nowIso: "2026-08-03T10:00:00.000Z",
+      sourceMessageId: "request-october-new-schema",
+    });
+
+    expect(result.answer).toContain("2026年10月10日入住、2026年10月11日退房");
+    expect(result.answer).not.toContain("請問入住日期");
+    expect(result.conversationContextPatch).toMatchObject({
+      check_in: "2026-10-10",
+      check_out: "2026-10-11",
+    });
+    expect(result.semanticMetadata).toMatchObject({
+      semantic_turn_action_raw: "request_quote",
+      semantic_pending_resolution_raw: "confirm",
+      validated_turn_action: "request_quote",
+      pending_executor_action: "confirm_pending",
+      normalized_pending_resolution: "confirm",
+      pending_resolution: "confirmed",
+      final_missing_fields: ["pet_count"],
+    });
+  });
+
+  it("normalizes legacy answer_pending with confirmation text into a pending confirm", async () => {
+    const result = await executeTurnAction({
+      message: "對，10人",
+      semanticResult: semantic("answer_pending", {
+        context_patch: { guest_count: 10 },
+        mentioned_fields: ["guest_count"],
+      }),
+      routeResult: staleMissingDateRoute(),
+      context: {
+        ...octoberPendingContext,
+        guest_count: 10,
+      },
+      previousContext: octoberPendingContext,
+      recentMessages: [],
+      nowIso: "2026-08-03T10:00:00.000Z",
+      sourceMessageId: "request-october-legacy-answer-pending",
+    });
+
+    expect(result.answer).toContain("2026年10月10日入住、2026年10月11日退房");
+    expect(result.answer).not.toContain("請問入住日期");
+    expect(result.semanticMetadata).toMatchObject({
+      semantic_turn_action_raw: "answer_pending",
+      semantic_turn_action: "request_quote",
+      validated_turn_action: "request_quote",
+      pending_executor_action: "confirm_pending",
+      normalized_pending_resolution: "confirm",
+      pending_protocol_normalization_reason:
+        "confirmation_pending_with_additional_field",
+      pending_resolution: "confirmed",
+      final_missing_fields: ["pet_count"],
+    });
+  });
+
+  it("normalizes legacy answer_pending rejection without applying proposed dates", async () => {
+    const result = await executeTurnAction({
+      message: "不是，10人",
+      semanticResult: semantic("answer_pending", {
+        context_patch: { guest_count: 10 },
+        mentioned_fields: ["guest_count"],
+      }),
+      routeResult: staleMissingDateRoute(),
+      context: {
+        ...octoberPendingContext,
+        guest_count: 10,
+      },
+      previousContext: octoberPendingContext,
+      recentMessages: [],
+      nowIso: "2026-08-03T10:00:00.000Z",
+      sourceMessageId: "request-october-legacy-reject",
+    });
+
+    expect(result.conversationContextPatch).not.toMatchObject({
+      check_out: "2026-10-11",
+    });
+    expect(result.conversationContextPatch.pending_interaction).toBeNull();
+    expect(result.semanticMetadata).toMatchObject({
+      semantic_turn_action_raw: "answer_pending",
+      validated_turn_action: "request_quote",
+      pending_executor_action: "reject_pending",
+      normalized_pending_resolution: "reject",
+      pending_resolution: "rejected",
+    });
+  });
+
+  it("normalizes legacy answer_pending replacement dates into modify", async () => {
+    const result = await executeTurnAction({
+      message: "不是，是10月12日到10月13日，10人",
+      semanticResult: semantic("answer_pending", {
+        context_patch: {
+          check_in: "2026-10-12",
+          check_out: "2026-10-13",
+          guest_count: 10,
+        },
+        mentioned_fields: ["check_in", "check_out", "guest_count"],
+      }),
+      routeResult: staleMissingDateRoute(),
+      context: {
+        ...octoberPendingContext,
+        check_in: "2026-10-12",
+        check_out: "2026-10-13",
+        guest_count: 10,
+      },
+      previousContext: octoberPendingContext,
+      recentMessages: [],
+      nowIso: "2026-08-03T10:00:00.000Z",
+      sourceMessageId: "request-october-legacy-modify",
+    });
+
+    expect(result.answer).toContain("2026年10月12日入住、2026年10月13日退房");
+    expect(result.answer).not.toContain("請問入住日期");
+    expect(result.conversationContextPatch.pending_interaction).toMatchObject({
+      action: "collect_quote_fields",
+      required_fields: ["pet_count"],
+    });
+    expect(result.semanticMetadata).toMatchObject({
+      semantic_turn_action_raw: "answer_pending",
+      validated_turn_action: "request_quote",
+      pending_executor_action: "modify_pending",
+      normalized_pending_resolution: "modify",
+      pending_resolution: "modified",
+      final_missing_fields: ["pet_count"],
+    });
+  });
+
+  it("does not execute pending operations when there is no pending interaction", async () => {
+    const result = await executeTurnAction({
+      message: "不是，是10月12日到10月13日",
+      semanticResult: semantic("modify_pending", {
+        context_patch: {
+          check_in: "2026-10-12",
+          check_out: "2026-10-13",
+        },
+        mentioned_fields: ["check_in", "check_out"],
+      }),
+      routeResult: route(),
+      context: {
+        ...oldQuoteContext,
+        check_in: "2026-10-12",
+        check_out: "2026-10-13",
+      },
+      previousContext: oldQuoteContext,
+      recentMessages: [],
+      nowIso: "2026-08-03T10:00:00.000Z",
+      sourceMessageId: "request-no-pending-modify",
+    });
+
+    expect(result.semanticMetadata).toMatchObject({
+      semantic_turn_action_raw: "modify_pending",
+      validated_turn_action: "request_quote",
+      pending_executor_action: null,
+      normalized_pending_resolution: "none",
+    });
+    expect(result.semanticMetadata.semantic_validation_errors).toContain(
+      "pending_resolution_without_pending"
+    );
+    expect(result.semanticMetadata.action_executor_result).not.toBe("pending_missing");
   });
 
   it("uses the same pricing capability for direct request_quote with complete context", async () => {

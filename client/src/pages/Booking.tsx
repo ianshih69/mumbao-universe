@@ -74,6 +74,9 @@ const emptyForm: BookingForm = {
   notes: "",
 };
 
+const bookingTestPassword = "123";
+const bookingTestStorageKey = "mumbao_booking_test_unlocked_v1";
+
 const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
 const petTypeLabels: Record<PetType, string> = {
   dog: "狗",
@@ -279,6 +282,12 @@ export default function Booking() {
   const [isChecking, setIsChecking] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedRequestId, setSubmittedRequestId] = useState("");
+  const [isBookingTestUnlocked, setIsBookingTestUnlocked] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.sessionStorage.getItem(bookingTestStorageKey) === "true";
+  });
+  const [bookingTestInput, setBookingTestInput] = useState("");
+  const [bookingTestError, setBookingTestError] = useState("");
 
   const minDate = todayText();
   const maxMonth = monthStart(maxDate);
@@ -296,6 +305,8 @@ export default function Booking() {
   const heroSubtitle = bookingCopy.subtitleTemplate.replace("{bookingWindowLabel}", settings.bookingWindowLabel);
 
   useEffect(() => {
+    if (!isBookingTestUnlocked) return;
+
     let isCurrent = true;
     setIsCalendarLoading(true);
     setError("");
@@ -319,9 +330,11 @@ export default function Booking() {
     return () => {
       isCurrent = false;
     };
-  }, [minDate]);
+  }, [isBookingTestUnlocked, minDate]);
 
   useEffect(() => {
+    if (!isBookingTestUnlocked) return;
+
     let isCurrent = true;
     fetchSitePageContent("booking")
       .then((content) => {
@@ -345,7 +358,7 @@ export default function Booking() {
     return () => {
       isCurrent = false;
     };
-  }, []);
+  }, [isBookingTestUnlocked]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -457,6 +470,72 @@ export default function Booking() {
     }
   }
 
+  function handleBookingTestUnlock(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (bookingTestInput.trim() !== bookingTestPassword) {
+      setBookingTestError("測試密碼錯誤");
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(bookingTestStorageKey, "true");
+    }
+    setBookingTestError("");
+    setBookingTestInput("");
+    setIsBookingTestUnlocked(true);
+  }
+
+  function handleExitBookingTest() {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(bookingTestStorageKey);
+    }
+    setBookingTestError("");
+    setBookingTestInput("");
+    setIsBookingTestUnlocked(false);
+  }
+
+  if (!isBookingTestUnlocked) {
+    return (
+      <div className="min-h-screen bg-[#fbf7f1] text-stone-900">
+        <Header />
+        <main className="px-4 pb-16 pt-32 md:px-8 md:pt-40">
+          <section className="mx-auto max-w-xl rounded-[24px] border border-[#eadfce] bg-white/90 p-6 shadow-sm md:p-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#b08d73]">STime Villa Booking</p>
+            <h1 className="mt-4 font-serif text-4xl font-light tracking-wide text-stone-900 md:text-5xl">
+              線上訂房系統建置中
+            </h1>
+            <p className="mt-5 text-base leading-8 text-stone-600">
+              此功能目前正在測試中，尚未正式開放。
+            </p>
+            <form className="mt-6 grid gap-4" onSubmit={handleBookingTestUnlock}>
+              <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                測試密碼
+                <input
+                  className={fieldClassName()}
+                  type="password"
+                  value={bookingTestInput}
+                  onChange={(event) => {
+                    setBookingTestInput(event.target.value);
+                    setBookingTestError("");
+                  }}
+                />
+              </label>
+              {bookingTestError && (
+                <div className="rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
+                  {bookingTestError}
+                </div>
+              )}
+              <Button className="h-12 bg-[#8b6f5b] hover:bg-[#765d4a]">
+                進入測試
+              </Button>
+            </form>
+          </section>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   function renderMonth(month: string, secondary = false) {
     const dates = getMonthDates(month);
 
@@ -511,6 +590,16 @@ export default function Booking() {
     <div className="min-h-screen bg-[#fbf7f1] text-stone-900">
       <Header />
       <main className="px-4 pb-16 pt-32 md:px-8 md:pt-40">
+        <div className="mx-auto mb-4 flex max-w-6xl flex-col gap-3 rounded-[12px] border border-[#eadfce] bg-white/80 px-4 py-3 text-sm text-stone-600 shadow-sm md:flex-row md:items-center md:justify-between">
+          <span>測試模式｜目前訂房系統尚未正式開放</span>
+          <button
+            type="button"
+            className="self-start text-xs font-medium text-stone-500 underline underline-offset-4 transition hover:text-[#765d4a] md:self-auto"
+            onClick={handleExitBookingTest}
+          >
+            退出測試
+          </button>
+        </div>
         <section className="mx-auto max-w-6xl">
           <div className="rounded-[24px] border border-[#eadfce] bg-white/90 p-6 shadow-sm md:p-8">
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#b08d73]">

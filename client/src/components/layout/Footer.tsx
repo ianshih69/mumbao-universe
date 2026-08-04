@@ -16,7 +16,7 @@ const socialLinks = [
     src: "/images/social/brand/instagram.svg",
   },
   {
-    href: "https://line.me/ti/g/SRvrzLE8CY",
+    href: "https://lin.ee/u3JpTa6",
     label: "LINE",
     src: "/images/social/brand/line.svg",
   },

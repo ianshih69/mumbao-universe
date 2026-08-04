@@ -11,6 +11,17 @@ import {
   parseDeepSeekResponseBody,
 } from "./deepSeek.js";
 import {
+  buildModelExecutionMetadata,
+  reserveModelCall,
+} from "./modelExecutionContext.js";
+import {
+  aiChatPromptBudget,
+  buildPromptBudgetMetadata,
+  measurePromptPayloadChars,
+  limitFaqItemsForPrompt,
+  limitMessagesForPrompt,
+} from "./promptBudget.js";
+import {
   isApprovedActiveFaqItem,
   normalizeAnswerMode,
 } from "./faqRetrieval.js";
@@ -470,11 +481,15 @@ export function shouldUseSemanticOrchestrator({
 }
 
 export function limitSemanticRecentMessages(recentMessages) {
-  return (Array.isArray(recentMessages) ? recentMessages : [])
-    .slice(-12)
+  const maxRecentMessages = Math.max(1, aiChatPromptBudget.maxRecentTurns * 2);
+  const maxMessageChars = Math.max(
+    200,
+    Math.floor(aiChatPromptBudget.maxRecentMessageChars / maxRecentMessages)
+  );
+  return limitMessagesForPrompt(recentMessages, aiChatPromptBudget).messages
     .map((message) => ({
       sender: message?.sender === "user" ? "user" : "assistant",
-      message: String(message?.message || "").slice(0, 500),
+      message: String(message?.message || "").slice(0, maxMessageChars),
     }))
     .filter((message) => message.message.trim());
 }
@@ -502,7 +517,7 @@ function buildLatestAssistantSemanticMetadata(recentMessages) {
 }
 
 export function limitSemanticFaqItems(items) {
-  return (Array.isArray(items) ? items : [])
+  const eligibleItems = (Array.isArray(items) ? items : [])
     .filter(
       (item) =>
         isApprovedActiveFaqItem(item) ||
@@ -511,8 +526,8 @@ export function limitSemanticFaqItems(items) {
           Boolean(String(item?.id || "").trim()) &&
           Boolean(String(item?.question || "").trim()) &&
           Boolean(String(item?.answer || "").trim()))
-    )
-    .slice(0, 5)
+    );
+  return limitFaqItemsForPrompt(eligibleItems, aiChatPromptBudget).items
     .map((item) => ({
       id: String(item.id || ""),
       category: String(item.category || ""),
@@ -658,6 +673,173 @@ export function buildSemanticMessages({
       ),
     },
   ];
+}
+
+function buildSemanticUserPayload({
+  message,
+  context,
+  recentMessages,
+  faqItems,
+  dateInfo,
+  includeLatestAssistantMetadata = true,
+}) {
+  const normalizedContext = normalizeConversationContext(context);
+  return {
+    current_date: dateInfo?.currentDate || "",
+    timezone: dateInfo?.timeZone || "Asia/Taipei",
+    conversation_context: normalizedContext,
+    pending_interaction: normalizedContext.pending_interaction || null,
+    recent_messages: recentMessages,
+    ...(includeLatestAssistantMetadata
+      ? { latest_assistant_metadata: buildLatestAssistantSemanticMetadata(recentMessages) }
+      : {}),
+    current_message: String(message || ""),
+    faq_candidates: faqItems,
+    strict_rules: [
+      "FAQ and approved database facts are the only trusted lodging facts.",
+      "Do not invent prices, availability, fees, payment, refund or booking confirmation.",
+      "Use selected_faq_ids only from faq_candidates.",
+      "Use pending_resolution_action for pending_interaction resolution and turn_action for the business action after pending is resolved.",
+      "One message can confirm pending values and add fields in context_patch. For pending date confirmation plus '撠?10鈭?, use pending_resolution_action=confirm, turn_action=request_quote, context_patch.guest_count=10.",
+      "For pending date confirmation plus only '10鈭?, use pending_resolution_action=answer_field and do not confirm proposed dates.",
+      "For pending date confirmation plus '銝嚗10/12??0/13嚗?0鈭?, use pending_resolution_action=modify and include replacement dates plus guest_count in context_patch.",
+    ],
+  };
+}
+
+function buildSemanticMessagesFromPayload(payload) {
+  return [
+    {
+      role: "system",
+      content: buildSemanticSystemInstruction(),
+    },
+    {
+      role: "user",
+      content: JSON.stringify(payload, null, 2),
+    },
+  ];
+}
+
+function fitSemanticPromptToHardLimit({
+  message,
+  context,
+  recentMessages,
+  faqItems,
+  dateInfo,
+  buildPayload,
+}) {
+  const hardLimit = aiChatPromptBudget.maxTotalInputChars;
+  const truncatedSections = [];
+  const currentMessage = String(message || "").trim();
+  let semanticRecentMessages = limitSemanticRecentMessages(recentMessages);
+  let semanticFaqItems = limitSemanticFaqItems(faqItems);
+  let includeLatestAssistantMetadata = true;
+
+  const rebuild = () => {
+    const semanticPayload = buildSemanticUserPayload({
+      message: currentMessage,
+      context,
+      recentMessages: semanticRecentMessages,
+      faqItems: semanticFaqItems,
+      dateInfo,
+      includeLatestAssistantMetadata,
+    });
+    const messages = buildSemanticMessagesFromPayload(semanticPayload);
+    const payload = buildPayload(messages);
+    return {
+      messages,
+      payload,
+      promptChars: measurePromptPayloadChars(payload),
+    };
+  };
+
+  let result = rebuild();
+
+  while (
+    result.promptChars > hardLimit &&
+    semanticRecentMessages.length > 0
+  ) {
+    semanticRecentMessages = semanticRecentMessages.slice(1);
+    truncatedSections.push("recent_messages_hard_limit");
+    result = rebuild();
+  }
+
+  while (result.promptChars > hardLimit && semanticFaqItems.length > 0) {
+    semanticFaqItems = semanticFaqItems.slice(0, -1);
+    truncatedSections.push("faq_candidates_hard_limit");
+    result = rebuild();
+  }
+
+  if (result.promptChars > hardLimit && includeLatestAssistantMetadata) {
+    includeLatestAssistantMetadata = false;
+    truncatedSections.push("assistant_metadata_hard_limit");
+    result = rebuild();
+  }
+
+  if (result.promptChars > hardLimit) {
+    const error = new Error("input_too_long");
+    error.providerErrorCode = "input_too_long";
+    error.promptBudgetMetadata = buildPromptBudgetMetadata({
+      prompt: buildSemanticSystemInstruction(),
+      messages: semanticRecentMessages,
+      faqItems: semanticFaqItems,
+      context: normalizeConversationContext(context),
+      pendingInteraction:
+        normalizeConversationContext(context).pending_interaction,
+      currentMessage,
+      actualPromptChars: result.promptChars,
+      truncatedSections: [...truncatedSections, "current_message"],
+      extraSections: [dateInfo || {}, "semantic_schema_and_strict_rules"],
+    });
+    throw error;
+  }
+
+  const normalizedContext = normalizeConversationContext(context);
+  return {
+    messages: result.messages,
+    payload: result.payload,
+    promptBudgetMetadata: buildPromptBudgetMetadata({
+      prompt: buildSemanticSystemInstruction(),
+      messages: semanticRecentMessages,
+      faqItems: semanticFaqItems,
+      context: normalizedContext,
+      pendingInteraction: normalizedContext.pending_interaction,
+      currentMessage,
+      actualPromptChars: result.promptChars,
+      truncatedSections,
+      extraSections: [dateInfo || {}, "semantic_schema_and_strict_rules"],
+    }),
+  };
+}
+
+function buildSemanticPromptMetadata({
+  message,
+  context,
+  recentMessages,
+  faqItems,
+  dateInfo,
+}) {
+  const normalizedContext = normalizeConversationContext(context);
+  const recentLimit = limitMessagesForPrompt(recentMessages, aiChatPromptBudget);
+  const faqLimit = limitFaqItemsForPrompt(faqItems, aiChatPromptBudget);
+
+  return buildPromptBudgetMetadata({
+    prompt: buildSemanticSystemInstruction(),
+    messages: recentLimit.messages,
+    faqItems: faqLimit.items,
+    context: normalizedContext,
+    pendingInteraction: normalizedContext.pending_interaction,
+    currentMessage: message,
+    extraSections: [
+      String(message || ""),
+      dateInfo || {},
+      "semantic_schema_and_strict_rules",
+    ],
+    truncatedSections: [
+      ...recentLimit.promptTruncationSections,
+      ...faqLimit.promptTruncationSections,
+    ],
+  });
 }
 
 function getDeepSeekConfig() {
@@ -1134,6 +1316,38 @@ export function buildNoSecondCallFallbackRoute(routeResult, fallbackReason) {
     };
   }
 
+  const approvedDirectItems = (Array.isArray(routeResult?.matchedFaqItems)
+    ? routeResult.matchedFaqItems
+    : []
+  ).filter(
+    (item) =>
+      isApprovedActiveFaqItem(item) &&
+      normalizeAnswerMode(item.answer_mode) === "direct" &&
+      String(item.answer || "").trim()
+  );
+  if (approvedDirectItems.length > 0) {
+    return {
+      ...routeResult,
+      route: "faq_grounded_fallback",
+      providerUsed: "faq_direct",
+      answer: approvedDirectItems
+        .map((item) => String(item.answer || "").trim())
+        .filter(Boolean)
+        .join("\n\n"),
+      notice: "",
+      shouldCallDeepSeek: false,
+      shouldMarkNeedsHuman: false,
+      knowledgeGap: false,
+      aiSkipped: false,
+      reason: "semantic_fallback_approved_faq",
+      semanticMetadata: {
+        ...(routeResult.semanticMetadata || {}),
+        fallback_reason: fallbackReason,
+        deterministic_fallback: "approved_faq",
+      },
+    };
+  }
+
   return {
     ...routeResult,
     route: "knowledge_gap",
@@ -1235,27 +1449,33 @@ export async function callSemanticOrchestrator({
   requestId,
   mode = "legacy",
   fetchImpl = fetch,
+  executionContext = null,
 }) {
   const { apiKey, baseUrl, model } = getDeepSeekConfig();
-  const messages = buildSemanticMessages({
-    message,
-    context,
-    recentMessages,
-    faqItems,
-    dateInfo,
-  });
-  const payload = buildDeepSeekRequestPayload({
-    model,
-    messages,
-    temperature: 0.2,
-    maxTokens: 500,
-  });
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 20000);
   const startedAt = Date.now();
   let providerResult = null;
+  let promptBudgetMetadata = buildPromptBudgetMetadata();
 
   try {
+    const budgetedPrompt = fitSemanticPromptToHardLimit({
+      message,
+      context,
+      recentMessages,
+      faqItems,
+      dateInfo,
+      buildPayload: (messages) =>
+        buildDeepSeekRequestPayload({
+          model,
+          messages,
+          temperature: 0.2,
+          maxTokens: aiChatPromptBudget.maxOutputTokens,
+        }),
+    });
+    const payload = budgetedPrompt.payload;
+    promptBudgetMetadata = budgetedPrompt.promptBudgetMetadata;
+    reserveModelCall(executionContext, "semantic_router");
     const response = await fetchImpl(
       `${baseUrl.replace(/\/$/, "")}/chat/completions`,
       {
@@ -1289,14 +1509,16 @@ export async function callSemanticOrchestrator({
         ...buildModelUsageMetadata({
           mode,
           provider: "deepseek",
-          modelCalled: true,
-          modelCallCount: 1,
+          modelCalled: executionContext?.model_call_attempted ?? true,
+          modelCallCount: executionContext?.model_call_count || 1,
           model,
           providerStatus: providerResult.providerStatus,
           finishReason: providerResult.finishReason,
           usage: providerResult.usage,
           latencyMs,
         }),
+        ...promptBudgetMetadata,
+        ...(executionContext ? buildModelExecutionMetadata(executionContext) : {}),
         ...buildSemanticObservationMetadata(semanticResult),
       },
     };
@@ -1306,13 +1528,18 @@ export async function callSemanticOrchestrator({
     const validatorRejected = fallbackReason.startsWith(
       "semantic_orchestrator_invalid"
     );
+    const effectivePromptBudgetMetadata =
+      error?.promptBudgetMetadata &&
+      typeof error.promptBudgetMetadata === "object"
+        ? error.promptBudgetMetadata
+        : promptBudgetMetadata;
 
     error.semanticMetadata = {
       ...buildModelUsageMetadata({
         mode,
         provider: "deepseek",
-        modelCalled: true,
-        modelCallCount: 1,
+        modelCalled: executionContext ? executionContext.model_call_attempted : true,
+        modelCallCount: executionContext ? executionContext.model_call_count : 1,
         model,
         providerStatus: providerResult?.providerStatus,
         finishReason: providerResult?.finishReason,
@@ -1320,6 +1547,8 @@ export async function callSemanticOrchestrator({
         latencyMs,
         fallbackReason,
       }),
+      ...effectivePromptBudgetMetadata,
+      ...(executionContext ? buildModelExecutionMetadata(executionContext) : {}),
       semantic_validator_result: validatorRejected ? "rejected" : "not_run",
       semantic_validator_accepted: false,
     };

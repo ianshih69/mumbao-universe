@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildConversationContextUpdate } from "./conversationContext.js";
+import { createAiModelExecutionContext } from "./modelExecutionContext.js";
+import { aiChatPromptBudget } from "./promptBudget.js";
 import { routeKnowledge } from "./knowledgeRouter.js";
 import {
   allowedPendingResolutionActions,
@@ -602,10 +604,37 @@ describe("semantic orchestrator validation", () => {
       reason: "semantic_fallback_prevented_second_model_call",
     });
   });
+
+  it("uses approved direct FAQ as deterministic fallback instead of a second model call", () => {
+    const fallback = buildNoSecondCallFallbackRoute(
+      {
+        route: "deepseek_grounded",
+        providerUsed: "deepseek_grounded",
+        shouldCallDeepSeek: true,
+        matchedFaqItems: [
+          faq({
+            id: "faq-077",
+            answer: "退房時間為中午 12:00 前。",
+          }),
+        ],
+      },
+      "semantic_orchestrator_timeout",
+    );
+
+    expect(fallback).toMatchObject({
+      route: "faq_grounded_fallback",
+      providerUsed: "faq_direct",
+      shouldCallDeepSeek: false,
+      shouldMarkNeedsHuman: false,
+      knowledgeGap: false,
+      reason: "semantic_fallback_approved_faq",
+    });
+    expect(fallback.answer).toContain("中午 12:00 前");
+  });
 });
 
 describe("semantic prompt and cost metadata", () => {
-  it("limits recent messages to 12 and FAQ candidates to 5", () => {
+  it("limits recent messages and FAQ candidates by prompt budget", () => {
     const messages = buildSemanticMessages({
       message: "那多少錢？",
       context: { active_intent: "pricing", stay_type: "villa" },
@@ -635,8 +664,12 @@ describe("semantic prompt and cost metadata", () => {
     expect(messages[0].content).toContain('"uses_relative_date"');
     expect(messages[0].content).toContain("confirm_pending");
     expect(messages[0].content).toContain("update_quote");
-    expect(payload.recent_messages).toHaveLength(12);
-    expect(payload.faq_candidates).toHaveLength(5);
+    expect(payload.recent_messages).toHaveLength(
+      aiChatPromptBudget.maxRecentTurns * 2
+    );
+    expect(payload.faq_candidates).toHaveLength(
+      aiChatPromptBudget.maxFaqCandidates
+    );
     expect(payload).toHaveProperty("pending_interaction");
     expect(payload).toHaveProperty("latest_assistant_metadata");
     expect(payload.latest_assistant_metadata).toMatchObject({
@@ -647,7 +680,9 @@ describe("semantic prompt and cost metadata", () => {
     expect(JSON.stringify(payload.latest_assistant_metadata)).not.toContain(
       "raw_user_meta_data"
     );
-    expect(limitSemanticFaqItems(payload.faq_candidates)).toHaveLength(5);
+    expect(limitSemanticFaqItems(payload.faq_candidates)).toHaveLength(
+      aiChatPromptBudget.maxFaqCandidates
+    );
   });
 
   it("records model_call_count as 0 for direct local routes and 1 for semantic routes", () => {
@@ -766,8 +801,199 @@ describe("semantic prompt and cost metadata", () => {
       stream: false,
       thinking: { type: "disabled" },
       temperature: 0.2,
-      max_tokens: 500,
+      max_tokens: aiChatPromptBudget.maxOutputTokens,
     });
+  });
+
+  it("fits semantic prompt before fetch so the actual payload stays under the hard cap", async () => {
+    vi.stubEnv("AI_MODE", "cloud_only");
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_BASE_URL", "https://deepseek.test");
+    vi.stubEnv("DEEPSEEK_MODEL", "deepseek-v4-flash");
+
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                content: JSON.stringify({
+                  turn_action: "request_quote",
+                  pending_resolution_action: "none",
+                  intent: "pricing",
+                  topic: "booking_price",
+                  is_follow_up: true,
+                  mentioned_fields: [],
+                  context_patch: {},
+                  clear_fields: [],
+                  uncertain_fields: [],
+                  uses_relative_date: false,
+                  selected_faq_ids: [],
+                  missing_fields: ["guest_count"],
+                  route: "collect_info",
+                  needs_human: false,
+                  reply_draft: "請提供人數。",
+                  confidence: 0.9,
+                }),
+              },
+            },
+          ],
+        }),
+    }));
+    const longRecentMessages = Array.from({ length: 30 }, (_, index) => ({
+      sender: index % 2 ? "ai" : "user",
+      message: `${index}-${"x".repeat(1400)}`,
+    }));
+    const faqItems = Array.from({ length: 12 }, (_, index) =>
+      faq({
+        id: `faq-hard-${index}`,
+        question: `question ${index}`,
+        answer: "answer ".repeat(600),
+      })
+    );
+
+    const result = await callSemanticOrchestrator({
+      message: "包棟多少錢？",
+      context: {
+        active_intent: "pricing",
+        stay_type: "villa",
+        pending_interaction: pendingDateConfirmation,
+      },
+      recentMessages: longRecentMessages,
+      faqItems,
+      dateInfo,
+      requestId: "hard-limit",
+      mode: "hybrid",
+      fetchImpl,
+    });
+    const sentBody = fetchImpl.mock.calls[0][1].body;
+
+    expect(sentBody.length).toBeLessThanOrEqual(
+      aiChatPromptBudget.maxTotalInputChars
+    );
+    expect(result.metadata.prompt_within_hard_limit).toBe(true);
+    expect(result.metadata.prompt_total_chars).toBe(sentBody.length);
+  });
+
+  it("does not call DeepSeek when the current message itself cannot fit the hard cap", async () => {
+    vi.stubEnv("AI_MODE", "cloud_only");
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_BASE_URL", "https://deepseek.test");
+    vi.stubEnv("DEEPSEEK_MODEL", "deepseek-v4-flash");
+
+    const fetchImpl = vi.fn();
+    const executionContext = createAiModelExecutionContext({
+      requestId: "current-too-long",
+      incomingMessageId: "incoming-too-long",
+    });
+
+    await expect(
+      callSemanticOrchestrator({
+        message: "超長訊息".repeat(6000),
+        context: {
+          active_intent: "pricing",
+          stay_type: "villa",
+        },
+        recentMessages: [],
+        faqItems: [],
+        dateInfo,
+        requestId: "current-too-long",
+        mode: "hybrid",
+        fetchImpl,
+        executionContext,
+      })
+    ).rejects.toMatchObject({
+      message: "input_too_long",
+      semanticMetadata: {
+        model_called: false,
+        model_call_count: 0,
+        prompt_truncated: true,
+        prompt_truncation_sections: expect.arrayContaining([
+          "current_message",
+        ]),
+      },
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("uses request-scoped model budget to block a second semantic fetch", async () => {
+    vi.stubEnv("AI_MODE", "cloud_only");
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_BASE_URL", "https://deepseek.test");
+    vi.stubEnv("DEEPSEEK_MODEL", "deepseek-v4-flash");
+
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                content: JSON.stringify({
+                  turn_action: "ask_information",
+                  pending_resolution_action: "none",
+                  intent: "pricing",
+                  topic: "booking_price",
+                  is_follow_up: true,
+                  mentioned_fields: [],
+                  context_patch: {},
+                  clear_fields: [],
+                  uncertain_fields: [],
+                  uses_relative_date: false,
+                  selected_faq_ids: [],
+                  missing_fields: ["guest_count"],
+                  route: "collect_info",
+                  needs_human: false,
+                  reply_draft: "請問幾位入住？",
+                  confidence: 0.9,
+                }),
+              },
+            },
+          ],
+        }),
+    }));
+    const executionContext = createAiModelExecutionContext({
+      requestId: "request-budget",
+      incomingMessageId: "incoming-budget",
+    });
+
+    await callSemanticOrchestrator({
+      message: "包棟多少錢",
+      context: { active_intent: "pricing", stay_type: "villa" },
+      recentMessages: [],
+      faqItems: [],
+      dateInfo,
+      requestId: "request-budget",
+      mode: "hybrid",
+      fetchImpl,
+      executionContext,
+    });
+
+    await expect(
+      callSemanticOrchestrator({
+        message: "所以多少",
+        context: { active_intent: "pricing", stay_type: "villa" },
+        recentMessages: [],
+        faqItems: [],
+        dateInfo,
+        requestId: "request-budget",
+        mode: "hybrid",
+        fetchImpl,
+        executionContext,
+      })
+    ).rejects.toMatchObject({
+      providerErrorCode: "model_call_budget_exceeded",
+      semanticMetadata: {
+        model_call_count: 1,
+        model_call_blocked_reason: "model_call_budget_exceeded",
+      },
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("records safe validator rejection metadata without saving raw model output", async () => {

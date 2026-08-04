@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildAiChatMessageRequestBody,
   createHumanTakeoverNoticeMessage,
   getHumanUnreadState,
   getLatestHumanMessage,
@@ -286,5 +287,38 @@ describe("Mumbao chat storage helpers", () => {
       sessionId: "",
       shouldClear: true,
     });
+  });
+});
+
+describe("AI chat message request body", () => {
+  it("includes the stable client message id for server idempotency", () => {
+    const requestBody = buildAiChatMessageRequestBody({
+      visitorId: "visitor-1",
+      targetSessionId: "session-1",
+      clientMessageId: "local-request-1",
+      question: "可以帶狗嗎？",
+      recentMessages: [
+        message(
+          "local-user",
+          "user",
+          "上一則問題",
+          "2026-08-04T01:00:00.000Z"
+        ),
+      ],
+    });
+
+    expect(requestBody).toMatchObject({
+      visitor_id: "visitor-1",
+      session_id: "session-1",
+      client_message_id: "local-request-1",
+      message: "可以帶狗嗎？",
+    });
+    expect(requestBody.recentMessages).toEqual([
+      {
+        sender: "user",
+        message: "上一則問題",
+        created_at: "2026-08-04T01:00:00.000Z",
+      },
+    ]);
   });
 });

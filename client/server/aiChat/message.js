@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { enforceAiChatRateLimit } from "./rateLimit.js";
 import { buildFaqPromptSection } from "./faqRetrieval.js";
 import {
@@ -19,10 +19,25 @@ import {
   runWithFailureStage,
 } from "./deepSeek.js";
 import {
+  buildModelExecutionMetadata,
+  createModelCallPlan,
+  createAiModelExecutionContext,
+  reserveModelCall,
+  setModelCallPlan,
+} from "./modelExecutionContext.js";
+import {
   buildKnowledgeGapMessageMetadata,
   buildKnowledgeMetadata,
   routeKnowledge,
 } from "./knowledgeRouter.js";
+import {
+  aiChatPromptBudget,
+  buildPromptBudgetMetadata,
+  limitFaqItemsForPrompt,
+  limitMessagesForPrompt,
+  measurePromptPayloadChars,
+  truncateTextForPrompt,
+} from "./promptBudget.js";
 import {
   buildModelUsageMetadata,
   buildNoSecondCallFallbackRoute,
@@ -54,6 +69,8 @@ const systemPrompt = `你是「慢慢蒔光｜白雲基地」的 AI 客服小幫
 如果不確定答案，不要亂編，請引導客人私訊官方 LINE 或等人工客服確認。
 每次回答盡量控制在 80～180 字。`;
 const aiErrorReply = "慢寶的雲朵訊號暫時不穩，請稍後再試。";
+const inputTooLongReply =
+  "這則訊息有點太長了，我怕一次讀不完整。請分成幾段傳送，我會接著幫你整理。";
 const scopeGuardReply =
   "慢寶目前主要協助回答慢慢蒔光｜白雲基地的訂房、入住、設施、寵物與生活公約問題喔。若有其他問題，歡迎私訊官方 LINE，會有專人協助你。";
 const humanTakeoverNotice =
@@ -64,10 +81,11 @@ const jsonHeaders = {
 const supabaseTimeoutMs = 8000;
 const lineVerifyTimeoutMs = 8000;
 const deepSeekTimeoutMs = 20000;
-const recentMessagesLimit = 12;
-const recentContextMaxChars = 4000;
+const recentMessagesLimit = aiChatPromptBudget.maxRecentTurns * 2;
+const recentContextMaxChars = aiChatPromptBudget.maxRecentMessageChars;
 const chatDebugEnabled =
   String(process.env.NEXT_PUBLIC_CHAT_DEBUG || "").toLowerCase() === "true";
+const inFlightIncomingMessages = new Map();
 
 function logChatDebug(event, details = {}) {
   if (!chatDebugEnabled) return;
@@ -787,6 +805,130 @@ function normalizeClientRecentMessages(value) {
   );
 }
 
+export function normalizeIncomingMessageId(value) {
+  const text = String(value || "").trim();
+  return text ? text.slice(0, 80) : "";
+}
+
+export function buildIncomingMessageContentHash(message) {
+  return createHash("sha256")
+    .update(String(message || "").trim(), "utf8")
+    .digest("hex");
+}
+
+function buildIncomingMessageMetadata(
+  incomingMessageId,
+  requestId,
+  extra = null,
+  incomingMessageContentHash = ""
+) {
+  const normalizedIncomingMessageId =
+    normalizeIncomingMessageId(incomingMessageId);
+  return {
+    ...(extra && typeof extra === "object" ? extra : {}),
+    idempotency_available: Boolean(normalizedIncomingMessageId),
+    ...(normalizedIncomingMessageId
+      ? { incoming_message_id: normalizedIncomingMessageId }
+      : {}),
+    ...(normalizedIncomingMessageId && incomingMessageContentHash
+      ? { incoming_message_content_hash: incomingMessageContentHash }
+      : {}),
+    requestId,
+  };
+}
+
+export function findExistingReplyForIncomingMessage(
+  recentMessages,
+  incomingMessageId,
+  incomingMessageContentHash = ""
+) {
+  const normalizedIncomingMessageId = normalizeIncomingMessageId(incomingMessageId);
+  if (!normalizedIncomingMessageId || !Array.isArray(recentMessages)) {
+    return null;
+  }
+
+  const userIndex = recentMessages.findIndex(
+    (message) =>
+      message?.sender === "user" &&
+      message?.metadata?.incoming_message_id === normalizedIncomingMessageId
+  );
+
+  if (userIndex < 0) {
+    return null;
+  }
+
+  const normalizedContentHash = String(incomingMessageContentHash || "").trim();
+  const savedContentHash = String(
+    recentMessages[userIndex]?.metadata?.incoming_message_content_hash || ""
+  ).trim();
+  if (
+    normalizedContentHash &&
+    savedContentHash &&
+    normalizedContentHash !== savedContentHash
+  ) {
+    return {
+      conflict: true,
+      userMessage: recentMessages[userIndex],
+      incomingMessageContentHash: normalizedContentHash,
+      savedIncomingMessageContentHash: savedContentHash,
+    };
+  }
+
+  const aiMessage = recentMessages
+    .slice(userIndex + 1)
+    .find((message) => message?.sender !== "user" && message?.message);
+
+  return aiMessage
+    ? {
+        userMessage: recentMessages[userIndex],
+        aiMessage,
+      }
+    : null;
+}
+
+function acquireIncomingMessageLock(
+  sessionId,
+  incomingMessageId,
+  incomingMessageContentHash
+) {
+  const normalizedIncomingMessageId = normalizeIncomingMessageId(incomingMessageId);
+  if (!sessionId || !normalizedIncomingMessageId) {
+    return { idempotencyAvailable: false, release: null };
+  }
+
+  const key = `${sessionId}:${normalizedIncomingMessageId}`;
+  const contentHash = String(incomingMessageContentHash || "").trim();
+  const existing = inFlightIncomingMessages.get(key);
+
+  if (existing) {
+    return {
+      idempotencyAvailable: true,
+      inProgress: true,
+      conflict: Boolean(
+        existing.contentHash && contentHash && existing.contentHash !== contentHash
+      ),
+      release: null,
+    };
+  }
+
+  inFlightIncomingMessages.set(key, {
+    contentHash,
+    startedAt: Date.now(),
+  });
+
+  return {
+    idempotencyAvailable: true,
+    inProgress: false,
+    conflict: false,
+    release: () => {
+      const current = inFlightIncomingMessages.get(key);
+      if (current?.contentHash === contentHash) {
+        inFlightIncomingMessages.delete(key);
+      }
+    },
+  };
+}
+
 function selectRecentMessagesForContext(serverRecentMessages, clientRecentMessages) {
   return serverRecentMessages.length ? serverRecentMessages : clientRecentMessages;
 }
@@ -805,26 +947,7 @@ function buildContextText(recentMessages, currentMessage) {
 }
 
 function trimRecentMessagesForPrompt(recentMessages) {
-  const selected = [];
-  let totalLength = 0;
-
-  for (let index = recentMessages.length - 1; index >= 0; index -= 1) {
-    const message = recentMessages[index];
-    const content = String(message?.message || "").trim();
-
-    if (!content) {
-      continue;
-    }
-
-    if (totalLength + content.length > recentContextMaxChars) {
-      break;
-    }
-
-    totalLength += content.length;
-    selected.unshift(message);
-  }
-
-  return selected;
+  return limitMessagesForPrompt(recentMessages, aiChatPromptBudget).messages;
 }
 
 async function persistConversationContext(session, conversationContext) {
@@ -860,12 +983,13 @@ async function persistConversationContext(session, conversationContext) {
 }
 
 function buildDeepSeekMessages(prompt, recentMessages, userMessage) {
-  const conversationMessages = trimRecentMessagesForPrompt(recentMessages).map(
-    (message) => ({
-      role: message.sender === "user" ? "user" : "assistant",
-      content: String(message.message || ""),
-    })
-  );
+  const conversationMessages = (Array.isArray(recentMessages)
+    ? recentMessages
+    : []
+  ).map((message) => ({
+    role: message.sender === "user" ? "user" : "assistant",
+    content: String(message.message || ""),
+  }));
 
   return [
     {
@@ -880,36 +1004,242 @@ function buildDeepSeekMessages(prompt, recentMessages, userMessage) {
   ];
 }
 
+function fitDeepSeekMessagesToHardLimit({
+  model,
+  messages,
+  maxTokens = aiChatPromptBudget.maxOutputTokens,
+  allowSystemPromptTruncation = true,
+}) {
+  const hardLimit = aiChatPromptBudget.maxTotalInputChars;
+  const truncatedSections = [];
+  let fittedMessages = (Array.isArray(messages) ? messages : []).map(
+    (message) => ({
+      role: message.role,
+      content: String(message.content || ""),
+    })
+  );
+
+  const buildPayload = () =>
+    buildDeepSeekRequestPayload({
+      model,
+      messages: fittedMessages,
+      maxTokens,
+    });
+  let payload = buildPayload();
+  let promptChars = measurePromptPayloadChars(payload);
+
+  while (promptChars > hardLimit && fittedMessages.length > 2) {
+    fittedMessages = [
+      fittedMessages[0],
+      ...fittedMessages.slice(2),
+    ];
+    truncatedSections.push("recent_messages_hard_limit");
+    payload = buildPayload();
+    promptChars = measurePromptPayloadChars(payload);
+  }
+
+  while (
+    promptChars > hardLimit &&
+    allowSystemPromptTruncation &&
+    fittedMessages[0] &&
+    String(fittedMessages[0].content || "").length > 2000
+  ) {
+    const currentContent = String(fittedMessages[0].content || "");
+    const overflow = promptChars - hardLimit;
+    fittedMessages[0] = {
+      ...fittedMessages[0],
+      content: currentContent.slice(
+        0,
+        Math.max(2000, currentContent.length - overflow - 200)
+      ),
+    };
+    truncatedSections.push("system_prompt_hard_limit");
+    payload = buildPayload();
+    promptChars = measurePromptPayloadChars(payload);
+  }
+
+  if (promptChars > hardLimit) {
+    return {
+      messages: fittedMessages,
+      payload,
+      promptChars,
+      truncatedSections: [...new Set(truncatedSections)],
+      exceedsHardLimit: true,
+    };
+  }
+
+  return {
+    messages: fittedMessages,
+    payload,
+    promptChars,
+    truncatedSections: [...new Set(truncatedSections)],
+    exceedsHardLimit: false,
+  };
+}
+
+export async function buildFinalReplyProviderPrompt({
+  model,
+  userMessage,
+  recentMessages,
+  dateInfo,
+  retrievedFaqItems,
+  conversationPromptContext,
+}) {
+  const baseRecentLimit = limitMessagesForPrompt(
+    recentMessages,
+    aiChatPromptBudget
+  );
+  let recentMessagesForPrompt = baseRecentLimit.messages;
+  const baseFaqLimit = limitFaqItemsForPrompt(
+    retrievedFaqItems,
+    aiChatPromptBudget
+  );
+  let faqItemsForPrompt = baseFaqLimit.items;
+  const contextLimit = truncateTextForPrompt(
+    conversationPromptContext,
+    aiChatPromptBudget.maxContextChars
+  );
+  let contextForPrompt = contextLimit.text;
+  const currentMessageForPrompt = String(userMessage || "").trim();
+  const truncatedSections = [
+    ...baseRecentLimit.promptTruncationSections,
+    ...baseFaqLimit.promptTruncationSections,
+    ...(contextLimit.truncated ? ["context_chars"] : []),
+  ];
+
+  const rebuild = async () => {
+    const prompt = await buildSystemPrompt(
+      dateInfo,
+      faqItemsForPrompt,
+      contextForPrompt
+    );
+    const messages = buildDeepSeekMessages(
+      prompt,
+      recentMessagesForPrompt,
+      currentMessageForPrompt
+    );
+    const fitted = fitDeepSeekMessagesToHardLimit({
+      model,
+      messages,
+      maxTokens: aiChatPromptBudget.maxOutputTokens,
+      allowSystemPromptTruncation: false,
+    });
+    return { prompt, ...fitted };
+  };
+
+  let result = await rebuild();
+  while (
+    result.exceedsHardLimit &&
+    faqItemsForPrompt.length > 0
+  ) {
+    faqItemsForPrompt = faqItemsForPrompt.slice(0, -1);
+    truncatedSections.push("faq_candidates_hard_limit");
+    result = await rebuild();
+  }
+
+  while (
+    result.exceedsHardLimit &&
+    contextForPrompt.length > 200
+  ) {
+    contextForPrompt = contextForPrompt.slice(0, Math.floor(contextForPrompt.length / 2));
+    truncatedSections.push("context_hard_limit");
+    result = await rebuild();
+  }
+
+  if (result.exceedsHardLimit) {
+    const fitted = fitDeepSeekMessagesToHardLimit({
+      model,
+      messages: result.messages,
+      maxTokens: aiChatPromptBudget.maxOutputTokens,
+      allowSystemPromptTruncation: true,
+    });
+    result = { ...result, ...fitted };
+  }
+
+  if (result.exceedsHardLimit) {
+    const promptBudgetMetadata = buildPromptBudgetMetadata({
+      prompt: result.messages[0]?.content || result.prompt,
+      messages: result.messages.slice(1, -1).map((message) => ({
+        sender: message.role === "user" ? "user" : "ai",
+        message: message.content,
+      })),
+      faqItems: faqItemsForPrompt,
+      context: contextForPrompt,
+      currentMessage: currentMessageForPrompt,
+      actualPromptChars: result.promptChars,
+      truncatedSections: [
+        ...truncatedSections,
+        ...result.truncatedSections,
+        "current_message",
+      ],
+    });
+    const error = createAiChatFailure(
+      "provider_request_failed",
+      "AI prompt exceeded the hard input limit.",
+      {
+        providerErrorCode: "input_too_long",
+      }
+    );
+    error.promptBudgetMetadata = promptBudgetMetadata;
+    throw error;
+  }
+
+  const sentRecentMessages = result.messages
+    .slice(1, -1)
+    .map((message) => ({
+      sender: message.role === "user" ? "user" : "ai",
+      message: message.content,
+    }));
+
+  return {
+    ...result,
+    promptBudgetMetadata: buildPromptBudgetMetadata({
+      prompt: result.messages[0]?.content || result.prompt,
+      messages: sentRecentMessages,
+      faqItems: faqItemsForPrompt,
+      context: contextForPrompt,
+      currentMessage: result.messages[result.messages.length - 1]?.content || "",
+      actualPromptChars: result.promptChars,
+      truncatedSections: [
+        ...truncatedSections,
+        ...result.truncatedSections,
+      ],
+    }),
+  };
+}
+
 async function callDeepSeek(
   userMessage,
   recentMessages,
   dateInfo,
   retrievedFaqItems = [],
   requestId,
-  conversationPromptContext = ""
+  conversationPromptContext = "",
+  executionContext = null
 ) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), deepSeekTimeoutMs);
+  let promptBudgetMetadata = buildPromptBudgetMetadata();
 
   try {
     const { apiKey, baseUrl, model } = getDeepSeekConfig();
-    const prompt = await buildSystemPrompt(
+    const promptArtifacts = await buildFinalReplyProviderPrompt({
+      model,
+      userMessage,
+      recentMessages,
       dateInfo,
       retrievedFaqItems,
-      conversationPromptContext
-    );
-    const messages = buildDeepSeekMessages(
-      prompt,
-      recentMessages,
-      userMessage
-    );
-    const payload = buildDeepSeekRequestPayload({ model, messages });
+      conversationPromptContext,
+    });
+    promptBudgetMetadata = promptArtifacts.promptBudgetMetadata;
+    reserveModelCall(executionContext, "final_reply_provider");
+    const payload = promptArtifacts.payload;
 
     logChatDebug("provider=deepseek", {
       requestId,
       model,
-      messagesCount: messages.length,
-      promptChars: prompt.length,
+      messagesCount: promptArtifacts.messages.length,
+      promptChars: promptBudgetMetadata.prompt_total_chars,
       stream: payload.stream,
       temperature: payload.temperature,
       maxTokens: payload.max_tokens,
@@ -941,7 +1271,11 @@ async function callDeepSeek(
       body,
     });
 
-    return result;
+    return {
+      ...result,
+      promptBudgetMetadata,
+      modelExecutionMetadata: buildModelExecutionMetadata(executionContext),
+    };
   } catch (error) {
     const normalizedError = error?.failureStage
       ? error
@@ -960,6 +1294,9 @@ async function callDeepSeek(
           },
           error
         );
+    normalizedError.promptBudgetMetadata = promptBudgetMetadata;
+    normalizedError.modelExecutionMetadata =
+      buildModelExecutionMetadata(executionContext);
 
     console.error("[ai-chat] DeepSeek request failed", {
       requestId,
@@ -1197,6 +1534,14 @@ function buildFailureMetadata(requestId, error) {
   return {
     requestId,
     failureStage: error?.failureStage || "request_failed",
+    ...(error?.modelExecutionMetadata &&
+    typeof error.modelExecutionMetadata === "object"
+      ? error.modelExecutionMetadata
+      : {}),
+    ...(error?.promptBudgetMetadata &&
+    typeof error.promptBudgetMetadata === "object"
+      ? error.promptBudgetMetadata
+      : {}),
     ...(Number.isInteger(error?.providerStatus)
       ? { providerStatus: error.providerStatus }
       : {}),
@@ -1302,7 +1647,19 @@ function applyContextualRouteOverride(routeResult, conversationContext) {
   };
 }
 
-function buildRouteMetadata(routeResult, requestId, semanticMode) {
+function buildRouteMetadata(
+  routeResult,
+  requestId,
+  semanticMode,
+  executionContext = null,
+  promptBudgetMetadata = null
+) {
+  const routePromptBudgetMetadata =
+    routeResult?.promptBudgetMetadata &&
+    typeof routeResult.promptBudgetMetadata === "object"
+      ? routeResult.promptBudgetMetadata
+      : null;
+
   return {
     ...buildKnowledgeMetadata(routeResult, requestId),
     ...buildModelUsageMetadata({
@@ -1312,6 +1669,58 @@ function buildRouteMetadata(routeResult, requestId, semanticMode) {
       modelCallCount: routeResult?.shouldCallDeepSeek ? 1 : 0,
       model: routeResult?.shouldCallDeepSeek ? getDeepSeekModelName() : "",
     }),
+    ...(promptBudgetMetadata && typeof promptBudgetMetadata === "object"
+      ? promptBudgetMetadata
+      : routePromptBudgetMetadata || buildPromptBudgetMetadata()),
+    ...buildModelExecutionMetadata(executionContext),
+  };
+}
+
+function isInputTooLongError(error) {
+  return (
+    error?.providerErrorCode === "input_too_long" ||
+    error?.message === "input_too_long"
+  );
+}
+
+export function buildInputTooLongRoute(baseRoute = {}, error = null) {
+  const errorPromptBudgetMetadata =
+    error?.promptBudgetMetadata && typeof error.promptBudgetMetadata === "object"
+      ? error.promptBudgetMetadata
+      : null;
+  const promptBudgetMetadata = errorPromptBudgetMetadata
+    ? {
+        ...errorPromptBudgetMetadata,
+        prompt_truncated: true,
+        prompt_truncation_sections: [
+          ...new Set([
+            ...(errorPromptBudgetMetadata.prompt_truncation_sections || []),
+            "current_message",
+          ]),
+        ],
+      }
+    : buildPromptBudgetMetadata({
+        truncatedSections: ["current_message"],
+        actualPromptChars: aiChatPromptBudget.maxTotalInputChars + 1,
+      });
+
+  return {
+    ...baseRoute,
+    route: "input_too_long",
+    providerUsed: "input_too_long",
+    answer: inputTooLongReply,
+    notice: inputTooLongReply,
+    shouldCallDeepSeek: false,
+    shouldMarkNeedsHuman: false,
+    knowledgeGap: false,
+    aiSkipped: true,
+    reason: "current_message_exceeds_prompt_hard_limit",
+    promptBudgetMetadata,
+    semanticMetadata: {
+      ...(baseRoute?.semanticMetadata || {}),
+      ...(error?.semanticMetadata || {}),
+      fallback_reason: "input_too_long",
+    },
   };
 }
 
@@ -1328,6 +1737,7 @@ export default async function handler(req, res) {
   }
 
   const requestId = randomUUID();
+  let releaseIncomingMessageLock = null;
 
   try {
     const body = await readBody(req);
@@ -1346,6 +1756,13 @@ export default async function handler(req, res) {
     const visitorId = identity.visitorId;
     const sessionId = String(body.session_id || "").trim();
     const message = String(body.message || "").trim();
+    const incomingMessageId = normalizeIncomingMessageId(
+      body.incoming_message_id || body.client_message_id || body.message_id
+    );
+    const executionContext = createAiModelExecutionContext({
+      requestId,
+      incomingMessageId,
+    });
 
     if (!visitorId) {
       return sendJson(res, 400, { error: "visitor_id is required." });
@@ -1354,6 +1771,7 @@ export default async function handler(req, res) {
     if (!message) {
       return sendJson(res, 400, { error: "message is required." });
     }
+    const incomingMessageContentHash = buildIncomingMessageContentHash(message);
 
     let session = await getSessionForMessage(
       visitorId,
@@ -1367,6 +1785,36 @@ export default async function handler(req, res) {
       session;
     session = await normalizeExpiredHumanTakeover(session, { supabaseRequest });
 
+    const incomingMessageLock = acquireIncomingMessageLock(
+      session.id,
+      incomingMessageId,
+      incomingMessageContentHash
+    );
+    if (incomingMessageLock.conflict) {
+      return sendJson(res, 409, {
+        error: "idempotency conflict",
+        metadata: {
+          requestId,
+          idempotency_available: true,
+          idempotency_conflict: true,
+          idempotency_conflict_reason: "incoming_message_id_content_mismatch",
+          ...buildModelExecutionMetadata(executionContext),
+        },
+      });
+    }
+    if (incomingMessageLock.inProgress) {
+      return sendJson(res, 409, {
+        error: "message already processing",
+        metadata: {
+          requestId,
+          idempotency_available: true,
+          idempotency_in_progress: true,
+          ...buildModelExecutionMetadata(executionContext),
+        },
+      });
+    }
+    releaseIncomingMessageLock = incomingMessageLock.release;
+
     const dateInfo = getTaipeiDateInfo();
     const clientRecentMessages = normalizeClientRecentMessages(body.recentMessages);
     let serverRecentMessages = [];
@@ -1374,6 +1822,41 @@ export default async function handler(req, res) {
       serverRecentMessages = await loadRecentMessages(session.id);
     } catch (error) {
       console.warn("[ai-chat] failed to load recent messages:", error);
+    }
+
+    const existingIncomingReply = findExistingReplyForIncomingMessage(
+      serverRecentMessages,
+      incomingMessageId,
+      incomingMessageContentHash
+    );
+    if (existingIncomingReply?.conflict) {
+      return sendJson(res, 409, {
+        error: "idempotency conflict",
+        metadata: {
+          requestId,
+          idempotency_available: true,
+          idempotency_conflict: true,
+          idempotency_conflict_reason: "saved_incoming_message_id_content_mismatch",
+          ...buildModelExecutionMetadata(executionContext),
+        },
+      });
+    }
+    if (existingIncomingReply) {
+      return sendJson(res, 200, {
+        session: serializeSessionForClient(session),
+        userMessage: existingIncomingReply.userMessage,
+        aiMessage: existingIncomingReply.aiMessage,
+        answer: existingIncomingReply.aiMessage.message || "",
+        provider_used: existingIncomingReply.aiMessage.provider_used || "deduped",
+        ai_skipped: false,
+        knowledge_gap: false,
+        metadata: {
+          requestId,
+          deduped_incoming_message: true,
+          provider_used: existingIncomingReply.aiMessage.provider_used || "deduped",
+          ...buildModelExecutionMetadata(executionContext),
+        },
+      });
     }
     const recentMessages = selectRecentMessagesForContext(
       serverRecentMessages,
@@ -1401,7 +1884,16 @@ export default async function handler(req, res) {
     );
 
     if (shouldSkipAiReply(session)) {
-      const userMessage = await insertUserMessage(session.id, message);
+      const userMessage = await insertUserMessage(
+        session.id,
+        message,
+        buildIncomingMessageMetadata(
+          incomingMessageId,
+          requestId,
+          null,
+          incomingMessageContentHash
+        )
+      );
       session = await updateSessionAfterMessage(session, userMessage, {
         incrementUnread: true,
         supportStatus: "human_takeover",
@@ -1428,11 +1920,18 @@ export default async function handler(req, res) {
           requestId,
           provider_used: "human_takeover",
           ai_skipped: true,
+          ...buildModelExecutionMetadata(executionContext),
           ...buildSessionModeBody(session),
         },
       });
     }
 
+    const userBaseMetadata = buildIncomingMessageMetadata(
+      incomingMessageId,
+      requestId,
+      null,
+      incomingMessageContentHash
+    );
     const semanticMode = getSemanticRouterMode();
     const rawKnowledgeRoute = await routeKnowledge({
       message,
@@ -1453,14 +1952,25 @@ export default async function handler(req, res) {
       rawKnowledgeRoute.candidateFaqItems?.length
         ? rawKnowledgeRoute.candidateFaqItems
         : rawKnowledgeRoute.matchedFaqItems
-    ).slice(0, 5);
+    );
+    const limitedSemanticFaqItems = limitFaqItemsForPrompt(
+      semanticFaqItems,
+      aiChatPromptBudget
+    ).items;
     const canAnswerLocally = isSafeLocalKnowledgeRoute({
       message,
       routeResult: rawKnowledgeRoute,
       context: conversationContextUpdate.context,
     });
+    const modelCallPlan = createModelCallPlan({
+      semanticMode,
+      canAnswerLocally,
+      routeResult: rawKnowledgeRoute,
+    });
+    setModelCallPlan(executionContext, modelCallPlan);
 
     if (
+      modelCallPlan.strategy === "semantic_only" &&
       shouldUseSemanticOrchestrator({
         mode: semanticMode,
         message,
@@ -1489,7 +1999,8 @@ export default async function handler(req, res) {
             },
           },
           requestId,
-          semanticMode
+          semanticMode,
+          executionContext
         );
 
         return sendJson(res, semanticRateLimit.status || 429, {
@@ -1504,10 +2015,11 @@ export default async function handler(req, res) {
           message,
           context: conversationContextUpdate.context,
           recentMessages,
-          faqItems: semanticFaqItems,
+          faqItems: limitedSemanticFaqItems,
           dateInfo,
           requestId,
           mode: semanticMode,
+          executionContext,
         });
         const semanticContext = mergeSemanticContext(
           conversationContextUpdate.context,
@@ -1526,7 +2038,7 @@ export default async function handler(req, res) {
           knowledgeRoute = buildSemanticKnowledgeRoute({
             semanticResult: semanticAttempt.semanticResult,
             context: finalConversationContext,
-            faqItems: semanticFaqItems,
+            faqItems: limitedSemanticFaqItems,
             fallbackRoute: legacyKnowledgeRoute,
             metadata: semanticAttempt.metadata,
           });
@@ -1537,8 +2049,8 @@ export default async function handler(req, res) {
           );
           knowledgeRoute = {
             ...knowledgeRoute,
-            modelCalled: true,
-            modelCallCount: 1,
+            modelCalled: executionContext.model_call_attempted,
+            modelCallCount: executionContext.model_call_count,
             semanticMetadata: {
               ...(knowledgeRoute.semanticMetadata || {}),
               ...semanticAttempt.metadata,
@@ -1551,14 +2063,16 @@ export default async function handler(req, res) {
           requestId,
           reason: error?.message || "semantic_orchestrator_failed",
         });
-        knowledgeRoute = buildNoSecondCallFallbackRoute(
-          legacyKnowledgeRoute,
-          error?.message || "semantic_orchestrator_failed"
-        );
+        knowledgeRoute = isInputTooLongError(error)
+          ? buildInputTooLongRoute(legacyKnowledgeRoute, error)
+          : buildNoSecondCallFallbackRoute(
+              legacyKnowledgeRoute,
+              error?.message || "semantic_orchestrator_failed"
+            );
         knowledgeRoute = {
           ...knowledgeRoute,
-          modelCalled: true,
-          modelCallCount: 1,
+          modelCalled: executionContext.model_call_attempted,
+          modelCallCount: executionContext.model_call_count,
           semanticMetadata: {
             ...(knowledgeRoute.semanticMetadata || {}),
             ...(error?.semanticMetadata || {}),
@@ -1608,10 +2122,49 @@ export default async function handler(req, res) {
       }
       knowledgeRoute = routeOverride;
     }
+    if (
+      knowledgeRoute.shouldCallDeepSeek &&
+      modelCallPlan.strategy !== "final_reply_only"
+    ) {
+      executionContext.model_call_blocked_reason =
+        "model_strategy_disallowed_final_provider";
+      knowledgeRoute = buildNoSecondCallFallbackRoute(
+        knowledgeRoute,
+        "model_strategy_disallowed_final_provider"
+      );
+      knowledgeRoute = {
+        ...knowledgeRoute,
+        modelCalled: executionContext.model_call_attempted,
+        modelCallCount: executionContext.model_call_count,
+        semanticMetadata: {
+          ...(knowledgeRoute.semanticMetadata || {}),
+          ...buildModelExecutionMetadata(executionContext),
+        },
+      };
+    } else if (
+      knowledgeRoute.shouldCallDeepSeek &&
+      executionContext.model_call_count >= executionContext.model_call_budget
+    ) {
+      executionContext.model_call_blocked_reason = "model_call_budget_exceeded";
+      knowledgeRoute = buildNoSecondCallFallbackRoute(
+        knowledgeRoute,
+        "model_call_budget_exceeded"
+      );
+      knowledgeRoute = {
+        ...knowledgeRoute,
+        modelCalled: executionContext.model_call_attempted,
+        modelCallCount: executionContext.model_call_count,
+        semanticMetadata: {
+          ...(knowledgeRoute.semanticMetadata || {}),
+          ...buildModelExecutionMetadata(executionContext),
+        },
+      };
+    }
     const routeMetadata = buildRouteMetadata(
       knowledgeRoute,
       requestId,
-      semanticMode
+      semanticMode,
+      executionContext
     );
     logChatDebug("knowledge route", {
       route: knowledgeRoute.route,
@@ -1625,9 +2178,12 @@ export default async function handler(req, res) {
     });
 
     if (!knowledgeRoute.shouldCallDeepSeek) {
-      const userMessageMetadata = knowledgeRoute.knowledgeGap
-        ? buildKnowledgeGapMessageMetadata(knowledgeRoute)
-        : null;
+      const userMessageMetadata = {
+        ...userBaseMetadata,
+        ...(knowledgeRoute.knowledgeGap
+          ? buildKnowledgeGapMessageMetadata(knowledgeRoute)
+          : {}),
+      };
       const userMessage = await insertUserMessage(
         session.id,
         message,
@@ -1694,7 +2250,11 @@ export default async function handler(req, res) {
       });
     }
 
-    const userMessage = await insertUserMessage(session.id, message);
+    const userMessage = await insertUserMessage(
+      session.id,
+      message,
+      userBaseMetadata
+    );
     const autoReplySupportStatus = getAutoReplySupportStatus(session);
     session = await updateSessionAfterMessage(session, userMessage, {
       incrementUnread: true,
@@ -1707,21 +2267,61 @@ export default async function handler(req, res) {
       );
     }
 
-    const providerResult = await callDeepSeek(
-      message,
-      recentMessages,
-      dateInfo,
-      knowledgeRoute.matchedFaqItems,
-      requestId,
-      conversationContextUpdate.promptContext
-    );
+    let providerResult;
+    try {
+      providerResult = await callDeepSeek(
+        message,
+        recentMessages,
+        dateInfo,
+        knowledgeRoute.matchedFaqItems,
+        requestId,
+        conversationContextUpdate.promptContext,
+        executionContext
+      );
+    } catch (error) {
+      if (!isInputTooLongError(error)) {
+        throw error;
+      }
+
+      const inputTooLongRoute = buildInputTooLongRoute(knowledgeRoute, error);
+      const inputTooLongMetadata = buildRouteMetadata(
+        inputTooLongRoute,
+        requestId,
+        semanticMode,
+        executionContext,
+        error.promptBudgetMetadata
+      );
+      const aiMessage = await insertAssistantMessage(
+        session.id,
+        inputTooLongRoute.answer,
+        inputTooLongRoute.providerUsed,
+        {},
+        inputTooLongMetadata
+      );
+      session = await updateSessionAfterMessage(session, aiMessage, {
+        supportStatus: autoReplySupportStatus,
+      });
+
+      return sendJson(res, 200, {
+        session: serializeSessionForClient(session),
+        userMessage,
+        aiMessage,
+        answer: inputTooLongRoute.answer,
+        provider_used: inputTooLongRoute.providerUsed,
+        ai_skipped: true,
+        knowledge_gap: false,
+        metadata: inputTooLongMetadata,
+      });
+    }
     const providerMetadata = {
       ...routeMetadata,
+      ...(providerResult.promptBudgetMetadata || {}),
+      ...(providerResult.modelExecutionMetadata || {}),
       ...buildModelUsageMetadata({
         mode: semanticMode,
         routeResult: knowledgeRoute,
         modelCalled: true,
-        modelCallCount: 1,
+        modelCallCount: executionContext.model_call_count,
         model: getDeepSeekModelName(),
         providerStatus: providerResult.providerStatus,
         finishReason: providerResult.finishReason,
@@ -1772,5 +2372,9 @@ export default async function handler(req, res) {
       error: aiErrorReply,
       metadata: failureMetadata,
     });
+  } finally {
+    if (typeof releaseIncomingMessageLock === "function") {
+      releaseIncomingMessageLock();
+    }
   }
 }

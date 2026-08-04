@@ -1493,6 +1493,36 @@ function buildLineRequestPayload(identity?: SessionRequestIdentity) {
   };
 }
 
+export function buildAiChatMessageRequestBody({
+  visitorId,
+  targetSessionId,
+  clientMessageId,
+  question,
+  recentMessages,
+  lineIdentity,
+  anonymousVisitorId,
+}: {
+  visitorId: string;
+  targetSessionId?: string;
+  clientMessageId?: string;
+  question: string;
+  recentMessages: ChatMessage[];
+  lineIdentity?: LineIdentity | null;
+  anonymousVisitorId?: string;
+}) {
+  return {
+    visitor_id: visitorId,
+    session_id: targetSessionId || undefined,
+    client_message_id: clientMessageId || undefined,
+    message: question,
+    recentMessages: getRecentMessagesForApi(recentMessages),
+    ...buildLineRequestPayload({
+      lineIdentity,
+      anonymousVisitorId,
+    }),
+  };
+}
+
 function getChatEntrySource(): "line_liff" | "" {
   if (typeof window === "undefined") {
     return "";
@@ -3396,16 +3426,17 @@ export function MumbaoChat({
         {
           method: "POST",
           headers: buildJsonHeaders(customerAccessToken),
-          body: JSON.stringify({
-            visitor_id: visitorId,
-            session_id: targetSessionId || undefined,
-            message: question,
-            recentMessages: getRecentMessagesForApi(messages),
-            ...buildLineRequestPayload({
+          body: JSON.stringify(
+            buildAiChatMessageRequestBody({
+              visitorId,
+              targetSessionId,
+              clientMessageId: pendingUserMessage.clientRequestId,
+              question,
+              recentMessages: messages,
               lineIdentity,
               anonymousVisitorId,
-            }),
-          }),
+            })
+          ),
         },
         30000,
         (status) => recordDebug({ apiHttpStatus: status })

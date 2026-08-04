@@ -28,11 +28,13 @@ const socialLinks = [
     label: "X",
     src: "/images/social/brand/x.svg",
   },
-  {
-    label: "Google Maps",
-    src: "/images/social/brand/google-maps.svg",
-  },
 ];
+
+const googleMapsLink = {
+  href: "https://maps.app.goo.gl/7kvLnwgWHAqxDJTo7",
+  label: "Google Maps",
+  src: "/images/social/brand/google-maps.svg",
+};
 
 export function Footer() {
   return (
@@ -53,7 +55,16 @@ export function Footer() {
             <span className="font-medium tracking-[0.08em] text-[#3D332B]">
               ADD :
             </span>{" "}
-            宜蘭縣員山鄉深洲二路158號
+            宜蘭縣員山鄉深洲二路158號{" "}
+            <a
+              href={googleMapsLink.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={googleMapsLink.label}
+              className="inline-flex h-[17px] w-[17px] items-center justify-center transition-opacity duration-200 hover:opacity-75 md:h-[18px] md:w-[18px]"
+            >
+              <img src={googleMapsLink.src} alt="" className="h-full w-full object-contain" />
+            </a>
           </span>
         </div>
 

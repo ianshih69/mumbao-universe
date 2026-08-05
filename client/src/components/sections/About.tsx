@@ -1,5 +1,6 @@
 import { ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
+import { aboutOriginContent } from "@/data/aboutContent";
 
 export function About() {
   return (
@@ -38,27 +39,17 @@ export function About() {
           >
             <div>
               <span className="text-[12px] font-medium tracking-[0.32em] text-[#B77C4B] md:text-[13px]">
-                About STime Villa
+                {aboutOriginContent.eyebrow}
               </span>
-              <h2 className="mt-4 font-serif text-3xl leading-[1.35] text-[#3D332B] md:text-4xl lg:text-5xl">
-                降落在員山的<br />
-                <span className="italic text-[#6F6258]">白雲基地</span>
+              <h2 className="mt-4 font-serif text-3xl leading-[1.35] text-[#3D332B] md:text-4xl lg:text-[42px] lg:leading-[1.28]">
+                {aboutOriginContent.title}
               </h2>
-              <p className="mt-5 text-[15px] leading-[1.9] text-[#8A7667] md:text-[16px]">
-                宜蘭員山包棟民宿｜寵物友善住宿｜慢寶 MUMBAO 原創 IP
-              </p>
             </div>
 
             <div className="space-y-6 text-justify font-serif text-base leading-[2.08] text-[#75685d] md:text-[17px] md:leading-[2.1]">
-              <p>
-                宜蘭員山，是水與雲霧相遇的地方。慢慢蒔光 STime Villa 座落在山與田之間，以包棟住宿、療癒空間與寵物友善為基礎，打造一座讓家庭、朋友與毛孩都能自在停留的白雲基地。
-              </p>
-              <p>
-                慢寶 MUMBAO 是來自宇宙第七次元（7D）的高維靈魂，象徵柔軟、溫暖與願望守護。在慢慢蒔光，這份陪伴會出現在公共空間、房型細節與文創商品裡，讓旅人住進的不只是宜蘭民宿，也是一段慢下來的時光。
-              </p>
-              <blockquote className="border-l border-[#d6c3ad] pl-5 italic leading-[2] text-[#6F6258]">
-                「在這裡，慢不是停滯，而是回到自己的節奏；雲停下來，時間也慢了。」
-              </blockquote>
+              {aboutOriginContent.paragraphs.map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
             </div>
 
             <a

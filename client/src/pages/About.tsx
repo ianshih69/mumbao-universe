@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { aboutOriginContent } from "@/data/aboutContent";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
 
@@ -68,23 +69,17 @@ export default function About() {
               >
                 <div className="space-y-4">
                   <span className="text-xs uppercase tracking-[0.3em] text-gray-400">
-                    THE ORIGIN
+                    {aboutOriginContent.eyebrow}
                   </span>
                   <h2 className="text-3xl font-light tracking-wide text-gray-800 md:text-5xl">
-                    白雲基地，為慢靈魂而降落
+                    {aboutOriginContent.title}
                   </h2>
                 </div>
 
                 <div className="mx-auto max-w-3xl space-y-6 text-justify text-base leading-[2.15] text-[#75685d] md:text-center md:text-lg md:leading-[2.18]">
-                  <p>
-                    慢寶相信，每一顆努力生活的靈魂，都需要一個可以安心停靠的地方。
-                  </p>
-                  <p>
-                    因此，慢寶宇宙將第一座白雲充電基地降落在宜蘭員山。慢慢蒔光不是旅程的終點，而是一段讓身體休息、讓心重新充滿能量的停留。
-                  </p>
-                  <p>
-                    在這裡，不必表現、不必趕路，也不需要成為任何人期待的樣子。只要回到自己，就已經足夠。
-                  </p>
+                  {aboutOriginContent.paragraphs.map((paragraph) => (
+                    <p key={paragraph}>{paragraph}</p>
+                  ))}
                 </div>
               </motion.div>
             </div>
@@ -195,62 +190,6 @@ export default function About() {
                     className="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
                     loading="lazy"
                   />
-                </div>
-              </motion.div>
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-white py-20 md:py-28">
-          <div className="container mx-auto px-6 md:px-12">
-            <div className="grid grid-cols-1 items-center gap-14 md:grid-cols-2 md:gap-24">
-              <motion.div
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true }}
-                variants={fadeInUp}
-                className="group relative order-1"
-              >
-                <div className="aspect-[3/4] overflow-hidden rounded-lg shadow-xl">
-                  <img
-                    src="/images/aboutMe/aboutMe-4.jpg"
-                    alt="慢慢蒔光慢寶宇宙主題住宿空間"
-                    className="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
-                    loading="lazy"
-                  />
-                </div>
-              </motion.div>
-
-              <motion.div
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true }}
-                variants={fadeInUp}
-                className="order-2 space-y-8"
-              >
-                <div className="space-y-4">
-                  <span className="text-xs uppercase tracking-[0.3em] text-gray-400">
-                    MUMBAO UNIVERSE STAY
-                  </span>
-                  <h2 className="text-3xl font-light tracking-wide text-gray-800 md:text-4xl">
-                    住進慢寶宇宙，感受慢下來的時光
-                  </h2>
-                </div>
-
-                <p className="text-sm leading-relaxed tracking-[0.08em] text-primary/75 md:text-base">
-                  十二星座藝術住宿｜療癒空間｜慢寶宇宙主題民宿
-                </p>
-
-                <div className="space-y-6 text-justify text-base leading-[2.15] text-[#75685d] md:text-lg md:leading-[2.18]">
-                  <p>
-                    每一次入住，都是一場走進慢寶宇宙的旅程。
-                  </p>
-                  <p>
-                    從藝術創作、主題房型到每件文創收藏，慢寶的身影陪伴著旅人，將住宿變成一場探索、療癒與收藏回憶的體驗。
-                  </p>
-                  <p>
-                    我們希望，你帶走的不只是旅行，而是一段重新與自己相遇的時光；當回到日常生活時，依然記得，在世界的某個角落，有一座名叫「慢慢蒔光」的白雲基地，始終為每一顆慢靈魂留著一盞溫暖的燈。
-                  </p>
                 </div>
               </motion.div>
             </div>

@@ -83,15 +83,30 @@ export default function Home() {
             <p className="text-[12px] font-medium uppercase tracking-[0.32em] text-[#B77C4B] md:text-[13px]">
               MUMBAO UNIVERSE STAY
             </p>
-            <h2 className="mt-4 font-serif text-[28px] font-light leading-[1.62] text-[#3D332B] md:text-[38px]">
-              住進慢寶宇宙，感受慢下來的宜蘭時光
+            <h2 className="mx-auto mt-4 max-w-5xl font-serif text-[28px] font-light leading-[1.48] text-[#3D332B] md:text-[36px] md:leading-[1.36]">
+              住進慢寶宇宙，讓疲憊的靈魂慢慢充電
             </h2>
             <p className="mt-5 text-[15px] leading-[1.9] text-[#8A7667] md:text-[16px]">
-              宜蘭包棟住宿｜寵物友善｜慢寶宇宙主題民宿
+              慢寶療癒品牌｜十二星座藝術空間｜白雲充電基地
             </p>
-            <p className="mx-auto mt-6 max-w-[820px] text-base leading-[2.2] text-[#75685d] md:text-[17px] md:leading-[2.18]">
-              慢慢蒔光 STime Villa 是位於宜蘭員山的包棟民宿，以療癒空間、寵物友善與慢寶 MUMBAO 原創 IP 為核心，為家庭、朋友與毛孩同行的旅人，留一段安靜自在的停留。從公共空間、房型設計到文創商品，讓慢寶的柔軟、溫暖與陪伴，安靜地出現在每一次住宿裡。
-            </p>
+            <div className="mx-auto mt-6 max-w-[820px] space-y-5 text-base leading-[2.2] text-[#75685d] md:text-[17px] md:leading-[2.18]">
+              <p>
+                有些時候，我們不是想去很遠的地方，
+                <br className="hidden md:block" />
+                只是想暫時離開那個一直努力、一直撐著的自己。
+              </p>
+              <p>
+                慢寶 MUMBAO，是為每一顆疲憊的慢靈魂而存在的療癒品牌；慢慢蒔光 STime Villa，則是慢寶在地球上，為旅人留下的一座白雲充電基地。
+              </p>
+              <p>
+                在這裡，十二星座、藝術、光與慢寶的陪伴，化成一個可以真正走進去的世界。
+              </p>
+              <p>
+                你不需要安排自己變得更好，也不必急著完成什麼。
+                <br className="hidden md:block" />
+                只要住下來，讓身體休息，讓心安靜，讓那些被生活消耗的能量，一點一點回到自己身上。
+              </p>
+            </div>
           </div>
         </section>
         <div id="about" className="scroll-mt-[120px]">

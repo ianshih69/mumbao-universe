@@ -3,6 +3,8 @@ import { Link, useLocation } from "wouter";
 import {
   Boxes,
   CalendarDays,
+  ChevronDown,
+  ChevronRight,
   ClipboardList,
   ExternalLink,
   FileText,
@@ -30,10 +32,13 @@ import {
 } from "@/lib/shop/adminAuth";
 import {
   adminNavigationSections,
+  adminSidebarExpandedSectionsStorageKey,
   canViewAdminNavItem,
   getAdminPageTitle,
   getVisibleAdminNavigation,
   isAdminNavItemActive,
+  parseStoredAdminExpandedSections,
+  resolveAdminExpandedSections,
   type AdminNavItem,
 } from "@/components/admin/adminNavigation";
 
@@ -99,6 +104,29 @@ function AdminNavLink({
   );
 }
 
+function readStoredExpandedSections() {
+  if (typeof window === "undefined") return new Set<string>();
+  try {
+    return parseStoredAdminExpandedSections(
+      window.sessionStorage.getItem(adminSidebarExpandedSectionsStorageKey)
+    );
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function saveStoredExpandedSections(sections: Set<string>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(
+      adminSidebarExpandedSectionsStorageKey,
+      JSON.stringify(Array.from(sections))
+    );
+  } catch {
+    // Storage can be unavailable in private or restricted browser modes.
+  }
+}
+
 function AdminSidebar({
   identity,
   pathname,
@@ -109,6 +137,32 @@ function AdminSidebar({
   onNavigate?: () => void;
 }) {
   const sections = getVisibleAdminNavigation(identity);
+  const [manualExpandedSections, setManualExpandedSections] = useState(
+    readStoredExpandedSections
+  );
+  const expandedSections = useMemo(
+    () =>
+      resolveAdminExpandedSections({
+        storedSections: manualExpandedSections,
+        pathname,
+      }),
+    [manualExpandedSections, pathname]
+  );
+  const overviewSection = sections.find((section) => section.label === "總覽");
+  const collapsibleSections = sections.filter((section) => section.label !== "總覽");
+
+  const toggleSection = (label: string) => {
+    setManualExpandedSections((current) => {
+      const next = new Set(current);
+      if (next.has(label)) {
+        next.delete(label);
+      } else {
+        next.add(label);
+      }
+      saveStoredExpandedSections(next);
+      return next;
+    });
+  };
 
   return (
     <div className="flex h-full flex-col bg-[#fbf7f1] text-stone-900">
@@ -116,25 +170,58 @@ function AdminSidebar({
         <p className="text-xs font-semibold tracking-[0.22em] text-[#9f7868]">
           STIME VILLA
         </p>
-        <h1 className="mt-2 text-lg font-semibold">慢慢蒔光管理後台</h1>
+        <h1 className="mt-2 text-lg font-semibold">管理後台</h1>
       </div>
 
-      <nav className="flex-1 space-y-5 overflow-y-auto px-4 py-5">
-        {sections.map((section) => (
-          <section key={section.label} className="space-y-2">
-            <p className="px-2 text-xs font-semibold text-stone-400">{section.label}</p>
-            <div className="space-y-1">
-              {section.items.map((item) => (
-                <AdminNavLink
-                  key={item.key}
-                  item={item}
-                  pathname={pathname}
-                  onNavigate={onNavigate}
-                />
-              ))}
-            </div>
-          </section>
+      <nav className="flex-1 space-y-3 overflow-y-auto px-4 py-5">
+        {overviewSection?.items.map((item) => (
+          <AdminNavLink
+            key={item.key}
+            item={item}
+            pathname={pathname}
+            onNavigate={onNavigate}
+          />
         ))}
+
+        {collapsibleSections.map((section) => {
+          const isExpanded = expandedSections.has(section.label);
+          const hasActiveItem = section.items.some((item) =>
+            isAdminNavItemActive(pathname, item)
+          );
+          const Arrow = isExpanded ? ChevronDown : ChevronRight;
+
+          return (
+            <section key={section.label} className="space-y-1.5">
+              <button
+                type="button"
+                className={cn(
+                  "flex min-h-9 w-full items-center justify-between rounded-[8px] px-2 text-left text-xs font-semibold transition",
+                  hasActiveItem
+                    ? "text-[#7d604b]"
+                    : "text-stone-400 hover:bg-[#f6efe6] hover:text-stone-600"
+                )}
+                aria-expanded={isExpanded}
+                onClick={() => toggleSection(section.label)}
+              >
+                <span>{section.label}</span>
+                <Arrow className="h-4 w-4 text-stone-400" />
+              </button>
+
+              {isExpanded && (
+                <div className="space-y-1 pl-2">
+                  {section.items.map((item) => (
+                    <AdminNavLink
+                      key={item.key}
+                      item={item}
+                      pathname={pathname}
+                      onNavigate={onNavigate}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          );
+        })}
       </nav>
     </div>
   );
@@ -286,9 +373,6 @@ export default function AdminLayout({
                   <Menu className="h-5 w-5" />
                 </button>
                 <div className="min-w-0">
-                  <p className="hidden text-xs font-semibold tracking-[0.18em] text-[#9f7868] sm:block">
-                    慢慢蒔光管理後台
-                  </p>
                   <h2 className="truncate text-lg font-semibold text-stone-900 md:text-xl">
                     {pageTitle}
                   </h2>

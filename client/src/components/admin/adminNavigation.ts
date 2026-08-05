@@ -14,6 +14,9 @@ export type AdminNavSection = {
   items: AdminNavItem[];
 };
 
+export const adminSidebarExpandedSectionsStorageKey =
+  "mumbao-admin-sidebar-expanded-sections";
+
 export const adminNavigationSections: AdminNavSection[] = [
   {
     label: "總覽",
@@ -102,6 +105,43 @@ export function findAdminNavItemByPath(pathname: string) {
     }
   }
   return null;
+}
+
+export function getAdminNavSectionLabelByPath(pathname: string) {
+  for (const section of adminNavigationSections) {
+    if (section.items.some((item) => isAdminNavItemActive(pathname, item))) {
+      return section.label;
+    }
+  }
+  return null;
+}
+
+export function parseStoredAdminExpandedSections(raw: string | null | undefined) {
+  if (!raw) return new Set<string>();
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set<string>();
+    return new Set(
+      parsed.filter((value): value is string => typeof value === "string")
+    );
+  } catch {
+    return new Set<string>();
+  }
+}
+
+export function resolveAdminExpandedSections({
+  storedSections,
+  pathname,
+}: {
+  storedSections: Iterable<string>;
+  pathname: string;
+}) {
+  const expanded = new Set(storedSections);
+  const activeSection = getAdminNavSectionLabelByPath(pathname);
+  if (activeSection && activeSection !== "總覽") {
+    expanded.add(activeSection);
+  }
+  return expanded;
 }
 
 export function getAdminPageTitle(pathname: string, fallback = "管理總覽") {

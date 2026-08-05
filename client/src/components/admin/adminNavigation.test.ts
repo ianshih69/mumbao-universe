@@ -3,8 +3,11 @@ import {
   adminNavigationSections,
   canViewAdminNavItem,
   findAdminNavItemByPath,
+  getAdminNavSectionLabelByPath,
   getAdminPageTitle,
   getVisibleAdminNavigation,
+  parseStoredAdminExpandedSections,
+  resolveAdminExpandedSections,
 } from "./adminNavigation";
 import type { AdminIdentity } from "@/lib/shop/adminAuth";
 
@@ -71,8 +74,31 @@ describe("admin unified navigation", () => {
 
   it("matches member detail routes to the members menu item", () => {
     expect(findAdminNavItemByPath("/admin/members/member-1")?.key).toBe("members");
+    expect(getAdminNavSectionLabelByPath("/admin/members/member-1")).toBe("會員管理");
     expect(getAdminPageTitle("/admin/members/member-1")).toBe("會員");
     expect(getAdminPageTitle("/admin/legacy-content")).toBe("舊版內容管理");
+  });
+
+  it("forces the active page section open while preserving stored expanded sections", () => {
+    const stored = parseStoredAdminExpandedSections('["官網內容"]');
+    const expanded = resolveAdminExpandedSections({
+      storedSections: stored,
+      pathname: "/admin/shop/orders",
+    });
+
+    expect(expanded.has("官網內容")).toBe(true);
+    expect(expanded.has("商城管理")).toBe(true);
+    expect(expanded.has("會員管理")).toBe(false);
+  });
+
+  it("does not force the overview item into a collapsible section", () => {
+    const expanded = resolveAdminExpandedSections({
+      storedSections: [],
+      pathname: "/admin",
+    });
+
+    expect(getAdminNavSectionLabelByPath("/admin")).toBe("總覽");
+    expect(expanded.has("總覽")).toBe(false);
   });
 
   it("checks individual nav item permissions with server-side permission names", () => {

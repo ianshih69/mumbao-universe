@@ -68,22 +68,22 @@ export default function About() {
               >
                 <div className="space-y-4">
                   <span className="text-xs uppercase tracking-[0.3em] text-gray-400">
-                    The Origin
+                    THE ORIGIN
                   </span>
                   <h2 className="text-3xl font-light tracking-wide text-gray-800 md:text-5xl">
-                    降落在員山的白雲基地
+                    白雲基地，為慢靈魂而降落
                   </h2>
                 </div>
 
                 <div className="mx-auto max-w-3xl space-y-6 text-justify text-base leading-[2.15] text-[#75685d] md:text-center md:text-lg md:leading-[2.18]">
                   <p>
-                    宜蘭員山，是水與雲霧相遇的地方。慢慢蒔光 STime Villa 座落在山與田之間，是一座以包棟住宿、療癒空間、寵物友善與慢寶 MUMBAO 原創 IP 為核心的宜蘭員山包棟民宿。
+                    慢寶相信，每一顆努力生活的靈魂，都需要一個可以安心停靠的地方。
                   </p>
                   <p>
-                    慢寶 MUMBAO 是來自宇宙第七次元（7D）的高維靈魂，象徵柔軟、溫暖與願望守護。在這裡，慢寶不是裝飾，而是慢慢蒔光的精神核心：提醒每一位旅人，什麼都不做，也值得被愛。
+                    因此，慢寶宇宙將第一座白雲充電基地降落在宜蘭員山。慢慢蒔光不是旅程的終點，而是一段讓身體休息、讓心重新充滿能量的停留。
                   </p>
                   <p>
-                    慢慢蒔光想留給旅人的，不只是住宿，而是一段可以慢下來的時間。讓家庭、朋友與毛孩在山景、田野與安靜空間裡，重新回到自己的節奏。
+                    在這裡，不必表現、不必趕路，也不需要成為任何人期待的樣子。只要回到自己，就已經足夠。
                   </p>
                 </div>
               </motion.div>
@@ -120,22 +120,22 @@ export default function About() {
               >
                 <div className="space-y-4">
                   <span className="text-xs uppercase tracking-[0.3em] text-gray-400">
-                    The Space
+                    THE SPACE
                   </span>
                   <h2 className="text-3xl font-light tracking-wide text-gray-800 md:text-4xl">
-                    被雲與光包住的空間
+                    一座可以住進去的療癒世界
                   </h2>
                 </div>
 
                 <div className="space-y-6 text-justify text-base leading-[2.15] text-[#75685d] md:text-lg md:leading-[2.18]">
                   <p>
-                    走進慢慢蒔光，你會看見柔和的弧線、留白的牆面與溫暖的光。空間不急著表現自己，而是安靜地接住旅人，讓身體與心慢慢放鬆下來。
+                    慢慢蒔光將慢寶宇宙、十二星座、藝術與療癒，轉化成可以被真實感受的空間。
                   </p>
                   <p>
-                    這裡規劃了適合家庭、朋友與毛孩同行的公共空間與房型動線。無論是在房裡休息、在客廳聊天，或只是望著窗外的山與田發呆，都能感受到一段不被催促的停留。
+                    從房型、畫作、光線到每一件文創作品，都不是單純的裝飾，而是慢寶傳遞陪伴與能量的方式。
                   </p>
                   <p>
-                    我們希望慢慢蒔光不只是宜蘭住宿，而是一座可以安心呼吸的白雲基地。讓每一位來到這裡的人，都能把生活的速度放慢一點。
+                    旅人住進的，不只是一個房間，而是一段被溫柔接住、慢慢充電的時間。
                   </p>
                 </div>
               </motion.div>
@@ -155,10 +155,10 @@ export default function About() {
               >
                 <div className="space-y-4">
                   <span className="text-xs uppercase tracking-[0.3em] text-gray-400">
-                    The Philosophy
+                    THE PHILOSOPHY
                   </span>
                   <h2 className="text-3xl font-light tracking-wide text-gray-800 md:text-4xl">
-                    慢，是回到自己的節奏
+                    慢，是讓靈魂重新充電
                   </h2>
                 </div>
 
@@ -170,13 +170,13 @@ export default function About() {
 
                 <div className="space-y-6 text-justify text-base leading-[2.15] text-[#75685d] md:text-lg md:leading-[2.18]">
                   <p>
-                    現代世界常常催促我們要更快、要更好、要成為某種樣子。但慢寶想提醒你：存在本身就有價值，愛不是交換條件。
+                    世界總是催促人前進，但慢寶想提醒我們：休息並不是落後，停下來也不是浪費。
                   </p>
                   <p>
-                    來到慢慢蒔光，我們不急著替你安排滿滿行程，而是留下一段空白。你可以望著稻田發呆、聽見自己的呼吸，也可以只是安靜地陪伴家人、朋友與毛孩。
+                    真正的療癒，不是逃離生活，而是在疲憊時願意照顧自己；在喧鬧中，仍然記得自己的聲音。
                   </p>
                   <p>
-                    慢慢蒔光想送給旅人的，是慢寶最重要的一句話：什麼都不做，也值得被愛。慢下來，找回自己的頻率，成為自己就很好了。
+                    慢慢蒔光希望成為一座白雲充電基地，讓每一位來到這裡的旅人，都能卸下疲憊，再帶著柔軟而充足的能量回到生活。
                   </p>
                 </div>
               </motion.div>
@@ -195,6 +195,62 @@ export default function About() {
                     className="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
                     loading="lazy"
                   />
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-white py-20 md:py-28">
+          <div className="container mx-auto px-6 md:px-12">
+            <div className="grid grid-cols-1 items-center gap-14 md:grid-cols-2 md:gap-24">
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                variants={fadeInUp}
+                className="group relative order-1"
+              >
+                <div className="aspect-[3/4] overflow-hidden rounded-lg shadow-xl">
+                  <img
+                    src="/images/aboutMe/aboutMe-4.jpg"
+                    alt="慢慢蒔光慢寶宇宙主題住宿空間"
+                    className="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                    loading="lazy"
+                  />
+                </div>
+              </motion.div>
+
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                variants={fadeInUp}
+                className="order-2 space-y-8"
+              >
+                <div className="space-y-4">
+                  <span className="text-xs uppercase tracking-[0.3em] text-gray-400">
+                    MUMBAO UNIVERSE STAY
+                  </span>
+                  <h2 className="text-3xl font-light tracking-wide text-gray-800 md:text-4xl">
+                    住進慢寶宇宙，感受慢下來的時光
+                  </h2>
+                </div>
+
+                <p className="text-sm leading-relaxed tracking-[0.08em] text-primary/75 md:text-base">
+                  十二星座藝術住宿｜療癒空間｜慢寶宇宙主題民宿
+                </p>
+
+                <div className="space-y-6 text-justify text-base leading-[2.15] text-[#75685d] md:text-lg md:leading-[2.18]">
+                  <p>
+                    每一次入住，都是一場走進慢寶宇宙的旅程。
+                  </p>
+                  <p>
+                    從藝術創作、主題房型到每件文創收藏，慢寶的身影陪伴著旅人，將住宿變成一場探索、療癒與收藏回憶的體驗。
+                  </p>
+                  <p>
+                    我們希望，你帶走的不只是旅行，而是一段重新與自己相遇的時光；當回到日常生活時，依然記得，在世界的某個角落，有一座名叫「慢慢蒔光」的白雲基地，始終為每一顆慢靈魂留著一盞溫暖的燈。
+                  </p>
                 </div>
               </motion.div>
             </div>

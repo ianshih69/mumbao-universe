@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   CalendarDays,
   FileText,
@@ -62,6 +62,7 @@ const overviewCards = [
 ];
 
 export default function AdminOverview() {
+  const [, setLocation] = useLocation();
   const identity = getAdminIdentity();
   const visibleCards = overviewCards.filter((card) =>
     canViewAdminNavItem(
@@ -77,20 +78,8 @@ export default function AdminOverview() {
   );
 
   return (
-    <main className="px-4 py-6 md:px-8 md:py-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <section className="rounded-[8px] border border-stone-200 bg-white p-6 shadow-sm md:p-7">
-          <p className="text-xs font-semibold tracking-[0.22em] text-[#9f7868]">
-            ADMIN DASHBOARD
-          </p>
-          <h1 className="mt-3 font-serif text-3xl font-light tracking-wide text-stone-900">
-            慢慢蒔光管理後台
-          </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-500">
-            集中管理房況、訂房、官網內容、商城與會員資料。
-          </p>
-        </section>
-
+    <main className="px-4 py-5 md:px-8 md:py-6">
+      <div className="mx-auto max-w-7xl">
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visibleCards.map((card) => {
             const Icon = card.icon;
@@ -98,7 +87,13 @@ export default function AdminOverview() {
               <Link
                 key={card.href}
                 href={card.href}
-                className="group rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#b99aa2] hover:shadow-md"
+                aria-label={`前往${card.title}`}
+                onKeyDown={(event) => {
+                  if (event.key !== " " && event.key !== "Spacebar") return;
+                  event.preventDefault();
+                  setLocation(card.href);
+                }}
+                className="group rounded-[8px] border border-stone-200 bg-white p-5 shadow-sm outline-none transition hover:-translate-y-0.5 hover:border-[#b99aa2] hover:shadow-md focus-visible:border-[#8b6f5b] focus-visible:ring-2 focus-visible:ring-[#ead8c8]"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -109,7 +104,9 @@ export default function AdminOverview() {
                     <Icon className="h-5 w-5" />
                   </span>
                 </div>
-                <p className="mt-5 text-sm font-semibold text-[#8b6f5b]">進入管理</p>
+                <p className="mt-5 text-sm font-semibold text-[#8b6f5b]" aria-hidden="true">
+                  →
+                </p>
               </Link>
             );
           })}

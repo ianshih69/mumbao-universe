@@ -59,6 +59,15 @@ export type AdminAuditLog = {
   created_at: string;
 };
 
+export type AdminAuditLogType = "operations" | "security";
+
+export type AdminAuditLoginSummary = {
+  id?: string | null;
+  actor_name?: string | null;
+  actor_email?: string | null;
+  created_at?: string | null;
+};
+
 export type AdminMemberProfileStatus =
   | "normal"
   | "email_not_verified"
@@ -264,6 +273,8 @@ export type AdminMemberDetailResponse = {
 export type AdminAuditLogsResponse = {
   logs?: AdminAuditLog[];
   items?: AdminAuditLog[];
+  logType?: AdminAuditLogType;
+  lastSuccessfulLogin?: AdminAuditLoginSummary | null;
   page: number;
   pageSize: number;
   total: number;
@@ -655,9 +666,18 @@ export function updateAdminUser(
 
 export function fetchAdminAuditLogs(
   token: string,
-  filters: { actor?: string; module?: string; actionName?: string; date?: string; page?: number; pageSize?: number } = {}
+  filters: {
+    actor?: string;
+    module?: string;
+    actionName?: string;
+    date?: string;
+    page?: number;
+    pageSize?: number;
+    logType?: AdminAuditLogType;
+  } = {}
 ) {
   const params = new URLSearchParams({ action: "admin-audit-logs" });
+  if (filters.logType) params.set("logType", filters.logType);
   if (filters.actor) params.set("actor", filters.actor);
   if (filters.module) params.set("module", filters.module);
   if (filters.actionName) params.set("actionName", filters.actionName);

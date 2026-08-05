@@ -14,8 +14,16 @@ import {
   deleteAdminAuditLog,
   deleteAdminAuditLogs,
   fetchAdminAuditLogs,
+  type AdminAuditLoginSummary,
   type AdminAuditLog,
 } from "@/lib/shop/adminIdentityApi";
+import {
+  auditLogTypeOptions,
+  formatAuditLogSummary,
+  getAuditLogActionOptions,
+  getAuditLogModuleOptions,
+  type AdminAuditLogType,
+} from "@/lib/shop/adminAuditLogView";
 
 const pageSize = 10;
 
@@ -40,7 +48,7 @@ function formatDate(value?: string | null) {
 }
 
 function logSummary(log: AdminAuditLog) {
-  return log.description || `${log.module}.${log.action}`;
+  return formatAuditLogSummary(log);
 }
 
 function getSelectedTimeRange(logs: AdminAuditLog[]) {
@@ -60,10 +68,12 @@ export default function AdminShopAuditLogs() {
   const [identity, setIdentity] = useState<AdminIdentity | null>(null);
   const [logs, setLogs] = useState<AdminAuditLog[]>([]);
   const [notice, setNotice] = useState("");
+  const [logType, setLogType] = useState<AdminAuditLogType>("operations");
   const [filters, setFilters] = useState({ actor: "", module: "all", actionName: "all", date: "" });
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [lastSuccessfulLogin, setLastSuccessfulLogin] = useState<AdminAuditLoginSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [deletingLogId, setDeletingLogId] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -71,6 +81,7 @@ export default function AdminShopAuditLogs() {
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
 
   const isSuperAdmin = identity?.role_code === "super_admin";
+  const canManageOperationLogs = isSuperAdmin && logType === "operations";
   const selectedLogs = useMemo(
     () => logs.filter((log) => selectedIds.has(log.id)),
     [logs, selectedIds]
@@ -94,12 +105,18 @@ export default function AdminShopAuditLogs() {
     return false;
   }
 
-  async function load(nextToken = token, nextPage = page) {
+  async function load(
+    nextToken = token,
+    nextPage = page,
+    nextFilters = filters,
+    nextLogType = logType
+  ) {
     if (!nextToken) return;
     setIsLoading(true);
     try {
       const data = await fetchAdminAuditLogs(nextToken, {
-        ...filters,
+        ...nextFilters,
+        logType: nextLogType,
         page: nextPage,
         pageSize,
       });
@@ -108,6 +125,7 @@ export default function AdminShopAuditLogs() {
       setPage(data.page || nextPage);
       setTotal(data.total || 0);
       setTotalPages(data.totalPages || 1);
+      setLastSuccessfulLogin(data.lastSuccessfulLogin || null);
       setSelectedIds(new Set());
     } catch (error) {
       handleAuthError(error);
@@ -126,7 +144,18 @@ export default function AdminShopAuditLogs() {
   function handleSearch() {
     setPage(1);
     setSelectedIds(new Set());
-    void load(token, 1);
+    void load(token, 1, filters, logType);
+  }
+
+  function changeLogType(nextLogType: AdminAuditLogType) {
+    if (nextLogType === logType) return;
+    const nextFilters = { ...filters, module: "all", actionName: "all" };
+    setLogType(nextLogType);
+    setFilters(nextFilters);
+    setPage(1);
+    setSelectedIds(new Set());
+    setNotice("");
+    void load(token, 1, nextFilters, nextLogType);
   }
 
   function toggleSelected(id: string) {
@@ -151,17 +180,17 @@ export default function AdminShopAuditLogs() {
   }
 
   function openSingleDelete(log: AdminAuditLog) {
-    if (!isSuperAdmin) return;
+    if (!canManageOperationLogs) return;
     setDeleteConfirm({ mode: "single", logs: [log] });
   }
 
   function openBatchDelete() {
-    if (!isSuperAdmin || !selectedLogs.length) return;
+    if (!canManageOperationLogs || !selectedLogs.length) return;
     setDeleteConfirm({ mode: "batch", logs: selectedLogs });
   }
 
   async function confirmDelete() {
-    if (!token || !deleteConfirm?.logs.length || !isSuperAdmin) return;
+    if (!token || !deleteConfirm?.logs.length || !canManageOperationLogs) return;
 
     const ids = deleteConfirm.logs.map((log) => log.id);
     setNotice("");
@@ -217,6 +246,8 @@ export default function AdminShopAuditLogs() {
   const confirmLogs = deleteConfirm?.logs || [];
   const confirmRange = getSelectedTimeRange(confirmLogs);
   const isDeleting = isBatchDeleting || Boolean(deletingLogId);
+  const moduleOptions = getAuditLogModuleOptions(logType);
+  const actionOptions = getAuditLogActionOptions(logType);
 
   return (
     <main className="min-h-screen bg-[#f7f1e9]">
@@ -233,6 +264,31 @@ export default function AdminShopAuditLogs() {
           </div>
         </div>
 
+        <div className="mt-6 inline-flex rounded-full border border-stone-200 bg-white/80 p-1 shadow-sm">
+          {auditLogTypeOptions.map((option) => (
+            <button
+              key={option.value}
+              className={
+                logType === option.value
+                  ? "rounded-full bg-[#8b6f5b] px-5 py-2 text-sm font-semibold text-white shadow-sm"
+                  : "rounded-full px-5 py-2 text-sm font-semibold text-stone-600 transition hover:bg-[#f7f1e9]"
+              }
+              onClick={() => changeLogType(option.value)}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        {logType === "security" && lastSuccessfulLogin ? (
+          <div className="mt-4 rounded-2xl border border-stone-200 bg-white/80 px-4 py-3 text-sm text-stone-600 shadow-sm">
+            <span className="font-medium text-stone-800">上次成功登入：</span>
+            {lastSuccessfulLogin.actor_name || "管理員"}
+            {lastSuccessfulLogin.actor_email ? `｜${lastSuccessfulLogin.actor_email}` : ""}｜{formatDate(lastSuccessfulLogin.created_at)}
+          </div>
+        ) : null}
+
         <section className="mt-6 rounded-[24px] border border-stone-200 bg-white/90 p-5 shadow-sm">
           <div className="grid gap-3 md:grid-cols-[1.2fr_1fr_1fr_1fr_auto] md:items-end">
             <label className="space-y-1.5 text-sm font-medium text-stone-700">
@@ -242,25 +298,21 @@ export default function AdminShopAuditLogs() {
             <label className="space-y-1.5 text-sm font-medium text-stone-700">
               <span>模組</span>
               <select className={inputClass()} value={filters.module} onChange={(event) => updateFilters({ ...filters, module: event.target.value })}>
-                <option value="all">全部</option>
-                <option value="auth">登入</option>
-                <option value="users">使用者</option>
-                <option value="warehouse">倉儲與資產</option>
-                <option value="audit_logs">操作紀錄</option>
-                <option value="social">社群</option>
+                {moduleOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="space-y-1.5 text-sm font-medium text-stone-700">
               <span>動作</span>
               <select className={inputClass()} value={filters.actionName} onChange={(event) => updateFilters({ ...filters, actionName: event.target.value })}>
-                <option value="all">全部</option>
-                <option value="create">新增</option>
-                <option value="update">編輯</option>
-                <option value="delete">刪除</option>
-                <option value="delete_audit_log">刪除操作紀錄</option>
-                <option value="delete_audit_logs">批次刪除操作紀錄</option>
-                <option value="adjust_quantity">數量調整</option>
-                <option value="login">登入</option>
+                {actionOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="space-y-1.5 text-sm font-medium text-stone-700">
@@ -280,7 +332,7 @@ export default function AdminShopAuditLogs() {
             <div className="flex flex-wrap items-center gap-3">
               <span>共 {total} 筆</span>
               <span>第 {page} 頁 / 共 {totalPages} 頁</span>
-              {isSuperAdmin ? (
+              {canManageOperationLogs ? (
                 <>
                   <label className="inline-flex items-center gap-2 font-medium text-stone-700">
                     <input
@@ -297,7 +349,7 @@ export default function AdminShopAuditLogs() {
               ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {isSuperAdmin ? (
+              {canManageOperationLogs ? (
                 <button
                   className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={!selectedIds.size || isDeleting}
@@ -331,7 +383,7 @@ export default function AdminShopAuditLogs() {
             <article key={log.id} className="rounded-2xl border border-stone-200 bg-white/90 p-4 shadow-sm">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="flex min-w-0 gap-3">
-                  {isSuperAdmin ? (
+                  {canManageOperationLogs ? (
                     <input
                       checked={selectedIds.has(log.id)}
                       className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-[#8b6f5b]"
@@ -351,7 +403,7 @@ export default function AdminShopAuditLogs() {
                   <span className="rounded-full bg-stone-100 px-3 py-1 text-stone-600">{log.module}</span>
                   <span className="rounded-full bg-[#efe5da] px-3 py-1 text-[#8b6f5b]">{log.action}</span>
                   {log.target_type ? <span className="rounded-full bg-white px-3 py-1 text-stone-500">{log.target_type}</span> : null}
-                  {isSuperAdmin ? (
+                  {canManageOperationLogs ? (
                     <button
                       className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-600 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={isDeleting}
@@ -365,7 +417,11 @@ export default function AdminShopAuditLogs() {
               </div>
             </article>
           ))}
-          {!logs.length && !isLoading ? <p className="rounded-2xl bg-white p-5 text-sm text-stone-500">目前沒有符合條件的操作紀錄。</p> : null}
+          {!logs.length && !isLoading ? (
+            <p className="rounded-2xl bg-white p-5 text-sm text-stone-500">
+              {logType === "security" ? "目前沒有符合條件的登入安全紀錄。" : "目前沒有符合條件的操作紀錄。"}
+            </p>
+          ) : null}
         </section>
       </div>
 

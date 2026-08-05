@@ -1,4 +1,9 @@
 import {
+  buildAdminAuditLogQueryParams,
+  buildLastSuccessfulAdminLoginQueryParams,
+  normalizeAuditLogType,
+} from "./auditLogFilters.js";
+import {
   firstQueryValue,
   getSupabaseConfig,
   getServerEnv,
@@ -3308,6 +3313,16 @@ function getAuditLogDeleteSummary(logs, deletedIds) {
   };
 }
 
+function normalizeLastSuccessfulLogin(row) {
+  if (!row) return null;
+  return {
+    id: row.id || null,
+    actor_name: row.actor_name || null,
+    actor_email: row.actor_email || null,
+    created_at: row.created_at || null,
+  };
+}
+
 async function handleAdminAuditLogs(req, res, context) {
   if (!hasAdminPermission(context, "audit_logs.view")) {
     return sendJson(res, 403, { error: "Permission denied." });
@@ -3373,23 +3388,22 @@ async function handleAdminAuditLogs(req, res, context) {
     return sendJson(res, 405, { error: "Method not allowed." });
   }
 
-  const params = [];
   const actor = cleanText(firstQueryValue(req.query?.actor));
+  const logType = normalizeAuditLogType(firstQueryValue(req.query?.logType));
   const moduleName = cleanText(firstQueryValue(req.query?.module));
   const actionName = cleanText(firstQueryValue(req.query?.actionName) || firstQueryValue(req.query?.logAction));
   const date = cleanText(firstQueryValue(req.query?.date));
   const pageSize = 10;
   const requestedPage = Math.max(1, getPage(firstQueryValue(req.query?.page)) || 1);
-  if (actor) params.push(`actor_email=ilike.*${encodeURIComponent(actor)}*`);
-  if (moduleName && moduleName !== "all") params.push(`module=eq.${encodeURIComponent(moduleName)}`);
-  if (actionName && actionName !== "all") params.push(`action=eq.${encodeURIComponent(actionName)}`);
-  if (date) {
-    const nextDate = getNextDateString(date);
-    params.push(`created_at=gte.${encodeURIComponent(`${date}T00:00:00.000Z`)}`);
-    if (nextDate) params.push(`created_at=lt.${encodeURIComponent(`${nextDate}T00:00:00.000Z`)}`);
-  }
-  params.push("select=*");
-  params.push("order=created_at.desc");
+  const nextDate = date ? getNextDateString(date) : null;
+  const params = buildAdminAuditLogQueryParams({
+    logType,
+    actor,
+    moduleName,
+    actionName,
+    date,
+    nextDate,
+  });
   let page = requestedPage;
   let result = await fetchAdminAuditLogPage(params, page, pageSize);
   let totalPages = Math.max(1, Math.ceil(result.total / pageSize));
@@ -3398,13 +3412,23 @@ async function handleAdminAuditLogs(req, res, context) {
     result = await fetchAdminAuditLogPage(params, page, pageSize);
     totalPages = Math.max(1, Math.ceil(result.total / pageSize));
   }
+  let lastSuccessfulLogin = null;
+  if (logType === "security") {
+    const loginRows = await supabaseRequest(
+      `/admin_activity_logs?${buildLastSuccessfulAdminLoginQueryParams({ actor, date, nextDate }).join("&")}`
+    );
+    lastSuccessfulLogin = normalizeLastSuccessfulLogin(Array.isArray(loginRows) ? loginRows[0] : null);
+  }
+
   return sendJson(res, 200, {
     logs: result.rows,
     items: result.rows,
+    logType,
     page,
     pageSize,
     total: result.total,
     totalPages,
+    lastSuccessfulLogin,
   });
 }
 

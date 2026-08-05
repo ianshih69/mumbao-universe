@@ -1,5 +1,6 @@
 export type StayType = "villa" | "room";
 export type PetType = "dog" | "cat" | "other";
+export type BookingPetTypeValue = PetType | "";
 
 export type BookingPublicSettings = {
   bookingWindowMonths: number;
@@ -22,6 +23,17 @@ export type BookingCalendarResult = {
   to: string;
   maxDate: string;
   unavailableDates: string[];
+  days?: Array<{
+    date: string;
+    saleMode?: string | null;
+    sale_mode?: string | null;
+    isAvailable?: boolean | null;
+    is_available?: boolean | null;
+    remainingRooms?: number | null;
+    remaining_rooms?: number | null;
+    unavailableReason?: string | null;
+    unavailable_reason?: string | null;
+  }>;
   settings: BookingPublicSettings;
 };
 
@@ -37,7 +49,7 @@ export type BookingRequestPayload = {
   room_count: number;
   has_pets: boolean;
   pet_count: number;
-  pet_type: PetType;
+  pet_type: BookingPetTypeValue;
   pet_notes: string;
   notes: string;
 };

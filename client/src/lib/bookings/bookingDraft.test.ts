@@ -17,8 +17,8 @@ const fallbackDraft: BookingDraftForm = {
   children: 0,
   room_count: 5,
   has_pets: false,
-  pet_count: 1,
-  pet_type: "dog",
+  pet_count: 0,
+  pet_type: "",
   pet_notes: "",
   notes: "",
 };

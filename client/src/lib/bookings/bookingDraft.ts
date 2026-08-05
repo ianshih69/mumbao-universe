@@ -1,4 +1,4 @@
-import type { PetType, StayType } from "./bookingApi";
+import type { BookingPetTypeValue, StayType } from "./bookingApi";
 
 export const bookingDraftStorageKey = "mumbao_booking_draft_v1";
 
@@ -14,7 +14,7 @@ export type BookingDraftForm = {
   room_count: number;
   has_pets: boolean;
   pet_count: number;
-  pet_type: PetType;
+  pet_type: BookingPetTypeValue;
   pet_notes: string;
   notes: string;
 };
@@ -35,7 +35,8 @@ function cleanStayType(value: unknown, fallback: StayType): StayType {
   return value === "villa" || value === "room" ? value : fallback;
 }
 
-function cleanPetType(value: unknown, fallback: PetType): PetType {
+function cleanPetType(value: unknown, fallback: BookingPetTypeValue): BookingPetTypeValue {
+  if (value === "") return "";
   return value === "dog" || value === "cat" || value === "other" ? value : fallback;
 }
 
@@ -53,7 +54,7 @@ export function normalizeBookingDraft(value: unknown, fallback: BookingDraftForm
     children: cleanCount(draft.children, fallback.children, 0, 30),
     room_count: cleanCount(draft.room_count, fallback.room_count, 1, 20),
     has_pets: Boolean(draft.has_pets),
-    pet_count: cleanCount(draft.pet_count, fallback.pet_count, 1, 20),
+    pet_count: cleanCount(draft.pet_count, fallback.pet_count, 0, 20),
     pet_type: cleanPetType(draft.pet_type, fallback.pet_type),
     pet_notes: cleanText(draft.pet_notes),
     notes: cleanText(draft.notes),

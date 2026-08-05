@@ -1,10 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
-  BedDouble,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Home,
+  Gift,
   Minus,
   Plus,
   Send,
@@ -22,9 +21,20 @@ import {
   checkBookingAvailability,
   fetchBookingCalendar,
   submitBookingRequest,
-  type PetType,
+  type BookingCalendarResult,
   type StayType,
 } from "@/lib/bookings/bookingApi";
+import {
+  getBookingRangeIssue,
+  isBookableStayNight,
+  isCalendarFilterMismatch,
+  normalizeBookingCalendarDay,
+  saleModeToStayType,
+  stayTypeToSaleMode,
+  type BookingCalendarDayView,
+  type BookingCalendarFilter,
+  type BookingSaleMode,
+} from "@/lib/bookings/bookingCalendarView";
 import {
   readBookingDraft,
   writeBookingDraft,
@@ -45,15 +55,11 @@ type BookingCmsCopy = {
 };
 
 const fallbackBookingCopy: BookingCmsCopy = {
-  eyebrow: "STime Villa Booking",
-  title: "預約・歸零",
-  subtitleTemplate: "請先選擇入住與退房日期。目前開放未來 {bookingWindowLabel} 內預約，實際可預約日期以房況日曆為準。",
-  instructions: [
-    "此頁為預約申請，送出後由我們人工確認。",
-    "可預約範圍、包棟或單間開放狀態，依後台設定顯示。",
-    "若日期已被訂房、保留或維修封鎖，將無法送出申請。",
-  ],
-  petNote: "慢慢蒔光為寵物友善 villa，實際入住規範與清潔注意事項，將於人工確認時一併說明。",
+  eyebrow: "",
+  title: "線上預約",
+  subtitleTemplate: "選擇入住與退房日期，送出後由我們確認房況。",
+  instructions: [],
+  petNote: "",
   successMessage: "已收到您的預約申請。我們會先確認房況，再與您聯繫付款與訂房細節。此申請尚未代表訂房成立。",
 };
 
@@ -68,22 +74,21 @@ const emptyForm: BookingForm = {
   children: 0,
   room_count: DEFAULT_BOOKING_SETTINGS.totalRoomCount,
   has_pets: false,
-  pet_count: 1,
-  pet_type: "dog",
+  pet_count: 0,
+  pet_type: "",
   pet_notes: "",
   notes: "",
 };
 
 const bookingTestPassword = "123";
 const bookingTestStorageKey = "mumbao_booking_test_unlocked_v1";
+const calendarFilters: Array<{ value: BookingCalendarFilter; label: string }> = [
+  { value: "all", label: "全部" },
+  { value: "whole_house", label: "只看包棟" },
+  { value: "room", label: "只看單間" },
+];
 
 const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
-const petTypeLabels: Record<PetType, string> = {
-  dog: "狗",
-  cat: "貓",
-  other: "其他",
-};
-
 function fieldClassName() {
   return "h-12 rounded-[8px] border border-[#eadfce] bg-white px-3 text-sm text-stone-900 outline-none transition focus:border-[#b7957c] focus:ring-2 focus:ring-[#eadfce]";
 }
@@ -150,6 +155,25 @@ function formatDate(dateText: string) {
   }).format(parseDate(dateText));
 }
 
+function formatFullDate(dateText: string) {
+  if (!dateText) return "-";
+  return new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(parseDate(dateText));
+}
+
+function formatBookingSummaryDate(dateText: string, includeYear = true) {
+  if (!dateText) return "-";
+  const date = parseDate(dateText);
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth() + 1;
+  const day = date.getUTCDate();
+  return includeYear ? `${year} 年 ${month} 月 ${day} 日` : `${month} 月 ${day} 日`;
+}
+
 function nightsBetween(checkIn: string, checkOut: string) {
   if (!checkIn || !checkOut || checkOut <= checkIn) return 0;
   const msPerDay = 24 * 60 * 60 * 1000;
@@ -178,16 +202,6 @@ function isDateInRange(date: string, checkIn: string, checkOut: string) {
   return Boolean(checkIn && checkOut && date >= checkIn && date < checkOut);
 }
 
-function rangeHasUnavailable(checkIn: string, checkOut: string, unavailableDates: Set<string>) {
-  if (!checkIn || !checkOut || checkOut <= checkIn) return true;
-  let current = checkIn;
-  while (current < checkOut) {
-    if (unavailableDates.has(current)) return true;
-    current = addDays(current, 1);
-  }
-  return false;
-}
-
 function getDefaultStayType(settings: PublicBookingSettings): StayType {
   if (settings.allowVillaBooking) return "villa";
   if (settings.allowRoomBooking) return "room";
@@ -207,14 +221,89 @@ function reconcileFormWithSettings(form: BookingForm, settings: PublicBookingSet
     ...form,
     stay_type: stayType,
     room_count: stayType === "villa" ? settings.totalRoomCount : clampRoomCount(form.room_count, settings.totalRoomCount),
-    has_pets: settings.allowPets ? form.has_pets : false,
-    pet_count: settings.allowPets ? form.pet_count : 1,
+    has_pets: false,
+    pet_count: 0,
+    pet_type: "",
+    pet_notes: "",
   };
 }
 
 function getInitialBookingForm() {
   if (typeof window === "undefined") return emptyForm;
   return readBookingDraft(window.sessionStorage, emptyForm);
+}
+
+function saleModeLabel(saleMode: BookingSaleMode) {
+  if (saleMode === "whole_house") return "包棟";
+  if (saleMode === "room") return "單間";
+  return "未開放";
+}
+
+function selectedStayTitle(stayType: StayType) {
+  return stayType === "villa" ? "已選擇包棟住宿" : "已選擇單間住宿";
+}
+
+function stayTypeDisplay(stayType: StayType) {
+  return stayType === "villa" ? "整棟包棟" : "單間住宿";
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function isValidPhone(value: string) {
+  const normalized = value.trim();
+  const digits = normalized.replace(/\D/g, "");
+  return digits.length >= 6 && /^[+\d()\-\s#]+$/.test(normalized);
+}
+
+function rangeIssueMessage(stayType: StayType, issue: string) {
+  if (issue === "mode_mismatch") {
+    return stayType === "villa"
+      ? "所選住宿期間包含非包棟開放日期，請重新選擇。"
+      : "所選住宿期間包含未開放單間或已滿房日期，請重新選擇。";
+  }
+  return "這段日期中有不可預約的日期，請重新選擇。";
+}
+
+function getCalendarDayLabels(day: BookingCalendarDayView, minDate: string, maxDate: string) {
+  if (day.date < minDate) {
+    return { modeLabel: "已過日期", statusLabel: "", mobileStatusLabel: "", unavailable: true };
+  }
+  if (day.date > maxDate || day.saleMode === "closed") {
+    return { modeLabel: "未開放", statusLabel: "", mobileStatusLabel: "", unavailable: true };
+  }
+  if (!day.isAvailable) {
+    return {
+      modeLabel: saleModeLabel(day.saleMode),
+      statusLabel: "已滿房",
+      mobileStatusLabel: "已滿",
+      unavailable: true,
+    };
+  }
+  if (day.saleMode === "room" && day.remainingRooms !== null) {
+    return {
+      modeLabel: "單間",
+      statusLabel: `剩 ${day.remainingRooms} 間`,
+      mobileStatusLabel: `${day.remainingRooms} 間`,
+      unavailable: false,
+    };
+  }
+  return {
+    modeLabel: saleModeLabel(day.saleMode),
+    statusLabel: "可預約",
+    mobileStatusLabel: "可訂",
+    unavailable: false,
+  };
+}
+
+function calendarDayAriaLabel(day: BookingCalendarDayView, minDate: string, maxDate: string) {
+  const labels = getCalendarDayLabels(day, minDate, maxDate);
+  const dateLabel = formatFullDate(day.date);
+  if (labels.modeLabel === "已過日期") return `${dateLabel}，已過日期`;
+  if (labels.modeLabel === "未開放") return `${dateLabel}，未開放`;
+  const availability = labels.statusLabel || (labels.unavailable ? "不可預約" : "可預約");
+  return `${dateLabel}，${labels.modeLabel}，${availability}`;
 }
 
 function Stepper({
@@ -275,6 +364,8 @@ export default function Booking() {
   const [bookingCopy, setBookingCopy] = useState<BookingCmsCopy>(fallbackBookingCopy);
   const [visibleMonth, setVisibleMonth] = useState(() => monthStart(todayText()));
   const [unavailableDates, setUnavailableDates] = useState<Set<string>>(new Set());
+  const [calendarDaySources, setCalendarDaySources] = useState<NonNullable<BookingCalendarResult["days"]>>([]);
+  const [calendarFilter, setCalendarFilter] = useState<BookingCalendarFilter>("all");
   const [maxDate, setMaxDate] = useState(() => addMonthsToDate(todayText(), DEFAULT_BOOKING_SETTINGS.bookingWindowMonths));
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -292,17 +383,39 @@ export default function Booking() {
   const minDate = todayText();
   const maxMonth = monthStart(maxDate);
   const bookingIsOpen = settings.allowVillaBooking || settings.allowRoomBooking;
+  const calendarDaySourceMap = useMemo(
+    () => new Map(calendarDaySources.map((day) => [day.date, day])),
+    [calendarDaySources]
+  );
+  const getCalendarDay = useMemo(
+    () => (date: string) => normalizeBookingCalendarDay(date, settings, unavailableDates, calendarDaySourceMap.get(date)),
+    [calendarDaySourceMap, settings, unavailableDates]
+  );
+  const selectedRangeIssue = useMemo(
+    () =>
+      getBookingRangeIssue({
+        checkIn: form.check_in,
+        checkOut: form.check_out,
+        saleMode: stayTypeToSaleMode(form.stay_type),
+        minDate,
+        maxDate,
+        getDay: getCalendarDay,
+      }),
+    [form.check_in, form.check_out, form.stay_type, getCalendarDay, maxDate, minDate]
+  );
   const selectedIsAvailable = useMemo(
-    () => Boolean(bookingIsOpen && form.check_in && form.check_out && form.check_out > form.check_in && !rangeHasUnavailable(form.check_in, form.check_out, unavailableDates)),
-    [bookingIsOpen, form.check_in, form.check_out, unavailableDates]
+    () => Boolean(bookingIsOpen && form.check_in && form.check_out && selectedRangeIssue === "ok"),
+    [bookingIsOpen, form.check_in, form.check_out, selectedRangeIssue]
   );
   const nightCount = nightsBetween(form.check_in, form.check_out);
-  const guestSummary = `${form.adults} 位成人・${form.children} 位孩童・${
-    form.stay_type === "villa" ? "包棟 villa" : `${form.room_count} 間客房`
-  }`;
+  const guestSummary = [
+    `${form.adults} 位成人`,
+    form.children > 0 ? `${form.children} 位孩童` : null,
+    stayTypeDisplay(form.stay_type),
+  ].filter(Boolean).join("｜");
+  const contactDetailsComplete = Boolean(form.guest_name.trim() && isValidEmail(form.email) && isValidPhone(form.phone));
   const canShowStayOptions = bookingIsOpen && selectedIsAvailable && !submittedRequestId;
   const canShowContactForm = canShowStayOptions;
-  const heroSubtitle = bookingCopy.subtitleTemplate.replace("{bookingWindowLabel}", settings.bookingWindowLabel);
 
   useEffect(() => {
     if (!isBookingTestUnlocked) return;
@@ -315,6 +428,7 @@ export default function Booking() {
       .then((data) => {
         if (!isCurrent) return;
         setUnavailableDates(new Set(data.unavailableDates));
+        setCalendarDaySources(data.days || []);
         setMaxDate(data.maxDate);
         setSettings(data.settings);
         setForm((current) => reconcileFormWithSettings(current, data.settings));
@@ -371,17 +485,25 @@ export default function Booking() {
     setError("");
   }
 
-  function updateStayType(stayType: StayType) {
-    if (stayType === "villa" && !settings.allowVillaBooking) return;
-    if (stayType === "room" && !settings.allowRoomBooking) return;
-
-    setForm((current) => ({
-      ...current,
-      stay_type: stayType,
-      room_count: stayType === "villa" ? settings.totalRoomCount : clampRoomCount(current.room_count, settings.totalRoomCount),
-    }));
+  function clearDateSelection() {
+    setForm((current) => {
+      const stayType = getDefaultStayType(settings);
+      return {
+        ...current,
+        check_in: "",
+        check_out: "",
+        stay_type: stayType,
+        room_count: stayType === "villa" ? settings.totalRoomCount : clampRoomCount(current.room_count, settings.totalRoomCount),
+      };
+    });
     setMessage("");
     setError("");
+    setSubmittedRequestId("");
+  }
+
+  function handleCalendarFilterChange(nextFilter: BookingCalendarFilter) {
+    setCalendarFilter(nextFilter);
+    clearDateSelection();
   }
 
   function selectDate(date: string) {
@@ -392,25 +514,53 @@ export default function Booking() {
     if (!bookingIsOpen || date < minDate || date > maxDate) return;
 
     setForm((current) => {
+      const clickedDay = getCalendarDay(date);
+      const currentSaleMode = stayTypeToSaleMode(current.stay_type);
       const canUseAsCheckout =
         current.check_in &&
         !current.check_out &&
         date > current.check_in &&
-        !rangeHasUnavailable(current.check_in, date, unavailableDates);
+        getBookingRangeIssue({
+          checkIn: current.check_in,
+          checkOut: date,
+          saleMode: currentSaleMode,
+          minDate,
+          maxDate,
+          getDay: getCalendarDay,
+        }) === "ok";
+      const filteredOut = isCalendarFilterMismatch(clickedDay, calendarFilter) && !canUseAsCheckout;
+      const canUseAsStayNight = isBookableStayNight(clickedDay, minDate, maxDate) && !filteredOut;
 
-      if (unavailableDates.has(date) && !canUseAsCheckout) return current;
+      if (!canUseAsStayNight && !canUseAsCheckout) return current;
 
       if (!current.check_in || (current.check_in && current.check_out) || date < current.check_in) {
-        return { ...current, check_in: date, check_out: "" };
+        const stayType = saleModeToStayType(clickedDay.saleMode) || getDefaultStayType(settings);
+        setMessage(`您已選擇${stayType === "villa" ? "包棟" : "單間"}住宿，請選擇退房日期。`);
+        return {
+          ...current,
+          check_in: date,
+          check_out: "",
+          stay_type: stayType,
+          room_count: stayType === "villa" ? settings.totalRoomCount : clampRoomCount(current.room_count, settings.totalRoomCount),
+        };
       }
 
       if (date === current.check_in) return { ...current, check_out: "" };
 
       const nextForm = { ...current, check_out: date };
-      if (rangeHasUnavailable(nextForm.check_in, nextForm.check_out, unavailableDates)) {
-        setError("這段日期中有不可預約的日期，請重新選擇。");
-        return { ...current, check_in: date, check_out: "" };
+      const rangeIssue = getBookingRangeIssue({
+        checkIn: nextForm.check_in,
+        checkOut: nextForm.check_out,
+        saleMode: currentSaleMode,
+        minDate,
+        maxDate,
+        getDay: getCalendarDay,
+      });
+      if (rangeIssue !== "ok") {
+        setError(rangeIssueMessage(current.stay_type, rangeIssue));
+        return { ...current, check_out: "" };
       }
+      setMessage("");
       return nextForm;
     });
   }
@@ -418,6 +568,10 @@ export default function Booking() {
   async function handleCheckAvailability() {
     if (!form.check_in || !form.check_out) {
       setError("請先選擇入住與退房日期。");
+      return;
+    }
+    if (selectedRangeIssue !== "ok") {
+      setError(rangeIssueMessage(form.stay_type, selectedRangeIssue));
       return;
     }
 
@@ -431,7 +585,7 @@ export default function Booking() {
         setError("這段日期目前無法預約，請重新選擇日期。");
         return;
       }
-      setMessage("這段日期目前可以送出預約申請。");
+      setMessage("");
     } catch (checkError) {
       setError(checkError instanceof Error ? checkError.message : "房況檢查失敗，請稍後再試。");
     } finally {
@@ -441,6 +595,10 @@ export default function Booking() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (selectedRangeIssue !== "ok") {
+      setError(rangeIssueMessage(form.stay_type, selectedRangeIssue));
+      return;
+    }
     setIsSubmitting(true);
     setMessage("");
     setError("");
@@ -449,7 +607,10 @@ export default function Booking() {
       const payload: BookingForm = {
         ...form,
         room_count: form.stay_type === "villa" ? settings.totalRoomCount : form.room_count,
-        has_pets: settings.allowPets ? form.has_pets : false,
+        has_pets: false,
+        pet_count: 0,
+        pet_type: "",
+        pet_notes: "",
       };
       const result = await submitBookingRequest(payload, session?.access_token || null);
       setSubmittedRequestId(result.request.id);
@@ -549,17 +710,29 @@ export default function Booking() {
         </div>
         <div className="mt-2 grid grid-cols-7 gap-1">
           {dates.map((date, index) => {
-            if (!date) return <div key={`blank-${month}-${index}`} className="aspect-square" />;
+            if (!date) return <div key={`blank-${month}-${index}`} className="min-h-[58px] md:min-h-[74px]" />;
 
             const unavailable = unavailableDates.has(date);
             const outOfRange = date < minDate || date > maxDate || !bookingIsOpen;
+            const day = getCalendarDay(date);
+            const labels = getCalendarDayLabels(day, minDate, maxDate);
+            const currentSaleMode = stayTypeToSaleMode(form.stay_type);
             const canUseAsCheckout =
               Boolean(form.check_in && !form.check_out && date > form.check_in) &&
-              !rangeHasUnavailable(form.check_in, date, unavailableDates);
+              getBookingRangeIssue({
+                checkIn: form.check_in,
+                checkOut: date,
+                saleMode: currentSaleMode,
+                minDate,
+                maxDate,
+                getDay: getCalendarDay,
+              }) === "ok";
             const isCheckIn = date === form.check_in;
             const isCheckOut = date === form.check_out;
             const inRange = isDateInRange(date, form.check_in, form.check_out);
-            const disabled = outOfRange || (unavailable && !canUseAsCheckout);
+            const filteredOut = isCalendarFilterMismatch(day, calendarFilter) && !canUseAsCheckout;
+            const disabled = outOfRange || filteredOut || (!isBookableStayNight(day, minDate, maxDate) && !canUseAsCheckout);
+            const muted = disabled || filteredOut || unavailable || labels.unavailable;
 
             return (
               <button
@@ -568,16 +741,34 @@ export default function Booking() {
                 disabled={disabled}
                 onClick={() => selectDate(date)}
                 className={cn(
-                  "aspect-square min-h-11 rounded-[10px] border text-sm transition md:min-h-12",
-                  disabled && "cursor-not-allowed border-stone-100 bg-stone-100 text-stone-300 line-through",
+                  "flex min-h-[58px] flex-col items-center justify-center gap-0.5 rounded-[10px] border px-1 py-1 text-center text-[10px] leading-tight transition md:min-h-[74px] md:text-xs",
+                  muted && "border-stone-100 bg-stone-100 text-stone-400",
+                  disabled && "cursor-not-allowed",
                   !disabled && "border-[#eadfce] bg-[#fffdf9] text-stone-700 hover:border-[#b7957c] hover:bg-[#f7f1e9]",
                   unavailable && canUseAsCheckout && "border-[#eadfce] bg-[#fffaf3] text-stone-500",
                   inRange && !disabled && "border-[#b7957c] bg-[#f3eadf] text-[#765d4a]",
                   (isCheckIn || isCheckOut) && "border-[#765d4a] bg-[#8b6f5b] font-semibold text-white hover:bg-[#765d4a]"
                 )}
-                aria-label={`${date}${disabled ? " 不可預約" : " 可選擇"}`}
+                aria-label={calendarDayAriaLabel(day, minDate, maxDate)}
               >
-                {Number(date.slice(8, 10))}
+                <span className="text-sm font-semibold md:text-base">{Number(date.slice(8, 10))}</span>
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 py-0.5 text-[9px] font-medium leading-none md:text-[10px]",
+                    day.saleMode === "whole_house" && !muted && "bg-[#8b6f5b] text-white",
+                    day.saleMode === "room" && !muted && "bg-[#d4ad72] text-white",
+                    muted && "bg-stone-200 text-stone-500",
+                    (isCheckIn || isCheckOut) && "bg-white/20 text-white"
+                  )}
+                >
+                  {labels.modeLabel}
+                </span>
+                {labels.statusLabel && (
+                  <span className="max-w-full truncate text-[9px] md:text-[10px]">
+                    <span className="hidden md:inline">{labels.statusLabel}</span>
+                    <span className="md:hidden">{labels.mobileStatusLabel}</span>
+                  </span>
+                )}
               </button>
             );
           })}
@@ -601,42 +792,18 @@ export default function Booking() {
           </button>
         </div>
         <section className="mx-auto max-w-6xl">
-          <div className="rounded-[24px] border border-[#eadfce] bg-white/90 p-6 shadow-sm md:p-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#b08d73]">
-              {bookingCopy.eyebrow}
+          <div className="rounded-[24px] border border-[#eadfce] bg-white/90 p-5 shadow-sm md:p-6">
+            <h1 className="font-serif text-3xl font-light tracking-wide text-stone-900 md:text-4xl">
+              線上預約
+            </h1>
+            <p className="mt-3 text-base leading-7 text-stone-600">
+              選擇入住與退房日期，送出後由我們確認房況。
             </p>
-            <div className="mt-4 grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
-              <div>
-                <h1 className="font-serif text-4xl font-light tracking-wide text-stone-900 md:text-5xl">
-                  {bookingCopy.title}
-                </h1>
-                <p className="mt-5 text-base leading-8 text-stone-600">{heroSubtitle}</p>
-              </div>
-              <div className="rounded-[16px] bg-[#f7f1e9] p-4 text-sm leading-7 text-stone-600">
-                {bookingCopy.instructions.map((item) => (
-                  <p key={item}>・{item}</p>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="hidden rounded-[24px] border border-[#eadfce] bg-white/90 p-6 shadow-sm md:p-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#b08d73]">STime Villa Booking</p>
-            <div className="mt-4 grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
-              <div>
-                <h1 className="font-serif text-4xl font-light tracking-wide text-stone-900 md:text-5xl">
-                  預約・歸零
-                </h1>
-                <p className="mt-5 text-base leading-8 text-stone-600">
-                  請先選擇入住與退房日期。<br />
-                  目前開放未來 {settings.bookingWindowLabel} 內預約，實際可預約日期以房況日曆為準。
-                </p>
-              </div>
-              <div className="rounded-[16px] bg-[#f7f1e9] p-4 text-sm leading-7 text-stone-600">
-                <p>・此頁為預約申請，送出後由我們人工確認。</p>
-                <p>・可預約範圍、包棟或單間開放狀態，依後台設定顯示。</p>
-                <p>・若日期已被訂房、保留或維修封鎖，將無法送出申請。</p>
-              </div>
+            <div className="mt-3 inline-flex max-w-full items-start gap-2 rounded-[10px] border border-[#ead9bd] bg-[#fff8ea] px-3 py-2 text-sm leading-6 text-stone-700">
+              <Gift className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#a47a4f]" />
+              <p>
+                <span className="font-semibold text-[#765d4a]">官網限定</span>｜完成訂房並入住，每筆訂單贈慢寶精美文創禮 1 份
+              </p>
             </div>
           </div>
 
@@ -678,6 +845,32 @@ export default function Booking() {
               </div>
             </div>
 
+            <div className="mt-4 rounded-[14px] bg-[#fbf7f1] px-3 py-2.5 md:px-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="mr-1 text-sm font-medium text-stone-700">查看日期：</p>
+                <div className="grid flex-1 grid-cols-3 gap-2 sm:flex sm:flex-none sm:items-center">
+                  {calendarFilters.map((filter) => (
+                    <button
+                      key={filter.value}
+                      type="button"
+                      onClick={() => handleCalendarFilterChange(filter.value)}
+                      className={cn(
+                        "rounded-full border px-3 py-1.5 text-xs font-medium transition md:px-4",
+                        calendarFilter === filter.value
+                          ? "border-[#8b6f5b] bg-[#8b6f5b] text-white"
+                          : "border-[#d7c5b2] bg-white text-stone-600 hover:bg-[#f7f1e9]"
+                      )}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="mt-2 text-[11px] leading-5 text-stone-500 md:text-xs">
+                包棟：整棟住宿空間一起預訂。單間：可依需求選擇個別客房。
+              </p>
+            </div>
+
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               {renderMonth(visibleMonth)}
               {renderMonth(addMonths(visibleMonth, 1), true)}
@@ -686,27 +879,36 @@ export default function Booking() {
             <div className="mt-5 flex flex-col gap-3 rounded-[12px] bg-[#fbf7f1] p-4 text-sm text-stone-600 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="font-semibold text-stone-800">
-                  {form.check_in ? `入住 ${formatDate(form.check_in)}` : "請選擇入住日期"}
-                  {form.check_out ? ` 至退房 ${formatDate(form.check_out)}，共 ${nightCount} 晚` : form.check_in ? "，再選擇退房日期" : ""}
+                  {form.check_in ? selectedStayTitle(form.stay_type) : "請選擇入住日期"}
                 </p>
-                <p className="mt-1">
-                  {selectedIsAvailable
-                    ? "這段日期目前可以送出預約申請。"
-                    : "請選擇可預約的入住與退房日期。"}
-                </p>
+                {form.check_in ? (
+                  <div className="mt-2 grid gap-1 leading-6">
+                    <p>
+                      {formatBookingSummaryDate(form.check_in)}入住
+                      {form.check_out ? `－${formatBookingSummaryDate(form.check_out, false)}退房` : "－請選擇退房日期"}
+                    </p>
+                    <p>{form.check_out ? `共 ${nightCount} 晚` : "尚未完成日期選擇"}</p>
+                  </div>
+                ) : (
+                  <p className="mt-1">請選擇可預約的入住與退房日期。</p>
+                )}
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void handleCheckAvailability()}
-                disabled={isChecking || !form.check_in || !form.check_out}
-              >
-                {isChecking ? "檢查中..." : "再次檢查房況"}
-              </Button>
+              <div className="flex flex-col gap-2 sm:flex-row md:items-center">
+                {form.check_in && (
+                  <button
+                    type="button"
+                    className="rounded-[8px] border border-[#d7c5b2] px-4 py-2 text-xs font-medium text-stone-600 transition hover:bg-white hover:text-[#765d4a]"
+                    onClick={clearDateSelection}
+                  >
+                    重新選擇日期
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="mt-4 flex flex-wrap gap-3 text-xs text-stone-500">
-              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded border border-[#eadfce] bg-[#fffdf9]" />可預約</span>
+              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-[#8b6f5b]" />包棟</span>
+              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-[#d4ad72]" />單間</span>
               <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-stone-100" />不可預約</span>
               <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-[#8b6f5b]" />已選日期</span>
             </div>
@@ -717,145 +919,44 @@ export default function Booking() {
           </section>
 
           {canShowStayOptions && (
-            <section className="mt-6 rounded-[20px] border border-[#eadfce] bg-white p-6 shadow-sm md:p-8">
+            <section className="mt-6 rounded-[20px] border border-[#eadfce] bg-white p-5 shadow-sm md:p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-2xl font-semibold text-stone-900">入住條件</h2>
-                  <p className="mt-2 text-sm leading-6 text-stone-500">選擇住宿方式、人數與寵物資訊，送出後由我們人工確認細節。</p>
+                  <h2 className="text-2xl font-semibold text-stone-900">入住人數</h2>
+                  <p className="mt-1 text-sm leading-6 text-stone-500">請填寫本次入住人數。</p>
                 </div>
                 <Users className="h-6 w-6 text-[#8b6f5b]" />
               </div>
 
-              <div className={cn("mt-6 grid gap-4", settings.allowVillaBooking && settings.allowRoomBooking && "md:grid-cols-2")}>
-                {settings.allowVillaBooking && (
-                  <button
-                    type="button"
-                    onClick={() => updateStayType("villa")}
-                    className={cn(
-                      "rounded-[16px] border p-4 text-left transition",
-                      form.stay_type === "villa" ? "border-[#8b6f5b] bg-[#f7f1e9]" : "border-[#eadfce] bg-white hover:bg-[#fbf7f1]"
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <BedDouble className="mt-1 h-5 w-5 text-[#8b6f5b]" />
-                      <div>
-                        <p className="font-semibold text-stone-900">包棟 villa</p>
-                        <p className="mt-1 text-sm leading-6 text-stone-600">包棟 villa｜{settings.totalRoomCount} 間主題房｜一天只接待一組客人</p>
-                        <p className="mt-2 text-xs font-medium text-[#8b6f5b]">整棟 {settings.totalRoomCount} 間，客房數不可調整</p>
-                      </div>
-                    </div>
-                  </button>
-                )}
-
-                {settings.allowRoomBooking && (
-                  <button
-                    type="button"
-                    onClick={() => updateStayType("room")}
-                    className={cn(
-                      "rounded-[16px] border p-4 text-left transition",
-                      form.stay_type === "room" ? "border-[#8b6f5b] bg-[#f7f1e9]" : "border-[#eadfce] bg-white hover:bg-[#fbf7f1]"
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <Home className="mt-1 h-5 w-5 text-[#8b6f5b]" />
-                      <div>
-                        <p className="font-semibold text-stone-900">單間客房</p>
-                        <p className="mt-1 text-sm leading-6 text-stone-600">單間客房｜淡季限定開放｜實際房型需由我們人工確認</p>
-                        <p className="mt-2 text-xs font-medium text-[#8b6f5b]">可申請 1 到 {settings.totalRoomCount} 間</p>
-                      </div>
-                    </div>
-                  </button>
-                )}
+              <div className="mt-4 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3 text-sm leading-6 text-stone-600">
+                <p>
+                  <span className="font-medium text-[#765d4a]">住宿方式</span>｜{stayTypeDisplay(form.stay_type)}
+                </p>
+                {form.stay_type === "villa" && <p className="text-xs text-stone-500">一天僅接待一組旅客</p>}
               </div>
 
-              <div className="mt-5 grid gap-4 lg:grid-cols-2">
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
                 <Stepper label="成人" value={form.adults} min={1} max={30} onChange={(value) => updateField("adults", value)} />
                 <Stepper label="孩童" value={form.children} min={0} max={30} onChange={(value) => updateField("children", value)} />
-                {form.stay_type === "room" && settings.allowRoomBooking && (
-                  <Stepper
-                    label="客房數"
-                    value={form.room_count}
-                    min={1}
-                    max={settings.totalRoomCount}
-                    hint={`單間客房第一版最多可申請 ${settings.totalRoomCount} 間，需人工確認`}
-                    onChange={(value) => updateField("room_count", value)}
-                  />
-                )}
               </div>
 
-              {settings.allowPets && (
-                <div className="mt-5 rounded-[16px] border border-[#eadfce] bg-[#fffdf9] p-4">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="font-semibold text-stone-900">是否攜帶寵物？</p>
-                      <p className="mt-1 text-sm leading-6 text-stone-500">{bookingCopy.petNote}</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        type="button"
-                        variant={form.has_pets ? "outline" : "default"}
-                        className={cn(!form.has_pets && "bg-[#8b6f5b] hover:bg-[#765d4a]")}
-                        onClick={() => updateField("has_pets", false)}
-                      >
-                        不攜帶
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={form.has_pets ? "default" : "outline"}
-                        className={cn(form.has_pets && "bg-[#8b6f5b] hover:bg-[#765d4a]")}
-                        onClick={() => updateField("has_pets", true)}
-                      >
-                        攜帶寵物
-                      </Button>
-                    </div>
-                  </div>
-
-                  {form.has_pets && (
-                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                      <Stepper label="寵物數量" value={form.pet_count} min={1} max={20} onChange={(value) => updateField("pet_count", value)} />
-                      <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-                        寵物類型
-                        <select className={fieldClassName()} value={form.pet_type} onChange={(event) => updateField("pet_type", event.target.value as PetType)}>
-                          {Object.entries(petTypeLabels).map(([value, label]) => (
-                            <option key={value} value={value}>
-                              {label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="grid gap-1.5 text-sm font-medium text-stone-700 lg:col-span-2">
-                        寵物備註
-                        <textarea
-                          className={textareaClassName()}
-                          value={form.pet_notes}
-                          onChange={(event) => updateField("pet_notes", event.target.value)}
-                          placeholder="例如品種、體型、是否會使用尿布墊，或其他需要我們提前知道的事。"
-                        />
-                      </label>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="mt-5 rounded-[12px] bg-[#f7f1e9] px-4 py-3 text-sm font-medium text-[#765d4a]">
+              <div className="mt-4 rounded-[12px] bg-[#f7f1e9] px-4 py-3 text-sm font-medium text-[#765d4a]">
                 {guestSummary}
               </div>
             </section>
           )}
 
           {canShowContactForm && (
-            <form className="mt-6 rounded-[20px] border border-[#eadfce] bg-white p-6 shadow-sm md:p-8" onSubmit={handleSubmit}>
+            <form className="mt-6 rounded-[20px] border border-[#eadfce] bg-white p-5 shadow-sm md:p-6" onSubmit={handleSubmit}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-2xl font-semibold text-stone-900">聯絡資料</h2>
-                  <p className="mt-2 text-sm leading-6 text-stone-500">
-                    此頁不收款，也不會自動成立 confirmed 訂房；送出後由我們人工確認房況。
-                  </p>
+                  <p className="mt-1 text-sm leading-6 text-stone-500">送出後，我們將與您確認房況及訂房細節。</p>
                 </div>
-                <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                {contactDetailsComplete && <CheckCircle2 className="h-6 w-6 text-emerald-600" />}
               </div>
 
-              <div className="mt-6 grid gap-4">
+              <div className="mt-4 grid gap-4">
                 <label className="grid gap-1.5 text-sm font-medium text-stone-700">
                   姓名
                   <input className={fieldClassName()} value={form.guest_name} onChange={(event) => updateField("guest_name", event.target.value)} />
@@ -876,12 +977,12 @@ export default function Booking() {
                     className={textareaClassName()}
                     value={form.notes}
                     onChange={(event) => updateField("notes", event.target.value)}
-                    placeholder="可以告訴我們抵達時間、同行需求、寵物細節，或其他希望先討論的事項。"
+                    placeholder="可以告訴我們抵達時間、同行需求，或其他希望先討論的事項。"
                   />
                 </label>
 
                 <div className="rounded-[8px] bg-[#f7f1e9] px-4 py-3 text-sm leading-6 text-stone-600">
-                  送出後狀態為待確認。我們會先確認房況，再與您聯繫付款與訂房細節。
+                  此步驟不需付款，送出後我們會與您確認房況及訂房細節。
                 </div>
 
                 <Button className="h-12 bg-[#8b6f5b] hover:bg-[#765d4a]" disabled={isSubmitting}>

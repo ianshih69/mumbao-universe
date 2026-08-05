@@ -316,9 +316,9 @@ export default function AdminShopHome() {
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
-                MUMBAO Admin
+                慢慢蒔光管理後台
               </p>
-              <h1 className="text-2xl font-semibold">商城後台登入</h1>
+              <h1 className="text-2xl font-semibold">管理後台登入</h1>
             </div>
           </div>
           <p className="text-sm leading-6 text-stone-600">
@@ -344,10 +344,10 @@ export default function AdminShopHome() {
         <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
-              MUMBAO Shop Admin
+              慢慢蒔光管理後台
             </p>
             <h1 className="mt-2 font-serif text-3xl font-light tracking-wide">
-              商城後台
+              商城總覽
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-500">
               集中管理慢寶商品、訂單、庫存、入庫與現場銷售。今日統計使用台灣時間。
@@ -368,7 +368,7 @@ export default function AdminShopHome() {
               <RefreshCw className={cn("h-4 w-4", isDashboardLoading && "animate-spin")} />
               重新整理
             </Button>
-            <Button variant="ghost" className="hidden rounded-full md:inline-flex" onClick={logout}>
+            <Button variant="ghost" className="hidden" onClick={logout}>
               <LogOut className="h-4 w-4" />
               登出
             </Button>

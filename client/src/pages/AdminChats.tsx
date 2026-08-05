@@ -987,7 +987,7 @@ export default function AdminChats() {
             </div>
             <div className="text-left">
               <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
-                MUMBAO Admin
+                慢慢蒔光管理後台
               </p>
               <h1 className="text-2xl font-semibold">網站問慢寶客服後台</h1>
             </div>
@@ -1013,7 +1013,7 @@ export default function AdminChats() {
             <ShieldCheck className="size-5" />
           </div>
           <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
-            MUMBAO Admin
+            慢慢蒔光管理後台
           </p>
           <h1 className="mt-2 text-2xl font-semibold">你沒有問慢寶客服後台權限</h1>
           <p className="mt-3 text-sm leading-6 text-stone-600">
@@ -1028,7 +1028,7 @@ export default function AdminChats() {
   }
 
   return (
-    <main className="flex h-[100svh] w-full max-w-[100vw] overflow-hidden overflow-x-hidden bg-[#f6f1ea] text-stone-900">
+    <main className="flex h-[calc(100svh-73px)] w-full max-w-[100vw] overflow-hidden overflow-x-hidden bg-[#f6f1ea] text-stone-900">
       <aside
         className={cn(
           "flex w-full max-w-none flex-col border-r border-stone-200 bg-white md:w-[390px] md:max-w-[390px]",
@@ -1043,7 +1043,7 @@ export default function AdminChats() {
               </p>
               <h1 className="text-xl font-semibold">網站問慢寶客服後台</h1>
             </div>
-            <Button variant="ghost" size="sm" onClick={logout}>
+            <Button variant="ghost" size="sm" className="hidden" onClick={logout}>
               登出
             </Button>
           </div>

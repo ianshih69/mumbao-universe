@@ -1,8 +1,10 @@
+import type { ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import AdminLayout from "@/components/admin/AdminLayout";
 import FixedViewport from "@/components/utils/FixedViewport";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { CustomerAuthProvider } from "./contexts/CustomerAuthContext";
@@ -19,6 +21,7 @@ import NewsPage from "./pages/News";
 import NewsDetail from "./pages/NewsDetail";
 import Mumbao from "./pages/Mumbao";
 import Admin from "./pages/Admin";
+import AdminOverview from "./pages/AdminOverview";
 import AdminChats from "./pages/AdminChats";
 import AdminMemberDetail from "./pages/AdminMemberDetail";
 import AdminMembers from "./pages/AdminMembers";
@@ -54,29 +57,117 @@ import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import DataDeletion from "./pages/DataDeletion";
 
+function AdminPage({
+  title,
+  children,
+  contentClassName,
+}: {
+  title: string;
+  children: ReactNode;
+  contentClassName?: string;
+}) {
+  return (
+    <AdminLayout title={title} contentClassName={contentClassName}>
+      {children}
+    </AdminLayout>
+  );
+}
 
 function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
-      <Route path={"/admin"} component={Admin} />
-      <Route path={"/admin/chats"} component={AdminChats} />
-      <Route path={"/admin/members/:memberId"} component={AdminMemberDetail} />
-      <Route path={"/admin/members"} component={AdminMembers} />
-      <Route path={"/admin/point-redemptions"} component={AdminPointRedemptions} />
-      <Route path={"/admin/shop"} component={AdminShopHome} />
-      <Route path={"/admin/shop/orders"} component={AdminShopOrders} />
-      <Route path={"/admin/shop/products"} component={AdminShopProducts} />
-      <Route path={"/admin/shop/inventory"} component={AdminShopInventory} />
-      <Route path={"/admin/shop/scan"} component={AdminShopScan} />
-      <Route path={"/admin/shop/pos"} component={AdminShopPos} />
-      <Route path={"/admin/shop/warehouse"} component={AdminShopWarehouse} />
       <Route path={"/admin/shop/login"} component={AdminShopLogin} />
-      <Route path={"/admin/shop/account"} component={AdminShopAccount} />
-      <Route path={"/admin/shop/users"} component={AdminShopUsers} />
-      <Route path={"/admin/shop/audit-logs"} component={AdminShopAuditLogs} />
-      <Route path={"/admin/bookings"} component={AdminBookings} />
-      <Route path={"/admin/site"} component={AdminSite} />
+      <Route path={"/admin/legacy-content"}>
+        <AdminPage title="舊版內容管理">
+          <Admin embeddedInAdminLayout />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/chats"}>
+        <AdminPage title="問慢寶客服" contentClassName="min-h-0">
+          <AdminChats />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/members/:memberId"}>
+        <AdminPage title="會員詳細資料">
+          <AdminMemberDetail />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/members"}>
+        <AdminPage title="會員">
+          <AdminMembers />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/point-redemptions"}>
+        <AdminPage title="積分兌換">
+          <AdminPointRedemptions />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/shop/orders"}>
+        <AdminPage title="商城訂單">
+          <AdminShopOrders />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/shop/products"}>
+        <AdminPage title="商品">
+          <AdminShopProducts />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/shop/inventory"}>
+        <AdminPage title="庫存">
+          <AdminShopInventory />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/shop/scan"}>
+        <AdminPage title="入庫">
+          <AdminShopScan />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/shop/pos"}>
+        <AdminPage title="POS">
+          <AdminShopPos />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/shop/warehouse"}>
+        <AdminPage title="倉儲與資產">
+          <AdminShopWarehouse />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/shop/account"}>
+        <AdminPage title="帳號設定">
+          <AdminShopAccount />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/shop/users"}>
+        <AdminPage title="管理員／使用者">
+          <AdminShopUsers />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/shop/audit-logs"}>
+        <AdminPage title="操作紀錄">
+          <AdminShopAuditLogs />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/shop"}>
+        <AdminPage title="商城總覽">
+          <AdminShopHome />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/bookings"}>
+        <AdminPage title="房況與訂房管理">
+          <AdminBookings />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/site"}>
+        <AdminPage title="官網內容管理">
+          <AdminSite />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin"}>
+        <AdminPage title="管理總覽">
+          <AdminOverview />
+        </AdminPage>
+      </Route>
       <Route path={"/about"} component={About} />
       <Route path={"/experience/breakfast"} component={Breakfast} />
       <Route path={"/experience/slow-guide"} component={SlowGuide} />

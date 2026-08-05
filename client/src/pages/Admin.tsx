@@ -70,8 +70,12 @@ function EmptyHint({ text }: { text: string }) {
   );
 }
 
-export default function Admin() {
-  const [loggedIn, setLoggedIn] = useState(isAdminLoggedIn);
+type AdminProps = {
+  embeddedInAdminLayout?: boolean;
+};
+
+export default function Admin({ embeddedInAdminLayout = false }: AdminProps = {}) {
+  const [loggedIn, setLoggedIn] = useState(() => embeddedInAdminLayout || isAdminLoggedIn());
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [activeTab, setActiveTab] = useState<AdminTab>("news");
@@ -134,7 +138,7 @@ export default function Admin() {
     }));
   };
 
-  if (!loggedIn) {
+  if (!embeddedInAdminLayout && !loggedIn) {
     return (
       <main className="min-h-[100svh] bg-[#F7F4EF] px-5 py-10 text-stone-900">
         <div className="mx-auto flex min-h-[calc(100svh-5rem)] max-w-md items-center">
@@ -144,7 +148,7 @@ export default function Admin() {
           >
             <div className="space-y-3">
               <p className="text-xs uppercase tracking-[0.28em] text-stone-400">
-                MUMBAO Admin
+                慢慢蒔光管理後台
               </p>
               <h1 className="font-serif text-3xl font-light tracking-wide">
                 後台登入
@@ -180,12 +184,13 @@ export default function Admin() {
   }
 
   return (
-    <main className="min-h-[100svh] bg-[#F7F4EF] text-stone-900">
+    <main className={embeddedInAdminLayout ? "text-stone-900" : "min-h-[100svh] bg-[#F7F4EF] text-stone-900"}>
+      {!embeddedInAdminLayout && (
       <header className="border-b border-stone-200 bg-white/95 px-5 py-5 backdrop-blur md:px-8">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.28em] text-stone-400">
-              MUMBAO Admin Dashboard
+              慢慢蒔光管理後台
             </p>
             <h1 className="mt-2 font-serif text-3xl font-light tracking-wide">
               網站內容管理
@@ -207,6 +212,15 @@ export default function Admin() {
           </div>
         </div>
       </header>
+      )}
+
+      {embeddedInAdminLayout && (
+        <section className="mx-auto max-w-7xl px-4 pt-6 md:px-8">
+          <div className="rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+            此頁為舊版內容管理相容入口，已改由慢慢蒔光管理後台登入保護；待後續比對新版官網內容資料來源後再整理。
+          </div>
+        </section>
+      )}
 
       <div className="mx-auto grid max-w-7xl gap-6 px-5 py-6 md:grid-cols-[240px_1fr] md:px-8 md:py-8">
         <aside className="space-y-3">

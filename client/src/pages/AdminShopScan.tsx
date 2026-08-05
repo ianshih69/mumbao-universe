@@ -293,7 +293,7 @@ export default function AdminShopScan() {
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
-                MUMBAO Admin
+                慢慢蒔光管理後台
               </p>
               <h1 className="text-2xl font-semibold">掃描入庫登入</h1>
             </div>
@@ -316,7 +316,7 @@ export default function AdminShopScan() {
         <div className="mx-auto flex max-w-5xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
-              MUMBAO Shop Admin
+              慢慢蒔光管理後台
             </p>
             <h1 className="mt-2 font-serif text-3xl font-light tracking-wide">
               掃描入庫
@@ -339,7 +339,7 @@ export default function AdminShopScan() {
             >
               商品管理
             </a>
-            <Button variant="ghost" className="hidden rounded-full md:inline-flex" onClick={logout}>
+            <Button variant="ghost" className="hidden" onClick={logout}>
               <LogOut className="h-4 w-4" />
               登出
             </Button>

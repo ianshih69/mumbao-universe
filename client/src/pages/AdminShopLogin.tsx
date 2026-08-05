@@ -11,8 +11,8 @@ const labels = {
   showPassword: "顯示密碼",
   hidePassword: "隱藏密碼",
   accountLoginFailed: "登入失敗，請確認 Email 與密碼。",
-  pageTitle: "後台登入",
-  accountIntro: "請使用個人管理員帳號登入。密碼由 Supabase Auth 管理。",
+  pageTitle: "慢慢蒔光管理後台",
+  accountIntro: "請使用個人管理員帳號登入，進入統一管理後台。",
   password: "密碼",
   loggingIn: "登入中...",
   accountLogin: "使用個人帳號登入",
@@ -100,7 +100,7 @@ export default function AdminShopLogin() {
     <main className="min-h-screen bg-[#f7f1e9] px-4 py-12">
       <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <section className="rounded-[28px] border border-stone-200 bg-white p-8 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.28em] text-[#b08d73]">MUMBAO ADMIN</p>
+          <p className="text-xs font-semibold tracking-[0.22em] text-[#b08d73]">STIME VILLA ADMIN</p>
           <h1 className="mt-3 text-3xl font-semibold text-stone-900">{labels.pageTitle}</h1>
           <p className="mt-2 text-sm leading-6 text-stone-600">{labels.accountIntro}</p>
 

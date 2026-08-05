@@ -118,19 +118,19 @@ export default function About() {
                     THE SPACE
                   </span>
                   <h2 className="text-3xl font-light tracking-wide text-gray-800 md:text-4xl">
-                    一座可以住進去的療癒世界
+                    被時間遺忘的暖星袋
                   </h2>
                 </div>
 
                 <div className="space-y-6 text-justify text-base leading-[2.15] text-[#75685d] md:text-lg md:leading-[2.18]">
                   <p>
-                    慢慢蒔光將慢寶宇宙、十二星座、藝術與療癒，轉化成可以被真實感受的空間。
+                    走進這座基地，你會發現空間裡充滿了流動的弧線與留白。這是慢寶的堅持：「人很柔軟，不該被尖銳的直角劃傷。」
                   </p>
                   <p>
-                    從房型、畫作、光線到每一件文創作品，都不是單純的裝飾，而是慢寶傳遞陪伴與能量的方式。
+                    每一扇窗，都是為了引入星源的守護之光；每一個角落，都像是一個巨大的「暖星袋」，用來收納你無處安放的願望與嘆息。
                   </p>
                   <p>
-                    旅人住進的，不只是一個房間，而是一段被溫柔接住、慢慢充電的時間。
+                    在這裡，建築不說話，它只是安靜地擁抱你。就像慢寶總是靜靜地陪伴，不急著要你變好，只希望你「存在」。當你躺在床上，感受窗外員山的風輕輕吹過，請閉上眼。此刻的你，正被宇宙溫柔地接住。
                   </p>
                 </div>
               </motion.div>
@@ -153,25 +153,25 @@ export default function About() {
                     THE PHILOSOPHY
                   </span>
                   <h2 className="text-3xl font-light tracking-wide text-gray-800 md:text-4xl">
-                    慢，是讓靈魂重新充電
+                    慢，是一種靈魂的特權
                   </h2>
                 </div>
 
                 <blockquote className="border-l-2 border-primary/30 py-2 pl-6">
-                  <p className="text-2xl font-light italic leading-relaxed tracking-wider text-primary/80 md:text-3xl">
-                    「什麼都不做，也值得被愛。」
+                  <p className="text-xl font-light italic leading-[1.85] tracking-wider text-primary/80 sm:text-2xl md:text-3xl">
+                    “什麼都不做，<span className="inline-block">也值得被愛.</span>”
                   </p>
                 </blockquote>
 
                 <div className="space-y-6 text-justify text-base leading-[2.15] text-[#75685d] md:text-lg md:leading-[2.18]">
                   <p>
-                    世界總是催促人前進，但慢寶想提醒我們：休息並不是落後，停下來也不是浪費。
+                    現代世界告訴我們要快、要優秀、要成為某種樣子。但慢寶來自的宇宙，有著另一套法則：「愛是一種能量，不是交換條件。」
                   </p>
                   <p>
-                    真正的療癒，不是逃離生活，而是在疲憊時願意照顧自己；在喧鬧中，仍然記得自己的聲音。
+                    來到慢慢蒔光，我們不提供行程表，只提供「空白」。我們邀請你練習浪費時間，練習對著稻田發呆，練習聽見自己心跳的頻率。
                   </p>
                   <p>
-                    慢慢蒔光希望成為一座白雲充電基地，讓每一位來到這裡的旅人，都能卸下疲憊，再帶著柔軟而充足的能量回到生活。
+                    請記住慢寶送給地球最珍貴的禮物：「什麼都不做，也值得被愛。」找回你的頻率，成為自己就很好了。
                   </p>
                 </div>
               </motion.div>

@@ -84,27 +84,17 @@ export default function Home() {
               MUMBAO UNIVERSE STAY
             </p>
             <h2 className="mx-auto mt-4 max-w-5xl font-serif text-[28px] font-light leading-[1.48] text-[#3D332B] md:text-[36px] md:leading-[1.36]">
-              住進慢寶宇宙，讓疲憊的靈魂慢慢充電
+              被雲與光擁抱的空間
             </h2>
-            <p className="mt-5 text-[15px] leading-[1.9] text-[#8A7667] md:text-[16px]">
-              慢寶療癒品牌｜十二星座藝術空間｜白雲充電基地
-            </p>
             <div className="mx-auto mt-6 max-w-[820px] space-y-5 text-base leading-[2.2] text-[#75685d] md:text-[17px] md:leading-[2.18]">
               <p>
-                有些時候，我們不是想去很遠的地方，
-                <br className="hidden md:block" />
-                只是想暫時離開那個一直努力、一直撐著的自己。
+                慢慢蒔光的每一個角落，都以「慢」為出發點設計。
               </p>
               <p>
-                慢寶 MUMBAO，是為每一顆疲憊的慢靈魂而存在的療癒品牌；慢慢蒔光 STime Villa，則是慢寶在地球上，為旅人留下的一座白雲充電基地。
+                柔和的光線、留白的空間、藝術與自然交織的氛圍，不是為了炫耀設計，而是希望身體與心，都能慢慢安靜下來。
               </p>
               <p>
-                在這裡，十二星座、藝術、光與慢寶的陪伴，化成一個可以真正走進去的世界。
-              </p>
-              <p>
-                你不需要安排自己變得更好，也不必急著完成什麼。
-                <br className="hidden md:block" />
-                只要住下來，讓身體休息，讓心安靜，讓那些被生活消耗的能量，一點一點回到自己身上。
+                十二星座房型、慢寶藝術作品與收藏，散落在住宿的每個角落。你不是走進一間民宿，而是一步步探索慢寶宇宙，感受那些藏在細節裡的驚喜與陪伴。
               </p>
             </div>
           </div>

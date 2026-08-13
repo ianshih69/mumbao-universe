@@ -463,5 +463,149 @@
     ],
     "min_confidence": "high",
     "should_call_deepseek": false
+  },
+  {
+    "input": "我們大概會開8台轎車，停得下嗎？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-106"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
+  },
+  {
+    "input": "八台車停得下嗎？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-106"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
+  },
+  {
+    "input": "我們有8台車可以停嗎？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-106"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
+  },
+  {
+    "input": "停車大概可以停幾台？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-106"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
+  },
+  {
+    "input": "還沒付訂金，可以先幫我保留日期嗎？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-004"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
+  },
+  {
+    "input": "還沒付款可以先留房嗎？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-004"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
+  },
+  {
+    "input": "可以先保留日期晚點匯款嗎？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-004"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
+  },
+  {
+    "input": "我提早到，可以直接先進房嗎？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-091"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
+  },
+  {
+    "input": "可以提前入住嗎？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-078"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
+  },
+  {
+    "input": "我們早一點到可以先進房嗎？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-091"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
+  },
+  {
+    "input": "入住前會把地址跟停車方式寄給我嗎？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-099"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
+  },
+  {
+    "input": "入住前會收到地址嗎？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-099"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
+  },
+  {
+    "input": "停車資訊會提前通知嗎？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-099"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
+  },
+  {
+    "input": "入住資訊是用 LINE 傳還是 Email？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-099"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
+  },
+  {
+    "input": "入住資訊會寄到哪裡？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-099"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
+  },
+  {
+    "input": "你們會寄 Email 給我嗎？",
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-099"
+    ],
+    "min_confidence": "high",
+    "should_call_deepseek": false
   }
 ]

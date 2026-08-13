@@ -517,7 +517,8 @@ export async function routeKnowledge({
     });
   }
 
-  const multipleParts = hasMultipleQuestionParts(message);
+  const multipleParts =
+    hasMultipleQuestionParts(message) && !top.exactMatch && !top.aliasMatch;
   if (highMatches.length === 1) {
     const answer = multipleParts ? buildPartialAnswer(top.answer) : top.answer;
     return createRouteResult({

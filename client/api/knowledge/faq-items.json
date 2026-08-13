@@ -747,8 +747,8 @@
       "連住有優惠嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 47
@@ -763,8 +763,8 @@
       "生日或紀念日有優"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 48
@@ -1352,8 +1352,8 @@
       "每個人都要登記資"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 84
@@ -1432,8 +1432,8 @@
       "找不到民宿入口怎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 89
@@ -1737,8 +1737,8 @@
       "電動車可以充電嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 108
@@ -1753,8 +1753,8 @@
       "可以騎機車去嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 109
@@ -1769,8 +1769,8 @@
       "搭火車怎麼到"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 110
@@ -1785,8 +1785,8 @@
       "搭高鐵怎麼到"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 111
@@ -1801,8 +1801,8 @@
       "附近有公車嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 112
@@ -1817,8 +1817,8 @@
       "有接駁服務嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 113
@@ -1833,8 +1833,8 @@
       "可以幫忙叫計程車"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 114
@@ -1849,8 +1849,8 @@
       "附近租車方便嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 115
@@ -1865,8 +1865,8 @@
       "路好開嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 116
@@ -1881,8 +1881,8 @@
       "下雨天路況會不會"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 117
@@ -1897,8 +1897,8 @@
       "附近有超商嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 118
@@ -1913,8 +1913,8 @@
       "附近有餐廳嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 119
@@ -1929,8 +1929,8 @@
       "附近有市場或賣場"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 120
@@ -1945,8 +1945,8 @@
       "附近晚上買東西方"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 121
@@ -1961,8 +1961,8 @@
       "民宿附近會不會很"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 122
@@ -1977,8 +1977,8 @@
       "叫外送方便嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 123
@@ -1993,8 +1993,8 @@
       "附近有加油站嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 124
@@ -2010,8 +2010,8 @@
       "景點"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 125
@@ -2026,8 +2026,8 @@
       "最多可以住幾人"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 126
@@ -2042,8 +2042,8 @@
       "基本人數是幾人"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 127
@@ -2058,8 +2058,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 128
@@ -2074,8 +2074,8 @@
       "小孩不佔床可以不"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 129
@@ -2090,8 +2090,8 @@
       "房間怎麼分配"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 130
@@ -2106,8 +2106,8 @@
       "有幾間房"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 131
@@ -2122,8 +2122,8 @@
       "每間房有獨立衛浴"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 132
@@ -2138,8 +2138,8 @@
       "有一樓房間嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 133
@@ -2154,8 +2154,8 @@
       "有雙人房嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 134
@@ -2170,8 +2170,8 @@
       "有四人房嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 135
@@ -2186,8 +2186,8 @@
       "床型可以選嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 136
@@ -2202,8 +2202,8 @@
       "可以加被子嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 137
@@ -2218,8 +2218,8 @@
       "可以加枕頭嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 138
@@ -2234,8 +2234,8 @@
       "房間可以換床位嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 139
@@ -2250,8 +2250,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 140
@@ -2266,8 +2266,8 @@
       "沒有過夜的訪客可"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 141
@@ -2282,8 +2282,8 @@
       "朋友可以白天來玩"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 142
@@ -2298,8 +2298,8 @@
       "可以辦活動或聚會"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 143
@@ -2314,8 +2314,8 @@
       "求婚或生日派對可"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 144
@@ -2330,8 +2330,8 @@
       "可以商業拍攝嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 145
@@ -2346,8 +2346,8 @@
       "可以拍婚紗嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 146
@@ -2362,8 +2362,8 @@
       "包棟"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 147
@@ -2378,8 +2378,8 @@
       "包棟"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 148
@@ -2394,8 +2394,8 @@
       "可以只租公共空間"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 149
@@ -2410,8 +2410,8 @@
       "管家會住在裡面嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 150
@@ -2426,8 +2426,8 @@
       "房間有冷氣嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 151
@@ -2442,8 +2442,8 @@
       "冷氣怎麼開"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 152
@@ -2458,8 +2458,8 @@
       "房間有暖氣嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 153
@@ -2474,8 +2474,8 @@
       "Wi-Fi"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 154
@@ -2490,8 +2490,8 @@
       "Wi-Fi"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 155
@@ -2506,8 +2506,8 @@
       "房間有電視嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 156
@@ -2522,8 +2522,8 @@
       "電視怎麼操作"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 157
@@ -2538,8 +2538,8 @@
       "有Netflix"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 158
@@ -2554,8 +2554,8 @@
       "房間有冰箱嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 159
@@ -2570,8 +2570,8 @@
       "有熱水壺嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 160
@@ -2586,8 +2586,8 @@
       "有吹風機嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 161
@@ -2602,8 +2602,8 @@
       "有毛巾浴巾嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 162
@@ -2618,8 +2618,8 @@
       "有牙刷牙膏嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 163
@@ -2634,8 +2634,8 @@
       "有洗髮精沐浴乳嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 164
@@ -2650,8 +2650,8 @@
       "有洗衣機嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 165
@@ -2666,8 +2666,8 @@
       "有曬衣空間嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 166
@@ -2682,8 +2682,8 @@
       "房間有插座嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 167
@@ -2698,8 +2698,8 @@
       "可以使用延長線嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 168
@@ -2714,8 +2714,8 @@
       "可以帶自己的電器"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 169
@@ -2730,8 +2730,8 @@
       "房間隔音好嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 170
@@ -2746,8 +2746,8 @@
       "房間有窗簾遮光嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 171
@@ -2762,8 +2762,8 @@
       "床墊軟硬度如何"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 172
@@ -2778,8 +2778,8 @@
       "房間有蚊子或昆蟲"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 173
@@ -2794,8 +2794,8 @@
       "房內可以吃東西嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 174
@@ -2810,8 +2810,8 @@
       "房內可以煮食嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 175
@@ -2826,8 +2826,8 @@
       "公共空間有哪些"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 176
@@ -2842,8 +2842,8 @@
       "客廳可以使用到幾"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 177
@@ -2858,8 +2858,8 @@
       "廚房"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 178
@@ -2874,8 +2874,8 @@
       "餐廳區可以聚餐嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 179
@@ -2890,8 +2890,8 @@
       "公共冰箱可以放東"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 180
@@ -2906,8 +2906,8 @@
       "有飲水機嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 181
@@ -2922,8 +2922,8 @@
       "有咖啡或茶嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 182
@@ -2938,8 +2938,8 @@
       "可以使用公共杯盤"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 183
@@ -2954,8 +2954,8 @@
       "可以借桌遊嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 184
@@ -2970,8 +2970,8 @@
       "有兒童玩具嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 185
@@ -2986,8 +2986,8 @@
       "有電梯嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 186
@@ -3002,8 +3002,8 @@
       "公共空間可以拍照"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 187
@@ -3018,8 +3018,8 @@
       "可以移動家具嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 188
@@ -3034,8 +3034,8 @@
       "可以布置公共空間"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 189
@@ -3050,8 +3050,8 @@
       "可以點蠟燭嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 190
@@ -3066,8 +3066,8 @@
       "可以使用香氛或擴"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 191
@@ -3082,8 +3082,8 @@
       "公共區域有冷氣嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 192
@@ -3098,8 +3098,8 @@
       "公共區域燈光可以"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 193
@@ -3114,8 +3114,8 @@
       "垃圾要丟哪裡"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 194
@@ -3130,8 +3130,8 @@
       "資源回收怎麼分類"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 195
@@ -3146,8 +3146,8 @@
       "公共空間髒了怎麼"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 196
@@ -3162,8 +3162,8 @@
       "設施壞掉怎麼辦"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 197
@@ -3178,8 +3178,8 @@
       "公共區可以穿室外"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 198
@@ -3194,8 +3194,8 @@
       "可以把公共物品拿"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 199
@@ -3210,8 +3210,8 @@
       "監視器"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 200
@@ -3226,8 +3226,8 @@
       "早餐"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 201
@@ -3242,8 +3242,8 @@
       "早餐"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 202
@@ -3258,8 +3258,8 @@
       "早餐"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 203
@@ -3274,8 +3274,8 @@
       "早餐"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 204
@@ -3290,8 +3290,8 @@
       "早餐"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 205
@@ -3306,8 +3306,8 @@
       "早餐"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 206
@@ -3322,8 +3322,8 @@
       "廚房"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 207
@@ -3338,8 +3338,8 @@
       "有鍋具可以用嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 208
@@ -3354,8 +3354,8 @@
       "可以煮火鍋嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 209
@@ -3372,8 +3372,8 @@
       "烤肉"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 210
@@ -3388,8 +3388,8 @@
       "烤肉"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 211
@@ -3404,8 +3404,8 @@
       "可以叫外燴嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 212
@@ -3420,8 +3420,8 @@
       "可以叫外送嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 213
@@ -3436,8 +3436,8 @@
       "附近有推薦餐廳嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 214
@@ -3452,8 +3452,8 @@
       "可以幫忙訂餐廳嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 215
@@ -3468,8 +3468,8 @@
       "可以在房間吃泡麵"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 216
@@ -3484,8 +3484,8 @@
       "可以帶酒嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 217
@@ -3500,8 +3500,8 @@
       "可以開派對喝酒唱"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 218
@@ -3516,8 +3516,8 @@
       "有提供冰塊嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 219
@@ -3532,8 +3532,8 @@
       "可以借保溫瓶或水"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 220
@@ -3548,8 +3548,8 @@
       "餐具不小心打破怎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 221
@@ -3564,8 +3564,8 @@
       "食物可以留在冰箱"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 222
@@ -3580,8 +3580,8 @@
       "可以煮氣味重的食"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 223
@@ -3596,8 +3596,8 @@
       "廚餘怎麼處理"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 224
@@ -3613,8 +3613,8 @@
       "廚房"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 225
@@ -3629,8 +3629,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 226
@@ -3645,8 +3645,8 @@
       "可以帶狗嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 227
@@ -3661,8 +3661,8 @@
       "可以帶貓嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 228
@@ -3677,8 +3677,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 229
@@ -3693,8 +3693,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 230
@@ -3709,8 +3709,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 231
@@ -3725,8 +3725,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 232
@@ -3741,8 +3741,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 233
@@ -3757,8 +3757,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 234
@@ -3773,8 +3773,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 235
@@ -3789,8 +3789,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 236
@@ -3805,8 +3805,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 237
@@ -3821,8 +3821,8 @@
       "要自備尿布墊嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 238
@@ -3837,8 +3837,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 239
@@ -3853,8 +3853,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 240
@@ -3869,8 +3869,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 241
@@ -3885,8 +3885,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 242
@@ -3901,8 +3901,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 243
@@ -3917,8 +3917,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 244
@@ -3933,8 +3933,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 245
@@ -3949,8 +3949,8 @@
       "附近有動物醫院嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 246
@@ -3965,8 +3965,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 247
@@ -3981,8 +3981,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 248
@@ -3997,8 +3997,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 249
@@ -4014,8 +4014,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 250
@@ -4030,8 +4030,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 251
@@ -4046,8 +4046,8 @@
       "有嬰兒床嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 252
@@ -4062,8 +4062,8 @@
       "有澡盆嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 253
@@ -4078,8 +4078,8 @@
       "有消毒鍋嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 254
@@ -4094,8 +4094,8 @@
       "小孩可以使用樓梯"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 255
@@ -4110,8 +4110,8 @@
       "有兒童遊戲區嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 256
@@ -4126,8 +4126,8 @@
       "可以帶嬰兒推車嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 257
@@ -4142,8 +4142,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 258
@@ -4158,8 +4158,8 @@
       "有無障礙設施嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 259
@@ -4174,8 +4174,8 @@
       "輪椅可以進出嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 260
@@ -4190,8 +4190,8 @@
       "有一樓衛浴嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 261
@@ -4206,8 +4206,8 @@
       "浴室會不會滑"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 262
@@ -4222,8 +4222,8 @@
       "有浴缸嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 263
@@ -4238,8 +4238,8 @@
       "有親子餐具嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 264
@@ -4254,8 +4254,8 @@
       "孩子可以跑跳嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 265
@@ -4270,8 +4270,8 @@
       "有尖角或易碎裝飾"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 266
@@ -4286,8 +4286,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 267
@@ -4302,8 +4302,8 @@
       "有藥箱嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 268
@@ -4318,8 +4318,8 @@
       "附近有醫院或診所"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 269
@@ -4334,8 +4334,8 @@
       "可以幫忙安排親子"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 270
@@ -4350,8 +4350,8 @@
       "小朋友要帶證件嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 271
@@ -4366,8 +4366,8 @@
       "有樓梯護欄嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 272
@@ -4382,8 +4382,8 @@
       "可以加裝床圍嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 273
@@ -4399,8 +4399,8 @@
       "哪間房"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 274
@@ -4415,8 +4415,8 @@
       "老人家晚上起夜方"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 275
@@ -4431,8 +4431,8 @@
       "房間會每天打掃嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 276
@@ -4447,8 +4447,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 277
@@ -4463,8 +4463,8 @@
       "床單會每組客人更"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 278
@@ -4479,8 +4479,8 @@
       "毛巾會更換嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 279
@@ -4495,8 +4495,8 @@
       "房間有異味怎麼辦"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 280
@@ -4511,8 +4511,8 @@
       "發現房間不乾淨怎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 281
@@ -4527,8 +4527,8 @@
       "垃圾可以先放房間"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 282
@@ -4543,8 +4543,8 @@
       "垃圾要分類嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 283
@@ -4559,8 +4559,8 @@
       "廚餘可以倒水槽嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 284
@@ -4575,8 +4575,8 @@
       "可以把油倒進水槽"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 285
@@ -4591,8 +4591,8 @@
       "浴室排水不順怎麼"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 286
@@ -4607,8 +4607,8 @@
       "馬桶堵塞怎麼辦"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 287
@@ -4623,8 +4623,8 @@
       "可以把濕紙巾丟馬"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 288
@@ -4639,8 +4639,8 @@
       "退房"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 289
@@ -4655,8 +4655,8 @@
       "清潔"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 290
@@ -4671,8 +4671,8 @@
       "若嘔吐或弄髒床墊"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 291
@@ -4687,8 +4687,8 @@
       "小孩尿床怎麼辦"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 292
@@ -4703,8 +4703,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 293
@@ -4719,8 +4719,8 @@
       "可以要求換房嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 294
@@ -4735,8 +4735,8 @@
       "房間有螞蟻怎麼辦"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 295
@@ -4751,8 +4751,8 @@
       "房間有小蟲正常嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 296
@@ -4767,8 +4767,8 @@
       "清潔"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 297
@@ -4783,8 +4783,8 @@
       "退房"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 298
@@ -4799,8 +4799,8 @@
       "使用過的毛巾放哪"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 299
@@ -4815,8 +4815,8 @@
       "清潔"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 300
@@ -4831,8 +4831,8 @@
       "晚上幾點後要安靜"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 301
@@ -4847,8 +4847,8 @@
       "包棟"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 302
@@ -4866,8 +4866,8 @@
       "歡唱"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 303
@@ -4882,8 +4882,8 @@
       "可以在室內吸菸嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 304
@@ -4898,8 +4898,8 @@
       "陽台可以抽菸嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 305
@@ -4914,8 +4914,8 @@
       "電子菸可以嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 306
@@ -4930,8 +4930,8 @@
       "有吸菸區嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 307
@@ -4946,8 +4946,8 @@
       "房間有煙味會收費"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 308
@@ -4962,8 +4962,8 @@
       "可以點香或燒金紙"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 309
@@ -4978,8 +4978,8 @@
       "可以放煙火嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 310
@@ -4994,8 +4994,8 @@
       "烤肉"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 311
@@ -5010,8 +5010,8 @@
       "可以使用瓦斯爐或"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 312
@@ -5026,8 +5026,8 @@
       "可以帶高功率電器"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 313
@@ -5042,8 +5042,8 @@
       "跳電怎麼辦"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 314
@@ -5058,8 +5058,8 @@
       "停電怎麼辦"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 315
@@ -5074,8 +5074,8 @@
       "火災警報響了怎麼"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 316
@@ -5090,8 +5090,8 @@
       "房內有逃生圖嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 317
@@ -5106,8 +5106,8 @@
       "滅火器在哪裡"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 318
@@ -5122,8 +5122,8 @@
       "可以鎖門外出嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 319
@@ -5138,8 +5138,8 @@
       "可以帶陌生人進來"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 320
@@ -5154,8 +5154,8 @@
       "喝酒後可以開車出"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 321
@@ -5170,8 +5170,8 @@
       "可以攜帶危險物品"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 322
@@ -5186,8 +5186,8 @@
       "深夜喧嘩會怎麼處"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 323
@@ -5202,8 +5202,8 @@
       "違反住宿規定會退"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 324
@@ -5218,8 +5218,8 @@
       "住宿規定在哪裡看"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 325
@@ -5237,8 +5237,8 @@
       "卡拉OK"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 326
@@ -5256,8 +5256,8 @@
       "可以唱歌嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 327
@@ -5272,8 +5272,8 @@
       "KTV"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 328
@@ -5288,8 +5288,8 @@
       "可以接自己的麥克"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 329
@@ -5304,8 +5304,8 @@
       "音響可以開很大聲"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 330
@@ -5320,8 +5320,8 @@
       "麻將"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 331
@@ -5336,8 +5336,8 @@
       "麻將"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 332
@@ -5352,8 +5352,8 @@
       "麻將"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 333
@@ -5368,8 +5368,8 @@
       "有桌遊嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 334
@@ -5384,8 +5384,8 @@
       "有Switch或"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 335
@@ -5400,8 +5400,8 @@
       "投影機可以用嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 336
@@ -5416,8 +5416,8 @@
       "可以看電影嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 337
@@ -5432,8 +5432,8 @@
       "可以辦生日派對嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 338
@@ -5448,8 +5448,8 @@
       "可以辦求婚嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 339
@@ -5464,8 +5464,8 @@
       "可以辦抓周嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 340
@@ -5480,8 +5480,8 @@
       "可以辦結婚或訂婚"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 341
@@ -5496,8 +5496,8 @@
       "可以請外部布置廠"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 342
@@ -5512,8 +5512,8 @@
       "可以請攝影師來拍"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 343
@@ -5528,8 +5528,8 @@
       "可以直播嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 344
@@ -5544,8 +5544,8 @@
       "可以使用煙霧機嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 345
@@ -5560,8 +5560,8 @@
       "可以撒亮片或彩帶"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 346
@@ -5576,8 +5576,8 @@
       "可以貼氣球在牆上"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 347
@@ -5592,8 +5592,8 @@
       "有提供音樂播放設"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 348
@@ -5608,8 +5608,8 @@
       "清潔"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 349
@@ -5624,8 +5624,8 @@
       "活動可以到戶外嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 350
@@ -5640,8 +5640,8 @@
       "有庭院嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 351
@@ -5656,8 +5656,8 @@
       "有露台嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 352
@@ -5672,8 +5672,8 @@
       "露台可以使用到幾"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 353
@@ -5688,8 +5688,8 @@
       "可以在戶外吃東西"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 354
@@ -5704,8 +5704,8 @@
       "烤肉"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 355
@@ -5720,8 +5720,8 @@
       "烤肉"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 356
@@ -5736,8 +5736,8 @@
       "烤肉"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 357
@@ -5752,8 +5752,8 @@
       "烤肉"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 358
@@ -5768,8 +5768,8 @@
       "可以玩水嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 359
@@ -5784,8 +5784,8 @@
       "泳池"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 360
@@ -5800,8 +5800,8 @@
       "戲水池水深多少"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 361
@@ -5816,8 +5816,8 @@
       "可以帶游泳圈嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 362
@@ -5832,8 +5832,8 @@
       "泳池"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 363
@@ -5848,8 +5848,8 @@
       "戶外會有蚊子嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 364
@@ -5864,8 +5864,8 @@
       "有提供防蚊用品嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 365
@@ -5880,8 +5880,8 @@
       "可以在戶外抽菸嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 366
@@ -5896,8 +5896,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 367
@@ -5912,8 +5912,8 @@
       "戶外區可以放音樂"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 368
@@ -5928,8 +5928,8 @@
       "可以在戶外搭帳篷"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 369
@@ -5944,8 +5944,8 @@
       "可以在戶外睡覺嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 370
@@ -5960,8 +5960,8 @@
       "可以使用空拍機嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 371
@@ -5976,8 +5976,8 @@
       "戶外燈幾點關"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 372
@@ -5992,8 +5992,8 @@
       "停車"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 373
@@ -6008,8 +6008,8 @@
       "戶外地面濕滑怎麼"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 374
@@ -6024,8 +6024,8 @@
       "戶外設施壞了可以"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 375
@@ -6040,8 +6040,8 @@
       "行李"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 376
@@ -6056,8 +6056,8 @@
       "行李"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 377
@@ -6073,8 +6073,8 @@
       "行李"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 378
@@ -6089,8 +6089,8 @@
       "行李"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 379
@@ -6105,8 +6105,8 @@
       "有管家服務嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 380
@@ -6121,8 +6121,8 @@
       "有24小時櫃台嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 381
@@ -6137,8 +6137,8 @@
       "晚上有問題找誰"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 382
@@ -6153,8 +6153,8 @@
       "可以代收包裹嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 383
@@ -6169,8 +6169,8 @@
       "可以幫忙準備蛋糕"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 384
@@ -6185,8 +6185,8 @@
       "可以幫忙布置房間"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 385
@@ -6201,8 +6201,8 @@
       "可以幫忙叫車嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 386
@@ -6217,8 +6217,8 @@
       "可以代訂餐嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 387
@@ -6233,8 +6233,8 @@
       "可以提供旅遊建議"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 388
@@ -6249,8 +6249,8 @@
       "有迎賓小禮嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 389
@@ -6265,8 +6265,8 @@
       "可以幫忙收垃圾嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 390
@@ -6281,8 +6281,8 @@
       "連住會補備品嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 391
@@ -6297,8 +6297,8 @@
       "可以借針線包嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 392
@@ -6313,8 +6313,8 @@
       "可以借雨傘嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 393
@@ -6329,8 +6329,8 @@
       "可以借充電器嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 394
@@ -6345,8 +6345,8 @@
       "可以借嬰兒用品嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 395
@@ -6361,8 +6361,8 @@
       "可以提前寄食材過"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 396
@@ -6377,8 +6377,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 397
@@ -6393,8 +6393,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 398
@@ -6409,8 +6409,8 @@
       "可以提供房內驚喜"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 399
@@ -6425,8 +6425,8 @@
       "行李"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 400
@@ -6441,8 +6441,8 @@
       "景點"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 401
@@ -6457,8 +6457,8 @@
       "宜蘭有什麼推薦行"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 402
@@ -6473,8 +6473,8 @@
       "下雨天可以去哪裡"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 403
@@ -6489,8 +6489,8 @@
       "帶小孩附近可以去"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 404
@@ -6505,8 +6505,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 405
@@ -6521,8 +6521,8 @@
       "附近有夜市嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 406
@@ -6537,8 +6537,8 @@
       "附近有溫泉嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 407
@@ -6553,8 +6553,8 @@
       "附近可以看海嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 408
@@ -6569,8 +6569,8 @@
       "附近有步道嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 409
@@ -6585,8 +6585,8 @@
       "可以幫我們排行程"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 410
@@ -6601,8 +6601,8 @@
       "兩天一夜怎麼排"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 411
@@ -6617,8 +6617,8 @@
       "三天兩夜怎麼排"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 412
@@ -6633,8 +6633,8 @@
       "附近有伴手禮店嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 413
@@ -6649,8 +6649,8 @@
       "附近有咖啡廳嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 414
@@ -6665,8 +6665,8 @@
       "附近有早午餐嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 415
@@ -6681,8 +6681,8 @@
       "附近有素食餐廳嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 416
@@ -6697,8 +6697,8 @@
       "附近有便利商店或"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 417
@@ -6713,8 +6713,8 @@
       "附近有醫院嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 418
@@ -6729,8 +6729,8 @@
       "寵物"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 419
@@ -6745,8 +6745,8 @@
       "可以幫忙訂票嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 420
@@ -6761,8 +6761,8 @@
       "附近有農場嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 421
@@ -6777,8 +6777,8 @@
       "附近有手作體驗嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 422
@@ -6793,8 +6793,8 @@
       "景點"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 423
@@ -6809,8 +6809,8 @@
       "附近晚上有活動嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 424
@@ -6825,8 +6825,8 @@
       "退房"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 425
@@ -6841,8 +6841,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 426
@@ -6857,8 +6857,8 @@
       "身分證"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 427
@@ -6873,8 +6873,8 @@
       "訂房"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 428
@@ -6889,8 +6889,8 @@
       "資料會保存多久"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 429
@@ -6905,8 +6905,8 @@
       "身分資料會拿去做"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 430
@@ -6921,8 +6921,8 @@
       "身分證"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 431
@@ -6937,8 +6937,8 @@
       "外國人要提供護照"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 432
@@ -6953,8 +6953,8 @@
       "訂房"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 433
@@ -6969,8 +6969,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 434
@@ -6985,8 +6985,8 @@
       "收據"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 435
@@ -7001,8 +7001,8 @@
       "可以開統編嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 436
@@ -7017,8 +7017,8 @@
       "發票"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 437
@@ -7033,8 +7033,8 @@
       "收據"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 438
@@ -7049,8 +7049,8 @@
       "收據"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 439
@@ -7066,8 +7066,8 @@
       "發票"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 440
@@ -7082,8 +7082,8 @@
       "收據"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 441
@@ -7098,8 +7098,8 @@
       "收據"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 442
@@ -7116,8 +7116,8 @@
       "清潔"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 443
@@ -7132,8 +7132,8 @@
       "公司旅遊可以開公"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 444
@@ -7148,8 +7148,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 445
@@ -7164,8 +7164,8 @@
       "資料填表安全嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 446
@@ -7180,8 +7180,8 @@
       "可以刪除我的個資"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 447
@@ -7196,8 +7196,8 @@
       "訂房"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 448
@@ -7212,8 +7212,8 @@
       "電話寫朋友的可以"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 449
@@ -7228,8 +7228,8 @@
       "資料變更要什麼時"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 450
@@ -7244,8 +7244,8 @@
       "監視器"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 451
@@ -7260,8 +7260,8 @@
       "監視器"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 452
@@ -7276,8 +7276,8 @@
       "民宿有保險嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 453
@@ -7292,8 +7292,8 @@
       "東西遺失怎麼辦"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 454
@@ -7308,8 +7308,8 @@
       "退房"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 455
@@ -7324,8 +7324,8 @@
       "遺失物會保管多久"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 456
@@ -7340,8 +7340,8 @@
       "貴重物品可以寄放"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 457
@@ -7356,8 +7356,8 @@
       "房內物品壞了怎麼"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 458
@@ -7372,8 +7372,8 @@
       "不小心打破杯子要"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 459
@@ -7388,8 +7388,8 @@
       "床單被染色怎麼辦"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 460
@@ -7404,8 +7404,8 @@
       "家具刮傷怎麼辦"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 461
@@ -7420,8 +7420,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 462
@@ -7436,8 +7436,8 @@
       "房間跟照片不一樣"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 463
@@ -7452,8 +7452,8 @@
       "設備故障會補償嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 464
@@ -7468,8 +7468,8 @@
       "隔壁太吵怎麼辦"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 465
@@ -7484,8 +7484,8 @@
       "附近鄰居抗議怎麼"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 466
@@ -7500,8 +7500,8 @@
       "可以給評價嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 467
@@ -7516,8 +7516,8 @@
       "評論可以獲得優惠"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 468
@@ -7532,8 +7532,8 @@
       "可以客訴嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 469
@@ -7548,8 +7548,8 @@
       "遇到安全疑慮怎麼"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 470
@@ -7564,8 +7564,8 @@
       "鄰近施工會事先通"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 471
@@ -7580,8 +7580,8 @@
       "停水怎麼辦"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 472
@@ -7596,8 +7596,8 @@
       "網路斷線怎麼辦"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 473
@@ -7612,8 +7612,8 @@
       "房間被誤闖怎麼辦"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 474
@@ -7628,8 +7628,8 @@
       "退房"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 475
@@ -7644,8 +7644,8 @@
       "可以帶導盲犬或服"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 476
@@ -7660,8 +7660,8 @@
       "我對羽絨過敏怎麼"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 477
@@ -7676,8 +7676,8 @@
       "我對香味過敏可以"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 478
@@ -7692,8 +7692,8 @@
       "可以安排安靜房嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 479
@@ -7708,8 +7708,8 @@
       "可以安排浪漫布置"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 480
@@ -7724,8 +7724,8 @@
       "可以準備求婚驚喜"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 481
@@ -7740,8 +7740,8 @@
       "可以準備生日蛋糕"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 482
@@ -7756,8 +7756,8 @@
       "可以提早寄生日禮"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 483
@@ -7772,8 +7772,8 @@
       "可以安排鮮花嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 484
@@ -7788,8 +7788,8 @@
       "可以幫忙保密驚喜"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 485
@@ -7804,8 +7804,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 486
@@ -7820,8 +7820,8 @@
       "可以帶長輩醫療器"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 487
@@ -7836,8 +7836,8 @@
       "需要冷藏藥品怎麼"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 488
@@ -7852,8 +7852,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 489
@@ -7868,8 +7868,8 @@
       "可以提早寄婚禮道"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 490
@@ -7884,8 +7884,8 @@
       "可以帶自己的枕頭"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 491
@@ -7900,8 +7900,8 @@
       "可以要求不要打掃"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 492
@@ -7916,8 +7916,8 @@
       "可以請民宿推薦攝"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 493
@@ -7932,8 +7932,8 @@
       "可以請外部按摩師"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 494
@@ -7948,8 +7948,8 @@
       "可以辦企業小聚嗎"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 495
@@ -7964,8 +7964,8 @@
       "可以開會或遠端工"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 496
@@ -7980,8 +7980,8 @@
       "可以要求高樓層或"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 497
@@ -7996,8 +7996,8 @@
       "可以要求避開某個"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 498
@@ -8012,8 +8012,8 @@
       "入住"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 499
@@ -8028,8 +8028,8 @@
       "遇到臨時緊急事件"
     ],
     "priority": 80,
-    "is_active": true,
-    "status": "approved",
+    "is_active": false,
+    "status": "needs_review",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 500

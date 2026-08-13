@@ -21,17 +21,34 @@ function faq(overrides = {}) {
 }
 
 describe("strict knowledge router", () => {
-  it("routes the dog question to a high-confidence approved FAQ", async () => {
-    const result = await routeKnowledge({ message: "可以帶狗嗎？" });
+  it("routes a natural approved payment FAQ without requiring the brand name", async () => {
+    const result = await routeKnowledge({ message: "可以刷卡嗎？" });
 
     expect(result).toMatchObject({
       route: "faq_direct",
       providerUsed: "faq_direct",
       confidence: "high",
-      matchedFaqIds: ["faq-227"],
+      matchedFaqIds: ["faq-035"],
       shouldCallDeepSeek: false,
       shouldMarkNeedsHuman: false,
       knowledgeGap: false,
+    });
+  });
+
+  it.each([
+    ["我可以先叫你們幫我留房，晚點再匯款嗎？", "faq-006"],
+    ["可以先去現場看看房間再決定嗎？", "faq-007"],
+    ["你們一般客人可以刷信用卡嗎？", "faq-035"],
+    ["退房後可以放行李到下午嗎？", "faq-092"],
+  ])("routes natural approved FAQ %s before scope guard", async (message, faqId) => {
+    const result = await routeKnowledge({ message });
+
+    expect(result).toMatchObject({
+      route: "faq_direct",
+      providerUsed: "faq_direct",
+      confidence: "high",
+      matchedFaqIds: [faqId],
+      shouldCallDeepSeek: false,
     });
   });
 
@@ -210,18 +227,18 @@ describe("strict knowledge router", () => {
 
   it("answers supported parts and escalates unsupported parts without guessing", async () => {
     const result = await routeKnowledge({
-      message: "可以帶狗嗎？可以借直升機嗎？",
+      message: "可以刷卡嗎？可以借直升機嗎？",
     });
 
     expect(result).toMatchObject({
       route: "faq_direct",
       providerUsed: "faq_direct",
-      matchedFaqIds: ["faq-227"],
+      matchedFaqIds: ["faq-035"],
       shouldCallDeepSeek: false,
       shouldMarkNeedsHuman: true,
       knowledgeGap: true,
     });
-    expect(result.answer).toContain("可以，慢慢蒔光是寵物友善");
+    expect(result.answer).toContain("目前一般付款不提供信用卡刷卡");
     expect(result.answer).toContain("請管家協助確認");
   });
 
@@ -258,13 +275,13 @@ describe("strict knowledge router", () => {
   });
 
   it("exposes safe metadata for faq_direct responses", async () => {
-    const result = await routeKnowledge({ message: "可以帶狗嗎？" });
+    const result = await routeKnowledge({ message: "可以刷卡嗎？" });
     const metadata = buildKnowledgeMetadata(result, "request-1");
 
     expect(metadata).toMatchObject({
       requestId: "request-1",
       provider_used: "faq_direct",
-      matchedFaqIds: ["faq-227"],
+      matchedFaqIds: ["faq-035"],
       matchedFaqCount: 1,
       matchConfidence: "high",
       ai_skipped: true,
@@ -288,7 +305,7 @@ describe("strict knowledge router", () => {
 
   it("still answers FAQ questions while a session is only needs_human", async () => {
     const result = await routeKnowledge({
-      message: "可以帶狗嗎？",
+      message: "可以刷卡嗎？",
       session: {
         status: "ai_active",
         support_status: "needs_human",
@@ -299,7 +316,7 @@ describe("strict knowledge router", () => {
     expect(result).toMatchObject({
       route: "faq_direct",
       providerUsed: "faq_direct",
-      matchedFaqIds: ["faq-227"],
+      matchedFaqIds: ["faq-035"],
       shouldCallDeepSeek: false,
     });
   });

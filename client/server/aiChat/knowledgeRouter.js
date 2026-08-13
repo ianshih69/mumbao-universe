@@ -449,17 +449,6 @@ export async function routeKnowledge({
     });
   }
 
-  if (!isAllowedSupportScope(message, contextText)) {
-    return createRouteResult({
-      route: "scope_guard",
-      providerUsed: "scope_guard",
-      answer: scopeGuardReply,
-      shouldCallDeepSeek: false,
-      reason: "out_of_scope",
-      aiSkipped: true,
-    });
-  }
-
   const matchedFaqItems = await retrieveFaqItems(retrievalMessage || message, {
     limit,
     maxLimit: limit,
@@ -470,6 +459,17 @@ export async function routeKnowledge({
   );
   const top = matchedFaqItems[0] || null;
   const topAnswerMode = normalizeAnswerMode(top?.answer_mode);
+
+  if (!highMatches.length && !isAllowedSupportScope(message, contextText)) {
+    return createRouteResult({
+      route: "scope_guard",
+      providerUsed: "scope_guard",
+      answer: scopeGuardReply,
+      shouldCallDeepSeek: false,
+      reason: "out_of_scope",
+      aiSkipped: true,
+    });
+  }
 
   if (!highMatches.length) {
     return createRouteResult({

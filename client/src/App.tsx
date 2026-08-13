@@ -11,6 +11,7 @@ import { CustomerAuthProvider } from "./contexts/CustomerAuthContext";
 import { MumbaoChatLauncher } from "./components/ai/MumbaoChatLauncher";
 import { SiteConstructionNotice } from "./components/layout/SiteConstructionNotice";
 import { ScrollToTop } from "./components/layout/ScrollToTop";
+import { ShopTestGate } from "./components/shop/ShopTestGate";
 import Home from "./pages/Home";
 import About from "./pages/About";
 import Breakfast from "./pages/Breakfast";
@@ -178,12 +179,36 @@ function Router() {
       <Route path={"/ai-chat"} component={AiChat} />
       <Route path={"/chat"} component={Chat} />
       <Route path={"/booking"} component={Booking} />
-      <Route path={"/shop"} component={Shop} />
-      <Route path={"/shop/:slug"} component={ProductDetail} />
-      <Route path={"/cart"} component={Cart} />
-      <Route path={"/checkout"} component={Checkout} />
-      <Route path={"/order-complete/:orderNumber"} component={OrderComplete} />
-      <Route path={"/order/lookup"} component={OrderLookup} />
+      <Route path={"/shop"}>
+        <ShopTestGate>
+          <Shop />
+        </ShopTestGate>
+      </Route>
+      <Route path={"/shop/:slug"}>
+        <ShopTestGate>
+          <ProductDetail />
+        </ShopTestGate>
+      </Route>
+      <Route path={"/cart"}>
+        <ShopTestGate>
+          <Cart />
+        </ShopTestGate>
+      </Route>
+      <Route path={"/checkout"}>
+        <ShopTestGate>
+          <Checkout />
+        </ShopTestGate>
+      </Route>
+      <Route path={"/order-complete/:orderNumber"}>
+        <ShopTestGate>
+          <OrderComplete />
+        </ShopTestGate>
+      </Route>
+      <Route path={"/order/lookup"}>
+        <ShopTestGate>
+          <OrderLookup />
+        </ShopTestGate>
+      </Route>
       <Route path={"/account"} component={CustomerAccount} />
       <Route path={"/account/login"} component={CustomerLogin} />
       <Route path={"/account/register"} component={CustomerRegister} />

@@ -21,6 +21,27 @@ const broadKeywords = new Set([
   "房型",
 ]);
 
+const incompleteDirectTerms = new Set([
+  ...broadKeywords,
+  "付款",
+  "訂金",
+  "行李",
+  "刷卡",
+  "信用卡",
+  "幾點",
+  "多少",
+  "費用",
+  "價格",
+]);
+
+const supportNamePrefixes = [
+  "mumbao",
+  "慢寶",
+  "慢慢蒔光",
+  "stimevilla",
+  "stime",
+];
+
 const topicSignals = [
   {
     name: "pet",
@@ -73,6 +94,44 @@ function normalizeLooseQuestionText(value) {
 
 function normalizeKeyword(value) {
   return normalizeText(value);
+}
+
+function getDirectEvidenceQuestionVariants(normalizedQuestion) {
+  const variants = new Set([normalizedQuestion]);
+  for (const prefix of supportNamePrefixes) {
+    if (normalizedQuestion.startsWith(prefix)) {
+      const stripped = normalizedQuestion.slice(prefix.length);
+      if (stripped) {
+        variants.add(stripped);
+      }
+    }
+  }
+  return Array.from(variants);
+}
+
+function isBroadOrIncompleteDirectText(value) {
+  const normalizedValue = normalizeText(value);
+  if (!normalizedValue) {
+    return true;
+  }
+
+  if (incompleteDirectTerms.has(normalizedValue)) {
+    return true;
+  }
+
+  if (/^[\u4e00-\u9fff]{1,2}$/.test(normalizedValue)) {
+    return true;
+  }
+
+  if (/^可以[\u4e00-\u9fff]{1}嗎?$/.test(normalizedValue)) {
+    return true;
+  }
+
+  if (/^可以(?:晚一點|早一點|停一下|放一下)嗎?$/.test(normalizedValue)) {
+    return true;
+  }
+
+  return false;
 }
 
 function getPriorityBoost(priority) {
@@ -216,6 +275,13 @@ function scoreFaqItem(item, normalizedQuestion) {
       score: 0,
       isExactQuestionMatch: false,
       isAliasMatch: false,
+      isQuestionExactMatch: false,
+      isQuestionLooseExactMatch: false,
+      isQuestionPartialMatch: false,
+      isAliasExactMatch: false,
+      isAliasPartialMatch: false,
+      exactAliasMatches: [],
+      directEvidenceText: "",
       matchedFields: [],
       keywordMatchCount: 0,
       broadKeywordMatchCount: 0,
@@ -228,6 +294,7 @@ function scoreFaqItem(item, normalizedQuestion) {
   const question = normalizeText(item?.question);
   const answer = normalizeText(item?.answer);
   const category = normalizeText(item?.category);
+  const questionVariants = getDirectEvidenceQuestionVariants(normalizedQuestion);
   const keywords = Array.isArray(item?.keywords)
     ? item.keywords.map(normalizeKeyword)
     : [];
@@ -238,27 +305,45 @@ function scoreFaqItem(item, normalizedQuestion) {
   let nonBroadKeywordMatchCount = 0;
   let isExactQuestionMatch = false;
   let isAliasMatch = false;
+  let isQuestionExactMatch = false;
+  let isQuestionLooseExactMatch = false;
+  let isQuestionPartialMatch = false;
+  let isAliasExactMatch = false;
+  let isAliasPartialMatch = false;
+  const exactAliasMatches = [];
+  let directEvidenceText = "";
   let score = 0;
   let categoryAlignment = false;
   let topicNames = [];
 
   if (question) {
-    if (question === normalizedQuestion) {
+    const exactQuestionVariant = questionVariants.find(
+      (variant) => question === variant
+    );
+    const looseQuestionVariant = questionVariants.find(
+      (variant) =>
+        normalizeLooseQuestionText(question) ===
+          normalizeLooseQuestionText(variant) &&
+        normalizeLooseQuestionText(variant).length >= 4
+    );
+
+    if (exactQuestionVariant) {
       isExactQuestionMatch = true;
+      isQuestionExactMatch = true;
+      directEvidenceText = exactQuestionVariant;
       matchedFields.push("question_exact");
       score += 100;
-    } else if (
-      normalizeLooseQuestionText(question) ===
-        normalizeLooseQuestionText(normalizedQuestion) &&
-      normalizeLooseQuestionText(normalizedQuestion).length >= 4
-    ) {
+    } else if (looseQuestionVariant) {
       isExactQuestionMatch = true;
+      isQuestionLooseExactMatch = true;
+      directEvidenceText = looseQuestionVariant;
       matchedFields.push("question_loose_exact");
       score += 92;
     } else if (
       question.includes(normalizedQuestion) ||
       normalizedQuestion.includes(question)
     ) {
+      isQuestionPartialMatch = true;
       matchedFields.push("question_partial");
       score += 60;
     } else {
@@ -283,12 +368,17 @@ function scoreFaqItem(item, normalizedQuestion) {
       continue;
     }
 
-    if (alias === normalizedQuestion) {
+    const exactAliasVariant = questionVariants.find((variant) => alias === variant);
+    if (exactAliasVariant) {
       isAliasMatch = true;
+      isAliasExactMatch = true;
+      exactAliasMatches.push(alias);
+      directEvidenceText ||= exactAliasVariant;
       matchedFields.push("alias_exact");
       score += 82;
     } else if (alias.includes(normalizedQuestion) || normalizedQuestion.includes(alias)) {
       isAliasMatch = true;
+      isAliasPartialMatch = true;
       matchedFields.push("alias_partial");
       score += 55;
     }
@@ -347,6 +437,13 @@ function scoreFaqItem(item, normalizedQuestion) {
     score,
     isExactQuestionMatch,
     isAliasMatch,
+    isQuestionExactMatch,
+    isQuestionLooseExactMatch,
+    isQuestionPartialMatch,
+    isAliasExactMatch,
+    isAliasPartialMatch,
+    exactAliasMatches,
+    directEvidenceText,
     matchedFields: Array.from(new Set(matchedFields)),
     keywordMatchCount,
     broadKeywordMatchCount,
@@ -429,6 +526,80 @@ function getConfidence(entry, candidates, index, normalizedQuestion) {
   return "low";
 }
 
+function hasStrongExactEvidence(entry) {
+  return Boolean(
+    entry?.isQuestionExactMatch ||
+      entry?.isQuestionLooseExactMatch ||
+      entry?.isAliasExactMatch
+  );
+}
+
+function hasCompetingExactEvidence(entry, candidates, index) {
+  return candidates.some(
+    (candidate, candidateIndex) =>
+      candidateIndex !== index &&
+      candidate.item?.id !== entry.item?.id &&
+      hasStrongExactEvidence(candidate)
+  );
+}
+
+function getLexicalSafeDirectReason(
+  entry,
+  candidates,
+  index,
+  normalizedQuestion
+) {
+  if (!isApprovedActiveFaqItem(entry.item)) return "not_approved_active";
+  if (entry.score < minimumMatchScore) return "below_minimum_score";
+  if (index !== 0) return "not_top_candidate";
+
+  const directEvidenceText = entry.directEvidenceText || normalizedQuestion;
+  const broadOrIncompleteQuery =
+    isBroadOrIncompleteDirectText(directEvidenceText);
+  const hasCompetingExact = hasCompetingExactEvidence(entry, candidates, index);
+
+  if (entry.isQuestionExactMatch) {
+    if (broadOrIncompleteQuery) return "broad_or_incomplete_question_exact";
+    if (hasCompetingExact) return "competing_exact_evidence";
+    return "question_exact";
+  }
+
+  if (entry.isAliasExactMatch) {
+    const hasUnsafeAlias = (entry.exactAliasMatches || []).some((alias) =>
+      isBroadOrIncompleteDirectText(alias)
+    );
+    if (broadOrIncompleteQuery || hasUnsafeAlias) {
+      return "unsafe_alias_exact";
+    }
+    if (hasCompetingExact) return "competing_exact_evidence";
+    return "alias_exact";
+  }
+
+  if (entry.isQuestionLooseExactMatch) {
+    if (broadOrIncompleteQuery) return "broad_or_incomplete_question_loose_exact";
+    if (hasCompetingExact) return "competing_exact_evidence";
+    if (candidates[1] && getScoreGap(candidates, index) < strongScoreGap) {
+      return "competing_close_candidate";
+    }
+    return "question_loose_exact";
+  }
+
+  if (entry.isAliasPartialMatch) return "alias_partial_not_safe_direct";
+  if (entry.isQuestionPartialMatch) return "question_partial_not_safe_direct";
+  if (entry.keywordMatchCount > 0) return "keyword_match_not_safe_direct";
+  if (entry.topicNames.length > 0) return "topic_alignment_not_safe_direct";
+
+  return "no_strong_lexical_evidence";
+}
+
+function isLexicalSafeDirectReason(reason) {
+  return [
+    "question_exact",
+    "alias_exact",
+    "question_loose_exact",
+  ].includes(reason);
+}
+
 function enrichCandidate(entry, candidates, index, normalizedQuestion) {
   const scoreGap = getScoreGap(candidates, index);
   const confidence = getConfidence(entry, candidates, index, normalizedQuestion);
@@ -437,12 +608,20 @@ function enrichCandidate(entry, candidates, index, normalizedQuestion) {
       ? ""
       : getRejectionReason(entry, candidates, index, normalizedQuestion) ||
         "not_high_confidence";
+  const lexicalSafeDirectReason = getLexicalSafeDirectReason(
+    entry,
+    candidates,
+    index,
+    normalizedQuestion
+  );
 
   return {
     ...entry,
     confidence,
     scoreGap,
     rejectionReason,
+    lexicalSafeDirect: isLexicalSafeDirectReason(lexicalSafeDirectReason),
+    lexicalSafeDirectReason,
   };
 }
 
@@ -477,10 +656,18 @@ function normalizeFaqForPrompt(entry) {
     matchedFields: entry.matchedFields || [],
     exactMatch: Boolean(entry.isExactQuestionMatch),
     aliasMatch: Boolean(entry.isAliasMatch),
+    questionExactMatch: Boolean(entry.isQuestionExactMatch),
+    questionLooseExactMatch: Boolean(entry.isQuestionLooseExactMatch),
+    questionPartialMatch: Boolean(entry.isQuestionPartialMatch),
+    aliasExactMatch: Boolean(entry.isAliasExactMatch),
+    aliasPartialMatch: Boolean(entry.isAliasPartialMatch),
     categoryAlignment: Boolean(entry.categoryAlignment),
     confidence: entry.confidence || "none",
     scoreGap: Number(entry.scoreGap || 0),
     rejectionReason: entry.rejectionReason || "",
+    lexicalSafeDirect: Boolean(entry.lexicalSafeDirect),
+    lexicalSafeDirectReason: entry.lexicalSafeDirectReason || "",
+    directEvidenceText: entry.directEvidenceText || "",
   };
 }
 

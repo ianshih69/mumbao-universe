@@ -463,8 +463,8 @@ export function isSafeLocalKnowledgeRoute({ message, routeResult, context }) {
   return (
     matchedFaqItems.length === 1 &&
     routeResult?.confidence === "high" &&
+    routeResult?.lexicalSafeDirect === true &&
     answerMode === "direct" &&
-    routeResult?.reason === "single_high_confidence_direct_faq" &&
     !isFollowUpOrCorrection(message) &&
     !hasMultipleQuestionParts(message) &&
     !hasHighRiskText(message, routeResult) &&

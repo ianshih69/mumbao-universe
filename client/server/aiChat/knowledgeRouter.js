@@ -1,5 +1,4 @@
 import {
-  buildFaqPromptSection,
   normalizeAnswerMode,
   normalizeText,
   retrieveFaqItems,
@@ -358,16 +357,6 @@ function hasMultipleQuestionParts(message) {
   );
 }
 
-function isSameCategory(items) {
-  const categories = new Set(items.map((item) => String(item.category || "")));
-  return categories.size <= 1;
-}
-
-function hasConflictingAnswers(items) {
-  const answers = new Set(items.map((item) => normalizeText(item.answer)));
-  return answers.size > 1 && items.length > 1 && !isSameCategory(items);
-}
-
 function buildPartialAnswer(answer) {
   return `${answer}\n\n其他沒有已核准資料支持的部分，我先幫你記錄，請管家協助確認喔。`;
 }
@@ -395,6 +384,13 @@ function createRouteResult(overrides = {}) {
     scoreGap: Number(topCandidate?.scoreGap || 0),
     exactMatch: Boolean(topCandidate?.exactMatch),
     aliasMatch: Boolean(topCandidate?.aliasMatch),
+    lexicalSafeDirect: Boolean(
+      overrides.lexicalSafeDirect ?? topCandidate?.lexicalSafeDirect
+    ),
+    lexicalSafeDirectReason:
+      overrides.lexicalSafeDirectReason ||
+      topCandidate?.lexicalSafeDirectReason ||
+      "",
     answerMode: overrides.answerMode || topCandidate?.answer_mode || "",
     shouldCallDeepSeek: Boolean(overrides.shouldCallDeepSeek),
     shouldMarkNeedsHuman: Boolean(overrides.shouldMarkNeedsHuman),
@@ -487,15 +483,13 @@ export async function routeKnowledge({
     maxLimit: limit,
     items: faqItems,
   });
-  const highMatches = matchedFaqItems.filter(
-    (item) => item.confidence === "high"
-  );
   const top = matchedFaqItems[0] || null;
+  const lexicalSafeDirectTop = Boolean(top?.lexicalSafeDirect);
   const topAnswerMode = normalizeAnswerMode(top?.answer_mode);
   let semanticFallbackMetadata = {};
   let semanticFallbackReason = "";
 
-  if (!highMatches.length && isExplicitExternalScope(message)) {
+  if (!lexicalSafeDirectTop && isExplicitExternalScope(message)) {
     return createRouteResult({
       route: "scope_guard",
       providerUsed: "scope_guard",
@@ -506,7 +500,7 @@ export async function routeKnowledge({
     });
   }
 
-  if (!highMatches.length) {
+  if (!lexicalSafeDirectTop) {
     const semanticResult = await retrieveSemanticFaqItems(
       retrievalMessage || message,
       {
@@ -586,7 +580,7 @@ export async function routeKnowledge({
     }
   }
 
-  if (!highMatches.length && !isAllowedSupportScope(message, contextText)) {
+  if (!lexicalSafeDirectTop && !isAllowedSupportScope(message, contextText)) {
     return createRouteResult({
       route: "scope_guard",
       providerUsed: "scope_guard",
@@ -597,7 +591,7 @@ export async function routeKnowledge({
     });
   }
 
-  if (!highMatches.length) {
+  if (!lexicalSafeDirectTop) {
     return createRouteResult({
       route: "knowledge_gap",
       providerUsed: "knowledge_gap",
@@ -607,9 +601,10 @@ export async function routeKnowledge({
       shouldCallDeepSeek: false,
       shouldMarkNeedsHuman: true,
       reason:
+        top?.lexicalSafeDirectReason ||
         top?.rejectionReason ||
         semanticFallbackReason ||
-        "no_high_confidence_approved_faq",
+        "no_lexical_safe_direct_approved_faq",
       notice: knowledgeGapNotice,
       answer: knowledgeGapNotice,
       knowledgeGap: true,
@@ -628,7 +623,7 @@ export async function routeKnowledge({
       answerMode: "ask_human",
       shouldCallDeepSeek: false,
       shouldMarkNeedsHuman: true,
-      reason: "faq_answer_mode_ask_human",
+      reason: `lexical_safe_direct_${top.lexicalSafeDirectReason}_ask_human`,
       aiSkipped: true,
     });
   }
@@ -642,14 +637,14 @@ export async function routeKnowledge({
       answer: top.answer,
       answerMode: "collect_info",
       shouldCallDeepSeek: false,
-      reason: "single_high_confidence_collect_info_faq",
+      reason: `lexical_safe_direct_${top.lexicalSafeDirectReason}_collect_info`,
       aiSkipped: true,
     });
   }
 
   const multipleParts =
     hasMultipleQuestionParts(message) && !top.exactMatch && !top.aliasMatch;
-  if (highMatches.length === 1) {
+  if (lexicalSafeDirectTop) {
     const answer = multipleParts ? buildPartialAnswer(top.answer) : top.answer;
     return createRouteResult({
       route: "faq_direct",
@@ -662,29 +657,9 @@ export async function routeKnowledge({
       shouldMarkNeedsHuman: multipleParts,
       reason: multipleParts
         ? "single_supported_faq_with_possible_unsupported_parts"
-        : "single_high_confidence_direct_faq",
+        : `lexical_safe_direct_${top.lexicalSafeDirectReason}`,
       knowledgeGap: multipleParts,
       aiSkipped: true,
-    });
-  }
-
-  const deepSeekGroundingAllowed =
-    multipleParts &&
-    highMatches.length <= 3 &&
-    isSameCategory(highMatches) &&
-    !hasConflictingAnswers(highMatches);
-
-  if (deepSeekGroundingAllowed) {
-    return createRouteResult({
-      route: "deepseek_grounded",
-      providerUsed: "deepseek_grounded",
-      matchedFaqItems: highMatches,
-      topCandidate: top,
-      answerMode: "direct",
-      shouldCallDeepSeek: true,
-      reason: "multiple_high_confidence_same_category_faq",
-      aiSkipped: false,
-      approvedKnowledgePrompt: buildFaqPromptSection(highMatches),
     });
   }
 
@@ -696,7 +671,7 @@ export async function routeKnowledge({
     usedFaqItems: [],
     shouldCallDeepSeek: false,
     shouldMarkNeedsHuman: true,
-    reason: "ambiguous_or_cross_category_faq_candidates",
+    reason: top?.lexicalSafeDirectReason || "no_lexical_safe_direct",
     notice: knowledgeGapNotice,
     answer: knowledgeGapNotice,
     knowledgeGap: true,
@@ -715,6 +690,8 @@ export function buildKnowledgeMetadata(routeResult, requestId) {
     aliasMatch: routeResult.aliasMatch,
     topScore: routeResult.topScore,
     scoreGap: routeResult.scoreGap,
+    lexical_safe_direct: routeResult.lexicalSafeDirect,
+    lexical_safe_direct_reason: routeResult.lexicalSafeDirectReason,
     answerMode: routeResult.answerMode || null,
     knowledge_gap: routeResult.knowledgeGap,
     ai_skipped: routeResult.aiSkipped,

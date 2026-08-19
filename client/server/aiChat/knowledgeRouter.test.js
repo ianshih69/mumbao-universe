@@ -91,8 +91,98 @@ describe("strict knowledge router", () => {
     const result = await routeKnowledge({ message: "入住" });
 
     expect(result.route).toBe("knowledge_gap");
+    expect(result.matchedFaqIds).toEqual([]);
+    expect(result.lexicalSafeDirect).toBe(false);
+    expect(result.reason).toBe("alias_partial_not_safe_direct");
+  });
+
+  it.each(["入住", "退房", "停車", "訂金", "行李", "付款", "刷卡"])(
+    "does not lexical-direct broad or incomplete topic %s",
+    async (message) => {
+      const result = await routeKnowledge({ message });
+
+      expect(result.route).not.toBe("faq_direct");
+      expect(result.matchedFaqIds).toEqual([]);
+      expect(result.lexicalSafeDirect).toBe(false);
+      expect(result.shouldCallDeepSeek).toBe(false);
+    },
+  );
+
+  it.each(["可以停嗎", "可以刷嗎", "可以帶嗎", "幾點", "可以晚一點嗎"])(
+    "does not lexical-direct vague short question %s",
+    async (message) => {
+      const result = await routeKnowledge({ message });
+
+      expect(result.route).not.toBe("faq_direct");
+      expect(result.matchedFaqIds).toEqual([]);
+      expect(result.lexicalSafeDirect).toBe(false);
+    },
+  );
+
+  it.each(["停車在哪裡", "可以停幾台", "附近哪裡可以停車"])(
+    "does not lexical-direct adjacent parking intent %s",
+    async (message) => {
+      const result = await routeKnowledge({ message });
+
+      expect(result.route).not.toBe("faq_direct");
+      expect(result.matchedFaqIds).toEqual([]);
+      expect(result.lexicalSafeDirect).toBe(false);
+    },
+  );
+
+  it.each(["退房後可以寄行李嗎", "可以晚退房嗎"])(
+    "does not lexical-direct adjacent checkout intent %s without strong evidence",
+    async (message) => {
+      const result = await routeKnowledge({ message });
+
+      expect(result.route).not.toBe("faq_direct");
+      expect(result.matchedFaqIds).toEqual([]);
+      expect(result.lexicalSafeDirect).toBe(false);
+    },
+  );
+
+  it.each(["可以晚點匯款嗎", "訂金多少"])(
+    "does not lexical-direct adjacent payment intent %s without strong evidence",
+    async (message) => {
+      const result = await routeKnowledge({ message });
+
+      expect(result.route).not.toBe("faq_direct");
+      expect(result.matchedFaqIds).toEqual([]);
+      expect(result.lexicalSafeDirect).toBe(false);
+    },
+  );
+
+  it.each([
+    ["可以刷信用卡嗎", "faq-035"],
+    ["尾款什麼時候付", "faq-034"],
+  ])("still lexical-directs clear payment intent %s", async (message, faqId) => {
+    const result = await routeKnowledge({ message });
+
+    expect(result).toMatchObject({
+      route: "faq_direct",
+      matchedFaqIds: [faqId],
+      lexicalSafeDirect: true,
+      shouldCallDeepSeek: false,
+    });
+  });
+
+  it("does not let a lower high-confidence candidate direct a medium top candidate", async () => {
+    const result = await routeKnowledge({ message: "付款" });
+
+    expect(result.route).toBe("knowledge_gap");
+    expect(result.topCandidateIds[0]).toBe("faq-041");
     expect(result.confidence).toBe("medium");
-    expect(result.reason).toBe("single_broad_keyword");
+    expect(result.matchedFaqIds).toEqual([]);
+    expect(result.lexicalSafeDirect).toBe(false);
+    expect(result.reason).toBe("question_partial_not_safe_direct");
+  });
+
+  it("does not let a lower high alias candidate direct a medium top candidate", async () => {
+    const result = await routeKnowledge({ message: "可以停嗎" });
+
+    expect(result.route).not.toBe("faq_direct");
+    expect(result.matchedFaqIds).toEqual([]);
+    expect(result.lexicalSafeDirect).toBe(false);
   });
 
   it("marks in-scope lodging questions without a high FAQ as a knowledge gap", async () => {
@@ -207,7 +297,7 @@ describe("strict knowledge router", () => {
       shouldCallDeepSeek: false,
       shouldMarkNeedsHuman: false,
     });
-    expect(result.answer).toContain("中午 12:00 前");
+    expect(result.answer).toContain("翌日上午 11:00 前");
   });
 
   it("honors answer_mode=ask_human without calling DeepSeek", async () => {
@@ -225,21 +315,16 @@ describe("strict knowledge router", () => {
     });
   });
 
-  it("answers supported parts and escalates unsupported parts without guessing", async () => {
+  it("does not answer a supported FAQ when the same turn includes unsupported parts", async () => {
     const result = await routeKnowledge({
       message: "可以刷卡嗎？可以借直升機嗎？",
     });
 
-    expect(result).toMatchObject({
-      route: "faq_direct",
-      providerUsed: "faq_direct",
-      matchedFaqIds: ["faq-035"],
-      shouldCallDeepSeek: false,
-      shouldMarkNeedsHuman: true,
-      knowledgeGap: true,
-    });
-    expect(result.answer).toContain("目前一般付款不提供信用卡刷卡");
-    expect(result.answer).toContain("請管家協助確認");
+    expect(result.route).not.toBe("faq_direct");
+    expect(result.matchedFaqIds).toEqual([]);
+    expect(result.shouldCallDeepSeek).toBe(false);
+    expect(result.lexicalSafeDirect).toBe(false);
+    expect(result.answer).not.toContain("目前一般付款不提供信用卡刷卡");
   });
 
   it("downgrades close FAQ candidates instead of marking them high", async () => {
@@ -284,6 +369,8 @@ describe("strict knowledge router", () => {
       matchedFaqIds: ["faq-035"],
       matchedFaqCount: 1,
       matchConfidence: "high",
+      lexical_safe_direct: true,
+      lexical_safe_direct_reason: "question_exact",
       ai_skipped: true,
       knowledge_gap: false,
     });

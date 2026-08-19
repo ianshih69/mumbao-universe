@@ -35,6 +35,18 @@ export function createModelCallPlan({
   }
 
   if (
+    routeResult?.route === "faq_selector_required" &&
+    routeResult?.shouldCallDeepSeek
+  ) {
+    return {
+      strategy: "faq_full_catalog_selector_only",
+      allowed_purpose: "faq_full_catalog_selector",
+      reason: "faq_full_catalog_selector_required",
+      model_call_budget: 1,
+    };
+  }
+
+  if (
     routeResult?.route === "semantic_verifier_required" &&
     routeResult?.shouldCallDeepSeek
   ) {

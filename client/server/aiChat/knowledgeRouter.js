@@ -1,9 +1,10 @@
 import {
+  isApprovedActiveFaqItem,
+  loadFaqItems,
   normalizeAnswerMode,
   normalizeText,
   retrieveFaqItems,
 } from "./faqRetrieval.js";
-import { retrieveSemanticFaqItems } from "./faqSemanticRetrieval.js";
 
 export const knowledgeGapNotice =
   "這個問題目前還沒有確認過的慢慢蒔光資料，我先幫你記錄，請管家協助確認喔。";
@@ -23,6 +24,35 @@ const localIntentReplies = {
 };
 
 const supportScopeKeywords = [
+  "訂房",
+  "保留",
+  "留房",
+  "訂金",
+  "匯款",
+  "付款",
+  "刷卡",
+  "信用卡",
+  "入住",
+  "退房",
+  "行李",
+  "停車",
+  "房型",
+  "房間",
+  "房",
+  "包棟",
+  "寵物",
+  "取消",
+  "ktv",
+  "烤肉",
+  "入住通知",
+  "看房",
+  "設備",
+  "垃圾",
+  "民宿",
+  "地址",
+  "導航",
+  "email",
+  "line",
   "慢慢蒔光",
   "白雲基地",
   "慢寶",
@@ -98,6 +128,13 @@ const yilanTravelKeywords = [
 ];
 
 const lodgingContextKeywords = [
+  "訂房",
+  "住宿",
+  "包棟",
+  "入住",
+  "退房",
+  "房間",
+  "民宿",
   "住宿",
   "民宿",
   "訂房",
@@ -116,6 +153,19 @@ const lodgingContextKeywords = [
 ];
 
 const blockedScopeKeywords = [
+  "一般數學",
+  "數學",
+  "寫程式",
+  "寫 javascript",
+  "幫我寫 javascript",
+  "股票",
+  "政治新聞",
+  "天氣",
+  "翻譯英文",
+  "哪張信用卡回饋",
+  "信用卡回饋最好",
+  "買車",
+  "餐廳",
   "寫程式",
   "程式碼",
   "程式",
@@ -144,6 +194,12 @@ const blockedScopeKeywords = [
   "政治",
   "選舉",
   "總統",
+];
+
+const forcedExternalScopeKeywords = [
+  "哪張信用卡回饋",
+  "信用卡回饋最好",
+  "信用卡推薦",
 ];
 
 const contextFollowUpKeywords = [
@@ -363,6 +419,7 @@ function buildPartialAnswer(answer) {
 
 function createRouteResult(overrides = {}) {
   const matchedFaqItems = overrides.matchedFaqItems || [];
+  const candidateFaqItems = overrides.candidateFaqItems || matchedFaqItems;
   const topCandidate = overrides.topCandidate || matchedFaqItems[0] || null;
   const usedFaqItems =
     overrides.usedFaqItems ||
@@ -374,7 +431,7 @@ function createRouteResult(overrides = {}) {
     route: overrides.route || "knowledge_gap",
     confidence: overrides.confidence || topCandidate?.confidence || "none",
     matchedFaqItems: usedFaqItems,
-    candidateFaqItems: matchedFaqItems,
+    candidateFaqItems,
     matchedFaqIds: usedFaqItems.map((item) => item.id),
     topCandidateIds: matchedFaqItems.slice(0, 3).map((item) => item.id),
     topCandidateScores: matchedFaqItems
@@ -410,29 +467,49 @@ function createRouteResult(overrides = {}) {
 
 function isExplicitExternalScope(message) {
   const normalizedMessage = String(message || "").toLowerCase().trim();
+  if (includesKeyword(normalizedMessage, forcedExternalScopeKeywords)) {
+    return true;
+  }
+
   return (
     includesKeyword(normalizedMessage, blockedScopeKeywords) &&
     !hasSupportContext(normalizedMessage)
   );
 }
 
-function buildSemanticRetrievalMetadata(semanticResult = {}) {
-  return {
-    faq_semantic_retrieval_status: semanticResult.status || "not_run",
-    faq_semantic_retrieval_reason: semanticResult.reason || "",
-    faq_semantic_embedding_called: Boolean(semanticResult.embeddingCalled),
-    faq_semantic_query_cache_hit: Boolean(semanticResult.queryEmbeddingCacheHit),
-    faq_semantic_corpus_approved_count: Number(
-      semanticResult.corpusApprovedCount || 0
-    ),
-    faq_semantic_corpus_needs_review_count: Number(
-      semanticResult.corpusNeedsReviewCount || 0
-    ),
-    faq_semantic_embedding_model: semanticResult.embeddingModel || "",
-    faq_semantic_vector_dimensions: Number(semanticResult.vectorDimensions || 0),
-    faq_semantic_index_source_hash: semanticResult.sourceHash || "",
-    faq_semantic_index_path: semanticResult.artifactPath || "",
-  };
+function isUnsafeStandaloneFragment(message, contextText = "") {
+  const normalizedMessage = String(message || "").toLowerCase().trim();
+  const compactMessage = normalizedMessage.replace(/\s+/g, "");
+  const normalizedContext = String(contextText || "").toLowerCase().trim();
+
+  if (!compactMessage) {
+    return true;
+  }
+
+  if (/^\d{3,}$/.test(compactMessage)) {
+    return true;
+  }
+
+  if (/^0\d{1,3}-?\d{3,4}-?\d{3,4}$/.test(compactMessage)) {
+    return true;
+  }
+
+  if (/^[a-z]{1,4}-?\d{3,}$/i.test(compactMessage)) {
+    return true;
+  }
+
+  if (
+    isDateOrPeopleFragment(normalizedMessage) &&
+    !hasSupportContext(normalizedContext)
+  ) {
+    return true;
+  }
+
+  return (
+    compactMessage.length <= 8 &&
+    !hasSupportContext(normalizedMessage) &&
+    !hasSupportContext(normalizedContext)
+  );
 }
 
 export async function routeKnowledge({
@@ -441,7 +518,6 @@ export async function routeKnowledge({
   contextText = message,
   retrievalMessage = message,
   faqItems,
-  semanticRetrieval = null,
   limit = 8,
 } = {}) {
   if (session?.status === "human_takeover") {
@@ -486,8 +562,6 @@ export async function routeKnowledge({
   const top = matchedFaqItems[0] || null;
   const lexicalSafeDirectTop = Boolean(top?.lexicalSafeDirect);
   const topAnswerMode = normalizeAnswerMode(top?.answer_mode);
-  let semanticFallbackMetadata = {};
-  let semanticFallbackReason = "";
 
   if (!lexicalSafeDirectTop && isExplicitExternalScope(message)) {
     return createRouteResult({
@@ -500,116 +574,55 @@ export async function routeKnowledge({
     });
   }
 
-  if (!lexicalSafeDirectTop) {
-    const semanticResult = await retrieveSemanticFaqItems(
-      retrievalMessage || message,
-      {
-        ...(semanticRetrieval && typeof semanticRetrieval === "object"
-          ? semanticRetrieval
-          : {}),
-        items: faqItems,
-      }
-    );
-    const semanticMetadata = buildSemanticRetrievalMetadata(semanticResult);
-    semanticFallbackMetadata = semanticMetadata;
-    semanticFallbackReason = semanticResult.reason || "";
-    const semanticTop = semanticResult.topCandidate || semanticResult.candidates?.[0];
-    const semanticAnswerMode = normalizeAnswerMode(semanticTop?.answer_mode);
-
-    if (semanticResult.status === "clear" && semanticTop) {
-      if (semanticAnswerMode === "ask_human") {
-        return createRouteResult({
-          route: "ask_human",
-          providerUsed: "semantic_direct",
-          matchedFaqItems: [semanticTop],
-          topCandidate: semanticTop,
-          answer: semanticTop.answer || knowledgeGapNotice,
-          answerMode: "ask_human",
-          shouldCallDeepSeek: false,
-          shouldMarkNeedsHuman: true,
-          reason: "semantic_clear_ask_human_faq",
-          aiSkipped: true,
-          semanticMetadata,
-        });
-      }
-
-      if (semanticAnswerMode === "collect_info") {
-        return createRouteResult({
-          route: "faq_collect_info",
-          providerUsed: "semantic_direct",
-          matchedFaqItems: [semanticTop],
-          topCandidate: semanticTop,
-          answer: semanticTop.answer,
-          answerMode: "collect_info",
-          shouldCallDeepSeek: false,
-          reason: "semantic_clear_collect_info_faq",
-          aiSkipped: true,
-          semanticMetadata,
-        });
-      }
-
-      return createRouteResult({
-        route: "semantic_direct",
-        providerUsed: "semantic_direct",
-        matchedFaqItems: [semanticTop],
-        topCandidate: semanticTop,
-        answer: semanticTop.answer,
-        answerMode: "direct",
-        shouldCallDeepSeek: false,
-        shouldMarkNeedsHuman: false,
-        reason: "semantic_clear_approved_faq",
-        knowledgeGap: false,
-        aiSkipped: true,
-        semanticMetadata,
-      });
-    }
-
-    if (semanticResult.status === "ambiguous" && semanticResult.candidates?.length) {
-      return createRouteResult({
-        route: "semantic_verifier_required",
-        providerUsed: "semantic_verifier_required",
-        matchedFaqItems: semanticResult.candidates,
-        topCandidate: semanticTop,
-        answerMode: semanticAnswerMode || "direct",
-        shouldCallDeepSeek: true,
-        shouldMarkNeedsHuman: false,
-        reason: "semantic_ambiguous_needs_verifier",
-        aiSkipped: false,
-        semanticMetadata,
-      });
-    }
-  }
-
-  if (!lexicalSafeDirectTop && !isAllowedSupportScope(message, contextText)) {
+  if (!lexicalSafeDirectTop && isUnsafeStandaloneFragment(message, contextText)) {
     return createRouteResult({
       route: "scope_guard",
       providerUsed: "scope_guard",
       answer: scopeGuardReply,
       shouldCallDeepSeek: false,
-      reason: "out_of_scope",
+      reason: "unsupported_fragment",
       aiSkipped: true,
     });
   }
 
   if (!lexicalSafeDirectTop) {
+    const approvedCatalogItems = (await loadFaqItems({ items: faqItems }))
+      .filter(isApprovedActiveFaqItem)
+      .sort((left, right) => String(left.id).localeCompare(String(right.id)));
+    if (!approvedCatalogItems.length) {
+      return createRouteResult({
+        route: "knowledge_gap",
+        providerUsed: "knowledge_gap",
+        matchedFaqItems,
+        topCandidate: top,
+        usedFaqItems: [],
+        shouldCallDeepSeek: false,
+        shouldMarkNeedsHuman: true,
+        reason: "no_approved_faq_catalog",
+        notice: knowledgeGapNotice,
+        answer: knowledgeGapNotice,
+        knowledgeGap: true,
+        aiSkipped: true,
+      });
+    }
     return createRouteResult({
-      route: "knowledge_gap",
-      providerUsed: "knowledge_gap",
+      route: "faq_selector_required",
+      providerUsed: "faq_selector_required",
       matchedFaqItems,
       topCandidate: top,
       usedFaqItems: [],
-      shouldCallDeepSeek: false,
-      shouldMarkNeedsHuman: true,
+      candidateFaqItems: approvedCatalogItems,
+      shouldCallDeepSeek: true,
+      shouldMarkNeedsHuman: false,
       reason:
         top?.lexicalSafeDirectReason ||
         top?.rejectionReason ||
-        semanticFallbackReason ||
-        "no_lexical_safe_direct_approved_faq",
-      notice: knowledgeGapNotice,
-      answer: knowledgeGapNotice,
-      knowledgeGap: true,
-      aiSkipped: true,
-      semanticMetadata: semanticFallbackMetadata,
+        "full_catalog_selector_required",
+      aiSkipped: false,
+      semanticMetadata: {
+        faq_selector_catalog_count: approvedCatalogItems.length,
+        faq_selector_trigger: "no_lexical_safe_direct",
+      },
     });
   }
 

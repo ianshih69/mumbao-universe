@@ -5,7 +5,11 @@ import {
 } from "./faqSemanticCorpus.js";
 import { retrieveSemanticFaqItems } from "./faqSemanticRetrieval.js";
 import {
+  buildApprovedFaqSelectorCatalog,
+  buildFaqFullCatalogSelectorMessages,
+  callFaqFullCatalogSelector,
   callFaqSemanticVerifier,
+  normalizeFaqSelectorResult,
   normalizeFaqSemanticVerifierSelection,
 } from "./faqSemanticVerifier.js";
 import {
@@ -74,7 +78,7 @@ describe("hybrid FAQ retrieval", () => {
     expect(embeddingCalls).toBe(0);
   });
 
-  it("uses semantic_direct for a clear approved FAQ miss from lexical retrieval", async () => {
+  it("routes lexical misses to the full approved FAQ selector without embeddings", async () => {
     const items = [
       faq(),
       faq({
@@ -85,6 +89,7 @@ describe("hybrid FAQ retrieval", () => {
         keywords: ["deposit", "reserve"],
       }),
     ];
+    let embeddingCalls = 0;
     const result = await routeKnowledge({
       message: "We will drive eight sedans. Is there enough space?",
       faqItems: items,
@@ -95,29 +100,27 @@ describe("hybrid FAQ retrieval", () => {
           "faq-payment": [0, 1, 0],
         }),
         createEmbedding: async (text) => {
-          expect(text).toBe("We will drive eight sedans. Is there enough space?");
+          embeddingCalls += 1;
           return [1, 0, 0];
         },
       },
     });
 
     expect(result).toMatchObject({
-      route: "semantic_direct",
-      providerUsed: "semantic_direct",
-      matchedFaqIds: ["faq-parking"],
-      confidence: "high",
-      shouldCallDeepSeek: false,
-      answer: "Eight sedans can park in the outdoor parking area.",
+      route: "faq_selector_required",
+      providerUsed: "faq_selector_required",
+      matchedFaqIds: [],
+      shouldCallDeepSeek: true,
     });
-    expect(result.semanticMetadata).toMatchObject({
-      faq_semantic_retrieval_status: "clear",
-      faq_semantic_embedding_called: true,
-      faq_semantic_corpus_approved_count: 2,
-      faq_semantic_corpus_needs_review_count: 0,
-    });
+    expect(result.candidateFaqItems.map((item) => item.id)).toEqual([
+      "faq-parking",
+      "faq-payment",
+    ]);
+    expect(result.semanticMetadata.faq_selector_catalog_count).toBe(2);
+    expect(embeddingCalls).toBe(0);
   });
 
-  it("routes ambiguous semantic matches to the selector-only verifier", async () => {
+  it("uses the full approved catalog instead of lexical Top-K candidates", async () => {
     const items = [
       faq(),
       faq({
@@ -142,15 +145,20 @@ describe("hybrid FAQ retrieval", () => {
       },
     });
 
-    expect(result.route).toBe("semantic_verifier_required");
+    expect(result.route).toBe("faq_selector_required");
     expect(result.shouldCallDeepSeek).toBe(true);
-    expect(result.matchedFaqIds).toEqual(["faq-parking", "faq-payment"]);
+    expect(result.matchedFaqIds).toEqual([]);
+    expect(result.candidateFaqItems.map((item) => item.id)).toEqual([
+      "faq-parking",
+      "faq-payment",
+    ]);
   });
 
-  it("falls back safely when the semantic artifact is stale", async () => {
+  it("does not use the embedding artifact as an active routing path", async () => {
     const items = [faq()];
     const artifact = artifactFor(items, { "faq-parking": [1, 0, 0] });
     artifact.source_hash = "stale";
+    let embeddingCalls = 0;
 
     const result = await routeKnowledge({
       message: "Mumbao parking: We will drive eight sedans. Is there enough space?",
@@ -160,17 +168,15 @@ describe("hybrid FAQ retrieval", () => {
         enabled: true,
         artifact,
         createEmbedding: async () => {
-          throw new Error("embedding should not run for stale artifacts");
+          embeddingCalls += 1;
+          return [1, 0, 0];
         },
       },
     });
 
-    expect(result.route).toBe("knowledge_gap");
-    expect(result.semanticMetadata).toMatchObject({
-      faq_semantic_retrieval_status: "stale",
-      faq_semantic_retrieval_reason: "embedding_artifact_hash_mismatch",
-      faq_semantic_embedding_called: false,
-    });
+    expect(result.route).toBe("faq_selector_required");
+    expect(result.shouldCallDeepSeek).toBe(true);
+    expect(embeddingCalls).toBe(0);
   });
 
   it("excludes needs_review FAQ from the semantic corpus", async () => {
@@ -217,10 +223,10 @@ describe("hybrid FAQ retrieval", () => {
     expect(embeddingCalls).toBe(0);
   });
 
-  it("does not embed previous context as the default semantic query", async () => {
+  it("does not embed previous context in the active FAQ route", async () => {
     const embeddedTexts = [];
     const items = [faq()];
-    await routeKnowledge({
+    const result = await routeKnowledge({
       message: "Current short question",
       retrievalMessage: "Current short question",
       contextText: "old context about a different date and price",
@@ -235,7 +241,156 @@ describe("hybrid FAQ retrieval", () => {
       },
     });
 
-    expect(embeddedTexts).toEqual(["Current short question"]);
+    expect(result.route).toBe("faq_selector_required");
+    expect(embeddedTexts).toEqual([]);
+  });
+});
+
+describe("DeepSeek full approved FAQ selector", () => {
+  it("builds a stable catalog without answers or needs_review FAQ", () => {
+    const items = [
+      faq({ id: "faq-002", answer: "Authoritative answer" }),
+      faq({
+        id: "faq-001",
+        question: "Can I reserve before paying?",
+        status: "approved",
+      }),
+      faq({
+        id: "faq-old",
+        question: "Old unreviewed policy",
+        answer: "Old answer",
+        status: "needs_review",
+        is_active: false,
+      }),
+    ];
+    const catalog = buildApprovedFaqSelectorCatalog(items);
+    const messages = buildFaqFullCatalogSelectorMessages({
+      message: "Can I hold the room?",
+      faqItems: items,
+    });
+    const prefix = `${messages[0].content}\n${messages[1].content}`;
+
+    expect(catalog.map((item) => item.id)).toEqual(["faq-001", "faq-002"]);
+    expect(prefix).toContain("APPROVED FAQ CATALOG");
+    expect(prefix).toContain("faq-001");
+    expect(prefix).not.toContain("Old answer");
+    expect(prefix).not.toContain("Authoritative answer");
+    expect(messages.at(-1).content).toContain("current_user_query");
+  });
+
+  it("validates selector output strictly against the approved catalog", () => {
+    const items = [faq(), faq({ id: "faq-payment" })];
+
+    expect(
+      normalizeFaqSelectorResult(
+        { action: "answer", faq_ids: ["faq-parking", "faq-payment"] },
+        items
+      )
+    ).toMatchObject({
+      action: "answer",
+      faqIds: ["faq-parking", "faq-payment"],
+      accepted: true,
+    });
+
+    expect(
+      normalizeFaqSelectorResult(
+        { action: "answer", faq_ids: ["faq-parking"], answer: "Do not trust me" },
+        items
+      )
+    ).toMatchObject({
+      accepted: false,
+      reason: "forbidden_selector_output_field",
+    });
+
+    expect(
+      normalizeFaqSelectorResult({ action: "answer", faq_ids: ["faq-old"] }, items)
+    ).toMatchObject({
+      accepted: false,
+      reason: "invalid_faq_id",
+    });
+  });
+
+  it("calls DeepSeek once with the selector model and records cache tokens", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_BASE_URL", "https://deepseek.test");
+    vi.stubEnv("DEEPSEEK_MODEL", "deepseek-v4-pro");
+    vi.stubEnv("FAQ_SELECTOR_MODEL", "deepseek-v4-flash");
+
+    const context = createAiModelExecutionContext();
+    setModelCallPlan(
+      context,
+      createModelCallPlan({
+        routeResult: {
+          route: "faq_selector_required",
+          shouldCallDeepSeek: true,
+        },
+      })
+    );
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                content: "{\"action\":\"answer\",\"faq_ids\":[\"faq-parking\"]}",
+              },
+            },
+          ],
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 8,
+            prompt_cache_hit_tokens: 60,
+            prompt_cache_miss_tokens: 40,
+          },
+        }),
+    }));
+
+    const result = await callFaqFullCatalogSelector({
+      message: "Four families will drive. Can we park?",
+      faqItems: [faq()],
+      executionContext: context,
+      fetchImpl,
+    });
+
+    expect(result.selectedFaqItems[0].id).toBe("faq-parking");
+    expect(result.metadata).toMatchObject({
+      model: "deepseek-v4-flash",
+      faq_selector_action: "answer",
+      faq_selector_result: "selected",
+      prompt_tokens: 100,
+      completion_tokens: 8,
+      cache_hit_tokens: 60,
+      cache_miss_tokens: 40,
+      model_call_count: 1,
+      model_call_purposes: ["faq_full_catalog_selector"],
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(fetchImpl.mock.calls[0][1].body);
+    expect(payload.thinking).toEqual({ type: "disabled" });
+    expect(payload.model).toBe("deepseek-v4-flash");
+  });
+
+  it("prevents selector plus final-provider model calls in one route", () => {
+    const context = createAiModelExecutionContext();
+    setModelCallPlan(
+      context,
+      createModelCallPlan({
+        semanticMode: "legacy",
+        routeResult: {
+          route: "faq_selector_required",
+          shouldCallDeepSeek: true,
+        },
+      })
+    );
+
+    reserveModelCall(context, "faq_full_catalog_selector");
+
+    expect(() => reserveModelCall(context, "final_reply_provider")).toThrow(
+      "AI model call purpose is not allowed for this route."
+    );
   });
 });
 

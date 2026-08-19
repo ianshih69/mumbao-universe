@@ -31,7 +31,11 @@ import {
   knowledgeGapNotice,
   routeKnowledge,
 } from "./knowledgeRouter.js";
-import { callFaqSemanticVerifier } from "./faqSemanticVerifier.js";
+import {
+  callFaqFullCatalogSelector,
+  callFaqSemanticVerifier,
+  getFaqSelectorModelName,
+} from "./faqSemanticVerifier.js";
 import {
   aiChatPromptBudget,
   buildPromptBudgetMetadata,
@@ -948,6 +952,39 @@ function buildContextText(recentMessages, currentMessage) {
     : text;
 }
 
+function shouldIncludePreviousUserQueryForSelector(message) {
+  const normalizedMessage = String(message || "").toLowerCase().trim();
+  const compactMessage = normalizedMessage.replace(/\s+/g, "");
+
+  if (!compactMessage) {
+    return false;
+  }
+
+  if (shortFollowUpMessages.includes(compactMessage)) {
+    return true;
+  }
+
+  if (isDateOrPeopleFragment(normalizedMessage)) {
+    return true;
+  }
+
+  return /^(那|這|所以|不然|還有|另外|剛剛|前面|上一題)/.test(
+    compactMessage
+  );
+}
+
+function getPreviousUserQueryForSelector(recentMessages, currentMessage) {
+  if (!shouldIncludePreviousUserQueryForSelector(currentMessage)) {
+    return "";
+  }
+
+  const messages = Array.isArray(recentMessages) ? recentMessages : [];
+  const previousUser = [...messages]
+    .reverse()
+    .find((message) => message?.sender === "user" && message?.message);
+  return String(previousUser?.message || "").trim().slice(0, 300);
+}
+
 function trimRecentMessagesForPrompt(recentMessages) {
   return limitMessagesForPrompt(recentMessages, aiChatPromptBudget).messages;
 }
@@ -1780,6 +1817,57 @@ function buildFaqSemanticVerifiedRoute(routeResult, verifierResult, executionCon
   };
 }
 
+function buildFaqSelectorVerifiedRoute(routeResult, selectorResult, executionContext) {
+  const selectedFaqItems = Array.isArray(selectorResult?.selectedFaqItems)
+    ? selectorResult.selectedFaqItems.filter(Boolean)
+    : [];
+  if (!selectedFaqItems.length) {
+    return null;
+  }
+  const candidateFaqItems = Array.isArray(routeResult?.candidateFaqItems)
+    ? routeResult.candidateFaqItems
+    : [];
+  const answerModes = selectedFaqItems.map((item) =>
+    normalizeAnswerMode(item.answer_mode)
+  );
+  const shouldMarkNeedsHuman = answerModes.includes("ask_human");
+  const finalRoute = shouldMarkNeedsHuman
+    ? "ask_human"
+    : answerModes.includes("collect_info")
+      ? "faq_collect_info"
+      : "faq_selector_direct";
+
+  return {
+    ...routeResult,
+    route: finalRoute,
+    providerUsed: "faq_full_catalog_selector",
+    matchedFaqItems: selectedFaqItems,
+    candidateFaqItems,
+    matchedFaqIds: selectedFaqItems.map((item) => item.id),
+    ...summarizeFaqCandidates(selectedFaqItems),
+    confidence: "high",
+    answer: selectedFaqItems
+      .map((item) => String(item.answer || "").trim())
+      .filter(Boolean)
+      .join("\n\n"),
+    notice: "",
+    answerMode: answerModes.length === 1 ? answerModes[0] : "direct",
+    shouldCallDeepSeek: false,
+    shouldMarkNeedsHuman,
+    knowledgeGap: false,
+    aiSkipped: false,
+    reason: "faq_full_catalog_selector_selected_approved_faq",
+    modelCalled: executionContext?.model_call_attempted || false,
+    modelCallCount: executionContext?.model_call_count || 0,
+    semanticMetadata: {
+      ...(routeResult?.semanticMetadata || {}),
+      ...(selectorResult?.metadata || {}),
+      faq_selector_final: "selected",
+      faq_selector_selected_count: selectedFaqItems.length,
+    },
+  };
+}
+
 function buildFaqSemanticVerifierKnowledgeGapRoute(
   routeResult,
   reason,
@@ -2215,6 +2303,77 @@ export default async function handler(req, res) {
         finalConversationContextChanged = true;
       }
       knowledgeRoute = routeOverride;
+    }
+
+    if (
+      knowledgeRoute.route === "faq_selector_required" &&
+      modelCallPlan.strategy === "faq_full_catalog_selector_only"
+    ) {
+      const selectorRateLimit = await enforceAiChatRateLimit(req, {
+        visitorId,
+        sessionId: session.id,
+        action: "faq_full_catalog_selector",
+        provider: "deepseek",
+        model: getFaqSelectorModelName(),
+      });
+
+      if (!selectorRateLimit.allowed) {
+        knowledgeRoute = buildFaqSemanticVerifierKnowledgeGapRoute(
+          knowledgeRoute,
+          selectorRateLimit.reason || "faq_selector_rate_limited",
+          executionContext,
+          {
+            faq_selector_result: "rate_limited",
+          }
+        );
+      } else {
+        try {
+          const selectorResult = await callFaqFullCatalogSelector({
+            message,
+            faqItems: knowledgeRoute.candidateFaqItems,
+            previousUserQuery: getPreviousUserQueryForSelector(
+              recentMessages,
+              message
+            ),
+            requestId,
+            executionContext,
+          });
+          const verifiedRoute = buildFaqSelectorVerifiedRoute(
+            knowledgeRoute,
+            selectorResult,
+            executionContext
+          );
+          knowledgeRoute =
+            verifiedRoute ||
+            buildFaqSemanticVerifierKnowledgeGapRoute(
+              knowledgeRoute,
+              selectorResult?.metadata?.faq_selector_result === "invalid_selection"
+                ? "faq_selector_invalid_selection"
+                : selectorResult?.metadata?.faq_selector_result === "none"
+                  ? "faq_selector_none"
+                  : selectorResult?.metadata?.faq_selector_result ||
+                    "faq_selector_none",
+              executionContext,
+              selectorResult?.metadata || {}
+            );
+        } catch (error) {
+          console.warn("[ai-chat] FAQ selector fallback", {
+            requestId,
+            reason:
+              error?.providerErrorCode ||
+              error?.message ||
+              "faq_selector_failed",
+          });
+          knowledgeRoute = buildFaqSemanticVerifierKnowledgeGapRoute(
+            knowledgeRoute,
+            error?.providerErrorCode ||
+              error?.message ||
+              "faq_selector_failed",
+            executionContext,
+            error?.faqSelectorMetadata || {}
+          );
+        }
+      }
     }
 
     if (

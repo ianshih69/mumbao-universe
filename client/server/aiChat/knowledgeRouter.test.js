@@ -90,9 +90,11 @@ describe("strict knowledge router", () => {
   it("does not treat a single broad keyword as high confidence", async () => {
     const result = await routeKnowledge({ message: "入住" });
 
-    expect(result.route).toBe("knowledge_gap");
+    expect(result.route).toBe("faq_selector_required");
+    expect(result.providerUsed).toBe("faq_selector_required");
     expect(result.matchedFaqIds).toEqual([]);
     expect(result.lexicalSafeDirect).toBe(false);
+    expect(result.shouldCallDeepSeek).toBe(true);
     expect(result.reason).toBe("alias_partial_not_safe_direct");
   });
 
@@ -104,7 +106,8 @@ describe("strict knowledge router", () => {
       expect(result.route).not.toBe("faq_direct");
       expect(result.matchedFaqIds).toEqual([]);
       expect(result.lexicalSafeDirect).toBe(false);
-      expect(result.shouldCallDeepSeek).toBe(false);
+      expect(result.route).toBe("faq_selector_required");
+      expect(result.shouldCallDeepSeek).toBe(true);
     },
   );
 
@@ -169,11 +172,12 @@ describe("strict knowledge router", () => {
   it("does not let a lower high-confidence candidate direct a medium top candidate", async () => {
     const result = await routeKnowledge({ message: "付款" });
 
-    expect(result.route).toBe("knowledge_gap");
+    expect(result.route).toBe("faq_selector_required");
     expect(result.topCandidateIds[0]).toBe("faq-041");
     expect(result.confidence).toBe("medium");
     expect(result.matchedFaqIds).toEqual([]);
     expect(result.lexicalSafeDirect).toBe(false);
+    expect(result.shouldCallDeepSeek).toBe(true);
     expect(result.reason).toBe("question_partial_not_safe_direct");
   });
 
@@ -185,17 +189,17 @@ describe("strict knowledge router", () => {
     expect(result.lexicalSafeDirect).toBe(false);
   });
 
-  it("marks in-scope lodging questions without a high FAQ as a knowledge gap", async () => {
+  it("routes in-scope lodging questions without a safe FAQ to the full catalog selector", async () => {
     const result = await routeKnowledge({
       message: "民宿可以借直升機嗎？",
     });
 
     expect(result).toMatchObject({
-      route: "knowledge_gap",
-      providerUsed: "knowledge_gap",
-      shouldCallDeepSeek: false,
-      shouldMarkNeedsHuman: true,
-      knowledgeGap: true,
+      route: "faq_selector_required",
+      providerUsed: "faq_selector_required",
+      shouldCallDeepSeek: true,
+      shouldMarkNeedsHuman: false,
+      knowledgeGap: false,
     });
   });
 
@@ -207,6 +211,16 @@ describe("strict knowledge router", () => {
       providerUsed: "scope_guard",
       shouldCallDeepSeek: false,
       shouldMarkNeedsHuman: false,
+    });
+  });
+
+  it("keeps external credit-card recommendation questions out of the FAQ selector", async () => {
+    const result = await routeKnowledge({ message: "哪張信用卡回饋最好？" });
+
+    expect(result).toMatchObject({
+      route: "scope_guard",
+      providerUsed: "scope_guard",
+      shouldCallDeepSeek: false,
     });
   });
 
@@ -321,8 +335,9 @@ describe("strict knowledge router", () => {
     });
 
     expect(result.route).not.toBe("faq_direct");
+    expect(result.route).toBe("faq_selector_required");
     expect(result.matchedFaqIds).toEqual([]);
-    expect(result.shouldCallDeepSeek).toBe(false);
+    expect(result.shouldCallDeepSeek).toBe(true);
     expect(result.lexicalSafeDirect).toBe(false);
     expect(result.answer).not.toContain("目前一般付款不提供信用卡刷卡");
   });
@@ -356,7 +371,8 @@ describe("strict knowledge router", () => {
     });
 
     expect(result.route).not.toBe("deepseek_grounded");
-    expect(result.shouldCallDeepSeek).toBe(false);
+    expect(result.route).toBe("faq_selector_required");
+    expect(result.shouldCallDeepSeek).toBe(true);
   });
 
   it("exposes safe metadata for faq_direct responses", async () => {

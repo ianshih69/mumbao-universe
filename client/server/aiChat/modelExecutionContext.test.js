@@ -79,6 +79,21 @@ describe("AI chat model execution context", () => {
         semanticMode: "hybrid",
         canAnswerLocally: false,
         routeResult: {
+          route: "faq_selector_required",
+          shouldCallDeepSeek: true,
+        },
+      })
+    ).toMatchObject({
+      strategy: "faq_full_catalog_selector_only",
+      allowed_purpose: "faq_full_catalog_selector",
+      model_call_budget: 1,
+    });
+
+    expect(
+      createModelCallPlan({
+        semanticMode: "hybrid",
+        canAnswerLocally: false,
+        routeResult: {
           route: "semantic_verifier_required",
           shouldCallDeepSeek: true,
         },

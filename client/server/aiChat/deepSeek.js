@@ -176,17 +176,22 @@ export function parseDeepSeekResponseBody({ ok, status, body }) {
     providerStatus: status,
     ...(data?.usage
       ? {
-          usage: {
-            prompt_tokens: Number(data.usage.prompt_tokens || 0),
-            completion_tokens: Number(data.usage.completion_tokens || 0),
-            total_tokens: Number(data.usage.total_tokens || 0),
-            cache_hit_tokens: Number(
-              data.usage.prompt_cache_hit_tokens ||
-                data.usage.cache_hit_tokens ||
-                0
-            ),
-          },
-        }
-      : {}),
+        usage: {
+          prompt_tokens: Number(data.usage.prompt_tokens || 0),
+          completion_tokens: Number(data.usage.completion_tokens || 0),
+          total_tokens: Number(data.usage.total_tokens || 0),
+          cache_hit_tokens: Number(
+            data.usage.prompt_cache_hit_tokens ||
+              data.usage.cache_hit_tokens ||
+              0
+          ),
+          cache_miss_tokens: Number(
+            data.usage.prompt_cache_miss_tokens ||
+              data.usage.cache_miss_tokens ||
+              0
+          ),
+        },
+      }
+    : {}),
   };
 }

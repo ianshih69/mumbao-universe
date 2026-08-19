@@ -14,6 +14,7 @@
     "faq:embed": "node client/scripts/faq/buildFaqEmbeddings.mjs",
     "faq:test": "tsx client/scripts/faq/runFaqRegression.mjs",
     "faq:audit": "node client/scripts/faq/validateFaqMaster.mjs && node client/scripts/faq/buildFaqItems.mjs --dry-run && node client/scripts/faq/validateFaqEmbeddings.mjs && tsx client/scripts/faq/runFaqRegression.mjs",
+    "faq:selector:benchmark": "node client/scripts/faq/runFaqSelectorBenchmark.mjs",
     "format": "prettier --write ."
   },
   "dependencies": {

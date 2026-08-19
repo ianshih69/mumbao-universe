@@ -1,0 +1,5301 @@
+{
+  "version": "faq-selector-benchmark-v1",
+  "source": {
+    "faq_items_path": "client/api/knowledge/faq-items.json",
+    "faq_items_sha256": "9713d4ac7c6ad677b63515729e8fdd3d1238b54b3db9255f3112d213e46a890d",
+    "approved_active_count": 103,
+    "note": "Positive cases were fixed from approved FAQ id/category/question/aliases/keywords only. FAQ answers were not used to generate expected ids or queries."
+  },
+  "positive": [
+    {
+      "case_id": "pos-faq-001-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-001"
+      ],
+      "query": "請問還有空房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-001-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-001"
+      ],
+      "query": "??????請問還有空房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-001-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-001"
+      ],
+      "query": "空房?"
+    },
+    {
+      "case_id": "pos-faq-001-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-001"
+      ],
+      "query": "?????空房??請問還有空房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-001-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-001"
+      ],
+      "query": "????????????????請問還有空房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-002-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-002"
+      ],
+      "query": "我要怎麼訂房？?"
+    },
+    {
+      "case_id": "pos-faq-002-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-002"
+      ],
+      "query": "??????我要怎麼訂房？?"
+    },
+    {
+      "case_id": "pos-faq-002-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-002"
+      ],
+      "query": "訂房?"
+    },
+    {
+      "case_id": "pos-faq-002-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-002"
+      ],
+      "query": "?????訂房??我要怎麼訂房？?"
+    },
+    {
+      "case_id": "pos-faq-002-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-002"
+      ],
+      "query": "????????????????我要怎麼訂房？?"
+    },
+    {
+      "case_id": "pos-faq-003-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-003"
+      ],
+      "query": "線上訂房後還需要再跟民宿確認嗎？?"
+    },
+    {
+      "case_id": "pos-faq-003-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-003"
+      ],
+      "query": "??????線上訂房後還需要再跟民宿確認嗎？?"
+    },
+    {
+      "case_id": "pos-faq-003-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-003"
+      ],
+      "query": "訂房?"
+    },
+    {
+      "case_id": "pos-faq-003-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-003"
+      ],
+      "query": "?????訂房??線上訂房後還需要再跟民宿確認嗎？?"
+    },
+    {
+      "case_id": "pos-faq-003-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-003"
+      ],
+      "query": "????????????????線上訂房後還需要再跟民宿確認嗎？?"
+    },
+    {
+      "case_id": "pos-faq-004-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-004"
+      ],
+      "query": "訂房需要先付訂金嗎？?"
+    },
+    {
+      "case_id": "pos-faq-004-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-004"
+      ],
+      "query": "??????訂房需要先付訂金嗎？?"
+    },
+    {
+      "case_id": "pos-faq-004-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-004"
+      ],
+      "query": "訂房?"
+    },
+    {
+      "case_id": "pos-faq-004-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-004"
+      ],
+      "query": "還沒付訂金，可以先幫我保留日期嗎？?"
+    },
+    {
+      "case_id": "pos-faq-004-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-004"
+      ],
+      "query": "????????????????訂房需要先付訂金嗎？?"
+    },
+    {
+      "case_id": "pos-faq-005-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-005"
+      ],
+      "query": "訂房後多久內要匯款？?"
+    },
+    {
+      "case_id": "pos-faq-005-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-005"
+      ],
+      "query": "??????訂房後多久內要匯款？?"
+    },
+    {
+      "case_id": "pos-faq-005-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-005"
+      ],
+      "query": "訂房?"
+    },
+    {
+      "case_id": "pos-faq-005-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-005"
+      ],
+      "query": "?????訂房??訂房後多久內要匯款？?"
+    },
+    {
+      "case_id": "pos-faq-005-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-005"
+      ],
+      "query": "????????????????訂房後多久內要匯款？?"
+    },
+    {
+      "case_id": "pos-faq-006-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-006"
+      ],
+      "query": "我可以先口頭保留房間嗎？?"
+    },
+    {
+      "case_id": "pos-faq-006-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-006"
+      ],
+      "query": "??????我可以先口頭保留房間嗎？?"
+    },
+    {
+      "case_id": "pos-faq-006-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-006"
+      ],
+      "query": "留房?"
+    },
+    {
+      "case_id": "pos-faq-006-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-006"
+      ],
+      "query": "我可以先叫你們幫我留房，晚點再匯款嗎？?"
+    },
+    {
+      "case_id": "pos-faq-006-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-006"
+      ],
+      "query": "????????????????我可以先口頭保留房間嗎？?"
+    },
+    {
+      "case_id": "pos-faq-007-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-007"
+      ],
+      "query": "可以現場看房再訂嗎？?"
+    },
+    {
+      "case_id": "pos-faq-007-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-007"
+      ],
+      "query": "??????可以現場看房再訂嗎？?"
+    },
+    {
+      "case_id": "pos-faq-007-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-007"
+      ],
+      "query": "看房?"
+    },
+    {
+      "case_id": "pos-faq-007-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-007"
+      ],
+      "query": "可以先去現場看看房間再決定嗎？?"
+    },
+    {
+      "case_id": "pos-faq-007-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-007"
+      ],
+      "query": "????????????????可以現場看房再訂嗎？?"
+    },
+    {
+      "case_id": "pos-faq-008-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-008"
+      ],
+      "query": "可以指定房間嗎？?"
+    },
+    {
+      "case_id": "pos-faq-008-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-008"
+      ],
+      "query": "??????可以指定房間嗎？?"
+    },
+    {
+      "case_id": "pos-faq-008-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-008"
+      ],
+      "query": "可以指定房間嗎?"
+    },
+    {
+      "case_id": "pos-faq-008-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-008"
+      ],
+      "query": "?????可以指定房間嗎??可以指定房間嗎？?"
+    },
+    {
+      "case_id": "pos-faq-008-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-008"
+      ],
+      "query": "????????????????可以指定房間嗎？?"
+    },
+    {
+      "case_id": "pos-faq-009-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-009"
+      ],
+      "query": "可以指定樓層嗎？?"
+    },
+    {
+      "case_id": "pos-faq-009-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-009"
+      ],
+      "query": "??????可以指定樓層嗎？?"
+    },
+    {
+      "case_id": "pos-faq-009-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-009"
+      ],
+      "query": "可以指定樓層嗎?"
+    },
+    {
+      "case_id": "pos-faq-009-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-009"
+      ],
+      "query": "?????可以指定樓層嗎??可以指定樓層嗎？?"
+    },
+    {
+      "case_id": "pos-faq-009-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-009"
+      ],
+      "query": "????????????????可以指定樓層嗎？?"
+    },
+    {
+      "case_id": "pos-faq-010-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-010"
+      ],
+      "query": "可以訂同一天多間房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-010-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-010"
+      ],
+      "query": "??????可以訂同一天多間房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-010-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-010"
+      ],
+      "query": "可以訂同一天多間?"
+    },
+    {
+      "case_id": "pos-faq-010-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-010"
+      ],
+      "query": "?????可以訂同一天多間??可以訂同一天多間房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-010-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-010"
+      ],
+      "query": "????????????????可以訂同一天多間房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-011-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-011"
+      ],
+      "query": "可以包棟嗎？?"
+    },
+    {
+      "case_id": "pos-faq-011-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-011"
+      ],
+      "query": "??????可以包棟嗎？?"
+    },
+    {
+      "case_id": "pos-faq-011-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-011"
+      ],
+      "query": "包棟?"
+    },
+    {
+      "case_id": "pos-faq-011-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-011"
+      ],
+      "query": "?????包棟??可以包棟嗎？?"
+    },
+    {
+      "case_id": "pos-faq-011-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-011"
+      ],
+      "query": "????????????????可以包棟嗎？?"
+    },
+    {
+      "case_id": "pos-faq-012-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-012"
+      ],
+      "query": "包棟會有其他客人嗎？?"
+    },
+    {
+      "case_id": "pos-faq-012-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-012"
+      ],
+      "query": "??????包棟會有其他客人嗎？?"
+    },
+    {
+      "case_id": "pos-faq-012-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-012"
+      ],
+      "query": "包棟?"
+    },
+    {
+      "case_id": "pos-faq-012-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-012"
+      ],
+      "query": "?????包棟??包棟會有其他客人嗎？?"
+    },
+    {
+      "case_id": "pos-faq-012-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-012"
+      ],
+      "query": "????????????????包棟會有其他客人嗎？?"
+    },
+    {
+      "case_id": "pos-faq-013-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-013"
+      ],
+      "query": "可以只訂部分房間不包棟嗎？?"
+    },
+    {
+      "case_id": "pos-faq-013-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-013"
+      ],
+      "query": "??????可以只訂部分房間不包棟嗎？?"
+    },
+    {
+      "case_id": "pos-faq-013-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-013"
+      ],
+      "query": "包棟?"
+    },
+    {
+      "case_id": "pos-faq-013-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-013"
+      ],
+      "query": "?????包棟??可以只訂部分房間不包棟嗎？?"
+    },
+    {
+      "case_id": "pos-faq-013-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-013"
+      ],
+      "query": "????????????????可以只訂部分房間不包棟嗎？?"
+    },
+    {
+      "case_id": "pos-faq-014-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-014"
+      ],
+      "query": "平日和假日怎麼分？?"
+    },
+    {
+      "case_id": "pos-faq-014-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-014"
+      ],
+      "query": "??????平日和假日怎麼分？?"
+    },
+    {
+      "case_id": "pos-faq-014-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-014"
+      ],
+      "query": "平日和假日怎麼分?"
+    },
+    {
+      "case_id": "pos-faq-014-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-014"
+      ],
+      "query": "?????平日和假日怎麼分??平日和假日怎麼分？?"
+    },
+    {
+      "case_id": "pos-faq-014-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-014"
+      ],
+      "query": "????????????????平日和假日怎麼分？?"
+    },
+    {
+      "case_id": "pos-faq-015-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-015"
+      ],
+      "query": "春節或連假可以訂嗎？?"
+    },
+    {
+      "case_id": "pos-faq-015-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-015"
+      ],
+      "query": "??????春節或連假可以訂嗎？?"
+    },
+    {
+      "case_id": "pos-faq-015-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-015"
+      ],
+      "query": "春節或連假可以訂?"
+    },
+    {
+      "case_id": "pos-faq-015-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-015"
+      ],
+      "query": "?????春節或連假可以訂??春節或連假可以訂嗎？?"
+    },
+    {
+      "case_id": "pos-faq-015-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-015"
+      ],
+      "query": "????????????????春節或連假可以訂嗎？?"
+    },
+    {
+      "case_id": "pos-faq-016-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-016"
+      ],
+      "query": "可以候補嗎？?"
+    },
+    {
+      "case_id": "pos-faq-016-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-016"
+      ],
+      "query": "??????可以候補嗎？?"
+    },
+    {
+      "case_id": "pos-faq-016-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-016"
+      ],
+      "query": "可以候補嗎?"
+    },
+    {
+      "case_id": "pos-faq-016-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-016"
+      ],
+      "query": "?????可以候補嗎??可以候補嗎？?"
+    },
+    {
+      "case_id": "pos-faq-016-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-016"
+      ],
+      "query": "????????????????可以候補嗎？?"
+    },
+    {
+      "case_id": "pos-faq-017-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-017"
+      ],
+      "query": "可以訂當天住宿嗎？?"
+    },
+    {
+      "case_id": "pos-faq-017-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-017"
+      ],
+      "query": "??????可以訂當天住宿嗎？?"
+    },
+    {
+      "case_id": "pos-faq-017-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-017"
+      ],
+      "query": "可以訂當天住宿嗎?"
+    },
+    {
+      "case_id": "pos-faq-017-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-017"
+      ],
+      "query": "?????可以訂當天住宿嗎??可以訂當天住宿嗎？?"
+    },
+    {
+      "case_id": "pos-faq-017-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-017"
+      ],
+      "query": "????????????????可以訂當天住宿嗎？?"
+    },
+    {
+      "case_id": "pos-faq-018-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-018"
+      ],
+      "query": "官網、平台和LINE價格一樣嗎？?"
+    },
+    {
+      "case_id": "pos-faq-018-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-018"
+      ],
+      "query": "??????官網、平台和LINE價格一樣嗎？?"
+    },
+    {
+      "case_id": "pos-faq-018-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-018"
+      ],
+      "query": "官網?"
+    },
+    {
+      "case_id": "pos-faq-018-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-018"
+      ],
+      "query": "?????官網??官網、平台和LINE價格一樣嗎？?"
+    },
+    {
+      "case_id": "pos-faq-018-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-018"
+      ],
+      "query": "????????????????官網、平台和LINE價格一樣嗎？?"
+    },
+    {
+      "case_id": "pos-faq-019-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-019"
+      ],
+      "query": "訂房成功會收到什麼資料？?"
+    },
+    {
+      "case_id": "pos-faq-019-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-019"
+      ],
+      "query": "??????訂房成功會收到什麼資料？?"
+    },
+    {
+      "case_id": "pos-faq-019-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-019"
+      ],
+      "query": "訂房?"
+    },
+    {
+      "case_id": "pos-faq-019-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-019"
+      ],
+      "query": "?????訂房??訂房成功會收到什麼資料？?"
+    },
+    {
+      "case_id": "pos-faq-019-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-019"
+      ],
+      "query": "????????????????訂房成功會收到什麼資料？?"
+    },
+    {
+      "case_id": "pos-faq-020-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-020"
+      ],
+      "query": "我沒收到確認信怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-020-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-020"
+      ],
+      "query": "??????我沒收到確認信怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-020-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-020"
+      ],
+      "query": "我沒收到確認信怎?"
+    },
+    {
+      "case_id": "pos-faq-020-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-020"
+      ],
+      "query": "?????我沒收到確認信怎??我沒收到確認信怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-020-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-020"
+      ],
+      "query": "????????????????我沒收到確認信怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-021-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-021"
+      ],
+      "query": "訂房姓名可以更改嗎？?"
+    },
+    {
+      "case_id": "pos-faq-021-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-021"
+      ],
+      "query": "??????訂房姓名可以更改嗎？?"
+    },
+    {
+      "case_id": "pos-faq-021-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-021"
+      ],
+      "query": "訂房?"
+    },
+    {
+      "case_id": "pos-faq-021-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-021"
+      ],
+      "query": "?????訂房??訂房姓名可以更改嗎？?"
+    },
+    {
+      "case_id": "pos-faq-021-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-021"
+      ],
+      "query": "????????????????訂房姓名可以更改嗎？?"
+    },
+    {
+      "case_id": "pos-faq-022-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-022"
+      ],
+      "query": "可以幫朋友或家人代訂嗎？?"
+    },
+    {
+      "case_id": "pos-faq-022-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-022"
+      ],
+      "query": "??????可以幫朋友或家人代訂嗎？?"
+    },
+    {
+      "case_id": "pos-faq-022-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-022"
+      ],
+      "query": "可以幫朋友或家人?"
+    },
+    {
+      "case_id": "pos-faq-022-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-022"
+      ],
+      "query": "?????可以幫朋友或家人??可以幫朋友或家人代訂嗎？?"
+    },
+    {
+      "case_id": "pos-faq-022-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-022"
+      ],
+      "query": "????????????????可以幫朋友或家人代訂嗎？?"
+    },
+    {
+      "case_id": "pos-faq-023-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-023"
+      ],
+      "query": "未成年可以自己訂房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-023-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-023"
+      ],
+      "query": "??????未成年可以自己訂房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-023-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-023"
+      ],
+      "query": "訂房?"
+    },
+    {
+      "case_id": "pos-faq-023-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-023"
+      ],
+      "query": "?????訂房??未成年可以自己訂房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-023-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-023"
+      ],
+      "query": "????????????????未成年可以自己訂房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-024-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-024"
+      ],
+      "query": "可以訂長住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-024-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-024"
+      ],
+      "query": "??????可以訂長住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-024-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-024"
+      ],
+      "query": "可以訂長住嗎?"
+    },
+    {
+      "case_id": "pos-faq-024-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-024"
+      ],
+      "query": "?????可以訂長住嗎??可以訂長住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-024-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-024"
+      ],
+      "query": "????????????????可以訂長住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-025-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-025"
+      ],
+      "query": "訂房需要提供哪些資料？?"
+    },
+    {
+      "case_id": "pos-faq-025-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-025"
+      ],
+      "query": "??????訂房需要提供哪些資料？?"
+    },
+    {
+      "case_id": "pos-faq-025-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-025"
+      ],
+      "query": "訂房?"
+    },
+    {
+      "case_id": "pos-faq-025-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-025"
+      ],
+      "query": "?????訂房??訂房需要提供哪些資料？?"
+    },
+    {
+      "case_id": "pos-faq-025-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-025"
+      ],
+      "query": "????????????????訂房需要提供哪些資料？?"
+    },
+    {
+      "case_id": "pos-faq-026-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-026"
+      ],
+      "query": "房價是多少？?"
+    },
+    {
+      "case_id": "pos-faq-026-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-026"
+      ],
+      "query": "??????房價是多少？?"
+    },
+    {
+      "case_id": "pos-faq-026-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-026"
+      ],
+      "query": "房價是多少?"
+    },
+    {
+      "case_id": "pos-faq-026-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-026"
+      ],
+      "query": "?????房價是多少??房價是多少？?"
+    },
+    {
+      "case_id": "pos-faq-026-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-026"
+      ],
+      "query": "????????????????房價是多少？?"
+    },
+    {
+      "case_id": "pos-faq-027-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-027"
+      ],
+      "query": "包棟價格怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-027-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-027"
+      ],
+      "query": "??????包棟價格怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-027-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-027"
+      ],
+      "query": "包棟?"
+    },
+    {
+      "case_id": "pos-faq-027-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-027"
+      ],
+      "query": "?????包棟??包棟價格怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-027-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-027"
+      ],
+      "query": "????????????????包棟價格怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-028-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-028"
+      ],
+      "query": "價格包含哪些費用？?"
+    },
+    {
+      "case_id": "pos-faq-028-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-028"
+      ],
+      "query": "??????價格包含哪些費用？?"
+    },
+    {
+      "case_id": "pos-faq-028-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-028"
+      ],
+      "query": "價格包含哪些費用?"
+    },
+    {
+      "case_id": "pos-faq-028-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-028"
+      ],
+      "query": "?????價格包含哪些費用??價格包含哪些費用？?"
+    },
+    {
+      "case_id": "pos-faq-028-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-028"
+      ],
+      "query": "????????????????價格包含哪些費用？?"
+    },
+    {
+      "case_id": "pos-faq-029-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-029"
+      ],
+      "query": "有另外收清潔費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-029-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-029"
+      ],
+      "query": "??????有另外收清潔費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-029-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-029"
+      ],
+      "query": "清潔?"
+    },
+    {
+      "case_id": "pos-faq-029-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-029"
+      ],
+      "query": "?????清潔??有另外收清潔費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-029-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-029"
+      ],
+      "query": "????????????????有另外收清潔費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-030-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-030"
+      ],
+      "query": "小孩也算人數嗎？?"
+    },
+    {
+      "case_id": "pos-faq-030-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-030"
+      ],
+      "query": "??????小孩也算人數嗎？?"
+    },
+    {
+      "case_id": "pos-faq-030-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-030"
+      ],
+      "query": "小孩也算人數嗎?"
+    },
+    {
+      "case_id": "pos-faq-030-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-030"
+      ],
+      "query": "?????小孩也算人數嗎??小孩也算人數嗎？?"
+    },
+    {
+      "case_id": "pos-faq-030-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-030"
+      ],
+      "query": "????????????????小孩也算人數嗎？?"
+    },
+    {
+      "case_id": "pos-faq-031-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-031"
+      ],
+      "query": "嬰兒需要收費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-031-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-031"
+      ],
+      "query": "??????嬰兒需要收費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-031-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-031"
+      ],
+      "query": "嬰兒需要收費嗎?"
+    },
+    {
+      "case_id": "pos-faq-031-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-031"
+      ],
+      "query": "?????嬰兒需要收費嗎??嬰兒需要收費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-031-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-031"
+      ],
+      "query": "????????????????嬰兒需要收費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-032-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-032"
+      ],
+      "query": "加人怎麼收費？?"
+    },
+    {
+      "case_id": "pos-faq-032-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-032"
+      ],
+      "query": "??????加人怎麼收費？?"
+    },
+    {
+      "case_id": "pos-faq-032-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-032"
+      ],
+      "query": "加人怎麼收費?"
+    },
+    {
+      "case_id": "pos-faq-032-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-032"
+      ],
+      "query": "?????加人怎麼收費??加人怎麼收費？?"
+    },
+    {
+      "case_id": "pos-faq-032-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-032"
+      ],
+      "query": "????????????????加人怎麼收費？?"
+    },
+    {
+      "case_id": "pos-faq-033-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-033"
+      ],
+      "query": "加床怎麼收費？?"
+    },
+    {
+      "case_id": "pos-faq-033-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-033"
+      ],
+      "query": "??????加床怎麼收費？?"
+    },
+    {
+      "case_id": "pos-faq-033-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-033"
+      ],
+      "query": "加床怎麼收費?"
+    },
+    {
+      "case_id": "pos-faq-033-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-033"
+      ],
+      "query": "?????加床怎麼收費??加床怎麼收費？?"
+    },
+    {
+      "case_id": "pos-faq-033-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-033"
+      ],
+      "query": "????????????????加床怎麼收費？?"
+    },
+    {
+      "case_id": "pos-faq-034-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-034"
+      ],
+      "query": "尾款可以什麼時候付？?"
+    },
+    {
+      "case_id": "pos-faq-034-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-034"
+      ],
+      "query": "??????尾款可以什麼時候付？?"
+    },
+    {
+      "case_id": "pos-faq-034-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-034"
+      ],
+      "query": "尾款可以什麼時候?"
+    },
+    {
+      "case_id": "pos-faq-034-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-034"
+      ],
+      "query": "?????尾款可以什麼時候??尾款可以什麼時候付？?"
+    },
+    {
+      "case_id": "pos-faq-034-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-034"
+      ],
+      "query": "????????????????尾款可以什麼時候付？?"
+    },
+    {
+      "case_id": "pos-faq-035-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-035"
+      ],
+      "query": "可以刷卡嗎？?"
+    },
+    {
+      "case_id": "pos-faq-035-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-035"
+      ],
+      "query": "??????可以刷卡嗎？?"
+    },
+    {
+      "case_id": "pos-faq-035-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-035"
+      ],
+      "query": "刷卡?"
+    },
+    {
+      "case_id": "pos-faq-035-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-035"
+      ],
+      "query": "你們一般客人可以刷信用卡嗎？?"
+    },
+    {
+      "case_id": "pos-faq-035-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-035"
+      ],
+      "query": "????????????????可以刷卡嗎？?"
+    },
+    {
+      "case_id": "pos-faq-036-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-036"
+      ],
+      "query": "可以用轉帳嗎？?"
+    },
+    {
+      "case_id": "pos-faq-036-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-036"
+      ],
+      "query": "??????可以用轉帳嗎？?"
+    },
+    {
+      "case_id": "pos-faq-036-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-036"
+      ],
+      "query": "可以用轉帳嗎?"
+    },
+    {
+      "case_id": "pos-faq-036-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-036"
+      ],
+      "query": "?????可以用轉帳嗎??可以用轉帳嗎？?"
+    },
+    {
+      "case_id": "pos-faq-036-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-036"
+      ],
+      "query": "????????????????可以用轉帳嗎？?"
+    },
+    {
+      "case_id": "pos-faq-037-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-037"
+      ],
+      "query": "可以用現金嗎？?"
+    },
+    {
+      "case_id": "pos-faq-037-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-037"
+      ],
+      "query": "??????可以用現金嗎？?"
+    },
+    {
+      "case_id": "pos-faq-037-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-037"
+      ],
+      "query": "可以用現金嗎?"
+    },
+    {
+      "case_id": "pos-faq-037-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-037"
+      ],
+      "query": "?????可以用現金嗎??可以用現金嗎？?"
+    },
+    {
+      "case_id": "pos-faq-037-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-037"
+      ],
+      "query": "????????????????可以用現金嗎？?"
+    },
+    {
+      "case_id": "pos-faq-038-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-038"
+      ],
+      "query": "可以用行動支付嗎？?"
+    },
+    {
+      "case_id": "pos-faq-038-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-038"
+      ],
+      "query": "??????可以用行動支付嗎？?"
+    },
+    {
+      "case_id": "pos-faq-038-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-038"
+      ],
+      "query": "可以用行動支付嗎?"
+    },
+    {
+      "case_id": "pos-faq-038-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-038"
+      ],
+      "query": "?????可以用行動支付嗎??可以用行動支付嗎？?"
+    },
+    {
+      "case_id": "pos-faq-038-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-038"
+      ],
+      "query": "????????????????可以用行動支付嗎？?"
+    },
+    {
+      "case_id": "pos-faq-039-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-039"
+      ],
+      "query": "可以開發票嗎？?"
+    },
+    {
+      "case_id": "pos-faq-039-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-039"
+      ],
+      "query": "??????可以開發票嗎？?"
+    },
+    {
+      "case_id": "pos-faq-039-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-039"
+      ],
+      "query": "發票?"
+    },
+    {
+      "case_id": "pos-faq-039-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-039"
+      ],
+      "query": "?????發票??可以開發票嗎？?"
+    },
+    {
+      "case_id": "pos-faq-039-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-039"
+      ],
+      "query": "????????????????可以開發票嗎？?"
+    },
+    {
+      "case_id": "pos-faq-040-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-040"
+      ],
+      "query": "可以報公司帳嗎？?"
+    },
+    {
+      "case_id": "pos-faq-040-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-040"
+      ],
+      "query": "??????可以報公司帳嗎？?"
+    },
+    {
+      "case_id": "pos-faq-040-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-040"
+      ],
+      "query": "可以報公司帳嗎?"
+    },
+    {
+      "case_id": "pos-faq-040-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-040"
+      ],
+      "query": "?????可以報公司帳嗎??可以報公司帳嗎？?"
+    },
+    {
+      "case_id": "pos-faq-040-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-040"
+      ],
+      "query": "????????????????可以報公司帳嗎？?"
+    },
+    {
+      "case_id": "pos-faq-041-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-041"
+      ],
+      "query": "可以分開付款嗎？?"
+    },
+    {
+      "case_id": "pos-faq-041-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-041"
+      ],
+      "query": "??????可以分開付款嗎？?"
+    },
+    {
+      "case_id": "pos-faq-041-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-041"
+      ],
+      "query": "可以分開付款嗎?"
+    },
+    {
+      "case_id": "pos-faq-041-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-041"
+      ],
+      "query": "?????可以分開付款嗎??可以分開付款嗎？?"
+    },
+    {
+      "case_id": "pos-faq-041-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-041"
+      ],
+      "query": "????????????????可以分開付款嗎？?"
+    },
+    {
+      "case_id": "pos-faq-042-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-042"
+      ],
+      "query": "多人包棟可以各自轉帳嗎？?"
+    },
+    {
+      "case_id": "pos-faq-042-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-042"
+      ],
+      "query": "??????多人包棟可以各自轉帳嗎？?"
+    },
+    {
+      "case_id": "pos-faq-042-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-042"
+      ],
+      "query": "包棟?"
+    },
+    {
+      "case_id": "pos-faq-042-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-042"
+      ],
+      "query": "?????包棟??多人包棟可以各自轉帳嗎？?"
+    },
+    {
+      "case_id": "pos-faq-042-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-042"
+      ],
+      "query": "????????????????多人包棟可以各自轉帳嗎？?"
+    },
+    {
+      "case_id": "pos-faq-043-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-043"
+      ],
+      "query": "付款後如何確認？?"
+    },
+    {
+      "case_id": "pos-faq-043-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-043"
+      ],
+      "query": "??????付款後如何確認？?"
+    },
+    {
+      "case_id": "pos-faq-043-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-043"
+      ],
+      "query": "付款後如何確認?"
+    },
+    {
+      "case_id": "pos-faq-043-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-043"
+      ],
+      "query": "?????付款後如何確認??付款後如何確認？?"
+    },
+    {
+      "case_id": "pos-faq-043-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-043"
+      ],
+      "query": "????????????????付款後如何確認？?"
+    },
+    {
+      "case_id": "pos-faq-044-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-044"
+      ],
+      "query": "匯錯金額怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-044-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-044"
+      ],
+      "query": "??????匯錯金額怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-044-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-044"
+      ],
+      "query": "匯錯金額怎麼辦?"
+    },
+    {
+      "case_id": "pos-faq-044-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-044"
+      ],
+      "query": "?????匯錯金額怎麼辦??匯錯金額怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-044-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-044"
+      ],
+      "query": "????????????????匯錯金額怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-045-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-045"
+      ],
+      "query": "訂金可以折抵房費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-045-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-045"
+      ],
+      "query": "??????訂金可以折抵房費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-045-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-045"
+      ],
+      "query": "訂金?"
+    },
+    {
+      "case_id": "pos-faq-045-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-045"
+      ],
+      "query": "?????訂金??訂金可以折抵房費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-045-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-045"
+      ],
+      "query": "????????????????訂金可以折抵房費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-046-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-046"
+      ],
+      "query": "價格可以優惠嗎？?"
+    },
+    {
+      "case_id": "pos-faq-046-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-046"
+      ],
+      "query": "??????價格可以優惠嗎？?"
+    },
+    {
+      "case_id": "pos-faq-046-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-046"
+      ],
+      "query": "價格可以優惠嗎?"
+    },
+    {
+      "case_id": "pos-faq-046-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-046"
+      ],
+      "query": "?????價格可以優惠嗎??價格可以優惠嗎？?"
+    },
+    {
+      "case_id": "pos-faq-046-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-046"
+      ],
+      "query": "????????????????價格可以優惠嗎？?"
+    },
+    {
+      "case_id": "pos-faq-049-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-049"
+      ],
+      "query": "寵物需要另外收費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-049-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-049"
+      ],
+      "query": "??????寵物需要另外收費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-049-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-049"
+      ],
+      "query": "寵物?"
+    },
+    {
+      "case_id": "pos-faq-049-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-049"
+      ],
+      "query": "?????寵物??寵物需要另外收費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-049-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-049"
+      ],
+      "query": "????????????????寵物需要另外收費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-050-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-050"
+      ],
+      "query": "押金什麼時候退？?"
+    },
+    {
+      "case_id": "pos-faq-050-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-050"
+      ],
+      "query": "??????押金什麼時候退？?"
+    },
+    {
+      "case_id": "pos-faq-050-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-050"
+      ],
+      "query": "押金什麼時候退?"
+    },
+    {
+      "case_id": "pos-faq-050-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-050"
+      ],
+      "query": "?????押金什麼時候退??押金什麼時候退？?"
+    },
+    {
+      "case_id": "pos-faq-050-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-050"
+      ],
+      "query": "????????????????押金什麼時候退？?"
+    },
+    {
+      "case_id": "pos-faq-051-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-051"
+      ],
+      "query": "取消訂房可以退訂金嗎？?"
+    },
+    {
+      "case_id": "pos-faq-051-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-051"
+      ],
+      "query": "??????取消訂房可以退訂金嗎？?"
+    },
+    {
+      "case_id": "pos-faq-051-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-051"
+      ],
+      "query": "取消?"
+    },
+    {
+      "case_id": "pos-faq-051-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-051"
+      ],
+      "query": "?????取消??取消訂房可以退訂金嗎？?"
+    },
+    {
+      "case_id": "pos-faq-051-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-051"
+      ],
+      "query": "????????????????取消訂房可以退訂金嗎？?"
+    },
+    {
+      "case_id": "pos-faq-052-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-052"
+      ],
+      "query": "14天前取消可以全退嗎？?"
+    },
+    {
+      "case_id": "pos-faq-052-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-052"
+      ],
+      "query": "??????14天前取消可以全退嗎？?"
+    },
+    {
+      "case_id": "pos-faq-052-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-052"
+      ],
+      "query": "取消?"
+    },
+    {
+      "case_id": "pos-faq-052-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-052"
+      ],
+      "query": "?????取消??14天前取消可以全退嗎？?"
+    },
+    {
+      "case_id": "pos-faq-052-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-052"
+      ],
+      "query": "????????????????14天前取消可以全退嗎？?"
+    },
+    {
+      "case_id": "pos-faq-053-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-053"
+      ],
+      "query": "入住前10到13天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-053-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-053"
+      ],
+      "query": "??????入住前10到13天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-053-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-053"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-053-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-053"
+      ],
+      "query": "?????入住??入住前10到13天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-053-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-053"
+      ],
+      "query": "????????????????入住前10到13天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-054-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-054"
+      ],
+      "query": "入住前7到9天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-054-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-054"
+      ],
+      "query": "??????入住前7到9天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-054-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-054"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-054-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-054"
+      ],
+      "query": "?????入住??入住前7到9天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-054-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-054"
+      ],
+      "query": "????????????????入住前7到9天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-055-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-055"
+      ],
+      "query": "入住前4到6天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-055-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-055"
+      ],
+      "query": "??????入住前4到6天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-055-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-055"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-055-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-055"
+      ],
+      "query": "?????入住??入住前4到6天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-055-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-055"
+      ],
+      "query": "????????????????入住前4到6天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-056-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-056"
+      ],
+      "query": "入住前2到3天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-056-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-056"
+      ],
+      "query": "??????入住前2到3天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-056-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-056"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-056-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-056"
+      ],
+      "query": "?????入住??入住前2到3天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-056-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-056"
+      ],
+      "query": "????????????????入住前2到3天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-057-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-057"
+      ],
+      "query": "入住前一天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-057-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-057"
+      ],
+      "query": "??????入住前一天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-057-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-057"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-057-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-057"
+      ],
+      "query": "?????入住??入住前一天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-057-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-057"
+      ],
+      "query": "????????????????入住前一天取消怎麼算？?"
+    },
+    {
+      "case_id": "pos-faq-058-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-058"
+      ],
+      "query": "入住當天取消會退費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-058-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-058"
+      ],
+      "query": "??????入住當天取消會退費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-058-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-058"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-058-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-058"
+      ],
+      "query": "?????入住??入住當天取消會退費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-058-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-058"
+      ],
+      "query": "????????????????入住當天取消會退費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-059-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-059"
+      ],
+      "query": "臨時不能去可以改期嗎？?"
+    },
+    {
+      "case_id": "pos-faq-059-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-059"
+      ],
+      "query": "??????臨時不能去可以改期嗎？?"
+    },
+    {
+      "case_id": "pos-faq-059-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-059"
+      ],
+      "query": "改期?"
+    },
+    {
+      "case_id": "pos-faq-059-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-059"
+      ],
+      "query": "?????改期??臨時不能去可以改期嗎？?"
+    },
+    {
+      "case_id": "pos-faq-059-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-059"
+      ],
+      "query": "????????????????臨時不能去可以改期嗎？?"
+    },
+    {
+      "case_id": "pos-faq-060-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-060"
+      ],
+      "query": "改期需要手續費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-060-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-060"
+      ],
+      "query": "??????改期需要手續費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-060-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-060"
+      ],
+      "query": "改期?"
+    },
+    {
+      "case_id": "pos-faq-060-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-060"
+      ],
+      "query": "?????改期??改期需要手續費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-060-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-060"
+      ],
+      "query": "????????????????改期需要手續費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-061-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-061"
+      ],
+      "query": "改期後還可以再取消嗎？?"
+    },
+    {
+      "case_id": "pos-faq-061-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-061"
+      ],
+      "query": "??????改期後還可以再取消嗎？?"
+    },
+    {
+      "case_id": "pos-faq-061-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-061"
+      ],
+      "query": "改期?"
+    },
+    {
+      "case_id": "pos-faq-061-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-061"
+      ],
+      "query": "?????改期??改期後還可以再取消嗎？?"
+    },
+    {
+      "case_id": "pos-faq-061-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-061"
+      ],
+      "query": "????????????????改期後還可以再取消嗎？?"
+    },
+    {
+      "case_id": "pos-faq-062-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-062"
+      ],
+      "query": "颱風可以取消嗎？?"
+    },
+    {
+      "case_id": "pos-faq-062-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-062"
+      ],
+      "query": "??????颱風可以取消嗎？?"
+    },
+    {
+      "case_id": "pos-faq-062-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-062"
+      ],
+      "query": "取消?"
+    },
+    {
+      "case_id": "pos-faq-062-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-062"
+      ],
+      "query": "?????取消??颱風可以取消嗎？?"
+    },
+    {
+      "case_id": "pos-faq-062-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-062"
+      ],
+      "query": "????????????????颱風可以取消嗎？?"
+    },
+    {
+      "case_id": "pos-faq-063-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-063"
+      ],
+      "query": "如果宜蘭停班停課可以退嗎？?"
+    },
+    {
+      "case_id": "pos-faq-063-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-063"
+      ],
+      "query": "??????如果宜蘭停班停課可以退嗎？?"
+    },
+    {
+      "case_id": "pos-faq-063-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-063"
+      ],
+      "query": "如果宜蘭停班停課?"
+    },
+    {
+      "case_id": "pos-faq-063-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-063"
+      ],
+      "query": "?????如果宜蘭停班停課??如果宜蘭停班停課可以退嗎？?"
+    },
+    {
+      "case_id": "pos-faq-063-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-063"
+      ],
+      "query": "????????????????如果宜蘭停班停課可以退嗎？?"
+    },
+    {
+      "case_id": "pos-faq-064-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-064"
+      ],
+      "query": "下雨可以取消或延期嗎？?"
+    },
+    {
+      "case_id": "pos-faq-064-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-064"
+      ],
+      "query": "??????下雨可以取消或延期嗎？?"
+    },
+    {
+      "case_id": "pos-faq-064-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-064"
+      ],
+      "query": "取消?"
+    },
+    {
+      "case_id": "pos-faq-064-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-064"
+      ],
+      "query": "?????取消??下雨可以取消或延期嗎？?"
+    },
+    {
+      "case_id": "pos-faq-064-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-064"
+      ],
+      "query": "????????????????下雨可以取消或延期嗎？?"
+    },
+    {
+      "case_id": "pos-faq-065-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-065"
+      ],
+      "query": "有人生病可以取消嗎？?"
+    },
+    {
+      "case_id": "pos-faq-065-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-065"
+      ],
+      "query": "??????有人生病可以取消嗎？?"
+    },
+    {
+      "case_id": "pos-faq-065-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-065"
+      ],
+      "query": "取消?"
+    },
+    {
+      "case_id": "pos-faq-065-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-065"
+      ],
+      "query": "?????取消??有人生病可以取消嗎？?"
+    },
+    {
+      "case_id": "pos-faq-065-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-065"
+      ],
+      "query": "????????????????有人生病可以取消嗎？?"
+    },
+    {
+      "case_id": "pos-faq-066-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-066"
+      ],
+      "query": "確診或傳染病可以延期嗎？?"
+    },
+    {
+      "case_id": "pos-faq-066-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-066"
+      ],
+      "query": "??????確診或傳染病可以延期嗎？?"
+    },
+    {
+      "case_id": "pos-faq-066-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-066"
+      ],
+      "query": "確診或傳染病可以?"
+    },
+    {
+      "case_id": "pos-faq-066-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-066"
+      ],
+      "query": "?????確診或傳染病可以??確診或傳染病可以延期嗎？?"
+    },
+    {
+      "case_id": "pos-faq-066-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-066"
+      ],
+      "query": "????????????????確診或傳染病可以延期嗎？?"
+    },
+    {
+      "case_id": "pos-faq-067-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-067"
+      ],
+      "query": "人數減少可以退差價嗎？?"
+    },
+    {
+      "case_id": "pos-faq-067-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-067"
+      ],
+      "query": "??????人數減少可以退差價嗎？?"
+    },
+    {
+      "case_id": "pos-faq-067-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-067"
+      ],
+      "query": "人數減少可以退差?"
+    },
+    {
+      "case_id": "pos-faq-067-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-067"
+      ],
+      "query": "?????人數減少可以退差??人數減少可以退差價嗎？?"
+    },
+    {
+      "case_id": "pos-faq-067-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-067"
+      ],
+      "query": "????????????????人數減少可以退差價嗎？?"
+    },
+    {
+      "case_id": "pos-faq-068-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-068"
+      ],
+      "query": "人數增加可以補費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-068-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-068"
+      ],
+      "query": "??????人數增加可以補費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-068-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-068"
+      ],
+      "query": "人數增加可以補費?"
+    },
+    {
+      "case_id": "pos-faq-068-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-068"
+      ],
+      "query": "?????人數增加可以補費??人數增加可以補費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-068-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-068"
+      ],
+      "query": "????????????????人數增加可以補費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-069-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-069"
+      ],
+      "query": "可以更換房型嗎？?"
+    },
+    {
+      "case_id": "pos-faq-069-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-069"
+      ],
+      "query": "??????可以更換房型嗎？?"
+    },
+    {
+      "case_id": "pos-faq-069-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-069"
+      ],
+      "query": "可以更換房型嗎?"
+    },
+    {
+      "case_id": "pos-faq-069-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-069"
+      ],
+      "query": "?????可以更換房型嗎??可以更換房型嗎？?"
+    },
+    {
+      "case_id": "pos-faq-069-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-069"
+      ],
+      "query": "????????????????可以更換房型嗎？?"
+    },
+    {
+      "case_id": "pos-faq-070-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-070"
+      ],
+      "query": "可以少住一天嗎？?"
+    },
+    {
+      "case_id": "pos-faq-070-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-070"
+      ],
+      "query": "??????可以少住一天嗎？?"
+    },
+    {
+      "case_id": "pos-faq-070-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-070"
+      ],
+      "query": "可以少住一天嗎?"
+    },
+    {
+      "case_id": "pos-faq-070-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-070"
+      ],
+      "query": "?????可以少住一天嗎??可以少住一天嗎？?"
+    },
+    {
+      "case_id": "pos-faq-070-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-070"
+      ],
+      "query": "????????????????可以少住一天嗎？?"
+    },
+    {
+      "case_id": "pos-faq-071-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-071"
+      ],
+      "query": "可以延長住宿嗎？?"
+    },
+    {
+      "case_id": "pos-faq-071-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-071"
+      ],
+      "query": "??????可以延長住宿嗎？?"
+    },
+    {
+      "case_id": "pos-faq-071-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-071"
+      ],
+      "query": "可以延長住宿嗎?"
+    },
+    {
+      "case_id": "pos-faq-071-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-071"
+      ],
+      "query": "?????可以延長住宿嗎??可以延長住宿嗎？?"
+    },
+    {
+      "case_id": "pos-faq-071-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-071"
+      ],
+      "query": "????????????????可以延長住宿嗎？?"
+    },
+    {
+      "case_id": "pos-faq-072-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-072"
+      ],
+      "query": "平台訂房要怎麼取消？?"
+    },
+    {
+      "case_id": "pos-faq-072-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-072"
+      ],
+      "query": "??????平台訂房要怎麼取消？?"
+    },
+    {
+      "case_id": "pos-faq-072-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-072"
+      ],
+      "query": "取消?"
+    },
+    {
+      "case_id": "pos-faq-072-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-072"
+      ],
+      "query": "?????取消??平台訂房要怎麼取消？?"
+    },
+    {
+      "case_id": "pos-faq-072-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-072"
+      ],
+      "query": "????????????????平台訂房要怎麼取消？?"
+    },
+    {
+      "case_id": "pos-faq-073-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-073"
+      ],
+      "query": "官網訂房要怎麼取消？?"
+    },
+    {
+      "case_id": "pos-faq-073-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-073"
+      ],
+      "query": "??????官網訂房要怎麼取消？?"
+    },
+    {
+      "case_id": "pos-faq-073-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-073"
+      ],
+      "query": "取消?"
+    },
+    {
+      "case_id": "pos-faq-073-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-073"
+      ],
+      "query": "?????取消??官網訂房要怎麼取消？?"
+    },
+    {
+      "case_id": "pos-faq-073-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-073"
+      ],
+      "query": "????????????????官網訂房要怎麼取消？?"
+    },
+    {
+      "case_id": "pos-faq-074-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-074"
+      ],
+      "query": "退費多久會入帳？?"
+    },
+    {
+      "case_id": "pos-faq-074-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-074"
+      ],
+      "query": "??????退費多久會入帳？?"
+    },
+    {
+      "case_id": "pos-faq-074-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-074"
+      ],
+      "query": "退費多久會入帳?"
+    },
+    {
+      "case_id": "pos-faq-074-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-074"
+      ],
+      "query": "?????退費多久會入帳??退費多久會入帳？?"
+    },
+    {
+      "case_id": "pos-faq-074-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-074"
+      ],
+      "query": "????????????????退費多久會入帳？?"
+    },
+    {
+      "case_id": "pos-faq-075-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-075"
+      ],
+      "query": "取消訂房需要提供什麼資料？?"
+    },
+    {
+      "case_id": "pos-faq-075-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-075"
+      ],
+      "query": "??????取消訂房需要提供什麼資料？?"
+    },
+    {
+      "case_id": "pos-faq-075-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-075"
+      ],
+      "query": "取消?"
+    },
+    {
+      "case_id": "pos-faq-075-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-075"
+      ],
+      "query": "?????取消??取消訂房需要提供什麼資料？?"
+    },
+    {
+      "case_id": "pos-faq-075-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-075"
+      ],
+      "query": "????????????????取消訂房需要提供什麼資料？?"
+    },
+    {
+      "case_id": "pos-faq-076-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-076"
+      ],
+      "query": "幾點可以入住？?"
+    },
+    {
+      "case_id": "pos-faq-076-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-076"
+      ],
+      "query": "??????幾點可以入住？?"
+    },
+    {
+      "case_id": "pos-faq-076-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-076"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-076-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-076"
+      ],
+      "query": "?????入住??幾點可以入住？?"
+    },
+    {
+      "case_id": "pos-faq-076-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-076"
+      ],
+      "query": "????????????????幾點可以入住？?"
+    },
+    {
+      "case_id": "pos-faq-077-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-077"
+      ],
+      "query": "幾點要退房？?"
+    },
+    {
+      "case_id": "pos-faq-077-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-077"
+      ],
+      "query": "??????幾點要退房？?"
+    },
+    {
+      "case_id": "pos-faq-077-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-077"
+      ],
+      "query": "退房?"
+    },
+    {
+      "case_id": "pos-faq-077-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-077"
+      ],
+      "query": "?????退房??幾點要退房？?"
+    },
+    {
+      "case_id": "pos-faq-077-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-077"
+      ],
+      "query": "????????????????幾點要退房？?"
+    },
+    {
+      "case_id": "pos-faq-078-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-078"
+      ],
+      "query": "可以提早入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-078-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-078"
+      ],
+      "query": "??????可以提早入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-078-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-078"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-078-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-078"
+      ],
+      "query": "可以提前入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-078-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-078"
+      ],
+      "query": "????????????????可以提早入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-079-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-079"
+      ],
+      "query": "可以延後退房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-079-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-079"
+      ],
+      "query": "??????可以延後退房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-079-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-079"
+      ],
+      "query": "退房?"
+    },
+    {
+      "case_id": "pos-faq-079-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-079"
+      ],
+      "query": "?????退房??可以延後退房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-079-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-079"
+      ],
+      "query": "????????????????可以延後退房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-080-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-080"
+      ],
+      "query": "最晚可以幾點入住？?"
+    },
+    {
+      "case_id": "pos-faq-080-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-080"
+      ],
+      "query": "??????最晚可以幾點入住？?"
+    },
+    {
+      "case_id": "pos-faq-080-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-080"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-080-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-080"
+      ],
+      "query": "?????入住??最晚可以幾點入住？?"
+    },
+    {
+      "case_id": "pos-faq-080-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-080"
+      ],
+      "query": "????????????????最晚可以幾點入住？?"
+    },
+    {
+      "case_id": "pos-faq-081-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-081"
+      ],
+      "query": "晚上很晚到會影響入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-081-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-081"
+      ],
+      "query": "??????晚上很晚到會影響入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-081-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-081"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-081-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-081"
+      ],
+      "query": "?????入住??晚上很晚到會影響入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-081-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-081"
+      ],
+      "query": "????????????????晚上很晚到會影響入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-082-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-082"
+      ],
+      "query": "入住當天需要帶什麼？?"
+    },
+    {
+      "case_id": "pos-faq-082-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-082"
+      ],
+      "query": "??????入住當天需要帶什麼？?"
+    },
+    {
+      "case_id": "pos-faq-082-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-082"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-082-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-082"
+      ],
+      "query": "?????入住??入住當天需要帶什麼？?"
+    },
+    {
+      "case_id": "pos-faq-082-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-082"
+      ],
+      "query": "????????????????入住當天需要帶什麼？?"
+    },
+    {
+      "case_id": "pos-faq-083-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-083"
+      ],
+      "query": "入住需要出示身分證嗎？?"
+    },
+    {
+      "case_id": "pos-faq-083-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-083"
+      ],
+      "query": "??????入住需要出示身分證嗎？?"
+    },
+    {
+      "case_id": "pos-faq-083-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-083"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-083-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-083"
+      ],
+      "query": "?????入住??入住需要出示身分證嗎？?"
+    },
+    {
+      "case_id": "pos-faq-083-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-083"
+      ],
+      "query": "????????????????入住需要出示身分證嗎？?"
+    },
+    {
+      "case_id": "pos-faq-085-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-085"
+      ],
+      "query": "外國旅客可以入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-085-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-085"
+      ],
+      "query": "??????外國旅客可以入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-085-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-085"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-085-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-085"
+      ],
+      "query": "?????入住??外國旅客可以入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-085-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-085"
+      ],
+      "query": "????????????????外國旅客可以入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-086-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-086"
+      ],
+      "query": "可以自助入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-086-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-086"
+      ],
+      "query": "??????可以自助入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-086-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-086"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-086-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-086"
+      ],
+      "query": "?????入住??可以自助入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-086-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-086"
+      ],
+      "query": "????????????????可以自助入住嗎？?"
+    },
+    {
+      "case_id": "pos-faq-087-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-087"
+      ],
+      "query": "鑰匙怎麼拿？?"
+    },
+    {
+      "case_id": "pos-faq-087-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-087"
+      ],
+      "query": "??????鑰匙怎麼拿？?"
+    },
+    {
+      "case_id": "pos-faq-087-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-087"
+      ],
+      "query": "鑰匙怎麼拿?"
+    },
+    {
+      "case_id": "pos-faq-087-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-087"
+      ],
+      "query": "?????鑰匙怎麼拿??鑰匙怎麼拿？?"
+    },
+    {
+      "case_id": "pos-faq-087-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-087"
+      ],
+      "query": "????????????????鑰匙怎麼拿？?"
+    },
+    {
+      "case_id": "pos-faq-088-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-088"
+      ],
+      "query": "門鎖密碼什麼時候給？?"
+    },
+    {
+      "case_id": "pos-faq-088-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-088"
+      ],
+      "query": "??????門鎖密碼什麼時候給？?"
+    },
+    {
+      "case_id": "pos-faq-088-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-088"
+      ],
+      "query": "門鎖密碼什麼時候?"
+    },
+    {
+      "case_id": "pos-faq-088-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-088"
+      ],
+      "query": "?????門鎖密碼什麼時候??門鎖密碼什麼時候給？?"
+    },
+    {
+      "case_id": "pos-faq-088-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-088"
+      ],
+      "query": "????????????????門鎖密碼什麼時候給？?"
+    },
+    {
+      "case_id": "pos-faq-090-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-090"
+      ],
+      "query": "抵達後要先去哪裡報到？?"
+    },
+    {
+      "case_id": "pos-faq-090-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-090"
+      ],
+      "query": "??????抵達後要先去哪裡報到？?"
+    },
+    {
+      "case_id": "pos-faq-090-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-090"
+      ],
+      "query": "抵達後要先去哪裡?"
+    },
+    {
+      "case_id": "pos-faq-090-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-090"
+      ],
+      "query": "?????抵達後要先去哪裡??抵達後要先去哪裡報到？?"
+    },
+    {
+      "case_id": "pos-faq-090-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-090"
+      ],
+      "query": "????????????????抵達後要先去哪裡報到？?"
+    },
+    {
+      "case_id": "pos-faq-091-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-091"
+      ],
+      "query": "可以先放行李嗎？?"
+    },
+    {
+      "case_id": "pos-faq-091-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-091"
+      ],
+      "query": "??????可以先放行李嗎？?"
+    },
+    {
+      "case_id": "pos-faq-091-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-091"
+      ],
+      "query": "行李?"
+    },
+    {
+      "case_id": "pos-faq-091-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-091"
+      ],
+      "query": "我提早到，可以直接先進房嗎？?"
+    },
+    {
+      "case_id": "pos-faq-091-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-091"
+      ],
+      "query": "????????????????可以先放行李嗎？?"
+    },
+    {
+      "case_id": "pos-faq-092-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-092"
+      ],
+      "query": "退房後可以寄放行李嗎？?"
+    },
+    {
+      "case_id": "pos-faq-092-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-092"
+      ],
+      "query": "??????退房後可以寄放行李嗎？?"
+    },
+    {
+      "case_id": "pos-faq-092-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-092"
+      ],
+      "query": "行李?"
+    },
+    {
+      "case_id": "pos-faq-092-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-092"
+      ],
+      "query": "退房後可以放行李到下午嗎？?"
+    },
+    {
+      "case_id": "pos-faq-092-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-092"
+      ],
+      "query": "????????????????退房後可以寄放行李嗎？?"
+    },
+    {
+      "case_id": "pos-faq-093-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-093"
+      ],
+      "query": "退房流程是什麼？?"
+    },
+    {
+      "case_id": "pos-faq-093-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-093"
+      ],
+      "query": "??????退房流程是什麼？?"
+    },
+    {
+      "case_id": "pos-faq-093-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-093"
+      ],
+      "query": "退房?"
+    },
+    {
+      "case_id": "pos-faq-093-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-093"
+      ],
+      "query": "?????退房??退房流程是什麼？?"
+    },
+    {
+      "case_id": "pos-faq-093-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-093"
+      ],
+      "query": "????????????????退房流程是什麼？?"
+    },
+    {
+      "case_id": "pos-faq-094-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-094"
+      ],
+      "query": "退房需要檢查房間嗎？?"
+    },
+    {
+      "case_id": "pos-faq-094-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-094"
+      ],
+      "query": "??????退房需要檢查房間嗎？?"
+    },
+    {
+      "case_id": "pos-faq-094-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-094"
+      ],
+      "query": "退房?"
+    },
+    {
+      "case_id": "pos-faq-094-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-094"
+      ],
+      "query": "?????退房??退房需要檢查房間嗎？?"
+    },
+    {
+      "case_id": "pos-faq-094-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-094"
+      ],
+      "query": "????????????????退房需要檢查房間嗎？?"
+    },
+    {
+      "case_id": "pos-faq-095-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-095"
+      ],
+      "query": "忘記退房時間怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-095-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-095"
+      ],
+      "query": "??????忘記退房時間怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-095-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-095"
+      ],
+      "query": "退房?"
+    },
+    {
+      "case_id": "pos-faq-095-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-095"
+      ],
+      "query": "?????退房??忘記退房時間怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-095-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-095"
+      ],
+      "query": "????????????????忘記退房時間怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-096-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-096"
+      ],
+      "query": "退房可以不用見到管家嗎？?"
+    },
+    {
+      "case_id": "pos-faq-096-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-096"
+      ],
+      "query": "??????退房可以不用見到管家嗎？?"
+    },
+    {
+      "case_id": "pos-faq-096-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-096"
+      ],
+      "query": "退房?"
+    },
+    {
+      "case_id": "pos-faq-096-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-096"
+      ],
+      "query": "?????退房??退房可以不用見到管家嗎？?"
+    },
+    {
+      "case_id": "pos-faq-096-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-096"
+      ],
+      "query": "????????????????退房可以不用見到管家嗎？?"
+    },
+    {
+      "case_id": "pos-faq-097-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-097"
+      ],
+      "query": "提早到可以使用公共空間嗎？?"
+    },
+    {
+      "case_id": "pos-faq-097-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-097"
+      ],
+      "query": "??????提早到可以使用公共空間嗎？?"
+    },
+    {
+      "case_id": "pos-faq-097-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-097"
+      ],
+      "query": "提早到可以使用公?"
+    },
+    {
+      "case_id": "pos-faq-097-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-097"
+      ],
+      "query": "?????提早到可以使用公??提早到可以使用公共空間嗎？?"
+    },
+    {
+      "case_id": "pos-faq-097-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-097"
+      ],
+      "query": "????????????????提早到可以使用公共空間嗎？?"
+    },
+    {
+      "case_id": "pos-faq-098-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-098"
+      ],
+      "query": "退房後還可以使用設施嗎？?"
+    },
+    {
+      "case_id": "pos-faq-098-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-098"
+      ],
+      "query": "??????退房後還可以使用設施嗎？?"
+    },
+    {
+      "case_id": "pos-faq-098-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-098"
+      ],
+      "query": "退房?"
+    },
+    {
+      "case_id": "pos-faq-098-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-098"
+      ],
+      "query": "?????退房??退房後還可以使用設施嗎？?"
+    },
+    {
+      "case_id": "pos-faq-098-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-098"
+      ],
+      "query": "????????????????退房後還可以使用設施嗎？?"
+    },
+    {
+      "case_id": "pos-faq-099-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-099"
+      ],
+      "query": "入住前會提供哪些資訊？?"
+    },
+    {
+      "case_id": "pos-faq-099-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-099"
+      ],
+      "query": "??????入住前會提供哪些資訊？?"
+    },
+    {
+      "case_id": "pos-faq-099-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-099"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-099-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-099"
+      ],
+      "query": "入住前會把地址跟停車方式寄給我嗎？?"
+    },
+    {
+      "case_id": "pos-faq-099-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-099"
+      ],
+      "query": "????????????????入住前會提供哪些資訊？?"
+    },
+    {
+      "case_id": "pos-faq-100-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-100"
+      ],
+      "query": "入住當天聯絡不到怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-100-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-100"
+      ],
+      "query": "??????入住當天聯絡不到怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-100-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-100"
+      ],
+      "query": "入住?"
+    },
+    {
+      "case_id": "pos-faq-100-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-100"
+      ],
+      "query": "?????入住??入住當天聯絡不到怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-100-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-100"
+      ],
+      "query": "????????????????入住當天聯絡不到怎麼辦？?"
+    },
+    {
+      "case_id": "pos-faq-101-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-101"
+      ],
+      "query": "民宿地址在哪裡？?"
+    },
+    {
+      "case_id": "pos-faq-101-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-101"
+      ],
+      "query": "??????民宿地址在哪裡？?"
+    },
+    {
+      "case_id": "pos-faq-101-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-101"
+      ],
+      "query": "民宿地址在哪裡?"
+    },
+    {
+      "case_id": "pos-faq-101-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-101"
+      ],
+      "query": "?????民宿地址在哪裡??民宿地址在哪裡？?"
+    },
+    {
+      "case_id": "pos-faq-101-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-101"
+      ],
+      "query": "????????????????民宿地址在哪裡？?"
+    },
+    {
+      "case_id": "pos-faq-102-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-102"
+      ],
+      "query": "導航要輸入什麼？?"
+    },
+    {
+      "case_id": "pos-faq-102-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-102"
+      ],
+      "query": "??????導航要輸入什麼？?"
+    },
+    {
+      "case_id": "pos-faq-102-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-102"
+      ],
+      "query": "導航要輸入什麼?"
+    },
+    {
+      "case_id": "pos-faq-102-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-102"
+      ],
+      "query": "?????導航要輸入什麼??導航要輸入什麼？?"
+    },
+    {
+      "case_id": "pos-faq-102-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-102"
+      ],
+      "query": "????????????????導航要輸入什麼？?"
+    },
+    {
+      "case_id": "pos-faq-103-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-103"
+      ],
+      "query": "開車怎麼到？?"
+    },
+    {
+      "case_id": "pos-faq-103-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-103"
+      ],
+      "query": "??????開車怎麼到？?"
+    },
+    {
+      "case_id": "pos-faq-103-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-103"
+      ],
+      "query": "開車怎麼到?"
+    },
+    {
+      "case_id": "pos-faq-103-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-103"
+      ],
+      "query": "?????開車怎麼到??開車怎麼到？?"
+    },
+    {
+      "case_id": "pos-faq-103-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-103"
+      ],
+      "query": "????????????????開車怎麼到？?"
+    },
+    {
+      "case_id": "pos-faq-104-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-104"
+      ],
+      "query": "有停車位嗎？?"
+    },
+    {
+      "case_id": "pos-faq-104-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-104"
+      ],
+      "query": "??????有停車位嗎？?"
+    },
+    {
+      "case_id": "pos-faq-104-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-104"
+      ],
+      "query": "停車?"
+    },
+    {
+      "case_id": "pos-faq-104-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-104"
+      ],
+      "query": "?????停車??有停車位嗎？?"
+    },
+    {
+      "case_id": "pos-faq-104-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-104"
+      ],
+      "query": "????????????????有停車位嗎？?"
+    },
+    {
+      "case_id": "pos-faq-105-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-105"
+      ],
+      "query": "停車要收費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-105-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-105"
+      ],
+      "query": "??????停車要收費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-105-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-105"
+      ],
+      "query": "停車?"
+    },
+    {
+      "case_id": "pos-faq-105-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-105"
+      ],
+      "query": "?????停車??停車要收費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-105-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-105"
+      ],
+      "query": "????????????????停車要收費嗎？?"
+    },
+    {
+      "case_id": "pos-faq-106-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-106"
+      ],
+      "query": "可以停幾台車？?"
+    },
+    {
+      "case_id": "pos-faq-106-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-106"
+      ],
+      "query": "??????可以停幾台車？?"
+    },
+    {
+      "case_id": "pos-faq-106-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-106"
+      ],
+      "query": "8台車?"
+    },
+    {
+      "case_id": "pos-faq-106-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-106"
+      ],
+      "query": "我們大概會開8台轎車，停得下嗎？?"
+    },
+    {
+      "case_id": "pos-faq-106-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-106"
+      ],
+      "query": "????????????????可以停幾台車？?"
+    },
+    {
+      "case_id": "pos-faq-107-canonical",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-107"
+      ],
+      "query": "休旅車或九人座可以停嗎？?"
+    },
+    {
+      "case_id": "pos-faq-107-polite",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-107"
+      ],
+      "query": "??????休旅車或九人座可以停嗎？?"
+    },
+    {
+      "case_id": "pos-faq-107-short",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-107"
+      ],
+      "query": "休旅車或九人座可?"
+    },
+    {
+      "case_id": "pos-faq-107-paraphrase",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-107"
+      ],
+      "query": "?????休旅車或九人座可??休旅車或九人座可以停嗎？?"
+    },
+    {
+      "case_id": "pos-faq-107-contextual_paraphrase",
+      "suite": "positive",
+      "type": "contextual_paraphrase",
+      "expected_faq_ids": [
+        "faq-107"
+      ],
+      "query": "????????????????休旅車或九人座可以停嗎？?"
+    }
+  ],
+  "negative": [
+    {
+      "case_id": "neg-001",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "??? JavaScript"
+    },
+    {
+      "case_id": "neg-002",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "????????"
+    },
+    {
+      "case_id": "neg-003",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "?????????"
+    },
+    {
+      "case_id": "neg-004",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "??????????"
+    },
+    {
+      "case_id": "neg-005",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "?????????????"
+    },
+    {
+      "case_id": "neg-006",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "???????"
+    },
+    {
+      "case_id": "neg-007",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "???????"
+    },
+    {
+      "case_id": "neg-008",
+      "suite": "negative",
+      "type": "domain_adjacent",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "????????"
+    },
+    {
+      "case_id": "neg-009",
+      "suite": "negative",
+      "type": "domain_adjacent",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "??????????"
+    },
+    {
+      "case_id": "neg-010",
+      "suite": "negative",
+      "type": "domain_adjacent",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "?????????"
+    },
+    {
+      "case_id": "neg-011",
+      "suite": "negative",
+      "type": "domain_adjacent",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "?????? Python ???"
+    },
+    {
+      "case_id": "neg-012",
+      "suite": "negative",
+      "type": "domain_adjacent",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "????????"
+    },
+    {
+      "case_id": "neg-013",
+      "suite": "negative",
+      "type": "domain_adjacent",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "????????"
+    },
+    {
+      "case_id": "neg-014",
+      "suite": "negative",
+      "type": "domain_adjacent",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "?????????"
+    },
+    {
+      "case_id": "neg-015",
+      "suite": "negative",
+      "type": "domain_adjacent",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "???????????"
+    },
+    {
+      "case_id": "neg-016",
+      "suite": "negative",
+      "type": "domain_adjacent",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "???????????"
+    },
+    {
+      "case_id": "neg-017",
+      "suite": "negative",
+      "type": "domain_adjacent",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "??????????"
+    },
+    {
+      "case_id": "neg-018",
+      "suite": "negative",
+      "type": "domain_adjacent",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "??????????"
+    },
+    {
+      "case_id": "neg-019",
+      "suite": "negative",
+      "type": "domain_adjacent",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "?????????????"
+    },
+    {
+      "case_id": "neg-020",
+      "suite": "negative",
+      "type": "domain_adjacent",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "???????????"
+    },
+    {
+      "case_id": "neg-021",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "???????????"
+    },
+    {
+      "case_id": "neg-022",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "Booking.com ???????"
+    },
+    {
+      "case_id": "neg-023",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "Airbnb ????????"
+    },
+    {
+      "case_id": "neg-024",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "???????"
+    },
+    {
+      "case_id": "neg-025",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "?????????"
+    },
+    {
+      "case_id": "neg-026",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "???????"
+    },
+    {
+      "case_id": "neg-027",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "??????????"
+    },
+    {
+      "case_id": "neg-028",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "????????"
+    },
+    {
+      "case_id": "neg-029",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "????????"
+    },
+    {
+      "case_id": "neg-030",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "???????"
+    },
+    {
+      "case_id": "neg-031",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "????????"
+    },
+    {
+      "case_id": "neg-032",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "???????????????"
+    },
+    {
+      "case_id": "neg-033",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "???? APP ?????"
+    },
+    {
+      "case_id": "neg-034",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "??????????"
+    },
+    {
+      "case_id": "neg-035",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "?????????????"
+    },
+    {
+      "case_id": "neg-036",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "??????????"
+    },
+    {
+      "case_id": "neg-037",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "?????????"
+    },
+    {
+      "case_id": "neg-038",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "JavaScript array map ????"
+    },
+    {
+      "case_id": "neg-039",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "???????"
+    },
+    {
+      "case_id": "neg-040",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "????????"
+    },
+    {
+      "case_id": "neg-041",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "?????????"
+    },
+    {
+      "case_id": "neg-042",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "????????"
+    },
+    {
+      "case_id": "neg-043",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "??????????"
+    },
+    {
+      "case_id": "neg-044",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "???????????"
+    },
+    {
+      "case_id": "neg-045",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "????????"
+    },
+    {
+      "case_id": "neg-046",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "????????"
+    },
+    {
+      "case_id": "neg-047",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "???????????????"
+    },
+    {
+      "case_id": "neg-048",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "???????????"
+    },
+    {
+      "case_id": "neg-049",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "??????????"
+    },
+    {
+      "case_id": "neg-050",
+      "suite": "negative",
+      "type": "out_of_domain",
+      "expected_action": "none",
+      "expected_faq_ids": [],
+      "query": "?????????"
+    }
+  ],
+  "multi_intent": [
+    {
+      "case_id": "multi-001",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-078",
+        "faq-035"
+      ],
+      "query": "?????????????????????"
+    },
+    {
+      "case_id": "multi-002",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-092",
+        "faq-106"
+      ],
+      "query": "???????????????????????"
+    },
+    {
+      "case_id": "multi-003",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-101",
+        "faq-102"
+      ],
+      "query": "????????????????"
+    },
+    {
+      "case_id": "multi-004",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-076",
+        "faq-077"
+      ],
+      "query": "?????????????"
+    },
+    {
+      "case_id": "multi-005",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-006",
+        "faq-035"
+      ],
+      "query": "???????????????????????"
+    },
+    {
+      "case_id": "multi-006",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-007",
+        "faq-006"
+      ],
+      "query": "??????????????????"
+    },
+    {
+      "case_id": "multi-007",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-091",
+        "faq-078"
+      ],
+      "query": "???????????????????"
+    },
+    {
+      "case_id": "multi-008",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-102",
+        "faq-106"
+      ],
+      "query": "?????????????????????"
+    },
+    {
+      "case_id": "multi-009",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-052",
+        "faq-053"
+      ],
+      "query": "14?????10?13?????????"
+    },
+    {
+      "case_id": "multi-010",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-053",
+        "faq-054"
+      ],
+      "query": "???10?13??7?9????????"
+    },
+    {
+      "case_id": "multi-011",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-002",
+        "faq-003"
+      ],
+      "query": "?????????????????????"
+    },
+    {
+      "case_id": "multi-012",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-026",
+        "faq-028"
+      ],
+      "query": "???????????????"
+    },
+    {
+      "case_id": "multi-013",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-029",
+        "faq-035"
+      ],
+      "query": "???????????????"
+    },
+    {
+      "case_id": "multi-014",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-101",
+        "faq-106"
+      ],
+      "query": "????????????????"
+    },
+    {
+      "case_id": "multi-015",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-103",
+        "faq-102"
+      ],
+      "query": "??????Google ????????"
+    },
+    {
+      "case_id": "multi-016",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-078",
+        "faq-092"
+      ],
+      "query": "??????????????????"
+    },
+    {
+      "case_id": "multi-017",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-006",
+        "faq-007"
+      ],
+      "query": "????????????????????"
+    },
+    {
+      "case_id": "multi-018",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-076",
+        "faq-080"
+      ],
+      "query": "?????????????????"
+    },
+    {
+      "case_id": "multi-019",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-091",
+        "faq-097"
+      ],
+      "query": "??????????????????"
+    },
+    {
+      "case_id": "multi-020",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-034",
+        "faq-035"
+      ],
+      "query": "????????????????????"
+    },
+    {
+      "case_id": "multi-021",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-001",
+        "faq-002"
+      ],
+      "query": "?????????????"
+    },
+    {
+      "case_id": "multi-022",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-074",
+        "faq-035"
+      ],
+      "query": "????????????????"
+    },
+    {
+      "case_id": "multi-023",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-063",
+        "faq-064"
+      ],
+      "query": "?????????????????"
+    },
+    {
+      "case_id": "multi-024",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-067",
+        "faq-068"
+      ],
+      "query": "?????????????????????"
+    },
+    {
+      "case_id": "multi-025",
+      "suite": "multi_intent",
+      "type": "multi_intent",
+      "expected_faq_ids": [
+        "faq-101",
+        "faq-076",
+        "faq-077"
+      ],
+      "query": "??????????????????"
+    }
+  ]
+}

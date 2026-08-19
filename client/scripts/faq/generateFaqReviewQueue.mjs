@@ -8,10 +8,6 @@ import {
 
 const outputPath = "docs/faq-review-queue.csv";
 const knownP0 = new Map([
-  [
-    "faq-080",
-    "入住時間可能與 guesthouse-rules.md 的 16:00-17:00 不一致",
-  ],
   ["faq-110", "問題問火車交通，但目前答案偏向停車資訊"],
   ["faq-112", "問題問公車，但目前答案偏向停車資訊"],
   ["faq-114", "問題問叫車服務，但目前答案偏向停車資訊"],

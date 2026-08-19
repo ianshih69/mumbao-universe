@@ -78,10 +78,6 @@ const highRiskTerms = [
 
 const knownRuleConflictWarnings = new Map([
   [
-    "faq-080",
-    "guesthouse-rules.md 寫入住 16:00-17:00；目前答案需人工確認是否一致。",
-  ],
-  [
     "faq-205",
     "guesthouse-rules.md 寫早餐價格未提供；目前答案若提到固定金額需人工確認。",
   ],

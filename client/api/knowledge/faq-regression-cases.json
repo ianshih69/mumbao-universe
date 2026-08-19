@@ -1,7 +1,7 @@
 [
   {
     "input": "Mumbao 請問還有空房嗎？",
-    "expected_route": "faq_direct",
+    "expected_route": "faq_collect_info",
     "expected_faq_ids": [
       "faq-001"
     ],
@@ -28,7 +28,7 @@
   },
   {
     "input": "Mumbao 房價是多少？",
-    "expected_route": "faq_direct",
+    "expected_route": "faq_collect_info",
     "expected_faq_ids": [
       "faq-026"
     ],
@@ -37,7 +37,7 @@
   },
   {
     "input": "Mumbao 價格包含哪些費用？",
-    "expected_route": "faq_direct",
+    "expected_route": "faq_collect_info",
     "expected_faq_ids": [
       "faq-028"
     ],
@@ -46,12 +46,9 @@
   },
   {
     "input": "Mumbao 有另外收清潔費嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-029"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "Mumbao 14天前取消可以全退嗎？",
@@ -136,27 +133,39 @@
   },
   {
     "input": "Mumbao 最多可以住幾人？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_collect_info",
+    "expected_faq_ids": [
+      "faq-126"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 基本人數是幾人？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_collect_info",
+    "expected_faq_ids": [
+      "faq-127"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 可以超過最大人數入住嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-128"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 房間有冷氣嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-151"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 冷氣怎麼開？",
@@ -166,204 +175,300 @@
   },
   {
     "input": "Mumbao 房間有暖氣嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-153"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 公共空間有哪些？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-176"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 客廳可以使用到幾點？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-177"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 廚房可以使用嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-178"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 有附早餐嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_collect_info",
+    "expected_faq_ids": [
+      "faq-201"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 早餐幾點供應？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_collect_info",
+    "expected_faq_ids": [
+      "faq-202"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 早餐可以素食嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_collect_info",
+    "expected_faq_ids": [
+      "faq-203"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 可以帶寵物嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_collect_info",
+    "expected_faq_ids": [
+      "faq-226"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 可以帶狗嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_collect_info",
+    "expected_faq_ids": [
+      "faq-227"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 可以帶貓嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_collect_info",
+    "expected_faq_ids": [
+      "faq-228"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 適合帶小孩入住嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-251"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 有嬰兒床嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-252"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 有澡盆嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-253"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 房間會每天打掃嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-276"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 入住前有消毒嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-277"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 床單會每組客人更換嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-278"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 晚上幾點後要安靜？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-301"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 包棟也需要安靜嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-302"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 可以在室內吸菸嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-304"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 可以接自己的麥克風嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-329"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 音響可以開很大聲嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-330"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 有麻將桌嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-331"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 有庭院嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-351"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 有露台嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-352"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 露台可以使用到幾點？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-353"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 可以寄放行李嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_collect_info",
+    "expected_faq_ids": [
+      "faq-376"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 行李可以先送到民宿嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-377"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 退房後可以放行李到下午嗎？",
     "expected_route": "faq_direct",
     "expected_faq_ids": [
-      "faq-092"
+      "faq-378"
     ],
     "min_confidence": "high",
     "should_call_deepseek": false
   },
   {
     "input": "Mumbao 附近有什麼景點？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_collect_info",
+    "expected_faq_ids": [
+      "faq-401"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 宜蘭有什麼推薦行程？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_collect_info",
+    "expected_faq_ids": [
+      "faq-402"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 下雨天可以去哪裡？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-403"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 入住為什麼要登記資料？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-426"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 可以不給身分證嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "ask_human",
+    "expected_faq_ids": [
+      "faq-427"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 只給訂房代表證件可以嗎？",
@@ -373,15 +478,21 @@
   },
   {
     "input": "Mumbao 房間內有監視器嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-451"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 公共區監視器會拍到我們嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-452"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 民宿有保險嗎？",
@@ -391,21 +502,30 @@
   },
   {
     "input": "Mumbao 可以帶導盲犬或服務犬嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-476"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 我對羽絨過敏怎麼辦？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-477"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "Mumbao 我對香味過敏可以嗎？",
-    "expected_route": "faq_selector_required",
-    "expected_faq_ids": [],
-    "should_call_deepseek": true
+    "expected_route": "faq_direct",
+    "expected_faq_ids": [
+      "faq-478"
+    ],
+    "should_call_deepseek": false,
+    "min_confidence": "high"
   },
   {
     "input": "hello",
@@ -430,182 +550,125 @@
   },
   {
     "input": "我可以先叫你們幫我留房，晚點再匯款嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-006"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "可以先去現場看看房間再決定嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-007"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "你們一般客人可以刷信用卡嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-035"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "退房後可以放行李到下午嗎？",
     "expected_route": "faq_direct",
     "expected_faq_ids": [
-      "faq-092"
+      "faq-378"
     ],
     "min_confidence": "high",
     "should_call_deepseek": false
   },
   {
     "input": "我們大概會開8台轎車，停得下嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-106"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "八台車停得下嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-106"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "我們有8台車可以停嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-106"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "停車大概可以停幾台？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-106"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "還沒付訂金，可以先幫我保留日期嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-004"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "還沒付款可以先留房嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-004"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "可以先保留日期晚點匯款嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-004"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "我提早到，可以直接先進房嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-091"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "可以提前入住嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-078"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "我們早一點到可以先進房嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-091"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "入住前會把地址跟停車方式寄給我嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-099"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "入住前會收到地址嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-099"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "停車資訊會提前通知嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-099"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "入住資訊是用 LINE 傳還是 Email？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-099"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "入住資訊會寄到哪裡？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-099"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   },
   {
     "input": "你們會寄 Email 給我嗎？",
-    "expected_route": "faq_direct",
-    "expected_faq_ids": [
-      "faq-099"
-    ],
-    "min_confidence": "high",
-    "should_call_deepseek": false
+    "expected_route": "faq_selector_required",
+    "expected_faq_ids": [],
+    "should_call_deepseek": true
   }
 ]

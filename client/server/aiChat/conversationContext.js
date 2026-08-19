@@ -1,3 +1,5 @@
+import { isStrongExplicitLodgingQuoteRequest } from "./pricingIntent.js";
+
 const contextFields = [
   "active_intent",
   "stay_type",
@@ -340,7 +342,9 @@ function extractCounts(message) {
 function extractIntentAndTopic(message, previousContext) {
   const compact = normalizeCompactText(message);
   const extracted = {};
-  const hasPricingCue = /(價格|房價|費用|多少錢|多少|總共|報價|價位)/.test(compact);
+  const hasPricingCue = isStrongExplicitLodgingQuoteRequest(message, {
+    previousContext,
+  });
   const hasFacilityCue = /(烤肉|bbq|設施|ktv|廚房|泳池|停車|早餐)/i.test(compact);
 
   if (hasPricingCue) {

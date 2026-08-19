@@ -1,5 +1,6 @@
 import { buildContextualKnowledgeGapReply, normalizeConversationContext } from "./conversationContext.js";
 import { loadGuesthouseKnowledge } from "./guesthouseKnowledge.js";
+import { isStrongExplicitLodgingQuoteRequest } from "./pricingIntent.js";
 
 const officialPricingSource = "client/api/knowledge/guesthouse-rules.md";
 const supportedDirectPricingRoute = "existing_official_pricing";
@@ -632,13 +633,8 @@ function isLodgingOnlyQuote(message) {
   return /不含.*(狗|寵物)|光住宿|住宿小計|不含狗狗|不含狗|不含寵物/.test(text);
 }
 
-function isInitialQuoteRequest(message) {
-  const text = normalizeCompactText(message);
-  if (!text) return false;
-  if (/烤肉|麻將|入住時間|退房|早餐|停車|附近|地址|設施|有提供|可以帶/.test(text)) {
-    return false;
-  }
-  return /房價|價格|總價|總共|多少錢|費用|報價|多少/.test(text);
+function isInitialQuoteRequest(message, options = {}) {
+  return isStrongExplicitLodgingQuoteRequest(message, options);
 }
 
 function getLatestAssistantMessage(recentMessages = []) {
@@ -676,7 +672,9 @@ export function classifyPricingReplyIntent({
       ? "quote_confirmation"
       : "quote_confirmation_missing_context";
   }
-  if (isInitialQuoteRequest(message)) return "initial_quote";
+  if (isInitialQuoteRequest(message, { context, previousContext, recentMessages })) {
+    return "initial_quote";
+  }
   if (
     previousContext &&
     context &&

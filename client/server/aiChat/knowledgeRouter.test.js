@@ -133,6 +133,26 @@ describe("strict knowledge router", () => {
     },
   );
 
+  it.each([
+    "八台車停得下嗎？",
+    "可以停八台嗎？",
+    "九人座停得下嗎？",
+    "車位夠嗎？",
+    "有地方停車嗎？",
+    "晚上可以停車嗎？",
+    "機車可以停嗎？",
+  ])("routes natural parking questions %s to the FAQ selector", async (message) => {
+    const result = await routeKnowledge({ message });
+
+    expect(result).toMatchObject({
+      route: "faq_selector_required",
+      providerUsed: "faq_selector_required",
+      shouldCallDeepSeek: true,
+      lexicalSafeDirect: false,
+    });
+    expect(result.matchedFaqIds).toEqual([]);
+  });
+
   it.each(["退房後可以寄行李嗎", "可以晚退房嗎"])(
     "does not lexical-direct adjacent checkout intent %s without strong evidence",
     async (message) => {

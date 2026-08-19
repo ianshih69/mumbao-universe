@@ -119,6 +119,42 @@ function route(overrides = {}) {
   };
 }
 
+function selectorRoute(overrides = {}) {
+  return route({
+    route: "faq_selector_required",
+    providerUsed: "faq_selector_required",
+    shouldCallDeepSeek: true,
+    shouldMarkNeedsHuman: false,
+    knowledgeGap: false,
+    aiSkipped: false,
+    reason: "full_catalog_selector_required",
+    candidateFaqItems: [],
+    ...overrides,
+  });
+}
+
+function faqDirectRoute({ id = "faq-test", question = "測試 FAQ", answer = "測試回答" } = {}) {
+  return route({
+    route: "faq_direct",
+    providerUsed: "faq_direct",
+    shouldCallDeepSeek: false,
+    shouldMarkNeedsHuman: false,
+    knowledgeGap: false,
+    aiSkipped: true,
+    answer,
+    matchedFaqItems: [
+      {
+        id,
+        question,
+        answer,
+        answer_mode: "direct",
+        lexicalSafeDirect: true,
+        lexicalSafeDirectReason: "alias_exact",
+      },
+    ],
+  });
+}
+
 function semantic(turnAction, overrides = {}) {
   return {
     turn_action: turnAction,
@@ -148,6 +184,13 @@ function contextUpdate(previousContext, message) {
     dateInfo,
     nowIso: "2026-08-02T08:00:00.000Z",
   });
+}
+
+function mergeContextWithResult(context, result) {
+  return {
+    ...context,
+    ...(result?.conversationContextPatch || {}),
+  };
 }
 
 function staleMissingDateRoute() {
@@ -1192,5 +1235,207 @@ describe("turn action executor", () => {
 
     expect(result.answer).toContain("NT$37,500");
     expect(result.answer).not.toContain("NT$1,000");
+  });
+
+  it("routes refund, late-arrival, and luggage questions independently in one session", async () => {
+    let previousContext = {};
+
+    const cancellationMessage = "如果入住前5天臨時取消，大概可以退多少訂金？";
+    const cancellationUpdate = contextUpdate(previousContext, cancellationMessage);
+    const cancellation = await executeTurnAction({
+      message: cancellationMessage,
+      semanticResult: null,
+      routeResult: selectorRoute({
+        reason: "keyword_match_not_safe_direct",
+        matchedFaqItems: [
+          {
+            id: "faq-051",
+            question: "取消訂房可以退訂金嗎？",
+            answer: "取消訂房依規定辦理。",
+            confidence: "medium",
+            lexicalSafeDirect: false,
+          },
+        ],
+      }),
+      context: cancellationUpdate.context,
+      previousContext: cancellationUpdate.previousContext,
+      recentMessages: [],
+    });
+
+    expect(cancellation.route).toBe("faq_selector_required");
+    expect(cancellation.shouldCallDeepSeek).toBe(true);
+    expect(cancellation.semanticMetadata.validated_turn_action).not.toBe("request_quote");
+    expect(cancellation.conversationContextPatch?.pending_interaction).toBeUndefined();
+
+    previousContext = mergeContextWithResult(cancellationUpdate.context, cancellation);
+
+    const lateArrivalMessage = "我們晚上可能七點多才到，還可以入住嗎？";
+    const lateArrivalUpdate = contextUpdate(previousContext, lateArrivalMessage);
+    const lateArrival = await executeTurnAction({
+      message: lateArrivalMessage,
+      semanticResult: null,
+      routeResult: selectorRoute(),
+      context: lateArrivalUpdate.context,
+      previousContext: lateArrivalUpdate.previousContext,
+      recentMessages: [],
+    });
+
+    expect(lateArrival.route).toBe("faq_selector_required");
+    expect(lateArrival.shouldCallDeepSeek).toBe(true);
+    expect(lateArrival.conversationContextPatch?.pending_interaction).toBeUndefined();
+
+    previousContext = mergeContextWithResult(lateArrivalUpdate.context, lateArrival);
+
+    const luggageMessage = "我早上就到宜蘭了，可以先把行李放民宿嗎？";
+    const luggageUpdate = contextUpdate(previousContext, luggageMessage);
+    const luggage = await executeTurnAction({
+      message: luggageMessage,
+      semanticResult: null,
+      routeResult: selectorRoute({
+        reason: "keyword_match_not_safe_direct",
+      }),
+      context: luggageUpdate.context,
+      previousContext: luggageUpdate.previousContext,
+      recentMessages: [],
+    });
+
+    expect(luggage.route).toBe("faq_selector_required");
+    expect(luggage.shouldCallDeepSeek).toBe(true);
+    expect(luggage.conversationContextPatch?.pending_interaction).toBeUndefined();
+  });
+
+  it("lets a strong explicit lodging quote collect missing fields before selector", async () => {
+    const message = "9月20日包棟多少錢？";
+    const update = contextUpdate({}, message);
+    const result = await executeTurnAction({
+      message,
+      semanticResult: null,
+      routeResult: selectorRoute(),
+      context: update.context,
+      previousContext: update.previousContext,
+      recentMessages: [],
+      nowIso: "2026-08-02T08:10:00.000Z",
+    });
+
+    expect(result.route).toBe("faq_collect_info");
+    expect(result.semanticMetadata.validated_turn_action).toBe("request_quote");
+    expect(result.semanticMetadata.action_executor_result).toBe("request_quote_missing_fields");
+    expect(result.conversationContextPatch.pending_interaction).toMatchObject({
+      action: "collect_quote_fields",
+      resume_action: "request_quote",
+    });
+  });
+
+  it("continues pending quote only when the current turn fills missing quote fields", async () => {
+    const previousContext = {
+      active_intent: "pricing",
+      stay_type: "villa",
+      check_in: "2026-09-20",
+      check_out: "2026-09-21",
+      guest_count: null,
+      adult_count: null,
+      child_count: null,
+      pet_count: null,
+      pet_type: null,
+      room_count: null,
+      current_topic: "booking_price",
+      pending_interaction: {
+        action: "collect_quote_fields",
+        proposed_values: {},
+        required_response_type: "fields",
+        required_fields: ["guest_count", "pet_count"],
+        resume_action: "request_quote",
+        source_assistant_message_id: "assistant-quote",
+        created_at: "2026-08-02T08:00:00.000Z",
+        expires_at: "2026-08-02T08:30:00.000Z",
+      },
+    };
+    const message = "10個人";
+    const update = contextUpdate(previousContext, message);
+    const result = await executeTurnAction({
+      message,
+      semanticResult: null,
+      routeResult: selectorRoute(),
+      context: update.context,
+      previousContext: update.previousContext,
+      recentMessages: [],
+      nowIso: "2026-08-02T08:10:00.000Z",
+    });
+
+    expect(result.route).toBe("faq_collect_info");
+    expect(result.semanticMetadata.pending_resolution).toBe("answered");
+    expect(result.semanticMetadata.resumed_turn_action).toBe("request_quote");
+    expect(result.semanticMetadata.action_executor_result).toBe("request_quote_missing_fields");
+    expect(result.conversationContextPatch.pending_interaction).toMatchObject({
+      action: "collect_quote_fields",
+      required_fields: ["pet_count"],
+    });
+  });
+
+  it("interrupts pending quote when a new direct FAQ question arrives", async () => {
+    const previousContext = {
+      active_intent: "pricing",
+      stay_type: "villa",
+      check_in: "2026-09-20",
+      check_out: "2026-09-21",
+      guest_count: 10,
+      adult_count: null,
+      child_count: null,
+      pet_count: null,
+      pet_type: null,
+      room_count: null,
+      current_topic: "booking_price",
+      pending_interaction: {
+        action: "collect_quote_fields",
+        proposed_values: {},
+        required_response_type: "fields",
+        required_fields: ["pet_count"],
+        resume_action: "request_quote",
+        source_assistant_message_id: "assistant-quote",
+        created_at: "2026-08-02T08:00:00.000Z",
+        expires_at: "2026-08-02T08:30:00.000Z",
+      },
+    };
+    const message = "對了，可以刷信用卡嗎？";
+    const update = contextUpdate(previousContext, message);
+    const result = await executeTurnAction({
+      message,
+      semanticResult: null,
+      routeResult: faqDirectRoute({
+        id: "faq-035",
+        question: "一般客人可以刷信用卡嗎？",
+        answer: "一般客人目前不提供信用卡付款。",
+      }),
+      context: update.context,
+      previousContext: update.previousContext,
+      recentMessages: [],
+    });
+
+    expect(result.route).toBe("faq_direct");
+    expect(result.answer).toContain("不提供信用卡付款");
+    expect(result.conversationContextPatch.pending_interaction).toBeNull();
+    expect(result.semanticMetadata).toMatchObject({
+      pending_resolution: "interrupted",
+      action_executor_result: "pending_quote_interrupted_by_faq_route",
+    });
+  });
+
+  it("does not treat policy fee questions as whole-stay lodging quote requests", async () => {
+    for (const message of ["取消住宿可以退多少錢？", "寵物要多少錢？", "加一個人多少錢？"]) {
+      const update = contextUpdate({}, message);
+      const result = await executeTurnAction({
+        message,
+        semanticResult: null,
+        routeResult: selectorRoute(),
+        context: update.context,
+        previousContext: update.previousContext,
+        recentMessages: [],
+      });
+
+      expect(result.route).toBe("faq_selector_required");
+      expect(result.shouldCallDeepSeek).toBe(true);
+      expect(result.semanticMetadata.validated_turn_action).not.toBe("request_quote");
+      expect(result.conversationContextPatch?.pending_interaction).toBeUndefined();
+    }
   });
 });

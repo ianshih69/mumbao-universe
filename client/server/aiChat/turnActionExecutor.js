@@ -9,6 +9,7 @@ import {
   classifyPricingReplyIntent,
   getPricingRelevantChangedFields,
 } from "./lodgingPricing.js";
+import { isStrongExplicitLodgingQuoteRequest } from "./pricingIntent.js";
 import {
   normalizePendingResolutionAction,
   normalizeTurnAction,
@@ -313,6 +314,96 @@ function expandMissingContextFields(missingFields) {
     }
   }
   return [...new Set(fields.filter((field) => pricingGuardFields.has(field)))];
+}
+
+function getPendingRequiredFields(pendingInteraction) {
+  const pending = normalizePendingInteraction(pendingInteraction);
+  if (!pending) return [];
+  if (Array.isArray(pending.required_fields) && pending.required_fields.length) {
+    return expandMissingContextFields(pending.required_fields);
+  }
+  return expandMissingContextFields(getMissingBookingContextFields(pending.proposed_values || {}));
+}
+
+function hasFilledPendingQuoteField({ pendingInteraction, context, previousContext, semanticResult }) {
+  const pending = normalizePendingInteraction(pendingInteraction);
+  if (!pending || pending.action !== "collect_quote_fields") return false;
+  const requiredFields = getPendingRequiredFields(pending);
+  if (!requiredFields.length) return false;
+
+  const before = normalizeConversationContext(previousContext);
+  const after = normalizeConversationContext(context);
+  const mentionedFields = new Set([
+    ...(Array.isArray(semanticResult?.mentioned_fields) ? semanticResult.mentioned_fields : []),
+    ...(Array.isArray(semanticResult?.clear_fields) ? semanticResult.clear_fields : []),
+  ]);
+
+  return requiredFields.some((field) => {
+    if (mentionedFields.has(field)) return true;
+    const beforeValue = before[field];
+    const afterValue = after[field];
+    return (
+      afterValue !== null &&
+      afterValue !== undefined &&
+      afterValue !== "" &&
+      beforeValue !== afterValue
+    );
+  });
+}
+
+function shouldInterruptPendingQuote({
+  pendingInteraction,
+  routeResult,
+  message,
+  context,
+  previousContext,
+  recentMessages,
+  semanticResult,
+}) {
+  const pending = normalizePendingInteraction(pendingInteraction);
+  if (!pending || pending.action !== "collect_quote_fields") return false;
+  if (
+    hasFilledPendingQuoteField({
+      pendingInteraction: pending,
+      context,
+      previousContext,
+      semanticResult,
+    })
+  ) {
+    return false;
+  }
+
+  if (["faq_direct", "faq_collect_info", "ask_human"].includes(routeResult?.route)) {
+    return true;
+  }
+
+  return (
+    routeResult?.route === "faq_selector_required" &&
+    !isStrongExplicitLodgingQuoteRequest(message, {
+      context,
+      previousContext,
+      recentMessages,
+    })
+  );
+}
+
+function shouldDeferWeakPricingActionToFaqSelector({
+  action,
+  routeResult,
+  message,
+  context,
+  previousContext,
+  recentMessages,
+}) {
+  return (
+    routeResult?.route === "faq_selector_required" &&
+    ["request_quote", "update_quote"].includes(action) &&
+    !isStrongExplicitLodgingQuoteRequest(message, {
+      context,
+      previousContext,
+      recentMessages,
+    })
+  );
 }
 
 function buildCollectQuoteFieldsPending({ missingFields, resumeAction, nowIso, sourceMessageId }) {
@@ -979,6 +1070,47 @@ export async function executeTurnAction({
       validated_turn_action: "knowledge_gap",
       turn_action_validator_result: "rejected",
       action_executor_result: "invalid_turn_action",
+    });
+  }
+
+  if (
+    shouldInterruptPendingQuote({
+      pendingInteraction,
+      routeResult,
+      message,
+      context: executorContext,
+      previousContext,
+      recentMessages,
+      semanticResult: normalizedSemanticResult,
+    })
+  ) {
+    return addExecutorMetadata(
+      {
+        ...routeResult,
+        conversationContextPatch: clearPendingPatch(),
+      },
+      {
+        ...metadata,
+        pending_resolution: "interrupted",
+        action_executor_result: "pending_quote_interrupted_by_faq_route",
+      }
+    );
+  }
+
+  if (
+    shouldDeferWeakPricingActionToFaqSelector({
+      action,
+      routeResult,
+      message,
+      context: executorContext,
+      previousContext,
+      recentMessages,
+    })
+  ) {
+    return addExecutorMetadata(routeResult, {
+      ...metadata,
+      action_executor_result: "faq_selector_deferred_weak_pricing_action",
+      pricing_called: false,
     });
   }
 

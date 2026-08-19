@@ -262,9 +262,33 @@ function includesKeyword(text, keywords) {
   return keywords.some((keyword) => text.includes(keyword));
 }
 
+function hasParkingSupportContext(text) {
+  const compactText = normalizeText(text);
+  if (!compactText) {
+    return false;
+  }
+
+  if (/(?:停車|停車位|車位|停放)/.test(compactText)) {
+    return true;
+  }
+
+  const hasVehicleTerm = /(?:轎車|汽車|休旅車|九人座|機車|重機|車輛|台車|輛車|車)/.test(
+    compactText
+  );
+  const hasParkingAction = /(?:停得下|停得了|可以停|能停|可停|有地方停|停)/.test(
+    compactText
+  );
+  const hasCapacityCue =
+    /(?:\d+|[零〇一二兩两三四五六七八九十]+)(?:台|輛)/.test(compactText) ||
+    /(?:夠|位置|空間|地方)/.test(compactText);
+
+  return (hasVehicleTerm && hasParkingAction) || (hasParkingAction && hasCapacityCue);
+}
+
 function hasSupportContext(text) {
   const normalizedText = String(text || "").toLowerCase().trim();
   const hasSupportKeyword = includesKeyword(normalizedText, supportScopeKeywords);
+  const hasParkingContext = hasParkingSupportContext(normalizedText);
   const hasYilanTravelKeyword = includesKeyword(
     normalizedText,
     yilanTravelKeywords
@@ -274,7 +298,11 @@ function hasSupportContext(text) {
     lodgingContextKeywords
   );
 
-  return hasSupportKeyword || (hasYilanTravelKeyword && hasLodgingContext);
+  return (
+    hasSupportKeyword ||
+    hasParkingContext ||
+    (hasYilanTravelKeyword && hasLodgingContext)
+  );
 }
 
 function isDateOrPeopleFragment(text) {

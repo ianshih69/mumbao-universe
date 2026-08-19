@@ -118,6 +118,9 @@ const safeLocalRoutes = new Set([
   "ask_human",
   "scope_guard",
   "human_takeover",
+  "semantic_direct",
+  "semantic_verified",
+  "faq_grounded_fallback",
 ]);
 
 const highRiskTerms = [

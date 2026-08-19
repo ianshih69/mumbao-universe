@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { enforceAiChatRateLimit } from "./rateLimit.js";
-import { buildFaqPromptSection } from "./faqRetrieval.js";
+import { buildFaqPromptSection, normalizeAnswerMode } from "./faqRetrieval.js";
 import {
   buildConversationContextUpdate,
   buildContextualKnowledgeRouteOverride,
@@ -28,8 +28,10 @@ import {
 import {
   buildKnowledgeGapMessageMetadata,
   buildKnowledgeMetadata,
+  knowledgeGapNotice,
   routeKnowledge,
 } from "./knowledgeRouter.js";
+import { callFaqSemanticVerifier } from "./faqSemanticVerifier.js";
 import {
   aiChatPromptBudget,
   buildPromptBudgetMetadata,
@@ -1724,6 +1726,98 @@ export function buildInputTooLongRoute(baseRoute = {}, error = null) {
   };
 }
 
+function summarizeFaqCandidates(candidates = []) {
+  const items = Array.isArray(candidates) ? candidates : [];
+  return {
+    topCandidateIds: items.slice(0, 3).map((item) => item.id),
+    topCandidateScores: items.slice(0, 3).map((item) => Number(item.score || 0)),
+  };
+}
+
+function buildFaqSemanticVerifiedRoute(routeResult, verifierResult, executionContext) {
+  const selectedFaqItem = verifierResult?.selectedFaqItem;
+  if (!selectedFaqItem) {
+    return null;
+  }
+  const candidateFaqItems = Array.isArray(routeResult?.candidateFaqItems)
+    ? routeResult.candidateFaqItems
+    : Array.isArray(routeResult?.matchedFaqItems)
+      ? routeResult.matchedFaqItems
+      : [];
+  const answerMode = normalizeAnswerMode(selectedFaqItem.answer_mode);
+
+  const finalRoute =
+    answerMode === "ask_human"
+      ? "ask_human"
+      : answerMode === "collect_info"
+        ? "faq_collect_info"
+        : "semantic_verified";
+
+  return {
+    ...routeResult,
+    route: finalRoute,
+    providerUsed: "semantic_verified",
+    matchedFaqItems: [selectedFaqItem],
+    candidateFaqItems,
+    matchedFaqIds: [selectedFaqItem.id],
+    ...summarizeFaqCandidates(candidateFaqItems),
+    confidence: "high",
+    answer: String(selectedFaqItem.answer || "").trim(),
+    notice: "",
+    answerMode,
+    shouldCallDeepSeek: false,
+    shouldMarkNeedsHuman: answerMode === "ask_human",
+    knowledgeGap: false,
+    aiSkipped: false,
+    reason: "semantic_verifier_selected_approved_faq",
+    modelCalled: executionContext?.model_call_attempted || false,
+    modelCallCount: executionContext?.model_call_count || 0,
+    semanticMetadata: {
+      ...(routeResult?.semanticMetadata || {}),
+      ...(verifierResult?.metadata || {}),
+      faq_semantic_verifier_final: "selected",
+    },
+  };
+}
+
+function buildFaqSemanticVerifierKnowledgeGapRoute(
+  routeResult,
+  reason,
+  executionContext,
+  semanticMetadata = {}
+) {
+  const candidateFaqItems = Array.isArray(routeResult?.candidateFaqItems)
+    ? routeResult.candidateFaqItems
+    : Array.isArray(routeResult?.matchedFaqItems)
+      ? routeResult.matchedFaqItems
+      : [];
+
+  return {
+    ...routeResult,
+    route: "knowledge_gap",
+    providerUsed: "knowledge_gap",
+    matchedFaqItems: [],
+    matchedFaqIds: [],
+    candidateFaqItems,
+    ...summarizeFaqCandidates(candidateFaqItems),
+    answer: knowledgeGapNotice,
+    notice: knowledgeGapNotice,
+    shouldCallDeepSeek: false,
+    shouldMarkNeedsHuman: true,
+    knowledgeGap: true,
+    aiSkipped: true,
+    reason,
+    modelCalled: executionContext?.model_call_attempted || false,
+    modelCallCount: executionContext?.model_call_count || 0,
+    semanticMetadata: {
+      ...(routeResult?.semanticMetadata || {}),
+      ...semanticMetadata,
+      fallback_reason: reason,
+      faq_semantic_verifier_final: "knowledge_gap",
+    },
+  };
+}
+
 export function selectRetrievalMessageForRouting(conversationContextUpdate, message) {
   return conversationContextUpdate?.hasContext
     ? conversationContextUpdate.retrievalText || message
@@ -2122,6 +2216,71 @@ export default async function handler(req, res) {
       }
       knowledgeRoute = routeOverride;
     }
+
+    if (
+      knowledgeRoute.route === "semantic_verifier_required" &&
+      modelCallPlan.strategy === "faq_semantic_verifier_only"
+    ) {
+      const verifierRateLimit = await enforceAiChatRateLimit(req, {
+        visitorId,
+        sessionId: session.id,
+        action: "faq_semantic_verifier",
+        provider: "deepseek",
+        model: getDeepSeekModelName(),
+      });
+
+      if (!verifierRateLimit.allowed) {
+        knowledgeRoute = buildFaqSemanticVerifierKnowledgeGapRoute(
+          knowledgeRoute,
+          verifierRateLimit.reason || "faq_semantic_verifier_rate_limited",
+          executionContext,
+          {
+            semantic_verifier_result: "rate_limited",
+          }
+        );
+      } else {
+        try {
+          const verifierResult = await callFaqSemanticVerifier({
+            message,
+            candidates: knowledgeRoute.matchedFaqItems,
+            requestId,
+            executionContext,
+          });
+          const verifiedRoute = buildFaqSemanticVerifiedRoute(
+            knowledgeRoute,
+            verifierResult,
+            executionContext
+          );
+          knowledgeRoute =
+            verifiedRoute ||
+            buildFaqSemanticVerifierKnowledgeGapRoute(
+              knowledgeRoute,
+              verifierResult?.metadata?.semantic_verifier_result === "invalid_selection"
+                ? "faq_semantic_verifier_invalid_selection"
+                : "faq_semantic_verifier_none",
+              executionContext,
+              verifierResult?.metadata || {}
+            );
+        } catch (error) {
+          console.warn("[ai-chat] FAQ semantic verifier fallback", {
+            requestId,
+            reason:
+              error?.providerErrorCode ||
+              error?.message ||
+              "faq_semantic_verifier_failed",
+          });
+          knowledgeRoute = buildFaqSemanticVerifierKnowledgeGapRoute(
+            knowledgeRoute,
+            error?.providerErrorCode ||
+              error?.message ||
+              "faq_semantic_verifier_failed",
+            executionContext,
+            error?.semanticVerifierMetadata || {}
+          );
+        }
+      }
+    }
+
     if (
       knowledgeRoute.shouldCallDeepSeek &&
       modelCallPlan.strategy !== "final_reply_only"

@@ -76,6 +76,21 @@ describe("AI chat model execution context", () => {
 
     expect(
       createModelCallPlan({
+        semanticMode: "hybrid",
+        canAnswerLocally: false,
+        routeResult: {
+          route: "semantic_verifier_required",
+          shouldCallDeepSeek: true,
+        },
+      })
+    ).toMatchObject({
+      strategy: "faq_semantic_verifier_only",
+      allowed_purpose: "faq_semantic_verifier",
+      model_call_budget: 1,
+    });
+
+    expect(
+      createModelCallPlan({
         semanticMode: "shadow",
         canAnswerLocally: true,
         routeResult: { shouldCallDeepSeek: true },

@@ -4,6 +4,7 @@ import {
   normalizeText,
   retrieveFaqItems,
 } from "./faqRetrieval.js";
+import { retrieveSemanticFaqItems } from "./faqSemanticRetrieval.js";
 
 export const knowledgeGapNotice =
   "這個問題目前還沒有確認過的慢慢蒔光資料，我先幫你記錄，請管家協助確認喔。";
@@ -404,6 +405,37 @@ function createRouteResult(overrides = {}) {
     knowledgeGap: Boolean(overrides.knowledgeGap),
     aiSkipped: overrides.aiSkipped !== false,
     approvedKnowledgePrompt: overrides.approvedKnowledgePrompt || "",
+    semanticMetadata:
+      overrides.semanticMetadata && typeof overrides.semanticMetadata === "object"
+        ? overrides.semanticMetadata
+        : {},
+  };
+}
+
+function isExplicitExternalScope(message) {
+  const normalizedMessage = String(message || "").toLowerCase().trim();
+  return (
+    includesKeyword(normalizedMessage, blockedScopeKeywords) &&
+    !hasSupportContext(normalizedMessage)
+  );
+}
+
+function buildSemanticRetrievalMetadata(semanticResult = {}) {
+  return {
+    faq_semantic_retrieval_status: semanticResult.status || "not_run",
+    faq_semantic_retrieval_reason: semanticResult.reason || "",
+    faq_semantic_embedding_called: Boolean(semanticResult.embeddingCalled),
+    faq_semantic_query_cache_hit: Boolean(semanticResult.queryEmbeddingCacheHit),
+    faq_semantic_corpus_approved_count: Number(
+      semanticResult.corpusApprovedCount || 0
+    ),
+    faq_semantic_corpus_needs_review_count: Number(
+      semanticResult.corpusNeedsReviewCount || 0
+    ),
+    faq_semantic_embedding_model: semanticResult.embeddingModel || "",
+    faq_semantic_vector_dimensions: Number(semanticResult.vectorDimensions || 0),
+    faq_semantic_index_source_hash: semanticResult.sourceHash || "",
+    faq_semantic_index_path: semanticResult.artifactPath || "",
   };
 }
 
@@ -413,6 +445,7 @@ export async function routeKnowledge({
   contextText = message,
   retrievalMessage = message,
   faqItems,
+  semanticRetrieval = null,
   limit = 8,
 } = {}) {
   if (session?.status === "human_takeover") {
@@ -459,6 +492,99 @@ export async function routeKnowledge({
   );
   const top = matchedFaqItems[0] || null;
   const topAnswerMode = normalizeAnswerMode(top?.answer_mode);
+  let semanticFallbackMetadata = {};
+  let semanticFallbackReason = "";
+
+  if (!highMatches.length && isExplicitExternalScope(message)) {
+    return createRouteResult({
+      route: "scope_guard",
+      providerUsed: "scope_guard",
+      answer: scopeGuardReply,
+      shouldCallDeepSeek: false,
+      reason: "out_of_scope",
+      aiSkipped: true,
+    });
+  }
+
+  if (!highMatches.length) {
+    const semanticResult = await retrieveSemanticFaqItems(
+      retrievalMessage || message,
+      {
+        ...(semanticRetrieval && typeof semanticRetrieval === "object"
+          ? semanticRetrieval
+          : {}),
+        items: faqItems,
+      }
+    );
+    const semanticMetadata = buildSemanticRetrievalMetadata(semanticResult);
+    semanticFallbackMetadata = semanticMetadata;
+    semanticFallbackReason = semanticResult.reason || "";
+    const semanticTop = semanticResult.topCandidate || semanticResult.candidates?.[0];
+    const semanticAnswerMode = normalizeAnswerMode(semanticTop?.answer_mode);
+
+    if (semanticResult.status === "clear" && semanticTop) {
+      if (semanticAnswerMode === "ask_human") {
+        return createRouteResult({
+          route: "ask_human",
+          providerUsed: "semantic_direct",
+          matchedFaqItems: [semanticTop],
+          topCandidate: semanticTop,
+          answer: semanticTop.answer || knowledgeGapNotice,
+          answerMode: "ask_human",
+          shouldCallDeepSeek: false,
+          shouldMarkNeedsHuman: true,
+          reason: "semantic_clear_ask_human_faq",
+          aiSkipped: true,
+          semanticMetadata,
+        });
+      }
+
+      if (semanticAnswerMode === "collect_info") {
+        return createRouteResult({
+          route: "faq_collect_info",
+          providerUsed: "semantic_direct",
+          matchedFaqItems: [semanticTop],
+          topCandidate: semanticTop,
+          answer: semanticTop.answer,
+          answerMode: "collect_info",
+          shouldCallDeepSeek: false,
+          reason: "semantic_clear_collect_info_faq",
+          aiSkipped: true,
+          semanticMetadata,
+        });
+      }
+
+      return createRouteResult({
+        route: "semantic_direct",
+        providerUsed: "semantic_direct",
+        matchedFaqItems: [semanticTop],
+        topCandidate: semanticTop,
+        answer: semanticTop.answer,
+        answerMode: "direct",
+        shouldCallDeepSeek: false,
+        shouldMarkNeedsHuman: false,
+        reason: "semantic_clear_approved_faq",
+        knowledgeGap: false,
+        aiSkipped: true,
+        semanticMetadata,
+      });
+    }
+
+    if (semanticResult.status === "ambiguous" && semanticResult.candidates?.length) {
+      return createRouteResult({
+        route: "semantic_verifier_required",
+        providerUsed: "semantic_verifier_required",
+        matchedFaqItems: semanticResult.candidates,
+        topCandidate: semanticTop,
+        answerMode: semanticAnswerMode || "direct",
+        shouldCallDeepSeek: true,
+        shouldMarkNeedsHuman: false,
+        reason: "semantic_ambiguous_needs_verifier",
+        aiSkipped: false,
+        semanticMetadata,
+      });
+    }
+  }
 
   if (!highMatches.length && !isAllowedSupportScope(message, contextText)) {
     return createRouteResult({
@@ -480,11 +606,15 @@ export async function routeKnowledge({
       usedFaqItems: [],
       shouldCallDeepSeek: false,
       shouldMarkNeedsHuman: true,
-      reason: top?.rejectionReason || "no_high_confidence_approved_faq",
+      reason:
+        top?.rejectionReason ||
+        semanticFallbackReason ||
+        "no_high_confidence_approved_faq",
       notice: knowledgeGapNotice,
       answer: knowledgeGapNotice,
       knowledgeGap: true,
       aiSkipped: true,
+      semanticMetadata: semanticFallbackMetadata,
     });
   }
 

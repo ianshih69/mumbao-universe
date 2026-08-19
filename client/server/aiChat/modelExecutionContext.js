@@ -34,6 +34,18 @@ export function createModelCallPlan({
     };
   }
 
+  if (
+    routeResult?.route === "semantic_verifier_required" &&
+    routeResult?.shouldCallDeepSeek
+  ) {
+    return {
+      strategy: "faq_semantic_verifier_only",
+      allowed_purpose: "faq_semantic_verifier",
+      reason: "faq_semantic_verifier_required",
+      model_call_budget: 1,
+    };
+  }
+
   if (mode === "hybrid" || mode === "shadow") {
     return {
       strategy: "semantic_only",

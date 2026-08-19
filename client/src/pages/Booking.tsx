@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   ChevronLeft,
@@ -44,6 +44,7 @@ import { cn } from "@/lib/utils";
 import { asArray, asString, fetchSitePageContent } from "@/lib/site/siteContentApi";
 
 type BookingForm = BookingDraftForm;
+type CalendarSelectionMode = "checkIn" | "checkOut";
 
 type BookingCmsCopy = {
   eyebrow: string;
@@ -153,6 +154,14 @@ function formatDate(dateText: string) {
     month: "2-digit",
     day: "2-digit",
   }).format(parseDate(dateText));
+}
+
+function formatSearchDate(dateText: string) {
+  if (!dateText) return "選擇日期";
+  const date = parseDate(dateText);
+  const month = date.getUTCMonth() + 1;
+  const day = date.getUTCDate();
+  return `${month}/${day}（${weekdays[date.getUTCDay()]}）`;
 }
 
 function formatFullDate(dateText: string) {
@@ -366,6 +375,8 @@ export default function Booking() {
   const [unavailableDates, setUnavailableDates] = useState<Set<string>>(new Set());
   const [calendarDaySources, setCalendarDaySources] = useState<NonNullable<BookingCalendarResult["days"]>>([]);
   const [calendarFilter, setCalendarFilter] = useState<BookingCalendarFilter>("all");
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [selectionMode, setSelectionMode] = useState<CalendarSelectionMode>("checkIn");
   const [maxDate, setMaxDate] = useState(() => addMonthsToDate(todayText(), DEFAULT_BOOKING_SETTINGS.bookingWindowMonths));
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -379,6 +390,8 @@ export default function Booking() {
   });
   const [bookingTestInput, setBookingTestInput] = useState("");
   const [bookingTestError, setBookingTestError] = useState("");
+  const bookingSearchRef = useRef<HTMLDivElement | null>(null);
+  const calendarPanelRef = useRef<HTMLElement | null>(null);
 
   const minDate = todayText();
   const maxMonth = monthStart(maxDate);
@@ -416,6 +429,7 @@ export default function Booking() {
   const contactDetailsComplete = Boolean(form.guest_name.trim() && isValidEmail(form.email) && isValidPhone(form.phone));
   const canShowStayOptions = bookingIsOpen && selectedIsAvailable && !submittedRequestId;
   const canShowContactForm = canShowStayOptions;
+  const guestCount = form.adults + form.children;
 
   useEffect(() => {
     if (!isBookingTestUnlocked) return;
@@ -479,6 +493,31 @@ export default function Booking() {
     writeBookingDraft(window.sessionStorage, form);
   }, [form]);
 
+  useEffect(() => {
+    if (!calendarOpen) return;
+
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (bookingSearchRef.current?.contains(target)) return;
+      if (calendarPanelRef.current?.contains(target)) return;
+      setCalendarOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setCalendarOpen(false);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [calendarOpen]);
+
   function updateField<K extends keyof BookingForm>(field: K, value: BookingForm[K]) {
     setForm((current) => ({ ...current, [field]: value }));
     setMessage("");
@@ -499,11 +538,27 @@ export default function Booking() {
     setMessage("");
     setError("");
     setSubmittedRequestId("");
+    setSelectionMode("checkIn");
   }
 
   function handleCalendarFilterChange(nextFilter: BookingCalendarFilter) {
     setCalendarFilter(nextFilter);
     clearDateSelection();
+    setCalendarOpen(true);
+  }
+
+  function openCalendar(mode: CalendarSelectionMode) {
+    const nextMode = mode === "checkOut" && !form.check_in ? "checkIn" : mode;
+    setSelectionMode(nextMode);
+    setCalendarOpen(true);
+    setError("");
+    if (nextMode === "checkIn" && form.check_in) {
+      setVisibleMonth(monthStart(form.check_in));
+      return;
+    }
+    if (nextMode === "checkOut") {
+      setVisibleMonth(monthStart(form.check_out || form.check_in || minDate));
+    }
   }
 
   function selectDate(date: string) {
@@ -516,9 +571,10 @@ export default function Booking() {
     setForm((current) => {
       const clickedDay = getCalendarDay(date);
       const currentSaleMode = stayTypeToSaleMode(current.stay_type);
+      const selectingCheckout = selectionMode === "checkOut" || Boolean(current.check_in && !current.check_out && date > current.check_in);
       const canUseAsCheckout =
+        selectingCheckout &&
         current.check_in &&
-        !current.check_out &&
         date > current.check_in &&
         getBookingRangeIssue({
           checkIn: current.check_in,
@@ -531,11 +587,25 @@ export default function Booking() {
       const filteredOut = isCalendarFilterMismatch(clickedDay, calendarFilter) && !canUseAsCheckout;
       const canUseAsStayNight = isBookableStayNight(clickedDay, minDate, maxDate) && !filteredOut;
 
+      if (selectionMode === "checkOut" && current.check_in) {
+        if (!canUseAsCheckout) {
+          setError(date <= current.check_in ? "退房日期需晚於入住日期。" : rangeIssueMessage(current.stay_type, "invalid_range"));
+          return current;
+        }
+        const nextForm = { ...current, check_out: date };
+        setMessage("");
+        setCalendarOpen(false);
+        setSelectionMode("checkIn");
+        return nextForm;
+      }
+
       if (!canUseAsStayNight && !canUseAsCheckout) return current;
 
       if (!current.check_in || (current.check_in && current.check_out) || date < current.check_in) {
         const stayType = saleModeToStayType(clickedDay.saleMode) || getDefaultStayType(settings);
         setMessage(`您已選擇${stayType === "villa" ? "包棟" : "單間"}住宿，請選擇退房日期。`);
+        setSelectionMode("checkOut");
+        setCalendarOpen(true);
         return {
           ...current,
           check_in: date,
@@ -561,6 +631,8 @@ export default function Booking() {
         return { ...current, check_out: "" };
       }
       setMessage("");
+      setCalendarOpen(false);
+      setSelectionMode("checkIn");
       return nextForm;
     });
   }
@@ -717,8 +789,9 @@ export default function Booking() {
             const day = getCalendarDay(date);
             const labels = getCalendarDayLabels(day, minDate, maxDate);
             const currentSaleMode = stayTypeToSaleMode(form.stay_type);
+            const selectingCheckout = selectionMode === "checkOut" || Boolean(form.check_in && !form.check_out);
             const canUseAsCheckout =
-              Boolean(form.check_in && !form.check_out && date > form.check_in) &&
+              Boolean(form.check_in && selectingCheckout && date > form.check_in) &&
               getBookingRangeIssue({
                 checkIn: form.check_in,
                 checkOut: date,
@@ -813,110 +886,172 @@ export default function Booking() {
             </div>
           )}
 
-          <section className="mt-6 rounded-[20px] border border-[#eadfce] bg-white p-4 shadow-sm md:p-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-2xl font-semibold text-stone-900">選擇入住日期</h2>
-                <p className="mt-1 text-sm text-stone-500">
-                  可預約日期從今天開始，最多可選到 {formatDate(maxDate)}。
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  disabled={visibleMonth <= monthStart(minDate)}
-                  onClick={() => setVisibleMonth((current) => addMonths(current, -1))}
-                  aria-label="上一個月"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  disabled={visibleMonth >= maxMonth}
-                  onClick={() => setVisibleMonth((current) => addMonths(current, 1))}
-                  aria-label="下一個月"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+          <div
+            ref={bookingSearchRef}
+            className="mt-6 rounded-[20px] border border-[#eadfce] bg-white p-3 shadow-sm md:p-4"
+          >
+            <div className="grid gap-2 md:grid-cols-[1fr_1fr_0.85fr]">
+              <button
+                type="button"
+                className={cn(
+                  "rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
+                  calendarOpen && selectionMode === "checkIn"
+                    ? "border-[#8b6f5b] bg-[#fff8ea]"
+                    : "border-[#eadfce] bg-[#fffdf9]"
+                )}
+                onClick={() => openCalendar("checkIn")}
+                aria-expanded={calendarOpen && selectionMode === "checkIn"}
+              >
+                <span className="block text-xs font-medium text-stone-500">入住</span>
+                <span className="mt-1 block text-base font-semibold text-stone-900">
+                  {formatSearchDate(form.check_in)}
+                </span>
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
+                  calendarOpen && selectionMode === "checkOut"
+                    ? "border-[#8b6f5b] bg-[#fff8ea]"
+                    : "border-[#eadfce] bg-[#fffdf9]"
+                )}
+                onClick={() => openCalendar("checkOut")}
+                aria-expanded={calendarOpen && selectionMode === "checkOut"}
+              >
+                <span className="block text-xs font-medium text-stone-500">退房</span>
+                <span className="mt-1 block text-base font-semibold text-stone-900">
+                  {formatSearchDate(form.check_out)}
+                </span>
+              </button>
+              <div className="rounded-[14px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
+                <span className="block text-xs font-medium text-stone-500">入住人數</span>
+                <span className="mt-1 block text-base font-semibold text-stone-900">{guestCount} 位</span>
               </div>
             </div>
+            {isCalendarLoading && <p className="mt-3 text-sm text-stone-500">房況載入中...</p>}
+          </div>
 
-            <div className="mt-4 rounded-[14px] bg-[#fbf7f1] px-3 py-2.5 md:px-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="mr-1 text-sm font-medium text-stone-700">查看日期：</p>
-                <div className="grid flex-1 grid-cols-3 gap-2 sm:flex sm:flex-none sm:items-center">
-                  {calendarFilters.map((filter) => (
-                    <button
-                      key={filter.value}
-                      type="button"
-                      onClick={() => handleCalendarFilterChange(filter.value)}
-                      className={cn(
-                        "rounded-full border px-3 py-1.5 text-xs font-medium transition md:px-4",
-                        calendarFilter === filter.value
-                          ? "border-[#8b6f5b] bg-[#8b6f5b] text-white"
-                          : "border-[#d7c5b2] bg-white text-stone-600 hover:bg-[#f7f1e9]"
-                      )}
-                    >
-                      {filter.label}
-                    </button>
-                  ))}
+          {calendarOpen && (
+            <section
+              ref={calendarPanelRef}
+              className="mt-3 rounded-[20px] border border-[#eadfce] bg-white p-4 shadow-sm md:p-6"
+            >
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-2xl font-semibold text-stone-900">
+                    {selectionMode === "checkOut" ? "選擇退房日期" : "選擇入住日期"}
+                  </h2>
+                  <p className="mt-1 text-sm text-stone-500">
+                    可預約日期從今天開始，最多可選到 {formatDate(maxDate)}。
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={visibleMonth <= monthStart(minDate)}
+                    onClick={() => setVisibleMonth((current) => addMonths(current, -1))}
+                    aria-label="上一個月"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={visibleMonth >= maxMonth}
+                    onClick={() => setVisibleMonth((current) => addMonths(current, 1))}
+                    aria-label="下一個月"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
-              <p className="mt-2 text-[11px] leading-5 text-stone-500 md:text-xs">
-                包棟：整棟住宿空間一起預訂。單間：可依需求選擇個別客房。
-              </p>
-            </div>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              {renderMonth(visibleMonth)}
-              {renderMonth(addMonths(visibleMonth, 1), true)}
-            </div>
-
-            <div className="mt-5 flex flex-col gap-3 rounded-[12px] bg-[#fbf7f1] p-4 text-sm text-stone-600 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="font-semibold text-stone-800">
-                  {form.check_in ? selectedStayTitle(form.stay_type) : "請選擇入住日期"}
-                </p>
-                {form.check_in ? (
-                  <div className="mt-2 grid gap-1 leading-6">
-                    <p>
-                      {formatBookingSummaryDate(form.check_in)}入住
-                      {form.check_out ? `－${formatBookingSummaryDate(form.check_out, false)}退房` : "－請選擇退房日期"}
-                    </p>
-                    <p>{form.check_out ? `共 ${nightCount} 晚` : "尚未完成日期選擇"}</p>
+              <div className="mt-4 rounded-[14px] bg-[#fbf7f1] px-3 py-2.5 md:px-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="mr-1 text-sm font-medium text-stone-700">查看日期：</p>
+                  <div className="grid flex-1 grid-cols-3 gap-2 sm:flex sm:flex-none sm:items-center">
+                    {calendarFilters.map((filter) => (
+                      <button
+                        key={filter.value}
+                        type="button"
+                        onClick={() => handleCalendarFilterChange(filter.value)}
+                        className={cn(
+                          "rounded-full border px-3 py-1.5 text-xs font-medium transition md:px-4",
+                          calendarFilter === filter.value
+                            ? "border-[#8b6f5b] bg-[#8b6f5b] text-white"
+                            : "border-[#d7c5b2] bg-white text-stone-600 hover:bg-[#f7f1e9]"
+                        )}
+                      >
+                        {filter.label}
+                      </button>
+                    ))}
                   </div>
-                ) : (
-                  <p className="mt-1">請選擇可預約的入住與退房日期。</p>
-                )}
+                </div>
+                <p className="mt-2 text-[11px] leading-5 text-stone-500 md:text-xs">
+                  包棟：整棟住宿空間一起預訂。單間：可依需求選擇個別客房。
+                </p>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row md:items-center">
-                {form.check_in && (
-                  <button
-                    type="button"
-                    className="rounded-[8px] border border-[#d7c5b2] px-4 py-2 text-xs font-medium text-stone-600 transition hover:bg-white hover:text-[#765d4a]"
-                    onClick={clearDateSelection}
-                  >
-                    重新選擇日期
-                  </button>
-                )}
+
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                {renderMonth(visibleMonth)}
+                {renderMonth(addMonths(visibleMonth, 1), true)}
               </div>
-            </div>
 
-            <div className="mt-4 flex flex-wrap gap-3 text-xs text-stone-500">
-              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-[#8b6f5b]" />包棟</span>
-              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-[#d4ad72]" />單間</span>
-              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-stone-100" />不可預約</span>
-              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-[#8b6f5b]" />已選日期</span>
-            </div>
+              <div className="mt-5 flex flex-col gap-3 rounded-[12px] bg-[#fbf7f1] p-4 text-sm text-stone-600 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="font-semibold text-stone-800">
+                    {form.check_in ? selectedStayTitle(form.stay_type) : "請選擇入住日期"}
+                  </p>
+                  {form.check_in ? (
+                    <div className="mt-2 grid gap-1 leading-6">
+                      <p>
+                        {formatBookingSummaryDate(form.check_in)}入住
+                        {form.check_out ? `－${formatBookingSummaryDate(form.check_out, false)}退房` : "－請選擇退房日期"}
+                      </p>
+                      <p>{form.check_out ? `共 ${nightCount} 晚` : "尚未完成日期選擇"}</p>
+                    </div>
+                  ) : (
+                    <p className="mt-1">請選擇可預約的入住與退房日期。</p>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row md:items-center">
+                  {form.check_in && (
+                    <button
+                      type="button"
+                      className="rounded-[8px] border border-[#d7c5b2] px-4 py-2 text-xs font-medium text-stone-600 transition hover:bg-white hover:text-[#765d4a]"
+                      onClick={clearDateSelection}
+                    >
+                      重新選擇日期
+                    </button>
+                  )}
+                </div>
+              </div>
 
-            {isCalendarLoading && <p className="mt-4 text-sm text-stone-500">房況載入中...</p>}
-            {message && <div className="mt-4 rounded-[8px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-700">{message}</div>}
-            {error && <div className="mt-4 rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">{error}</div>}
-          </section>
+              <div className="mt-4 flex flex-wrap gap-3 text-xs text-stone-500">
+                <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-[#8b6f5b]" />包棟</span>
+                <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-[#d4ad72]" />單間</span>
+                <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-stone-100" />不可預約</span>
+                <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-[#8b6f5b]" />已選日期</span>
+              </div>
+
+              {message && <div className="mt-4 rounded-[8px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-700">{message}</div>}
+              {error && <div className="mt-4 rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">{error}</div>}
+            </section>
+          )}
+
+          {!calendarOpen && (message || error) && (
+            <div
+              className={cn(
+                "mt-4 rounded-[8px] border px-4 py-3 text-sm leading-6",
+                error ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"
+              )}
+            >
+              {error || message}
+            </div>
+          )}
 
           {canShowStayOptions && (
             <section className="mt-6 rounded-[20px] border border-[#eadfce] bg-white p-5 shadow-sm md:p-6">

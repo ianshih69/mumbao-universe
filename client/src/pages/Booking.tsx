@@ -81,6 +81,14 @@ const emptyForm: BookingForm = {
   notes: "",
 };
 
+function createDefaultBookingForm(today = todayText()): BookingForm {
+  return {
+    ...emptyForm,
+    check_in: today,
+    check_out: addDays(today, 1),
+  };
+}
+
 const bookingTestPassword = "123";
 const bookingTestStorageKey = "mumbao_booking_test_unlocked_v1";
 const calendarFilters: Array<{ value: BookingCalendarFilter; label: string }> = [
@@ -238,8 +246,13 @@ function reconcileFormWithSettings(form: BookingForm, settings: PublicBookingSet
 }
 
 function getInitialBookingForm() {
-  if (typeof window === "undefined") return emptyForm;
-  return readBookingDraft(window.sessionStorage, emptyForm);
+  const today = todayText();
+  const fallback = createDefaultBookingForm(today);
+  if (typeof window === "undefined") return fallback;
+  const draft = readBookingDraft(window.sessionStorage, fallback);
+  if (draft.check_in >= today && draft.check_out > draft.check_in) return draft;
+  if (draft.check_in >= today) return { ...draft, check_out: addDays(draft.check_in, 1) };
+  return fallback;
 }
 
 function saleModeLabel(saleMode: BookingSaleMode) {
@@ -417,8 +430,8 @@ export default function Booking() {
     [form.check_in, form.check_out, form.stay_type, getCalendarDay, maxDate, minDate]
   );
   const selectedIsAvailable = useMemo(
-    () => Boolean(bookingIsOpen && form.check_in && form.check_out && selectedRangeIssue === "ok"),
-    [bookingIsOpen, form.check_in, form.check_out, selectedRangeIssue]
+    () => Boolean(!isCalendarLoading && bookingIsOpen && form.check_in && form.check_out && selectedRangeIssue === "ok"),
+    [bookingIsOpen, form.check_in, form.check_out, isCalendarLoading, selectedRangeIssue]
   );
   const nightCount = nightsBetween(form.check_in, form.check_out);
   const guestSummary = [
@@ -603,13 +616,21 @@ export default function Booking() {
 
       if (!current.check_in || (current.check_in && current.check_out) || date < current.check_in) {
         const stayType = saleModeToStayType(clickedDay.saleMode) || getDefaultStayType(settings);
-        setMessage(`您已選擇${stayType === "villa" ? "包棟" : "單間"}住宿，請選擇退房日期。`);
-        setSelectionMode("checkOut");
-        setCalendarOpen(true);
+        const nextCheckOut = current.check_out && date < current.check_out ? current.check_out : addDays(date, 1);
+        const hasCompleteRange = Boolean(current.check_out);
+        if (hasCompleteRange) {
+          setMessage("");
+          setCalendarOpen(false);
+          setSelectionMode("checkIn");
+        } else {
+          setMessage(`您已選擇${stayType === "villa" ? "包棟" : "單間"}住宿，請選擇退房日期。`);
+          setSelectionMode("checkOut");
+          setCalendarOpen(true);
+        }
         return {
           ...current,
           check_in: date,
-          check_out: "",
+          check_out: hasCompleteRange ? nextCheckOut : "",
           stay_type: stayType,
           room_count: stayType === "villa" ? settings.totalRoomCount : clampRoomCount(current.room_count, settings.totalRoomCount),
         };

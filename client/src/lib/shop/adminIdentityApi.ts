@@ -124,6 +124,7 @@ export type AdminMember = {
   profile_status_label: string;
   member_level: AdminMemberLevel;
   member_level_label: string;
+  partner_name?: string | null;
   is_admin_user?: boolean;
   admin_profile_id?: string | null;
   member_type?: "customer" | "admin";

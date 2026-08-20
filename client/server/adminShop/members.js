@@ -210,7 +210,7 @@ function getMemberLevelLabel(level) {
   return memberLevelLabels[normalizeMemberLevel(level)];
 }
 
-export function normalizeAdminMember(authUser, profile = null, adminProfile = null) {
+export function normalizeAdminMember(authUser, profile = null, adminProfile = null, diamondProfile = null) {
   const user = authUser?.user || authUser || {};
   const authUserId = cleanText(user.id);
   const email = normalizeMemberEmail(user.email || profile?.email);
@@ -223,6 +223,7 @@ export function normalizeAdminMember(authUser, profile = null, adminProfile = nu
   const profileStatus = getMemberProfileStatus({ profile, emailVerified, adminProfile });
   const memberLevel = normalizeMemberLevel(profile?.member_level);
   const couponCode = cleanText(profile?.coupon_code);
+  const partnerName = cleanText(diamondProfile?.partner_name);
 
   return {
     id: authUserId,
@@ -239,6 +240,7 @@ export function normalizeAdminMember(authUser, profile = null, adminProfile = nu
     profile_status_label: getMemberProfileStatusLabel(profileStatus),
     member_level: memberLevel,
     member_level_label: getMemberLevelLabel(memberLevel),
+    partner_name: partnerName,
     is_admin_user: Boolean(adminProfile),
     admin_profile_id: adminProfile?.id || null,
     member_type: adminProfile ? "admin" : "customer",
@@ -264,7 +266,7 @@ function matchesMemberSearch(member, rawSearch) {
 
   const emailSearch = normalizeMemberEmail(search);
   const phoneSearch = normalizePhoneSearch(search);
-  const fields = [member.name, member.email, member.phone].map((value) =>
+  const fields = [member.name, member.email, member.phone, member.partner_name].map((value) =>
     cleanText(value).toLowerCase()
   );
   const rawMatch = fields.some((value) => value.includes(search));
@@ -583,21 +585,36 @@ function mapAdminProfilesByAuthUserId(adminProfiles) {
   return map;
 }
 
+function mapDiamondProfilesByCustomerProfileId(diamondProfiles) {
+  const map = new Map();
+  for (const profile of diamondProfiles || []) {
+    const profileId = cleanText(profile?.customer_profile_id);
+    if (profileId) map.set(profileId, profile);
+  }
+  return map;
+}
+
 async function mergeAuthUsersWithProfiles(authUsers, deps) {
   const users = Array.isArray(authUsers) ? authUsers : [];
   const authUserIds = users.map((user) => user?.id).filter(Boolean);
   const profiles = await deps.fetchProfilesByAuthUserIds(authUserIds);
   const adminProfiles = await deps.fetchAdminProfilesByAuthUserIds(authUserIds);
+  const diamondProfiles = await deps.fetchDiamondProfilesByCustomerProfileIds(
+    profiles.map((profile) => profile?.id).filter(Boolean)
+  );
   const profileByAuthUserId = mapProfilesByAuthUserId(profiles);
   const adminProfileByAuthUserId = mapAdminProfilesByAuthUserId(adminProfiles);
+  const diamondProfileByCustomerProfileId = mapDiamondProfilesByCustomerProfileId(diamondProfiles);
 
-  return users.map((user) =>
-    normalizeAdminMember(
+  return users.map((user) => {
+    const profile = profileByAuthUserId.get(user.id) || null;
+    return normalizeAdminMember(
       user,
-      profileByAuthUserId.get(user.id) || null,
-      adminProfileByAuthUserId.get(user.id) || null
-    )
-  );
+      profile,
+      adminProfileByAuthUserId.get(user.id) || null,
+      profile?.id ? diamondProfileByCustomerProfileId.get(profile.id) || null : null
+    );
+  });
 }
 
 function getManageableMembers(members) {
@@ -990,6 +1007,19 @@ async function fetchDiamondProfile(profileId) {
     )}&select=${diamondProfileSelect}&limit=1`
   );
   return normalizeDiamondProfile(Array.isArray(rows) ? rows[0] || null : null);
+}
+
+async function fetchDiamondProfilesByCustomerProfileIds(profileIds) {
+  const uniqueIds = Array.from(
+    new Set((profileIds || []).map((id) => cleanText(id)).filter(Boolean))
+  );
+  if (!uniqueIds.length) return [];
+
+  const idList = uniqueIds.map((id) => encodeURIComponent(id)).join(",");
+  const rows = await restRows(
+    `/member_diamond_profiles?customer_profile_id=in.(${idList})&select=${diamondProfileSelect}`
+  );
+  return (rows || []).map(normalizeDiamondProfile).filter(Boolean);
 }
 
 async function fetchAllDiamondProfiles() {
@@ -1797,6 +1827,7 @@ export function createAdminMembersHandler(dependencyOverrides = {}) {
     fetchShopOrdersForMember,
     fetchBookingRequestsForMember,
     fetchDiamondProfile,
+    fetchDiamondProfilesByCustomerProfileIds,
     fetchAllDiamondProfiles,
     upsertDiamondProfile,
     fetchPointsLedger,
@@ -1833,6 +1864,7 @@ export const __testing = {
   matchesMemberStatus,
   normalizeDiamondExclusiveCode,
   normalizeDiamondProfile,
+  mapDiamondProfilesByCustomerProfileId,
   normalizePhoneSearch,
   normalizeShopOrder,
   rowsWithNormalizedEmail,

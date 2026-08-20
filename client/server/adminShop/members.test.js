@@ -589,6 +589,9 @@ function createDependencies(options = {}) {
         }));
     }),
     fetchDiamondProfile: vi.fn(async (profileId) => diamondProfileByProfileId.get(profileId) || null),
+    fetchDiamondProfilesByCustomerProfileIds: vi.fn(async (profileIds) =>
+      profileIds.map((profileId) => diamondProfileByProfileId.get(profileId)).filter(Boolean)
+    ),
     fetchAllDiamondProfiles: vi.fn(async () => Array.from(diamondProfileByProfileId.values())),
     upsertDiamondProfile: vi.fn(async (profileId, patch) => {
       const existing = diamondProfileByProfileId.get(profileId);
@@ -689,6 +692,27 @@ describe("admin members API", () => {
     expect(byName.body.members.map((member) => member.name)).toEqual(["Extra Member 12"]);
     expect(byEmail.body.members.map((member) => member.auth_user_id)).toEqual([authUserA]);
     expect(byPhone.body.members.map((member) => member.auth_user_id)).toEqual([authUserB]);
+  });
+
+  it("returns partner names and searches members by partner name", async () => {
+    const deps = createDependencies();
+    const handler = createAdminMembersHandler(deps);
+
+    const listResponse = await invoke(handler, { query: { page: "1" } });
+    const partnerSearch = await invoke(handler, { query: { search: "Slow Partner Cafe" } });
+    const partialPartnerSearch = await invoke(handler, { query: { search: "Partner" } });
+
+    const diamondMember = listResponse.body.members.find((member) => member.auth_user_id === authUserE);
+    const normalMember = listResponse.body.members.find((member) => member.auth_user_id === authUserA);
+    expect(diamondMember).toMatchObject({
+      auth_user_id: authUserE,
+      member_level: "diamond",
+      partner_name: "Slow Partner Cafe",
+    });
+    expect(normalMember.partner_name).toBe("");
+    expect(partnerSearch.body.members.map((member) => member.auth_user_id)).toEqual([authUserE]);
+    expect(partialPartnerSearch.body.members.map((member) => member.auth_user_id)).toEqual([authUserE]);
+    expect(deps.fetchDiamondProfilesByCustomerProfileIds).toHaveBeenCalled();
   });
 
   it("filters by member level and profile status", async () => {

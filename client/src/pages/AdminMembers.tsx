@@ -69,6 +69,10 @@ function getMemberLevelClassName(member: AdminMember) {
   return "bg-stone-100 text-stone-700";
 }
 
+function getPartnerName(member: AdminMember) {
+  return member.partner_name?.trim() || "—";
+}
+
 export default function AdminMembers() {
   const [, setLocation] = useLocation();
   const [authStatus, setAuthStatus] = useState<AdminAuthStatus>("checking");
@@ -229,7 +233,7 @@ export default function AdminMembers() {
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
               <input
                 className={inputClassName("pl-11")}
-                placeholder="搜尋姓名、Email、手機"
+                placeholder="搜尋姓名、Email、手機、合作店家"
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
               />
@@ -284,12 +288,13 @@ export default function AdminMembers() {
           </div>
         </section>
 
-        <section className="mt-6 overflow-hidden rounded-[24px] border border-stone-200 bg-white/90 shadow-sm">
-          <div className="hidden grid-cols-[1fr_1.35fr_0.9fr_0.85fr_0.9fr_1fr_1fr_1fr_0.85fr] gap-3 border-b border-stone-100 bg-[#fffaf4] px-5 py-3 text-xs font-semibold text-stone-500 md:grid">
+        <section className="mt-6 overflow-x-auto rounded-[24px] border border-stone-200 bg-white/90 shadow-sm">
+          <div className="hidden min-w-[1180px] grid-cols-[1fr_1.35fr_0.9fr_0.85fr_1.15fr_0.9fr_1fr_1fr_1fr_0.85fr] gap-3 border-b border-stone-100 bg-[#fffaf4] px-5 py-3 text-xs font-semibold text-stone-500 md:grid">
             <span>姓名</span>
             <span>Email</span>
             <span>手機</span>
             <span>會員等級</span>
+            <span>合作店家</span>
             <span>Email 驗證</span>
             <span>註冊日期</span>
             <span>最後登入</span>
@@ -310,7 +315,7 @@ export default function AdminMembers() {
             {members.map((member) => (
               <button
                 key={member.auth_user_id}
-                className="grid w-full gap-3 px-5 py-4 text-left text-sm text-stone-700 transition hover:bg-[#fffaf4] md:grid-cols-[1fr_1.35fr_0.9fr_0.85fr_0.9fr_1fr_1fr_1fr_0.85fr] md:items-center"
+                className="grid w-full gap-3 px-5 py-4 text-left text-sm text-stone-700 transition hover:bg-[#fffaf4] md:min-w-[1180px] md:grid-cols-[1fr_1.35fr_0.9fr_0.85fr_1.15fr_0.9fr_1fr_1fr_1fr_0.85fr] md:items-center"
                 onClick={() => openMemberDetail(member)}
                 type="button"
               >
@@ -325,6 +330,10 @@ export default function AdminMembers() {
                 <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${getMemberLevelClassName(member)}`}>
                   {member.member_level_label}
                 </span>
+                <p className="max-w-[14rem] truncate text-stone-700" title={member.partner_name?.trim() || undefined}>
+                  <span className="font-medium text-stone-500 md:hidden">合作店家：</span>
+                  {getPartnerName(member)}
+                </p>
                 <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${getVerifiedClassName(member)}`}>
                   {member.email_verified_label}
                 </span>

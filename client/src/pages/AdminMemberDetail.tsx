@@ -490,6 +490,7 @@ export default function AdminMemberDetail() {
               <Field label="Email" value={member.email} />
               <Field label="Email 是否完成驗證" value={member.email_verified ? "已驗證" : "尚未驗證"} />
               <Field label="會員等級" value={member.member_level_label} />
+              <Field label="合作店家" value={detail.diamond_profile?.partner_name || "-"} />
               <Field label="註冊日期" value={formatDate(member.registered_at)} />
               <Field label="最後登入時間" value={formatDate(member.last_login_at)} />
               <Field label="會員資料狀態" value={member.profile_status_label} />

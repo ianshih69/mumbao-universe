@@ -378,8 +378,15 @@ function getPackageUnavailableReason(
   checkIn: string,
   checkOut: string
 ) {
+  const includesSaturdayStayNight = hasSaturdayStayNight(checkIn, checkOut);
+  if (packageType === "villa_18") {
+    if (!includesSaturdayStayNight && guestCount < 18) {
+      return "18 人包棟適用於 18 位以上入住；住宿期間包含週六時則不受此限制。";
+    }
+    return "";
+  }
   if (packageType !== "villa_10") return "";
-  if (hasSaturdayStayNight(checkIn, checkOut)) {
+  if (includesSaturdayStayNight) {
     return "此住宿期間包含週六，週六不提供小包棟方案，請選擇 18 人包棟。";
   }
   if (guestCount >= 18) {
@@ -388,9 +395,9 @@ function getPackageUnavailableReason(
   return "";
 }
 
-function getPackageSelectionNote(packageType: BookingPackageType, guestCount: number) {
-  if (packageType === "villa_18" && guestCount < 18) {
-    return "此方案為 18 人包棟；未滿 18 位入住仍以 18 人包棟房價計算。";
+function getPackageSelectionNote(packageType: BookingPackageType, guestCount: number, checkIn: string, checkOut: string) {
+  if (packageType === "villa_18" && guestCount < 18 && hasSaturdayStayNight(checkIn, checkOut)) {
+    return "此住宿期間包含週六，可選擇 18 人包棟；未滿 18 位入住仍依 18 人包棟房價計算。";
   }
   return "";
 }
@@ -401,6 +408,9 @@ function getQuoteUnavailableMessage(reason?: string) {
   }
   if (reason === "guest_count_requires_full_villa") {
     return "18 位以上入住請選擇 18 人包棟方案。";
+  }
+  if (reason === "full_villa_requires_18_guests") {
+    return "18 人包棟適用於 18 位以上入住；住宿期間包含週六時則不受此限制。";
   }
   if (reason === "unsupported_guest_count") {
     return "目前最多可接待 23 位入住。";
@@ -577,7 +587,12 @@ export default function Booking() {
     form.check_in,
     form.check_out
   );
-  const selectedPackageSelectionNote = getPackageSelectionNote(form.selected_package_type, guestCount);
+  const selectedPackageSelectionNote = getPackageSelectionNote(
+    form.selected_package_type,
+    guestCount,
+    form.check_in,
+    form.check_out
+  );
   const canShowOrderSummary = canShowStayOptions && selectedPackageQuantity === 1 && !selectedPackageUnavailableReason;
   const guestCountExceedsLimit = guestCount > MAX_BOOKING_PRICING_GUESTS;
   const quoteReady = priceQuote?.pricing.status === "resolved";
@@ -686,6 +701,7 @@ export default function Booking() {
     setShowContactForm(false);
     setPriceQuote(null);
     setPriceQuoteError("");
+    setError(selectedPackageUnavailableReason);
   }, [form.selected_package_quantity, selectedPackageUnavailableReason]);
 
   useEffect(() => {
@@ -955,7 +971,7 @@ export default function Booking() {
     if (unavailableReason) {
       setExpandedPackageType(packageType);
       setMessage("");
-      setError("");
+      setError(unavailableReason);
       return;
     }
     setForm((current) => ({
@@ -1568,7 +1584,7 @@ export default function Booking() {
                         const selected = form.selected_package_type === option.value && selectedPackageQuantity === 1;
                         const expanded = expandedPackageType === option.value;
                         const unavailableReason = getPackageUnavailableReason(option.value, guestCount, form.check_in, form.check_out);
-                        const selectionNote = getPackageSelectionNote(option.value, guestCount);
+                        const selectionNote = getPackageSelectionNote(option.value, guestCount, form.check_in, form.check_out);
                         const unavailable = Boolean(unavailableReason);
                         const detailsId = `booking-package-${option.value}-details`;
                         return (

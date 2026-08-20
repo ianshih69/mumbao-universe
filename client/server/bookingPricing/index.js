@@ -128,8 +128,9 @@ export function resolvePricingGuestCount(guestCount, packageType = "villa_10", d
   if (!Number.isInteger(guestCount) || guestCount <= 0) {
     return { ok: false, reason: "invalid_guest_count", pricingGuestCount: null };
   }
+  const includesSaturdayStayNight = hasSaturdayStayNight(dateRange.checkIn, dateRange.checkOut);
   if (packageType === "villa_10") {
-    if (hasSaturdayStayNight(dateRange.checkIn, dateRange.checkOut)) {
+    if (includesSaturdayStayNight) {
       return { ok: false, reason: "saturday_small_package_unavailable", pricingGuestCount: null };
     }
     if (guestCount >= extraBedBaseGuestCount) {
@@ -142,6 +143,9 @@ export function resolvePricingGuestCount(guestCount, packageType = "villa_10", d
   }
   if (packageType !== "villa_18") {
     return { ok: false, reason: "unsupported_package_type", pricingGuestCount: null };
+  }
+  if (guestCount < extraBedBaseGuestCount && !includesSaturdayStayNight) {
+    return { ok: false, reason: "full_villa_requires_18_guests", pricingGuestCount: null };
   }
   if (guestCount <= extraBedBaseGuestCount) {
     return { ok: true, pricingGuestCount: extraBedBaseGuestCount, extraBedCount: 0, extraBedUnitPrice, extraBedAmount: 0 };

@@ -97,6 +97,17 @@ const calendarFilters: Array<{ value: BookingCalendarFilter; label: string }> = 
   { value: "room", label: "只看單間" },
 ];
 
+const bookingGalleryImages = [
+  { src: "/images/Main/STime.JPG", alt: "慢慢蒔光住宿空間外觀" },
+  { src: "/images/aboutMe/aboutMe-2.jpg", alt: "慢慢蒔光室內公共空間" },
+  { src: "/images/Room/S521.jpg", alt: "慢慢蒔光主題住宿空間" },
+  { src: "/images/Room/S360.jpg", alt: "慢慢蒔光主題客房空間" },
+  { src: "/images/Room/S530.jpg", alt: "慢慢蒔光療癒住宿空間" },
+  { src: "/images/Room/S888.jpg", alt: "慢慢蒔光藝術住宿空間" },
+];
+
+const bookingAmenityLabels = ["客廳", "餐廳", "歡唱設備", "麻將房", "星空露臺", "戶外烤肉區"];
+
 const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
 function fieldClassName() {
   return "h-12 rounded-[8px] border border-[#eadfce] bg-white px-3 text-sm text-stone-900 outline-none transition focus:border-[#b7957c] focus:ring-2 focus:ring-[#eadfce]";
@@ -328,57 +339,6 @@ function calendarDayAriaLabel(day: BookingCalendarDayView, minDate: string, maxD
   return `${dateLabel}，${labels.modeLabel}，${availability}`;
 }
 
-function Stepper({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-  hint,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max?: number;
-  onChange: (value: number) => void;
-  hint?: string;
-}) {
-  const canDecrease = value > min;
-  const canIncrease = max === undefined || value < max;
-
-  return (
-    <div className="rounded-[12px] border border-[#eadfce] bg-white px-4 py-3">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-stone-800">{label}</p>
-          {hint && <p className="mt-1 text-xs text-stone-500">{hint}</p>}
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={!canDecrease}
-            onClick={() => onChange(value - 1)}
-            aria-label={`${label}減少`}
-          >
-            <Minus className="h-4 w-4" />
-          </button>
-          <span className="min-w-8 text-center text-lg font-semibold text-stone-900">{value}</span>
-          <button
-            type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={!canIncrease}
-            onClick={() => onChange(value + 1)}
-            aria-label={`${label}增加`}
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function Booking() {
   const { session } = useCustomerAuth();
   const [form, setForm] = useState<BookingForm>(() => getInitialBookingForm());
@@ -389,7 +349,9 @@ export default function Booking() {
   const [calendarDaySources, setCalendarDaySources] = useState<NonNullable<BookingCalendarResult["days"]>>([]);
   const [calendarFilter, setCalendarFilter] = useState<BookingCalendarFilter>("all");
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [peopleOpen, setPeopleOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState<CalendarSelectionMode>("checkIn");
+  const [selectedGalleryIndex, setSelectedGalleryIndex] = useState(0);
   const [maxDate, setMaxDate] = useState(() => addMonthsToDate(todayText(), DEFAULT_BOOKING_SETTINGS.bookingWindowMonths));
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -405,6 +367,7 @@ export default function Booking() {
   const [bookingTestError, setBookingTestError] = useState("");
   const bookingSearchRef = useRef<HTMLDivElement | null>(null);
   const calendarPanelRef = useRef<HTMLElement | null>(null);
+  const peoplePanelRef = useRef<HTMLElement | null>(null);
 
   const minDate = todayText();
   const maxMonth = monthStart(maxDate);
@@ -437,12 +400,12 @@ export default function Booking() {
   const guestSummary = [
     `${form.adults} 位成人`,
     form.children > 0 ? `${form.children} 位孩童` : null,
-    stayTypeDisplay(form.stay_type),
   ].filter(Boolean).join("｜");
   const contactDetailsComplete = Boolean(form.guest_name.trim() && isValidEmail(form.email) && isValidPhone(form.phone));
   const canShowStayOptions = bookingIsOpen && selectedIsAvailable && !submittedRequestId;
   const canShowContactForm = canShowStayOptions;
   const guestCount = form.adults + form.children;
+  const activeGalleryImage = bookingGalleryImages[selectedGalleryIndex] || bookingGalleryImages[0];
 
   useEffect(() => {
     if (!isBookingTestUnlocked) return;
@@ -507,18 +470,23 @@ export default function Booking() {
   }, [form]);
 
   useEffect(() => {
-    if (!calendarOpen) return;
+    if (!calendarOpen && !peopleOpen) return;
 
     function handlePointerDown(event: MouseEvent | TouchEvent) {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (bookingSearchRef.current?.contains(target)) return;
       if (calendarPanelRef.current?.contains(target)) return;
+      if (peoplePanelRef.current?.contains(target)) return;
       setCalendarOpen(false);
+      setPeopleOpen(false);
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setCalendarOpen(false);
+      if (event.key === "Escape") {
+        setCalendarOpen(false);
+        setPeopleOpen(false);
+      }
     }
 
     document.addEventListener("mousedown", handlePointerDown);
@@ -529,7 +497,7 @@ export default function Booking() {
       document.removeEventListener("touchstart", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [calendarOpen]);
+  }, [calendarOpen, peopleOpen]);
 
   function updateField<K extends keyof BookingForm>(field: K, value: BookingForm[K]) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -564,6 +532,7 @@ export default function Booking() {
     const nextMode = mode === "checkOut" && !form.check_in ? "checkIn" : mode;
     setSelectionMode(nextMode);
     setCalendarOpen(true);
+    setPeopleOpen(false);
     setError("");
     if (nextMode === "checkIn" && form.check_in) {
       setVisibleMonth(monthStart(form.check_in));
@@ -572,6 +541,12 @@ export default function Booking() {
     if (nextMode === "checkOut") {
       setVisibleMonth(monthStart(form.check_out || form.check_in || minDate));
     }
+  }
+
+  function togglePeoplePopover() {
+    setPeopleOpen((current) => !current);
+    setCalendarOpen(false);
+    setError("");
   }
 
   function selectDate(date: string) {
@@ -617,20 +592,13 @@ export default function Booking() {
       if (!current.check_in || (current.check_in && current.check_out) || date < current.check_in) {
         const stayType = saleModeToStayType(clickedDay.saleMode) || getDefaultStayType(settings);
         const nextCheckOut = current.check_out && date < current.check_out ? current.check_out : addDays(date, 1);
-        const hasCompleteRange = Boolean(current.check_out);
-        if (hasCompleteRange) {
-          setMessage("");
-          setCalendarOpen(false);
-          setSelectionMode("checkIn");
-        } else {
-          setMessage(`您已選擇${stayType === "villa" ? "包棟" : "單間"}住宿，請選擇退房日期。`);
-          setSelectionMode("checkOut");
-          setCalendarOpen(true);
-        }
+        setMessage(`您已選擇${stayType === "villa" ? "包棟" : "單間"}住宿，請選擇退房日期。`);
+        setSelectionMode("checkOut");
+        setCalendarOpen(true);
         return {
           ...current,
           check_in: date,
-          check_out: hasCompleteRange ? nextCheckOut : "",
+          check_out: current.check_out ? nextCheckOut : "",
           stay_type: stayType,
           room_count: stayType === "villa" ? settings.totalRoomCount : clampRoomCount(current.room_count, settings.totalRoomCount),
         };
@@ -790,25 +758,23 @@ export default function Booking() {
     );
   }
 
-  function renderMonth(month: string, secondary = false) {
+  function renderMonth(month: string) {
     const dates = getMonthDates(month);
 
     return (
-      <div className={cn("rounded-[16px] border border-[#eadfce] bg-white p-4 shadow-sm", secondary && "hidden md:block")}>
-        <h3 className="text-center font-serif text-xl text-stone-900">{monthLabel(month)}</h3>
-        <div className="mt-4 grid grid-cols-7 gap-1 text-center text-xs font-medium text-stone-400">
+      <div>
+        <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-stone-400">
           {weekdays.map((weekday) => (
             <span key={weekday}>{weekday}</span>
           ))}
         </div>
         <div className="mt-2 grid grid-cols-7 gap-1">
           {dates.map((date, index) => {
-            if (!date) return <div key={`blank-${month}-${index}`} className="min-h-[58px] md:min-h-[74px]" />;
+            if (!date) return <div key={`blank-${month}-${index}`} className="h-9" />;
 
             const unavailable = unavailableDates.has(date);
             const outOfRange = date < minDate || date > maxDate || !bookingIsOpen;
             const day = getCalendarDay(date);
-            const labels = getCalendarDayLabels(day, minDate, maxDate);
             const currentSaleMode = stayTypeToSaleMode(form.stay_type);
             const selectingCheckout = selectionMode === "checkOut" || Boolean(form.check_in && !form.check_out);
             const canUseAsCheckout =
@@ -826,7 +792,8 @@ export default function Booking() {
             const inRange = isDateInRange(date, form.check_in, form.check_out);
             const filteredOut = isCalendarFilterMismatch(day, calendarFilter) && !canUseAsCheckout;
             const disabled = outOfRange || filteredOut || (!isBookableStayNight(day, minDate, maxDate) && !canUseAsCheckout);
-            const muted = disabled || filteredOut || unavailable || labels.unavailable;
+            const muted = disabled || filteredOut || unavailable || !day.isAvailable || day.saleMode === "closed";
+            const isToday = date === minDate;
 
             return (
               <button
@@ -835,34 +802,17 @@ export default function Booking() {
                 disabled={disabled}
                 onClick={() => selectDate(date)}
                 className={cn(
-                  "flex min-h-[58px] flex-col items-center justify-center gap-0.5 rounded-[10px] border px-1 py-1 text-center text-[10px] leading-tight transition md:min-h-[74px] md:text-xs",
-                  muted && "border-stone-100 bg-stone-100 text-stone-400",
+                  "flex h-9 items-center justify-center rounded-full text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
+                  muted && "text-stone-300",
                   disabled && "cursor-not-allowed",
-                  !disabled && "border-[#eadfce] bg-[#fffdf9] text-stone-700 hover:border-[#b7957c] hover:bg-[#f7f1e9]",
-                  unavailable && canUseAsCheckout && "border-[#eadfce] bg-[#fffaf3] text-stone-500",
-                  inRange && !disabled && "border-[#b7957c] bg-[#f3eadf] text-[#765d4a]",
-                  (isCheckIn || isCheckOut) && "border-[#765d4a] bg-[#8b6f5b] font-semibold text-white hover:bg-[#765d4a]"
+                  !disabled && "text-stone-700 hover:bg-[#f7f1e9]",
+                  isToday && !isCheckIn && !isCheckOut && "ring-1 ring-[#d7c5b2]",
+                  inRange && !disabled && !isCheckIn && !isCheckOut && "bg-[#f3eadf] text-[#765d4a]",
+                  (isCheckIn || isCheckOut) && "bg-[#8b6f5b] text-white shadow-sm hover:bg-[#765d4a]"
                 )}
                 aria-label={calendarDayAriaLabel(day, minDate, maxDate)}
               >
-                <span className="text-sm font-semibold md:text-base">{Number(date.slice(8, 10))}</span>
-                <span
-                  className={cn(
-                    "rounded-full px-1.5 py-0.5 text-[9px] font-medium leading-none md:text-[10px]",
-                    day.saleMode === "whole_house" && !muted && "bg-[#8b6f5b] text-white",
-                    day.saleMode === "room" && !muted && "bg-[#d4ad72] text-white",
-                    muted && "bg-stone-200 text-stone-500",
-                    (isCheckIn || isCheckOut) && "bg-white/20 text-white"
-                  )}
-                >
-                  {labels.modeLabel}
-                </span>
-                {labels.statusLabel && (
-                  <span className="max-w-full truncate text-[9px] md:text-[10px]">
-                    <span className="hidden md:inline">{labels.statusLabel}</span>
-                    <span className="md:hidden">{labels.mobileStatusLabel}</span>
-                  </span>
-                )}
+                {Number(date.slice(8, 10))}
               </button>
             );
           })}
@@ -909,13 +859,13 @@ export default function Booking() {
 
           <div
             ref={bookingSearchRef}
-            className="mt-6 rounded-[20px] border border-[#eadfce] bg-white p-3 shadow-sm md:p-4"
+            className="relative mt-6 rounded-[20px] border border-[#eadfce] bg-white p-3 shadow-sm md:p-4"
           >
-            <div className="grid gap-2 md:grid-cols-[1fr_1fr_0.85fr]">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_0.8fr]">
               <button
                 type="button"
                 className={cn(
-                  "rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
+                  "min-h-[72px] rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
                   calendarOpen && selectionMode === "checkIn"
                     ? "border-[#8b6f5b] bg-[#fff8ea]"
                     : "border-[#eadfce] bg-[#fffdf9]"
@@ -931,7 +881,7 @@ export default function Booking() {
               <button
                 type="button"
                 className={cn(
-                  "rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
+                  "min-h-[72px] rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
                   calendarOpen && selectionMode === "checkOut"
                     ? "border-[#8b6f5b] bg-[#fff8ea]"
                     : "border-[#eadfce] bg-[#fffdf9]"
@@ -944,43 +894,47 @@ export default function Booking() {
                   {formatSearchDate(form.check_out)}
                 </span>
               </button>
-              <div className="rounded-[14px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
+              <button
+                type="button"
+                className={cn(
+                  "min-h-[72px] rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce] sm:col-span-2 lg:col-span-1",
+                  peopleOpen ? "border-[#8b6f5b] bg-[#fff8ea]" : "border-[#eadfce] bg-[#fffdf9]"
+                )}
+                onClick={togglePeoplePopover}
+                aria-expanded={peopleOpen}
+              >
                 <span className="block text-xs font-medium text-stone-500">入住人數</span>
                 <span className="mt-1 block text-base font-semibold text-stone-900">{guestCount} 位</span>
-              </div>
+              </button>
             </div>
             {isCalendarLoading && <p className="mt-3 text-sm text-stone-500">房況載入中...</p>}
-          </div>
 
-          {calendarOpen && (
-            <section
-              ref={calendarPanelRef}
-              className="mt-3 rounded-[20px] border border-[#eadfce] bg-white p-4 shadow-sm md:p-6"
-            >
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h2 className="text-2xl font-semibold text-stone-900">
-                    {selectionMode === "checkOut" ? "選擇退房日期" : "選擇入住日期"}
-                  </h2>
-                  <p className="mt-1 text-sm text-stone-500">
-                    可預約日期從今天開始，最多可選到 {formatDate(maxDate)}。
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
+            {calendarOpen && (
+              <section
+                ref={calendarPanelRef}
+                className={cn(
+                  "absolute left-0 right-0 top-full z-40 mt-3 rounded-[18px] border border-[#eadfce] bg-white p-4 shadow-xl sm:right-auto sm:w-[340px]",
+                  selectionMode === "checkOut" ? "sm:left-[calc(50%+0.25rem)] lg:left-[calc(33.333%+0.25rem)]" : "sm:left-0"
+                )}
+              >
+                <div className="flex items-center justify-between gap-3">
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
+                    className="h-9 w-9 rounded-full"
                     disabled={visibleMonth <= monthStart(minDate)}
                     onClick={() => setVisibleMonth((current) => addMonths(current, -1))}
                     aria-label="上一個月"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
+                  <p className="font-serif text-xl text-stone-900">{monthLabel(visibleMonth)}</p>
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
+                    className="h-9 w-9 rounded-full"
                     disabled={visibleMonth >= maxMonth}
                     onClick={() => setVisibleMonth((current) => addMonths(current, 1))}
                     aria-label="下一個月"
@@ -988,82 +942,119 @@ export default function Booking() {
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
-              </div>
+                <p className="mt-1 text-center text-xs text-stone-500">
+                  {selectionMode === "checkOut" ? "請選擇退房日期" : "請選擇入住日期"}
+                </p>
 
-              <div className="mt-4 rounded-[14px] bg-[#fbf7f1] px-3 py-2.5 md:px-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="mr-1 text-sm font-medium text-stone-700">查看日期：</p>
-                  <div className="grid flex-1 grid-cols-3 gap-2 sm:flex sm:flex-none sm:items-center">
-                    {calendarFilters.map((filter) => (
+                <div className="mt-3 grid grid-cols-3 gap-1 rounded-full bg-[#fbf7f1] p-1">
+                  {calendarFilters.map((filter) => (
+                    <button
+                      key={filter.value}
+                      type="button"
+                      onClick={() => handleCalendarFilterChange(filter.value)}
+                      className={cn(
+                        "rounded-full px-2 py-1.5 text-xs font-medium transition",
+                        calendarFilter === filter.value
+                          ? "bg-[#8b6f5b] text-white"
+                          : "text-stone-500 hover:bg-white hover:text-[#765d4a]"
+                      )}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-4">
+                  {renderMonth(visibleMonth)}
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-3 text-[11px] text-stone-500">
+                  <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[#8b6f5b]" />已選</span>
+                  <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[#f3eadf]" />住宿期間</span>
+                  <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full border border-[#d7c5b2]" />今天</span>
+                  <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-stone-200" />不可選</span>
+                </div>
+
+                {message && <div className="mt-3 rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-700">{message}</div>}
+                {error && <div className="mt-3 rounded-[8px] border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">{error}</div>}
+              </section>
+            )}
+
+            {peopleOpen && (
+              <section
+                ref={peoplePanelRef}
+                className="absolute left-0 right-0 top-full z-40 mt-3 rounded-[18px] border border-[#eadfce] bg-white p-4 shadow-xl sm:left-auto sm:right-0 sm:w-[320px]"
+              >
+                <div className="grid gap-3">
+                  <div className="flex items-center justify-between gap-4 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-3 py-3">
+                    <div>
+                      <p className="text-sm font-semibold text-stone-800">成人</p>
+                      <p className="mt-0.5 text-xs text-stone-500">13歲以上</p>
+                    </div>
+                    <div className="flex items-center gap-3">
                       <button
-                        key={filter.value}
                         type="button"
-                        onClick={() => handleCalendarFilterChange(filter.value)}
-                        className={cn(
-                          "rounded-full border px-3 py-1.5 text-xs font-medium transition md:px-4",
-                          calendarFilter === filter.value
-                            ? "border-[#8b6f5b] bg-[#8b6f5b] text-white"
-                            : "border-[#d7c5b2] bg-white text-stone-600 hover:bg-[#f7f1e9]"
-                        )}
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={form.adults <= 1}
+                        onClick={() => updateField("adults", form.adults - 1)}
+                        aria-label="成人減少"
                       >
-                        {filter.label}
+                        <Minus className="h-4 w-4" />
                       </button>
-                    ))}
+                      <span className="min-w-6 text-center text-base font-semibold text-stone-900">{form.adults}</span>
+                      <button
+                        type="button"
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={form.adults >= 30}
+                        onClick={() => updateField("adults", form.adults + 1)}
+                        aria-label="成人增加"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-3 py-3">
+                    <div>
+                      <p className="text-sm font-semibold text-stone-800">孩童</p>
+                      <p className="mt-0.5 text-xs text-stone-500">2～12歲</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={form.children <= 0}
+                        onClick={() => updateField("children", form.children - 1)}
+                        aria-label="孩童減少"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </button>
+                      <span className="min-w-6 text-center text-base font-semibold text-stone-900">{form.children}</span>
+                      <button
+                        type="button"
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={form.children >= 30}
+                        onClick={() => updateField("children", form.children + 1)}
+                        aria-label="孩童增加"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 rounded-[12px] bg-[#fbf7f1] px-3 py-3">
+                    <div>
+                      <p className="text-sm font-semibold text-stone-700">嬰幼兒</p>
+                      <p className="mt-0.5 text-xs text-stone-500">0～1歲</p>
+                    </div>
+                    <span className="text-xs text-stone-500">可於備註補充</span>
                   </div>
                 </div>
-                <p className="mt-2 text-[11px] leading-5 text-stone-500 md:text-xs">
-                  包棟：整棟住宿空間一起預訂。單間：可依需求選擇個別客房。
-                </p>
-              </div>
+              </section>
+            )}
+          </div>
 
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                {renderMonth(visibleMonth)}
-                {renderMonth(addMonths(visibleMonth, 1), true)}
-              </div>
-
-              <div className="mt-5 flex flex-col gap-3 rounded-[12px] bg-[#fbf7f1] p-4 text-sm text-stone-600 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="font-semibold text-stone-800">
-                    {form.check_in ? selectedStayTitle(form.stay_type) : "請選擇入住日期"}
-                  </p>
-                  {form.check_in ? (
-                    <div className="mt-2 grid gap-1 leading-6">
-                      <p>
-                        {formatBookingSummaryDate(form.check_in)}入住
-                        {form.check_out ? `－${formatBookingSummaryDate(form.check_out, false)}退房` : "－請選擇退房日期"}
-                      </p>
-                      <p>{form.check_out ? `共 ${nightCount} 晚` : "尚未完成日期選擇"}</p>
-                    </div>
-                  ) : (
-                    <p className="mt-1">請選擇可預約的入住與退房日期。</p>
-                  )}
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row md:items-center">
-                  {form.check_in && (
-                    <button
-                      type="button"
-                      className="rounded-[8px] border border-[#d7c5b2] px-4 py-2 text-xs font-medium text-stone-600 transition hover:bg-white hover:text-[#765d4a]"
-                      onClick={clearDateSelection}
-                    >
-                      重新選擇日期
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-3 text-xs text-stone-500">
-                <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-[#8b6f5b]" />包棟</span>
-                <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-[#d4ad72]" />單間</span>
-                <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-stone-100" />不可預約</span>
-                <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded bg-[#8b6f5b]" />已選日期</span>
-              </div>
-
-              {message && <div className="mt-4 rounded-[8px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-700">{message}</div>}
-              {error && <div className="mt-4 rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">{error}</div>}
-            </section>
-          )}
-
-          {!calendarOpen && (message || error) && (
+          {!calendarOpen && !peopleOpen && (message || error) && (
             <div
               className={cn(
                 "mt-4 rounded-[8px] border px-4 py-3 text-sm leading-6",
@@ -1073,31 +1064,86 @@ export default function Booking() {
               {error || message}
             </div>
           )}
-
           {canShowStayOptions && (
-            <section className="mt-6 rounded-[20px] border border-[#eadfce] bg-white p-5 shadow-sm md:p-6">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-2xl font-semibold text-stone-900">入住人數</h2>
-                  <p className="mt-1 text-sm leading-6 text-stone-500">請填寫本次入住人數。</p>
+            <section className="mt-6 overflow-hidden rounded-[20px] border border-[#eadfce] bg-white shadow-sm">
+              <div className="grid gap-0 lg:grid-cols-[1.25fr_0.95fr]">
+                <div className="border-b border-[#eadfce] p-4 lg:border-b-0 lg:border-r lg:p-5">
+                  <div className="overflow-hidden rounded-[16px] bg-[#fbf7f1]">
+                    <img
+                      src={activeGalleryImage.src}
+                      alt={activeGalleryImage.alt}
+                      className="aspect-[4/3] w-full object-cover sm:aspect-[16/10] lg:aspect-[4/3]"
+                    />
+                  </div>
+                  <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                    {bookingGalleryImages.map((image, index) => (
+                      <button
+                        key={image.src}
+                        type="button"
+                        className={cn(
+                          "h-16 w-20 flex-none overflow-hidden rounded-[10px] border transition",
+                          selectedGalleryIndex === index
+                            ? "border-[#8b6f5b] ring-2 ring-[#eadfce]"
+                            : "border-[#eadfce] hover:border-[#b7957c]"
+                        )}
+                        onClick={() => setSelectedGalleryIndex(index)}
+                        aria-label="切換住宿空間照片"
+                      >
+                        <img src={image.src} alt="" className="h-full w-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <Users className="h-6 w-6 text-[#8b6f5b]" />
-              </div>
 
-              <div className="mt-4 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3 text-sm leading-6 text-stone-600">
-                <p>
-                  <span className="font-medium text-[#765d4a]">住宿方式</span>｜{stayTypeDisplay(form.stay_type)}
-                </p>
-                {form.stay_type === "villa" && <p className="text-xs text-stone-500">一天僅接待一組旅客</p>}
-              </div>
+                <div className="grid gap-5 p-5 md:p-6">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">STAY</p>
+                    <h2 className="mt-2 font-serif text-3xl font-light text-stone-900">
+                      {form.stay_type === "villa" ? "包棟" : "單間住宿"}
+                    </h2>
+                    <p className="mt-2 text-sm leading-6 text-stone-500">
+                      依目前選擇的日期與人數，送出後由我們確認房況及訂房細節。
+                    </p>
+                  </div>
 
-              <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                <Stepper label="成人" value={form.adults} min={1} max={30} onChange={(value) => updateField("adults", value)} />
-                <Stepper label="孩童" value={form.children} min={0} max={30} onChange={(value) => updateField("children", value)} />
-              </div>
+                  <div className="grid gap-3 text-sm text-stone-600">
+                    <div className="rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
+                      <p className="text-xs font-medium text-stone-500">住宿日期</p>
+                      <p className="mt-1 font-semibold text-stone-900">
+                        {formatSearchDate(form.check_in)}－{formatSearchDate(form.check_out)}
+                      </p>
+                      <p className="mt-1 text-xs text-stone-500">共 {nightCount} 晚</p>
+                    </div>
 
-              <div className="mt-4 rounded-[12px] bg-[#f7f1e9] px-4 py-3 text-sm font-medium text-[#765d4a]">
-                {guestSummary}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
+                        <p className="flex items-center gap-2 text-xs font-medium text-stone-500">
+                          <Users className="h-3.5 w-3.5" />
+                          入住人數
+                        </p>
+                        <p className="mt-1 font-semibold text-stone-900">{guestSummary}</p>
+                      </div>
+                      <div className="rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
+                        <p className="text-xs font-medium text-stone-500">住宿方式</p>
+                        <p className="mt-1 font-semibold text-stone-900">{stayTypeDisplay(form.stay_type)}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-stone-500">設施</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {bookingAmenityLabels.map((amenity) => (
+                        <span
+                          key={amenity}
+                          className="rounded-full border border-[#eadfce] bg-[#fbf7f1] px-3 py-1 text-xs font-medium text-[#765d4a]"
+                        >
+                          {amenity}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             </section>
           )}

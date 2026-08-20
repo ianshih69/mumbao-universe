@@ -75,6 +75,7 @@ const emptyForm: BookingForm = {
   adults: 2,
   children: 0,
   infants: 0,
+  selected_package_quantity: 0,
   room_count: DEFAULT_BOOKING_SETTINGS.totalRoomCount,
   has_pets: false,
   pet_count: 0,
@@ -414,7 +415,9 @@ export default function Booking() {
   ].filter(Boolean).join("｜");
   const contactDetailsComplete = Boolean(form.guest_name.trim() && isValidEmail(form.email) && isValidPhone(form.phone));
   const canShowStayOptions = bookingIsOpen && selectedIsAvailable && !submittedRequestId;
-  const canShowContactForm = canShowStayOptions && showContactForm;
+  const selectedPackageQuantity = form.selected_package_quantity;
+  const canShowOrderSummary = canShowStayOptions && selectedPackageQuantity === 1;
+  const canShowContactForm = canShowOrderSummary && showContactForm;
   const guestCount = form.adults + form.children;
   const activeGalleryImage = bookingGalleryImages[selectedGalleryIndex] || bookingGalleryImages[0];
 
@@ -481,6 +484,24 @@ export default function Booking() {
   }, [form]);
 
   useEffect(() => {
+    if (isCalendarLoading || form.selected_package_quantity === 0) return;
+    if (bookingIsOpen && form.check_in && form.check_out && selectedRangeIssue === "ok") return;
+
+    setForm((current) =>
+      current.selected_package_quantity === 0
+        ? current
+        : {
+            ...current,
+            selected_package_quantity: 0,
+          }
+    );
+    setShowContactForm(false);
+    if (form.check_in && form.check_out && selectedRangeIssue !== "ok") {
+      setError("日期或房況已變更，請重新確認可預約日期後再選擇方案。");
+    }
+  }, [bookingIsOpen, form.check_in, form.check_out, form.selected_package_quantity, isCalendarLoading, selectedRangeIssue]);
+
+  useEffect(() => {
     if (!calendarOpen && !peopleOpen) return;
 
     function handlePointerDown(event: MouseEvent | TouchEvent) {
@@ -524,9 +545,11 @@ export default function Booking() {
         check_in: "",
         check_out: "",
         stay_type: stayType,
+        selected_package_quantity: 0,
         room_count: stayType === "villa" ? settings.totalRoomCount : clampRoomCount(current.room_count, settings.totalRoomCount),
       };
     });
+    setShowContactForm(false);
     setMessage("");
     setError("");
     setSubmittedRequestId("");
@@ -665,6 +688,16 @@ export default function Booking() {
     }
   }
 
+  function handlePackageQuantityChange(nextQuantity: number) {
+    const quantity = Math.min(Math.max(nextQuantity, 0), 1);
+    setForm((current) => ({ ...current, selected_package_quantity: quantity }));
+    if (quantity === 0) {
+      setShowContactForm(false);
+    }
+    setMessage("");
+    setError("");
+  }
+
   function handleStartBooking() {
     if (!form.check_in || !form.check_out) {
       setError("請先確認入住與退房日期。");
@@ -680,6 +713,10 @@ export default function Booking() {
     }
     if (form.adults < 1) {
       setError("成人至少需 1 位。");
+      return;
+    }
+    if (selectedPackageQuantity !== 1) {
+      setError("請先選擇包棟方案。");
       return;
     }
 
@@ -1132,97 +1169,173 @@ export default function Booking() {
             </div>
           )}
           {canShowStayOptions && (
-            <section className="mt-6 overflow-hidden rounded-[20px] border border-[#eadfce] bg-white shadow-sm">
-              <div className="grid gap-0 lg:grid-cols-[1.25fr_0.95fr]">
-                <div className="border-b border-[#eadfce] p-4 lg:border-b-0 lg:border-r lg:p-5">
-                  <div className="overflow-hidden rounded-[16px] bg-[#fbf7f1]">
-                    <img
-                      src={activeGalleryImage.src}
-                      alt={activeGalleryImage.alt}
-                      className="aspect-[4/3] w-full object-cover sm:aspect-[16/10] lg:aspect-[4/3]"
-                    />
-                  </div>
-                  <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                    {bookingGalleryImages.map((image, index) => (
-                      <button
-                        key={image.src}
-                        type="button"
-                        className={cn(
-                          "h-16 w-20 flex-none overflow-hidden rounded-[10px] border transition",
-                          selectedGalleryIndex === index
-                            ? "border-[#8b6f5b] ring-2 ring-[#eadfce]"
-                            : "border-[#eadfce] hover:border-[#b7957c]"
-                        )}
-                        onClick={() => setSelectedGalleryIndex(index)}
-                        aria-label="切換住宿空間照片"
-                      >
-                        <img src={image.src} alt="" className="h-full w-full object-cover" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid gap-5 p-5 md:p-6">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">STAY</p>
-                    <h2 className="mt-2 font-serif text-3xl font-light text-stone-900">
-                      {form.stay_type === "villa" ? "包棟" : "單間住宿"}
-                    </h2>
-                    <p className="mt-2 text-sm leading-6 text-stone-500">
-                      依目前選擇的日期與人數，送出後由我們確認房況及訂房細節。
-                    </p>
-                  </div>
-
-                  <div className="grid gap-3 text-sm text-stone-600">
-                    <div className="rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
-                      <p className="text-xs font-medium text-stone-500">住宿日期</p>
-                      <p className="mt-1 font-semibold text-stone-900">
-                        {formatSearchDate(form.check_in)}－{formatSearchDate(form.check_out)}
-                      </p>
-                      <p className="mt-1 text-xs text-stone-500">共 {nightCount} 晚</p>
+            <section
+              className={cn(
+                "mt-6 grid gap-4",
+                canShowOrderSummary && "lg:grid-cols-[minmax(0,1fr)_340px]"
+              )}
+            >
+              <div className="overflow-hidden rounded-[20px] border border-[#eadfce] bg-white shadow-sm">
+                <div className="grid gap-0 lg:grid-cols-[1.25fr_0.95fr]">
+                  <div className="border-b border-[#eadfce] p-4 lg:border-b-0 lg:border-r lg:p-5">
+                    <div className="overflow-hidden rounded-[16px] bg-[#fbf7f1]">
+                      <img
+                        src={activeGalleryImage.src}
+                        alt={activeGalleryImage.alt}
+                        className="aspect-[4/3] w-full object-cover sm:aspect-[16/10] lg:aspect-[4/3]"
+                      />
                     </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
-                        <p className="flex items-center gap-2 text-xs font-medium text-stone-500">
-                          <Users className="h-3.5 w-3.5" />
-                          入住人數
-                        </p>
-                        <p className="mt-1 font-semibold text-stone-900">{guestSummary}</p>
-                      </div>
-                      <div className="rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
-                        <p className="text-xs font-medium text-stone-500">住宿方式</p>
-                        <p className="mt-1 font-semibold text-stone-900">{stayTypeDisplay(form.stay_type)}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-stone-500">設施</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {bookingAmenityLabels.map((amenity) => (
-                        <span
-                          key={amenity}
-                          className="rounded-full border border-[#eadfce] bg-[#fbf7f1] px-3 py-1 text-xs font-medium text-[#765d4a]"
+                    <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                      {bookingGalleryImages.map((image, index) => (
+                        <button
+                          key={image.src}
+                          type="button"
+                          className={cn(
+                            "h-16 w-20 flex-none overflow-hidden rounded-[10px] border transition",
+                            selectedGalleryIndex === index
+                              ? "border-[#8b6f5b] ring-2 ring-[#eadfce]"
+                              : "border-[#eadfce] hover:border-[#b7957c]"
+                          )}
+                          onClick={() => setSelectedGalleryIndex(index)}
+                          aria-label="切換住宿空間照片"
                         >
-                          {amenity}
-                        </span>
+                          <img src={image.src} alt="" className="h-full w-full object-cover" />
+                        </button>
                       ))}
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-2 border-t border-[#eadfce] pt-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-xs leading-5 text-stone-500">下訂後填寫聯絡資料，我們會再確認房況與訂房細節。</p>
-                    <Button
-                      type="button"
-                      className="h-12 bg-[#8b6f5b] px-6 hover:bg-[#765d4a] sm:w-auto"
-                      onClick={handleStartBooking}
-                    >
-                      下訂
-                    </Button>
+                  <div className="grid gap-5 p-5 md:p-6">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">STAY</p>
+                      <h2 className="mt-2 font-serif text-3xl font-light text-stone-900">
+                        {form.stay_type === "villa" ? "包棟" : "單間住宿"}
+                      </h2>
+                      <p className="mt-2 text-sm leading-6 text-stone-500">
+                        依目前選擇的日期與人數，送出後由我們確認房況及訂房細節。
+                      </p>
+                    </div>
+
+                    <div className="grid gap-3 text-sm text-stone-600">
+                      <div className="rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
+                        <p className="text-xs font-medium text-stone-500">住宿日期</p>
+                        <p className="mt-1 font-semibold text-stone-900">
+                          {formatSearchDate(form.check_in)}－{formatSearchDate(form.check_out)}
+                        </p>
+                        <p className="mt-1 text-xs text-stone-500">共 {nightCount} 晚</p>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
+                          <p className="flex items-center gap-2 text-xs font-medium text-stone-500">
+                            <Users className="h-3.5 w-3.5" />
+                            入住人數
+                          </p>
+                          <p className="mt-1 font-semibold text-stone-900">{guestSummary}</p>
+                        </div>
+                        <div className="rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
+                          <p className="text-xs font-medium text-stone-500">住宿方式</p>
+                          <p className="mt-1 font-semibold text-stone-900">{stayTypeDisplay(form.stay_type)}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium text-stone-500">設施</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {bookingAmenityLabels.map((amenity) => (
+                          <span
+                            key={amenity}
+                            className="rounded-full border border-[#eadfce] bg-[#fbf7f1] px-3 py-1 text-xs font-medium text-[#765d4a]"
+                          >
+                            {amenity}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-3 border-t border-[#eadfce] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-stone-500">包棟方案</p>
+                        <p className="mt-1 text-sm text-stone-600">選擇這組住宿方案後，右側會顯示訂單摘要。</p>
+                      </div>
+                      <div className="flex w-full items-center justify-between rounded-full border border-[#d7c5b2] bg-[#fffdf9] px-3 py-2 sm:w-auto sm:min-w-[156px]">
+                        <button
+                          type="button"
+                          className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
+                          disabled={selectedPackageQuantity <= 0}
+                          onClick={() => handlePackageQuantityChange(selectedPackageQuantity - 1)}
+                          aria-label="減少包棟方案"
+                        >
+                          <Minus className="h-4 w-4" />
+                        </button>
+                        <span className="min-w-8 text-center text-base font-semibold text-stone-900">{selectedPackageQuantity}</span>
+                        <button
+                          type="button"
+                          className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
+                          disabled={selectedPackageQuantity >= 1}
+                          onClick={() => handlePackageQuantityChange(selectedPackageQuantity + 1)}
+                          aria-label="增加包棟方案"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
+              {canShowOrderSummary && (
+                <aside className="rounded-[20px] border border-[#eadfce] bg-white p-5 shadow-sm md:p-6 lg:self-start">
+                  <div className="border-b border-[#eadfce] pb-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">SELECTED STAY</p>
+                    <h2 className="mt-2 text-2xl font-semibold text-stone-900">訂單摘要</h2>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 text-sm text-stone-600">
+                    <div>
+                      <p className="text-xs font-medium text-stone-500">住宿日期</p>
+                      <p className="mt-1 font-semibold text-stone-900">{formatSearchDate(form.check_in)}－{formatSearchDate(form.check_out)}</p>
+                      <p className="mt-1 text-xs text-stone-500">共 {nightCount} 晚</p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium text-stone-500">入住人數</p>
+                      <div className="mt-1 grid gap-1 font-semibold text-stone-900">
+                        <p>{form.adults} 位成人</p>
+                        {form.children > 0 && <p>{form.children} 位孩童</p>}
+                        {form.infants > 0 && <p>{form.infants} 位嬰幼兒</p>}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-medium text-stone-500">已選住宿</span>
+                        <span className="font-semibold text-stone-900">{form.stay_type === "villa" ? "包棟" : "單間住宿"}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-medium text-stone-500">數量</span>
+                        <span className="font-semibold text-stone-900">{selectedPackageQuantity}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-medium text-stone-500">住宿方式</span>
+                        <span className="font-semibold text-stone-900">{stayTypeDisplay(form.stay_type)}</span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[12px] bg-[#f7f1e9] px-4 py-3 text-sm leading-6 text-stone-600">
+                      房價將依入住日期、人數確認，送出後由我們確認房況及訂房細節。
+                    </div>
+
+                    <Button
+                      type="button"
+                      className="h-12 bg-[#8b6f5b] hover:bg-[#765d4a]"
+                      onClick={handleStartBooking}
+                    >
+                      下一步
+                    </Button>
+                  </div>
+                </aside>
+              )}
             </section>
           )}
 

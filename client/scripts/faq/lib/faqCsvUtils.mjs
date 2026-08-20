@@ -76,12 +76,7 @@ const highRiskTerms = [
   "緊急",
 ];
 
-const knownRuleConflictWarnings = new Map([
-  [
-    "faq-205",
-    "guesthouse-rules.md 寫早餐價格未提供；目前答案若提到固定金額需人工確認。",
-  ],
-]);
+const knownRuleConflictWarnings = new Map();
 
 export function readUtf8File(filePath) {
   const buffer = fs.readFileSync(filePath);

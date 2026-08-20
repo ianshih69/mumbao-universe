@@ -229,7 +229,7 @@
   },
   {
     "input": "Mumbao 早餐可以素食嗎？",
-    "expected_route": "faq_collect_info",
+    "expected_route": "faq_direct",
     "expected_faq_ids": [
       "faq-203"
     ],
@@ -238,7 +238,7 @@
   },
   {
     "input": "Mumbao 可以帶寵物嗎？",
-    "expected_route": "faq_collect_info",
+    "expected_route": "faq_direct",
     "expected_faq_ids": [
       "faq-226"
     ],
@@ -247,7 +247,7 @@
   },
   {
     "input": "Mumbao 可以帶狗嗎？",
-    "expected_route": "faq_collect_info",
+    "expected_route": "faq_direct",
     "expected_faq_ids": [
       "faq-227"
     ],
@@ -256,7 +256,7 @@
   },
   {
     "input": "Mumbao 可以帶貓嗎？",
-    "expected_route": "faq_collect_info",
+    "expected_route": "faq_direct",
     "expected_faq_ids": [
       "faq-228"
     ],

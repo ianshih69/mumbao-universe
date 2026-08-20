@@ -1,9 +1,17 @@
 export const MIN_BOOKING_DATE = "2026-11-01";
+export const MIN_BOOKING_DATE_LABEL = formatBookingDateSlash(MIN_BOOKING_DATE);
+export const MIN_BOOKING_MONTH_DAY_LABEL = formatBookingDateSlash(MIN_BOOKING_DATE, false);
 
 export type BookingDateRange = {
   check_in: string;
   check_out: string;
 };
+
+export function formatBookingDateSlash(dateText: string, includeYear = true) {
+  const [year, month, day] = dateText.split("-").map((part) => Number(part));
+  if (!year || !month || !day) return dateText;
+  return includeYear ? `${year}/${month}/${day}` : `${month}/${day}`;
+}
 
 function toDateText(date: Date) {
   return date.toISOString().slice(0, 10);

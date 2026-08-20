@@ -47,6 +47,8 @@ import {
 } from "@/lib/bookings/bookingDraft";
 import {
   createDefaultBookingDateRange,
+  MIN_BOOKING_DATE_LABEL,
+  MIN_BOOKING_MONTH_DAY_LABEL,
   resolveBookingDraftDateRange,
   resolveEarliestBookingDate,
 } from "@/lib/bookings/bookingDateRules";
@@ -1123,6 +1125,10 @@ export default function Booking() {
             ref={bookingSearchRef}
             className="relative mt-6 rounded-[20px] border border-[#eadfce] bg-white p-3 shadow-sm md:p-4"
           >
+            <div className="mb-3 rounded-[12px] border border-[#ead9bd] bg-[#fff8ea] px-3 py-2 text-sm leading-6 text-stone-700 md:flex md:items-center md:gap-3">
+              <p className="font-semibold text-[#765d4a]">試營運預約｜{MIN_BOOKING_DATE_LABEL} 起開放入住</p>
+              <p className="text-stone-600">目前可預約 {MIN_BOOKING_DATE_LABEL} 起的住宿日期。</p>
+            </div>
             <div className="grid grid-cols-2 gap-2 lg:grid-cols-[1fr_1fr_0.8fr]">
               <button
                 type="button"
@@ -1210,6 +1216,7 @@ export default function Booking() {
                 <p className="mt-1 text-center text-xs text-stone-500">
                   {selectionMode === "checkOut" ? "請選擇退房日期" : "請選擇入住日期"}
                 </p>
+                <p className="mt-1 text-center text-xs text-stone-500">{MIN_BOOKING_MONTH_DAY_LABEL} 起開放預約</p>
 
                 <div className="mt-3 grid grid-cols-3 gap-1 rounded-full bg-[#fbf7f1] p-1">
                   {calendarFilters.map((filter) => (

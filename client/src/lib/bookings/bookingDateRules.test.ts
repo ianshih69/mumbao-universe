@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   MIN_BOOKING_DATE,
+  MIN_BOOKING_DATE_LABEL,
+  MIN_BOOKING_MONTH_DAY_LABEL,
   createDefaultBookingDateRange,
+  formatBookingDateSlash,
   resolveBookingDraftDateRange,
   resolveEarliestBookingDate,
 } from "./bookingDateRules";
@@ -10,6 +13,9 @@ import type { BookingDateRange } from "./bookingDateRules";
 describe("booking date rules", () => {
   it("uses the launch date while today is before the minimum booking date", () => {
     expect(MIN_BOOKING_DATE).toBe("2026-11-01");
+    expect(MIN_BOOKING_DATE_LABEL).toBe("2026/11/1");
+    expect(MIN_BOOKING_MONTH_DAY_LABEL).toBe("11/1");
+    expect(formatBookingDateSlash(MIN_BOOKING_DATE)).toBe("2026/11/1");
     expect(resolveEarliestBookingDate("2026-08-20")).toBe("2026-11-01");
     expect(createDefaultBookingDateRange("2026-08-20")).toEqual({
       check_in: "2026-11-01",

@@ -129,11 +129,11 @@ const bookingPackageOptions: Array<{ value: BookingPackageType; label: string; d
 
 const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
 function fieldClassName() {
-  return "h-12 rounded-[8px] border border-[#eadfce] bg-white px-3 text-sm text-stone-900 outline-none transition focus:border-[#b7957c] focus:ring-2 focus:ring-[#eadfce]";
+  return "h-12 w-full max-w-full min-w-0 rounded-[8px] border border-[#eadfce] bg-white px-3 text-sm text-stone-900 outline-none transition focus:border-[#b7957c] focus:ring-2 focus:ring-[#eadfce]";
 }
 
 function textareaClassName() {
-  return "min-h-28 rounded-[8px] border border-[#eadfce] bg-white px-3 py-2 text-sm text-stone-900 outline-none transition focus:border-[#b7957c] focus:ring-2 focus:ring-[#eadfce]";
+  return "min-h-28 w-full max-w-full min-w-0 rounded-[8px] border border-[#eadfce] bg-white px-3 py-2 text-sm text-stone-900 outline-none transition focus:border-[#b7957c] focus:ring-2 focus:ring-[#eadfce]";
 }
 
 function buildBookingRequestNotes(notes: string, infants: number) {
@@ -1088,8 +1088,8 @@ export default function Booking() {
   return (
     <div className="min-h-screen bg-[#fbf7f1] text-stone-900">
       <Header />
-      <main className="px-4 pb-16 pt-32 md:px-8 md:pt-40">
-        <div className="mx-auto mb-4 flex max-w-6xl flex-col gap-3 rounded-[12px] border border-[#eadfce] bg-white/80 px-4 py-3 text-sm text-stone-600 shadow-sm md:flex-row md:items-center md:justify-between">
+      <main className="overflow-x-clip px-3 pb-16 pt-32 sm:px-4 md:px-8 md:pt-40">
+        <div className="mx-auto mb-4 flex w-full max-w-6xl min-w-0 flex-col gap-3 rounded-[12px] border border-[#eadfce] bg-white/80 px-4 py-3 text-sm text-stone-600 shadow-sm md:flex-row md:items-center md:justify-between">
           <span>測試模式｜目前訂房系統尚未正式開放</span>
           <button
             type="button"
@@ -1099,8 +1099,8 @@ export default function Booking() {
             退出測試
           </button>
         </div>
-        <section className="mx-auto max-w-6xl">
-          <div className="rounded-[24px] border border-[#eadfce] bg-white/90 p-5 shadow-sm md:p-6">
+        <section className="mx-auto w-full max-w-6xl min-w-0">
+          <div className="w-full min-w-0 rounded-[24px] border border-[#eadfce] bg-white/90 p-5 shadow-sm md:p-6">
             <h1 className="font-serif text-3xl font-light tracking-wide text-stone-900 md:text-4xl">
               線上預約
             </h1>
@@ -1123,17 +1123,17 @@ export default function Booking() {
 
           <div
             ref={bookingSearchRef}
-            className="relative mt-6 rounded-[20px] border border-[#eadfce] bg-white p-3 shadow-sm md:p-4"
+            className="relative mt-6 w-full max-w-full min-w-0 rounded-[20px] border border-[#eadfce] bg-white p-3 shadow-sm md:p-4"
           >
-            <div className="mb-3 rounded-[12px] border border-[#ead9bd] bg-[#fff8ea] px-3 py-2 text-sm leading-6 text-stone-700 md:flex md:items-center md:gap-3">
+            <div className="mb-3 max-w-full min-w-0 rounded-[12px] border border-[#ead9bd] bg-[#fff8ea] px-3 py-2 text-sm leading-6 text-stone-700 md:flex md:flex-wrap md:items-center md:gap-3">
               <p className="font-semibold text-[#765d4a]">試營運預約｜{MIN_BOOKING_DATE_LABEL} 起開放入住</p>
               <p className="text-stone-600">目前可預約 {MIN_BOOKING_DATE_LABEL} 起的住宿日期。</p>
             </div>
-            <div className="grid grid-cols-2 gap-2 lg:grid-cols-[1fr_1fr_0.8fr]">
+            <div className="grid min-w-0 grid-cols-2 gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
               <button
                 type="button"
                 className={cn(
-                  "min-h-[72px] rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
+                  "min-h-[72px] min-w-0 rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
                   calendarOpen && selectionMode === "checkIn"
                     ? "border-[#8b6f5b] bg-[#fff8ea] shadow-[inset_0_-3px_0_rgba(139,111,91,0.18)]"
                     : "border-[#eadfce] bg-[#fffdf9]"
@@ -1149,7 +1149,7 @@ export default function Booking() {
               <button
                 type="button"
                 className={cn(
-                  "min-h-[72px] rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
+                  "min-h-[72px] min-w-0 rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
                   calendarOpen && selectionMode === "checkOut"
                     ? "border-[#8b6f5b] bg-[#fff8ea] shadow-[inset_0_-3px_0_rgba(139,111,91,0.18)]"
                     : "border-[#eadfce] bg-[#fffdf9]"
@@ -1165,7 +1165,7 @@ export default function Booking() {
               <button
                 type="button"
                 className={cn(
-                  "col-span-2 min-h-[72px] rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce] lg:col-span-1",
+                  "col-span-2 min-h-[72px] min-w-0 rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce] lg:col-span-1",
                   peopleOpen ? "border-[#8b6f5b] bg-[#fff8ea]" : "border-[#eadfce] bg-[#fffdf9]"
                 )}
                 onClick={togglePeoplePopover}
@@ -1180,7 +1180,7 @@ export default function Booking() {
             {calendarOpen && (
               <section
                 ref={calendarPanelRef}
-                className="absolute left-0 right-0 top-full z-40 mt-3 w-full max-w-[calc(100vw-2rem)] rounded-[18px] border border-[#eadfce] bg-white p-4 shadow-xl sm:right-auto sm:w-[380px]"
+                className="absolute left-0 right-0 top-full z-40 mt-3 box-border w-full max-w-[calc(100vw-1.5rem)] min-w-0 rounded-[18px] border border-[#eadfce] bg-white p-3 shadow-xl sm:right-auto sm:w-[380px] sm:p-4"
               >
                 <div className="flex items-center justify-between gap-3">
                   <Button
@@ -1255,15 +1255,15 @@ export default function Booking() {
             {peopleOpen && (
               <section
                 ref={peoplePanelRef}
-                className="absolute left-0 right-0 top-full z-40 mt-3 rounded-[18px] border border-[#eadfce] bg-white p-4 shadow-xl sm:left-auto sm:right-0 sm:w-[320px]"
+                className="absolute left-0 right-0 top-full z-40 mt-3 box-border w-full max-w-[calc(100vw-1.5rem)] min-w-0 rounded-[18px] border border-[#eadfce] bg-white p-3 shadow-xl sm:left-auto sm:right-0 sm:w-[320px] sm:p-4"
               >
                 <div className="grid gap-3">
-                  <div className="flex items-center justify-between gap-4 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-3 py-3">
-                    <div>
+                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-3 py-3">
+                    <div className="min-w-0">
                       <p className="text-sm font-semibold text-stone-800">成人</p>
                       <p className="mt-0.5 text-xs text-stone-500">13歲以上</p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="grid w-[136px] max-w-full grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-2">
                       <button
                         type="button"
                         className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
@@ -1286,12 +1286,12 @@ export default function Booking() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-4 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-3 py-3">
-                    <div>
+                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-3 py-3">
+                    <div className="min-w-0">
                       <p className="text-sm font-semibold text-stone-800">孩童</p>
                       <p className="mt-0.5 text-xs text-stone-500">2～12歲</p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="grid w-[136px] max-w-full grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-2">
                       <button
                         type="button"
                         className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
@@ -1314,12 +1314,12 @@ export default function Booking() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-4 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-3 py-3">
-                    <div>
+                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-3 py-3">
+                    <div className="min-w-0">
                       <p className="text-sm font-semibold text-stone-800">嬰幼兒</p>
                       <p className="mt-0.5 text-xs text-stone-500">0～1歲</p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="grid w-[136px] max-w-full grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-2">
                       <button
                         type="button"
                         className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
@@ -1357,18 +1357,18 @@ export default function Booking() {
             </div>
           )}
           {canShowStayOptions && (
-            <section className="mt-6 overflow-hidden rounded-[20px] border border-[#eadfce] bg-white shadow-sm">
-              <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
-                <div className="grid gap-5 border-b border-[#eadfce] p-4 lg:border-b-0 lg:border-r lg:p-5">
+            <section className="mt-6 w-full max-w-full min-w-0 overflow-hidden rounded-[20px] border border-[#eadfce] bg-white shadow-sm">
+              <div className="grid min-w-0 gap-0 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+                <div className="grid min-w-0 gap-5 border-b border-[#eadfce] p-4 lg:border-b-0 lg:border-r lg:p-5">
                   <div>
-                    <div className="overflow-hidden rounded-[16px] bg-[#fbf7f1]">
+                    <div className="w-full min-w-0 overflow-hidden rounded-[16px] bg-[#fbf7f1]">
                       <img
                         src={activeGalleryImage.src}
                         alt={activeGalleryImage.alt}
-                        className="aspect-[4/3] w-full object-cover sm:aspect-[16/10] lg:aspect-[4/3]"
+                        className="block aspect-[4/3] w-full max-w-full object-cover sm:aspect-[16/10] lg:aspect-[4/3]"
                       />
                     </div>
-                    <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                    <div className="mt-3 flex w-full max-w-full min-w-0 gap-2 overflow-x-auto overscroll-x-contain pb-1">
                       {bookingGalleryImages.map((image, index) => (
                         <button
                           key={image.src}
@@ -1390,11 +1390,11 @@ export default function Booking() {
 
                   <div>
                     <p className="text-xs font-medium text-stone-500">設施</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
+                    <div className="mt-2 flex min-w-0 flex-wrap gap-2">
                       {bookingAmenityLabels.map((amenity) => (
                         <span
                           key={amenity}
-                          className="rounded-full border border-[#eadfce] bg-[#fbf7f1] px-3 py-1 text-xs font-medium text-[#765d4a]"
+                          className="max-w-full break-words rounded-full border border-[#eadfce] bg-[#fbf7f1] px-3 py-1 text-xs font-medium text-[#765d4a]"
                         >
                           {amenity}
                         </span>
@@ -1402,14 +1402,14 @@ export default function Booking() {
                     </div>
                   </div>
 
-                  <div className="grid gap-3 border-t border-[#eadfce] pt-4">
+                  <div className="grid min-w-0 gap-3 border-t border-[#eadfce] pt-4">
                     <div>
                       <p className="text-xs font-medium text-stone-500">包棟方案</p>
                       <p className="mt-1 text-sm text-stone-600">
                         選擇本次住宿方案後，右側會顯示正式房價明細。
                       </p>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="grid min-w-0 gap-2 sm:grid-cols-2">
                       {bookingPackageOptions.map((option) => {
                         const selected = form.selected_package_type === option.value && selectedPackageQuantity === 1;
                         return (
@@ -1417,7 +1417,7 @@ export default function Booking() {
                             key={option.value}
                             type="button"
                             className={cn(
-                              "rounded-[14px] border px-4 py-3 text-left transition",
+                              "min-w-0 rounded-[14px] border px-4 py-3 text-left transition",
                               selected
                                 ? "border-[#8b6f5b] bg-[#fff8ea] shadow-sm"
                                 : "border-[#eadfce] bg-[#fffdf9] hover:border-[#b7957c]"
@@ -1431,7 +1431,7 @@ export default function Booking() {
                         );
                       })}
                     </div>
-                    <div className="flex w-full items-center justify-between rounded-full border border-[#d7c5b2] bg-[#fffdf9] px-3 py-2 sm:w-auto sm:max-w-[180px]">
+                    <div className="grid w-full max-w-full grid-cols-[44px_minmax(0,1fr)_44px] items-center rounded-full border border-[#d7c5b2] bg-[#fffdf9] px-2 py-2 sm:max-w-[180px]">
                       <button
                         type="button"
                         className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
@@ -1441,7 +1441,7 @@ export default function Booking() {
                       >
                         <Minus className="h-4 w-4" />
                       </button>
-                      <span className="min-w-8 text-center text-base font-semibold text-stone-900">{selectedPackageQuantity}</span>
+                      <span className="min-w-0 text-center text-base font-semibold text-stone-900">{selectedPackageQuantity}</span>
                       <button
                         type="button"
                         className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
@@ -1455,7 +1455,7 @@ export default function Booking() {
                   </div>
 
                 </div>
-                <div className="grid gap-5 p-5 md:p-6">
+                <div className="grid min-w-0 gap-5 p-4 md:p-6">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">STAY</p>
                     <h2 className="mt-2 font-serif text-3xl font-light text-stone-900">
@@ -1466,38 +1466,38 @@ export default function Booking() {
                     </p>
                   </div>
 
-                  <div className="grid gap-3 text-sm text-stone-600">
-                    <div className="rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
+                  <div className="grid min-w-0 gap-3 text-sm text-stone-600">
+                    <div className="min-w-0 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
                       <p className="text-xs font-medium text-stone-500">住宿日期</p>
-                      <p className="mt-1 font-semibold text-stone-900">
+                      <p className="mt-1 break-words font-semibold text-stone-900">
                         {formatSearchDate(form.check_in)}－{formatSearchDate(form.check_out)}
                       </p>
                       <p className="mt-1 text-xs text-stone-500">共 {nightCount} 晚</p>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
+                    <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                      <div className="min-w-0 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
                         <p className="flex items-center gap-2 text-xs font-medium text-stone-500">
                           <Users className="h-3.5 w-3.5" />
                           入住人數
                         </p>
-                        <p className="mt-1 font-semibold text-stone-900">{guestSummary}</p>
+                        <p className="mt-1 break-words font-semibold text-stone-900">{guestSummary}</p>
                       </div>
-                      <div className="rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
+                      <div className="min-w-0 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-3">
                         <p className="text-xs font-medium text-stone-500">住宿方式</p>
-                        <p className="mt-1 font-semibold text-stone-900">{stayTypeDisplay(form.stay_type)}</p>
+                        <p className="mt-1 break-words font-semibold text-stone-900">{stayTypeDisplay(form.stay_type)}</p>
                       </div>
                     </div>
                   </div>
 
                   {canShowOrderSummary && (
-                    <div className="rounded-[16px] border border-[#eadfce] bg-[#fffdf9] p-4">
+                    <div className="max-w-full min-w-0 rounded-[16px] border border-[#eadfce] bg-[#fffdf9] p-4">
                       <div className="border-b border-[#eadfce] pb-3">
                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">ORDER SUMMARY</p>
                         <h2 className="mt-2 text-2xl font-semibold text-stone-900">訂單摘要</h2>
                       </div>
 
-                      <div className="mt-4 grid gap-4 text-sm text-stone-600">
+                      <div className="mt-4 grid min-w-0 gap-4 text-sm text-stone-600">
                         <div>
                           <p className="text-xs font-medium text-stone-500">住宿日期</p>
                           <p className="mt-1 font-semibold text-stone-900">{formatSearchDate(form.check_in)}－{formatSearchDate(form.check_out)}</p>
@@ -1513,23 +1513,23 @@ export default function Booking() {
                           </div>
                         </div>
 
-                        <div className="grid gap-3 rounded-[12px] border border-[#eadfce] bg-white px-4 py-3">
-                          <div className="flex items-center justify-between gap-3">
+                        <div className="grid min-w-0 gap-3 rounded-[12px] border border-[#eadfce] bg-white px-4 py-3">
+                          <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
                             <span className="text-xs font-medium text-stone-500">已選方案</span>
-                            <span className="text-right font-semibold text-stone-900">{selectedPackageLabel}</span>
+                            <span className="shrink-0 whitespace-nowrap text-right font-semibold text-stone-900">{selectedPackageLabel}</span>
                           </div>
-                          <div className="flex items-center justify-between gap-3">
+                          <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
                             <span className="text-xs font-medium text-stone-500">數量</span>
-                            <span className="font-semibold text-stone-900">{selectedPackageQuantity} 組</span>
+                            <span className="font-semibold text-stone-900 sm:whitespace-nowrap">{selectedPackageQuantity} 組</span>
                           </div>
-                          <div className="flex items-center justify-between gap-3">
+                          <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
                             <span className="text-xs font-medium text-stone-500">住宿方式</span>
-                            <span className="font-semibold text-stone-900">{stayTypeDisplay(form.stay_type)}</span>
+                            <span className="font-semibold text-stone-900 sm:whitespace-nowrap">{stayTypeDisplay(form.stay_type)}</span>
                           </div>
                         </div>
 
-                        <div className="grid gap-3 rounded-[12px] border border-[#eadfce] bg-white px-4 py-3">
-                          <div className="flex items-center justify-between gap-3">
+                        <div className="grid min-w-0 gap-3 rounded-[12px] border border-[#eadfce] bg-white px-4 py-3">
+                          <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
                             <p className="text-xs font-medium text-stone-500">價格明細</p>
                             {isQuoteLoading && <span className="text-xs text-stone-500">房價計算中…</span>}
                           </div>
@@ -1541,14 +1541,14 @@ export default function Booking() {
                           )}
 
                           {quoteReady && showGroupedNightly && nightlyGroups[0] && (
-                            <div className="flex flex-wrap items-start justify-between gap-2 text-sm">
-                              <div>
+                            <div className="grid gap-1 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-2">
+                              <div className="min-w-0">
                                 <p className="font-semibold text-stone-900">{nightlyGroups[0].label}</p>
                                 <p className="mt-0.5 text-xs text-stone-500">
                                   {quoteNights[0]?.packageLabel || selectedPackageLabel}｜計價人數 {quoteNights[0]?.pricingGuestCount} 人
                                 </p>
                               </div>
-                              <p className="text-right font-semibold text-stone-900">
+                              <p className="shrink-0 whitespace-nowrap font-semibold text-stone-900 sm:text-right">
                                 {formatTwd(nightlyGroups[0].amount)} × {nightlyGroups[0].nights.length} 晚
                               </p>
                             </div>
@@ -1557,8 +1557,8 @@ export default function Booking() {
                           {quoteReady && !showGroupedNightly && (
                             <div className="grid gap-2">
                               {quoteNights.map((night) => (
-                                <div key={night.date} className="flex flex-wrap items-start justify-between gap-2 text-sm">
-                                  <div>
+                                <div key={night.date} className="grid gap-1 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-2">
+                                  <div className="min-w-0">
                                     <p className="font-semibold text-stone-900">
                                       {formatCompactDate(night.date)} {night.dayTypeLabel}
                                       {night.specialDateLabel ? "｜" + night.specialDateLabel : ""}
@@ -1567,32 +1567,32 @@ export default function Booking() {
                                       {night.packageLabel}｜計價人數 {night.pricingGuestCount} 人
                                     </p>
                                   </div>
-                                  <p className="text-right font-semibold text-stone-900">{formatTwd(night.price)}</p>
+                                  <p className="shrink-0 whitespace-nowrap font-semibold text-stone-900 sm:text-right">{formatTwd(night.price)}</p>
                                 </div>
                               ))}
                             </div>
                           )}
 
                           <div className="border-t border-[#eadfce] pt-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                            <div className="grid gap-1 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
                               <span className="font-medium text-stone-600">住宿小計</span>
-                              <span className="font-semibold text-stone-900">{formatTwd(priceQuote?.pricing.subtotal)}</span>
+                              <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">{formatTwd(priceQuote?.pricing.subtotal)}</span>
                             </div>
                           </div>
                         </div>
 
-                        <div className="grid gap-3 rounded-[14px] border border-[#ead9bd] bg-[#fff8ea] px-4 py-4">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="grid min-w-0 gap-3 rounded-[14px] border border-[#ead9bd] bg-[#fff8ea] px-4 py-4">
+                          <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
                             <span className="text-sm font-semibold text-[#765d4a]">總價</span>
-                            <span className="text-2xl font-semibold text-stone-900">{formatTwd(quoteTotal)}</span>
+                            <span className="shrink-0 whitespace-nowrap text-2xl font-semibold text-stone-900">{formatTwd(quoteTotal)}</span>
                           </div>
-                          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                          <div className="grid gap-1 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
                             <span className="text-stone-600">訂金 {quoteDepositRatePercent ?? 30}%</span>
-                            <span className="font-semibold text-stone-900">{formatTwd(priceQuote?.pricing.depositAmount)}</span>
+                            <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">{formatTwd(priceQuote?.pricing.depositAmount)}</span>
                           </div>
-                          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                          <div className="grid gap-1 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
                             <span className="text-stone-600">尾款 {quoteBalanceRatePercent ?? 70}%</span>
-                            <span className="font-semibold text-stone-900">{formatTwd(priceQuote?.pricing.balanceAmount)}</span>
+                            <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">{formatTwd(priceQuote?.pricing.balanceAmount)}</span>
                           </div>
                           <p className="text-xs leading-5 text-stone-500">
                             此頁不需付款。送出後，我們將依此房價明細與您確認房況及訂房細節。
@@ -1616,7 +1616,7 @@ export default function Booking() {
           )}
 
           {canShowContactForm && (
-            <form ref={contactFormRef} className="mt-6 scroll-mt-24 rounded-[20px] border border-[#eadfce] bg-white p-5 shadow-sm md:p-6" onSubmit={handleSubmit}>
+            <form ref={contactFormRef} className="mt-6 w-full max-w-full min-w-0 scroll-mt-24 rounded-[20px] border border-[#eadfce] bg-white p-4 shadow-sm md:p-6" onSubmit={handleSubmit}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-2xl font-semibold text-stone-900">聯絡資料</h2>
@@ -1626,21 +1626,21 @@ export default function Booking() {
               </div>
 
               <div className="mt-4 grid gap-4">
-                <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                <label className="grid min-w-0 gap-1.5 text-sm font-medium text-stone-700">
                   姓名
                   <input className={fieldClassName()} value={form.guest_name} onChange={(event) => updateField("guest_name", event.target.value)} />
                 </label>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                <div className="grid min-w-0 gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                  <label className="grid min-w-0 gap-1.5 text-sm font-medium text-stone-700">
                     Email
                     <input className={fieldClassName()} type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} />
                   </label>
-                  <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                  <label className="grid min-w-0 gap-1.5 text-sm font-medium text-stone-700">
                     電話
                     <input className={fieldClassName()} value={form.phone} onChange={(event) => updateField("phone", event.target.value)} />
                   </label>
                 </div>
-                <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                <label className="grid min-w-0 gap-1.5 text-sm font-medium text-stone-700">
                   備註
                   <textarea
                     className={textareaClassName()}

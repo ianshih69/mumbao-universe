@@ -1358,9 +1358,9 @@ export default function Booking() {
           )}
           {canShowStayOptions && (
             <section className="mt-6 w-full max-w-full min-w-0 overflow-hidden rounded-[20px] border border-[#eadfce] bg-white shadow-sm">
-              <div className="grid min-w-0 gap-0 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-                <div className="grid min-w-0 gap-5 border-b border-[#eadfce] p-4 lg:border-b-0 lg:border-r lg:p-5">
-                  <div>
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 border-b border-[#eadfce] p-4 lg:border-b-0 lg:border-r lg:p-5">
+                  <div className="min-w-0">
                     <div className="w-full min-w-0 overflow-hidden rounded-[16px] bg-[#fbf7f1]">
                       <img
                         src={activeGalleryImage.src}
@@ -1455,7 +1455,7 @@ export default function Booking() {
                   </div>
 
                 </div>
-                <div className="grid min-w-0 gap-5 p-4 md:p-6">
+                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 p-4 md:p-6">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">STAY</p>
                     <h2 className="mt-2 font-serif text-3xl font-light text-stone-900">

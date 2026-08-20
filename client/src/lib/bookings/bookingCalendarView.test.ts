@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getBookingRangeIssue,
   isCalendarFilterMismatch,
+  isBookableStayNight,
   normalizeBookingCalendarDay,
   type BookingCalendarDayView,
 } from "./bookingCalendarView";
@@ -98,5 +99,10 @@ describe("booking calendar view helpers", () => {
         getDay: (date) => days.get(date) || makeDay(date, "closed", false),
       }),
     ).toBe("ok");
+  });
+
+  it("keeps dates before the minimum booking date unbookable and includes the boundary date", () => {
+    expect(isBookableStayNight(makeDay("2026-10-31", "whole_house"), "2026-11-01", "2027-02-20")).toBe(false);
+    expect(isBookableStayNight(makeDay("2026-11-01", "whole_house"), "2026-11-01", "2027-02-20")).toBe(true);
   });
 });

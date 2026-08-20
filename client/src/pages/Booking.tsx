@@ -45,6 +45,11 @@ import {
   writeBookingDraft,
   type BookingDraftForm,
 } from "@/lib/bookings/bookingDraft";
+import {
+  createDefaultBookingDateRange,
+  resolveBookingDraftDateRange,
+  resolveEarliestBookingDate,
+} from "@/lib/bookings/bookingDateRules";
 import { cn } from "@/lib/utils";
 import { asArray, asString, fetchSitePageContent } from "@/lib/site/siteContentApi";
 
@@ -90,10 +95,10 @@ const emptyForm: BookingForm = {
 };
 
 function createDefaultBookingForm(today = todayText()): BookingForm {
+  const defaultDates = createDefaultBookingDateRange(today);
   return {
     ...emptyForm,
-    check_in: today,
-    check_out: addDays(today, 1),
+    ...defaultDates,
   };
 }
 
@@ -285,12 +290,12 @@ function reconcileFormWithSettings(form: BookingForm, settings: PublicBookingSet
 
 function getInitialBookingForm() {
   const today = todayText();
+  const minDate = resolveEarliestBookingDate(today);
   const fallback = createDefaultBookingForm(today);
   if (typeof window === "undefined") return fallback;
   const draft = readBookingDraft(window.sessionStorage, fallback);
-  if (draft.check_in >= today && draft.check_out > draft.check_in) return draft;
-  if (draft.check_in >= today) return { ...draft, check_out: addDays(draft.check_in, 1) };
-  return fallback;
+  const resolved = resolveBookingDraftDateRange(draft, fallback, minDate);
+  return resolved.adjusted ? { ...resolved.draft, selected_package_quantity: 0 } : resolved.draft;
 }
 
 function saleModeLabel(saleMode: BookingSaleMode) {
@@ -401,7 +406,7 @@ export default function Booking() {
   const [form, setForm] = useState<BookingForm>(() => getInitialBookingForm());
   const [settings, setSettings] = useState<PublicBookingSettings>(() => ({ ...DEFAULT_BOOKING_SETTINGS }));
   const [bookingCopy, setBookingCopy] = useState<BookingCmsCopy>(fallbackBookingCopy);
-  const [visibleMonth, setVisibleMonth] = useState(() => monthStart(todayText()));
+  const [visibleMonth, setVisibleMonth] = useState(() => monthStart(resolveEarliestBookingDate(todayText())));
   const [unavailableDates, setUnavailableDates] = useState<Set<string>>(new Set());
   const [calendarDaySources, setCalendarDaySources] = useState<NonNullable<BookingCalendarResult["days"]>>([]);
   const [calendarFilter, setCalendarFilter] = useState<BookingCalendarFilter>("all");
@@ -432,8 +437,9 @@ export default function Booking() {
   const peoplePanelRef = useRef<HTMLElement | null>(null);
   const contactFormRef = useRef<HTMLFormElement | null>(null);
 
-  const minDate = todayText();
+  const minDate = resolveEarliestBookingDate(todayText());
   const maxMonth = monthStart(maxDate);
+  const earliestVisibleMonth = addMonths(monthStart(minDate), -1);
   const bookingIsOpen = settings.allowVillaBooking || settings.allowRoomBooking;
   const calendarDaySourceMap = useMemo(
     () => new Map(calendarDaySources.map((day) => [day.date, day])),
@@ -1176,7 +1182,7 @@ export default function Booking() {
                     variant="outline"
                     size="icon"
                     className="h-9 w-9 rounded-full"
-                    disabled={visibleMonth <= monthStart(minDate)}
+                    disabled={visibleMonth <= earliestVisibleMonth}
                     onClick={() => {
                       setHoverPreviewDate("");
                       setVisibleMonth((current) => addMonths(current, -1));

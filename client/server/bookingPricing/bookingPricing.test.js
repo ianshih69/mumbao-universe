@@ -163,7 +163,11 @@ describe("bookingPricing", () => {
 
     const oneNight = await quote({ checkIn: "2026-11-05", checkOut: "2026-11-06" });
     expect(oneNight.pricing.breakdown.map((night) => night.date)).toEqual(["2026-11-05"]);
-    expect(oneNight.pricing.total).toBe(25000);
+    expect(oneNight.pricing).toMatchObject({
+      total: 25000,
+      depositAmount: 7500,
+      balanceAmount: 17500,
+    });
   });
 
   it("uses active special date override before weekday fallback", async () => {
@@ -193,6 +197,11 @@ describe("bookingPricing", () => {
     await expect(quote({ checkIn: "2026-10-31", checkOut: "2026-11-01" })).resolves.toMatchObject({
       status: "unavailable",
       pricing: { reason: "missing_rule_set" },
+    });
+
+    await expect(quote({ checkIn: "2026-11-01", checkOut: "2026-11-02" })).resolves.toMatchObject({
+      status: "resolved",
+      pricing: { total: 25000, depositAmount: 7500, balanceAmount: 17500 },
     });
   });
 

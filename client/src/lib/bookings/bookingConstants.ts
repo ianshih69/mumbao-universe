@@ -8,6 +8,7 @@ export const DEFAULT_BOOKING_SETTINGS = {
 } as const;
 
 export const MIN_ADULTS = 1;
+export const MAX_BOOKING_PRICING_GUESTS = 23;
 
 export type PublicBookingSettings = {
   bookingWindowMonths: number;

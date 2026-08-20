@@ -3,6 +3,7 @@ import {
   calculateBookingQuote,
   classifyFallbackDayType,
   resolvePricingGuestCount,
+  roundMoney,
 } from "./index.js";
 
 const trialRuleSet = {
@@ -10,7 +11,7 @@ const trialRuleSet = {
   name: "試營運包棟房價",
   effective_from: "2026-11-01",
   effective_to: "2027-02-01",
-  deposit_rate: 0.3,
+  deposit_rate: 0.5,
   is_active: true,
 };
 
@@ -101,32 +102,74 @@ describe("bookingPricing", () => {
     expect(classifyFallbackDayType("2026-11-07")).toBe("holiday");
   });
 
-  it("maps 1-10 actual guests to pricing guest count 10", () => {
-    expect(resolvePricingGuestCount(1)).toEqual({ ok: true, pricingGuestCount: 10 });
-    expect(resolvePricingGuestCount(10)).toEqual({ ok: true, pricingGuestCount: 10 });
-    expect(resolvePricingGuestCount(18)).toEqual({ ok: true, pricingGuestCount: 18 });
-    expect(resolvePricingGuestCount(19)).toEqual({
+  it("rounds monetary calculations to whole TWD", () => {
+    expect(roundMoney(26250 * 0.95)).toBe(24938);
+  });
+
+  it("maps actual guests to package-specific pricing rows and extra beds", () => {
+    expect(resolvePricingGuestCount(1, "villa_10")).toMatchObject({ ok: true, pricingGuestCount: 10, extraBedCount: 0 });
+    expect(resolvePricingGuestCount(10, "villa_10")).toMatchObject({ ok: true, pricingGuestCount: 10, extraBedCount: 0 });
+    expect(resolvePricingGuestCount(17, "villa_10")).toMatchObject({ ok: true, pricingGuestCount: 17, extraBedCount: 0 });
+    expect(resolvePricingGuestCount(18, "villa_10")).toEqual({
+      ok: false,
+      reason: "guest_count_requires_full_villa",
+      pricingGuestCount: null,
+    });
+    expect(resolvePricingGuestCount(2, "villa_18")).toMatchObject({ ok: true, pricingGuestCount: 18, extraBedCount: 0 });
+    expect(resolvePricingGuestCount(18, "villa_18")).toMatchObject({ ok: true, pricingGuestCount: 18, extraBedCount: 0 });
+    expect(resolvePricingGuestCount(19, "villa_18")).toMatchObject({
+      ok: true,
+      pricingGuestCount: 18,
+      extraBedCount: 1,
+      extraBedUnitPrice: 800,
+      extraBedAmount: 800,
+    });
+    expect(resolvePricingGuestCount(23, "villa_18")).toMatchObject({
+      ok: true,
+      pricingGuestCount: 18,
+      extraBedCount: 5,
+      extraBedUnitPrice: 800,
+      extraBedAmount: 4000,
+    });
+    expect(resolvePricingGuestCount(24, "villa_18")).toEqual({
       ok: false,
       reason: "unsupported_guest_count",
       pricingGuestCount: null,
     });
   });
 
-  it("returns exact 10 person weekday, friday, and holiday prices", async () => {
-    await expect(quote({ checkIn: "2026-11-02", checkOut: "2026-11-03" })).resolves.toMatchObject({
+  it("returns exact villa_10 weekday and friday prices without using a formula", async () => {
+    await expect(quote({ adults: 8, packageType: "villa_10", checkIn: "2026-11-02", checkOut: "2026-11-03" })).resolves.toMatchObject({
       status: "resolved",
       pricingGuestCount: 10,
-      pricing: { total: 25000, depositAmount: 7500, balanceAmount: 17500 },
+      pricing: { total: 25000, depositAmount: 12500, balanceAmount: 12500 },
     });
-    await expect(quote({ checkIn: "2026-11-06", checkOut: "2026-11-07" })).resolves.toMatchObject({
+    await expect(quote({ adults: 12, packageType: "villa_10", checkIn: "2026-11-02", checkOut: "2026-11-03" })).resolves.toMatchObject({
+      pricingGuestCount: 12,
+      pricing: { total: 27500 },
+    });
+    await expect(quote({ adults: 17, packageType: "villa_10", checkIn: "2026-11-02", checkOut: "2026-11-03" })).resolves.toMatchObject({
+      pricingGuestCount: 17,
+      pricing: { total: 33750 },
+    });
+    await expect(quote({ adults: 10, packageType: "villa_10", checkIn: "2026-11-06", checkOut: "2026-11-07" })).resolves.toMatchObject({
       pricing: { total: 32000 },
-    });
-    await expect(quote({ checkIn: "2026-11-07", checkOut: "2026-11-08" })).resolves.toMatchObject({
-      pricing: { total: 39000 },
     });
   });
 
   it("returns exact 18 person weekday, friday, and holiday prices", async () => {
+    await expect(quote({ adults: 2, packageType: "villa_18", checkIn: "2026-11-02", checkOut: "2026-11-03" })).resolves.toMatchObject({
+      pricingGuestCount: 18,
+      pricing: { total: 35000 },
+    });
+    await expect(quote({ adults: 10, packageType: "villa_18", checkIn: "2026-11-02", checkOut: "2026-11-03" })).resolves.toMatchObject({
+      pricingGuestCount: 18,
+      pricing: { total: 35000 },
+    });
+    await expect(quote({ adults: 15, packageType: "villa_18", checkIn: "2026-11-02", checkOut: "2026-11-03" })).resolves.toMatchObject({
+      pricingGuestCount: 18,
+      pricing: { total: 35000 },
+    });
     await expect(quote({ adults: 18, packageType: "villa_18", checkIn: "2026-11-02", checkOut: "2026-11-03" })).resolves.toMatchObject({
       pricingGuestCount: 18,
       pricing: { total: 35000 },
@@ -139,6 +182,49 @@ describe("bookingPricing", () => {
     });
   });
 
+  it("calculates 19-23 guests from the 18 person base rate plus nightly extra beds", async () => {
+    const cases = [
+      { adults: 19, checkIn: "2026-11-02", checkOut: "2026-11-03", basePrice: 35000, total: 35800 },
+      { adults: 20, checkIn: "2026-11-02", checkOut: "2026-11-03", basePrice: 35000, total: 36600 },
+      { adults: 23, checkIn: "2026-11-02", checkOut: "2026-11-03", basePrice: 35000, total: 39000 },
+      { adults: 19, checkIn: "2026-11-06", checkOut: "2026-11-07", basePrice: 42000, total: 42800 },
+      { adults: 23, checkIn: "2026-11-06", checkOut: "2026-11-07", basePrice: 42000, total: 46000 },
+      { adults: 19, checkIn: "2026-11-07", checkOut: "2026-11-08", basePrice: 49000, total: 49800 },
+      { adults: 23, checkIn: "2026-11-07", checkOut: "2026-11-08", basePrice: 49000, total: 53000 },
+    ];
+
+    for (const testCase of cases) {
+      const result = await quote({
+        adults: testCase.adults,
+        packageType: "villa_18",
+        checkIn: testCase.checkIn,
+        checkOut: testCase.checkOut,
+      });
+      const extraBedCount = testCase.adults - 18;
+      expect(result).toMatchObject({
+        status: "resolved",
+        guestCount: testCase.adults,
+        pricingGuestCount: 18,
+        pricing: { total: testCase.total },
+      });
+      expect(result.pricing.breakdown[0]).toMatchObject({
+        baseGuestCount: 18,
+        basePrice: testCase.basePrice,
+        extraBedCount,
+        extraBedUnitPrice: 800,
+        extraBedAmount: extraBedCount * 800,
+        price: testCase.total,
+      });
+    }
+  });
+
+  it("returns unsupported for 24 or more guests", async () => {
+    await expect(quote({ adults: 24, packageType: "villa_18" })).resolves.toMatchObject({
+      status: "unavailable",
+      pricing: { reason: "unsupported_guest_count" },
+    });
+  });
+
   it("covers every 11-17 matrix entry", async () => {
     for (const guestCount of [11, 12, 13, 14, 15, 16, 17]) {
       await expect(quote({ adults: guestCount, checkIn: "2026-11-02", checkOut: "2026-11-03" })).resolves.toMatchObject({
@@ -148,26 +234,208 @@ describe("bookingPricing", () => {
       await expect(quote({ adults: guestCount, checkIn: "2026-11-06", checkOut: "2026-11-07" })).resolves.toMatchObject({
         pricing: { total: matrix[guestCount].friday },
       });
-      await expect(quote({ adults: guestCount, checkIn: "2026-11-07", checkOut: "2026-11-08" })).resolves.toMatchObject({
-        pricing: { total: matrix[guestCount].holiday },
-      });
     }
+  });
+
+  it("makes villa_10 unavailable for 18 or more guests and Saturday stay nights", async () => {
+    await expect(quote({ adults: 18, packageType: "villa_10", checkIn: "2026-11-02", checkOut: "2026-11-03" })).resolves.toMatchObject({
+      status: "unavailable",
+      pricing: { reason: "guest_count_requires_full_villa" },
+    });
+    await expect(quote({ adults: 10, packageType: "villa_10", checkIn: "2026-11-07", checkOut: "2026-11-08" })).resolves.toMatchObject({
+      status: "unavailable",
+      pricing: { reason: "saturday_small_package_unavailable" },
+    });
+    await expect(quote({ adults: 10, packageType: "villa_10", checkIn: "2026-11-06", checkOut: "2026-11-08" })).resolves.toMatchObject({
+      status: "unavailable",
+      pricing: { reason: "saturday_small_package_unavailable" },
+    });
+    await expect(quote({ adults: 10, packageType: "villa_10", checkIn: "2026-11-06", checkOut: "2026-11-07" })).resolves.toMatchObject({
+      status: "resolved",
+      pricing: { total: 32000 },
+    });
   });
 
   it("calculates multi-night totals and does not charge checkout date", async () => {
     const result = await quote({ checkIn: "2026-11-05", checkOut: "2026-11-07" });
     expect(result.pricing.breakdown.map((night) => night.date)).toEqual(["2026-11-05", "2026-11-06"]);
     expect(result.pricing.total).toBe(57000);
-    expect(result.pricing.depositAmount).toBe(17100);
-    expect(result.pricing.balanceAmount).toBe(39900);
+    expect(result.pricing.depositAmount).toBe(28500);
+    expect(result.pricing.balanceAmount).toBe(28500);
 
     const oneNight = await quote({ checkIn: "2026-11-05", checkOut: "2026-11-06" });
     expect(oneNight.pricing.breakdown.map((night) => night.date)).toEqual(["2026-11-05"]);
     expect(oneNight.pricing).toMatchObject({
       total: 25000,
-      depositAmount: 7500,
-      balanceAmount: 17500,
+      depositAmount: 12500,
+      balanceAmount: 12500,
     });
+  });
+
+  it("applies the 95% weekday consecutive-stay discount to the second night only", async () => {
+    const result = await quote({ checkIn: "2026-11-02", checkOut: "2026-11-05" });
+
+    expect(result.pricing.breakdown.map((night) => night.price)).toEqual([25000, 23750, 25000]);
+    expect(result.pricing.breakdown[0]).toMatchObject({
+      date: "2026-11-02",
+      dayType: "weekday",
+      preDiscountPrice: 25000,
+      discountType: null,
+      discountRate: 1,
+      discountAmount: 0,
+      price: 25000,
+    });
+    expect(result.pricing.breakdown[1]).toMatchObject({
+      date: "2026-11-03",
+      dayType: "weekday",
+      preDiscountPrice: 25000,
+      discountType: "weekday_second_night_95",
+      discountRate: 0.95,
+      discountAmount: 1250,
+      price: 23750,
+    });
+    expect(result.pricing.breakdown[2]).toMatchObject({
+      date: "2026-11-04",
+      discountType: null,
+      discountRate: 1,
+      discountAmount: 0,
+      price: 25000,
+    });
+    expect(result.pricing.total).toBe(73750);
+    expect(result.pricing.depositAmount).toBe(36875);
+    expect(result.pricing.balanceAmount).toBe(36875);
+  });
+
+  it("rounds second-night discounts to whole TWD", async () => {
+    const result = await quote({
+      adults: 11,
+      packageType: "villa_10",
+      checkIn: "2026-11-02",
+      checkOut: "2026-11-04",
+    });
+
+    expect(result.pricing.breakdown.map((night) => night.price)).toEqual([26250, 24938]);
+    expect(result.pricing.breakdown[1]).toMatchObject({
+      preDiscountPrice: 26250,
+      discountType: "weekday_second_night_95",
+      discountRate: 0.95,
+      discountAmount: 1312,
+      price: 24938,
+    });
+    expect(result.pricing.total).toBe(51188);
+    expect(result.pricing.depositAmount).toBe(25594);
+    expect(result.pricing.balanceAmount).toBe(25594);
+  });
+
+  it("does not apply the weekday consecutive-stay discount to Sunday starts, Fridays, or special-date overrides", async () => {
+    const sundayStart = await quote({ checkIn: "2026-11-01", checkOut: "2026-11-03" });
+    expect(sundayStart.pricing.breakdown.map((night) => night.price)).toEqual([25000, 25000]);
+    expect(sundayStart.pricing.breakdown.map((night) => night.discountType)).toEqual([null, null]);
+
+    const thursdayFriday = await quote({ checkIn: "2026-11-05", checkOut: "2026-11-07" });
+    expect(thursdayFriday.pricing.breakdown.map((night) => night.price)).toEqual([25000, 32000]);
+    expect(thursdayFriday.pricing.breakdown.map((night) => night.discountType)).toEqual([null, null]);
+
+    const specialDateSecondNight = await quote(
+      { checkIn: "2026-11-02", checkOut: "2026-11-04" },
+      {
+        specialDates: [
+          {
+            id: "special-2",
+            rule_set_id: trialRuleSet.id,
+            date: "2026-11-03",
+            day_type: "holiday",
+            label: "Manual holiday",
+            is_active: true,
+          },
+        ],
+      }
+    );
+    expect(specialDateSecondNight.pricing.breakdown.map((night) => night.price)).toEqual([25000, 39000]);
+    expect(specialDateSecondNight.pricing.breakdown[1]).toMatchObject({
+      dayType: "holiday",
+      specialDateLabel: "Manual holiday",
+      discountType: null,
+      discountAmount: 0,
+    });
+  });
+
+  it("charges extra beds per night for multi-night 19-23 guest quotes", async () => {
+    const result = await quote({
+      adults: 20,
+      packageType: "villa_18",
+      checkIn: "2026-11-05",
+      checkOut: "2026-11-07",
+    });
+
+    expect(result.pricing.breakdown.map((night) => night.date)).toEqual(["2026-11-05", "2026-11-06"]);
+    expect(result.pricing.breakdown.map((night) => night.price)).toEqual([36600, 43600]);
+    expect(result.pricing.breakdown).toEqual([
+      expect.objectContaining({
+        dayType: "weekday",
+        baseGuestCount: 18,
+        basePrice: 35000,
+        extraBedCount: 2,
+        extraBedUnitPrice: 800,
+        extraBedAmount: 1600,
+        price: 36600,
+      }),
+      expect.objectContaining({
+        dayType: "friday",
+        baseGuestCount: 18,
+        basePrice: 42000,
+        extraBedCount: 2,
+        extraBedUnitPrice: 800,
+        extraBedAmount: 1600,
+        price: 43600,
+      }),
+    ]);
+    expect(result.pricing.total).toBe(80200);
+    expect(result.pricing.depositAmount).toBe(40100);
+    expect(result.pricing.balanceAmount).toBe(40100);
+    expect(result.pricing.depositAmount + result.pricing.balanceAmount).toBe(result.pricing.total);
+  });
+
+  it("includes extra beds in the second-night weekday discount", async () => {
+    const result = await quote({
+      adults: 20,
+      packageType: "villa_18",
+      checkIn: "2026-11-02",
+      checkOut: "2026-11-04",
+    });
+
+    expect(result.pricing.breakdown).toEqual([
+      expect.objectContaining({
+        date: "2026-11-02",
+        dayType: "weekday",
+        basePrice: 35000,
+        extraBedCount: 2,
+        extraBedUnitPrice: 800,
+        extraBedAmount: 1600,
+        preDiscountPrice: 36600,
+        discountType: null,
+        discountRate: 1,
+        discountAmount: 0,
+        price: 36600,
+      }),
+      expect.objectContaining({
+        date: "2026-11-03",
+        dayType: "weekday",
+        basePrice: 35000,
+        extraBedCount: 2,
+        extraBedUnitPrice: 800,
+        extraBedAmount: 1600,
+        preDiscountPrice: 36600,
+        discountType: "weekday_second_night_95",
+        discountRate: 0.95,
+        discountAmount: 1830,
+        price: 34770,
+      }),
+    ]);
+    expect(result.pricing.total).toBe(71370);
+    expect(result.pricing.depositAmount).toBe(35685);
+    expect(result.pricing.balanceAmount).toBe(35685);
+    expect(result.pricing.depositAmount + result.pricing.balanceAmount).toBe(result.pricing.total);
   });
 
   it("uses active special date override before weekday fallback", async () => {
@@ -194,14 +462,14 @@ describe("bookingPricing", () => {
   });
 
   it("returns unavailable outside active period", async () => {
-    await expect(quote({ checkIn: "2026-10-31", checkOut: "2026-11-01" })).resolves.toMatchObject({
+    await expect(quote({ checkIn: "2026-10-30", checkOut: "2026-10-31" })).resolves.toMatchObject({
       status: "unavailable",
       pricing: { reason: "missing_rule_set" },
     });
 
     await expect(quote({ checkIn: "2026-11-01", checkOut: "2026-11-02" })).resolves.toMatchObject({
       status: "resolved",
-      pricing: { total: 25000, depositAmount: 7500, balanceAmount: 17500 },
+      pricing: { total: 25000, depositAmount: 12500, balanceAmount: 12500 },
     });
   });
 

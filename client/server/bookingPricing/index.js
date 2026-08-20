@@ -1,5 +1,10 @@
 export const bookingDayTypes = ["weekday", "friday", "holiday"];
 export const bookingPackageTypes = ["villa_10", "villa_18"];
+export const maxBookingPricingGuests = 23;
+export const extraBedBaseGuestCount = 18;
+export const extraBedUnitPrice = 800;
+export const weekdaySecondNightDiscountType = "weekday_second_night_95";
+export const weekdaySecondNightDiscountRate = 0.95;
 
 const msPerDay = 24 * 60 * 60 * 1000;
 const dayTypeLabels = {
@@ -81,6 +86,33 @@ export function classifyFallbackDayType(dateText) {
   return "weekday";
 }
 
+export function roundMoney(amount) {
+  return Math.round(Number(amount));
+}
+
+function isMondayThroughThursday(dateText) {
+  const day = new Date(`${dateText}T00:00:00Z`).getUTCDay();
+  return day >= 1 && day <= 4;
+}
+
+function shouldApplyWeekdaySecondNightDiscount({ nightIndex, firstNight, date, dayType }) {
+  if (nightIndex !== 1) return false;
+  if (!firstNight || firstNight.dayType !== "weekday" || dayType !== "weekday") return false;
+  return isMondayThroughThursday(firstNight.date) && isMondayThroughThursday(date);
+}
+
+export function hasSaturdayStayNight(checkIn, checkOut) {
+  const normalizedCheckIn = normalizeIsoDate(checkIn);
+  const normalizedCheckOut = normalizeIsoDate(checkOut);
+  if (!normalizedCheckIn || !normalizedCheckOut || normalizedCheckOut <= normalizedCheckIn) return false;
+  const nights = daysBetween(normalizedCheckIn, normalizedCheckOut);
+  for (let index = 0; index < nights; index += 1) {
+    const nightDate = addDays(normalizedCheckIn, index);
+    if (new Date(`${nightDate}T00:00:00Z`).getUTCDay() === 6) return true;
+  }
+  return false;
+}
+
 export function normalizeGuestCount({ guestCount, adults, children }) {
   const explicit = Number.parseInt(String(guestCount ?? ""), 10);
   if (Number.isInteger(explicit) && explicit > 0) return explicit;
@@ -92,15 +124,38 @@ export function normalizeGuestCount({ guestCount, adults, children }) {
   return safeAdults + safeChildren;
 }
 
-export function resolvePricingGuestCount(guestCount) {
+export function resolvePricingGuestCount(guestCount, packageType = "villa_10", dateRange = {}) {
   if (!Number.isInteger(guestCount) || guestCount <= 0) {
     return { ok: false, reason: "invalid_guest_count", pricingGuestCount: null };
   }
-  if (guestCount <= 10) {
-    return { ok: true, pricingGuestCount: 10 };
+  if (packageType === "villa_10") {
+    if (hasSaturdayStayNight(dateRange.checkIn, dateRange.checkOut)) {
+      return { ok: false, reason: "saturday_small_package_unavailable", pricingGuestCount: null };
+    }
+    if (guestCount >= extraBedBaseGuestCount) {
+      return { ok: false, reason: "guest_count_requires_full_villa", pricingGuestCount: null };
+    }
+    if (guestCount <= 10) {
+      return { ok: true, pricingGuestCount: 10, extraBedCount: 0, extraBedUnitPrice, extraBedAmount: 0 };
+    }
+    return { ok: true, pricingGuestCount: guestCount, extraBedCount: 0, extraBedUnitPrice, extraBedAmount: 0 };
   }
-  if (guestCount <= 18) {
-    return { ok: true, pricingGuestCount: guestCount };
+  if (packageType !== "villa_18") {
+    return { ok: false, reason: "unsupported_package_type", pricingGuestCount: null };
+  }
+  if (guestCount <= extraBedBaseGuestCount) {
+    return { ok: true, pricingGuestCount: extraBedBaseGuestCount, extraBedCount: 0, extraBedUnitPrice, extraBedAmount: 0 };
+  }
+  if (guestCount <= maxBookingPricingGuests) {
+    const extraBedCount = guestCount - extraBedBaseGuestCount;
+    const extraBedAmount = extraBedCount * extraBedUnitPrice;
+    return {
+      ok: true,
+      pricingGuestCount: extraBedBaseGuestCount,
+      extraBedCount,
+      extraBedUnitPrice,
+      extraBedAmount,
+    };
   }
   return { ok: false, reason: "unsupported_guest_count", pricingGuestCount: null };
 }
@@ -196,7 +251,7 @@ export async function calculateBookingQuote(input, options = {}) {
     });
   }
 
-  const pricingGuest = resolvePricingGuestCount(guestCount);
+  const pricingGuest = resolvePricingGuestCount(guestCount, packageType, { checkIn, checkOut });
   if (!pricingGuest.ok) {
     return unavailableQuote({
       reason: pricingGuest.reason,
@@ -272,11 +327,34 @@ export async function calculateBookingQuote(input, options = {}) {
       });
     }
 
+    const basePrice = Number(rate.nightly_price);
+    const extraBedCount = pricingGuest.extraBedCount || 0;
+    const nightlyExtraBedAmount = extraBedCount * extraBedUnitPrice;
+    const preDiscountPrice = basePrice + nightlyExtraBedAmount;
+    const hasWeekdaySecondNightDiscount = shouldApplyWeekdaySecondNightDiscount({
+      nightIndex: index,
+      firstNight: breakdown[0],
+      date,
+      dayType,
+    });
+    const discountRate = hasWeekdaySecondNightDiscount ? weekdaySecondNightDiscountRate : 1;
+    const nightTotal = hasWeekdaySecondNightDiscount ? roundMoney(preDiscountPrice * discountRate) : preDiscountPrice;
+    const discountAmount = preDiscountPrice - nightTotal;
+
     breakdown.push({
       date,
       dayType,
       dayTypeLabel: dayTypeLabels[dayType] || dayType,
-      price: Number(rate.nightly_price),
+      price: nightTotal,
+      preDiscountPrice,
+      discountType: hasWeekdaySecondNightDiscount ? weekdaySecondNightDiscountType : null,
+      discountRate,
+      discountAmount,
+      baseGuestCount: pricingGuest.pricingGuestCount,
+      basePrice,
+      extraBedCount,
+      extraBedUnitPrice,
+      extraBedAmount: nightlyExtraBedAmount,
       specialDateLabel: specialDate?.label || null,
       ruleSetId: ruleSet.id,
       ruleSetName: ruleSet.name,
@@ -307,7 +385,7 @@ export async function calculateBookingQuote(input, options = {}) {
 
   const subtotal = breakdown.reduce((total, night) => total + night.price, 0);
   const depositRate = depositRates[0];
-  const depositAmount = Math.round(subtotal * depositRate);
+  const depositAmount = roundMoney(subtotal * depositRate);
   const balanceAmount = subtotal - depositAmount;
   const singleRuleSet = ruleSets.length === 1 ? ruleSets[0] : null;
 

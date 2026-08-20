@@ -43,6 +43,15 @@ export type BookingPricingBreakdownNight = {
   dayType: "weekday" | "friday" | "holiday";
   dayTypeLabel: string;
   price: number;
+  preDiscountPrice?: number;
+  discountType?: "weekday_second_night_95" | string | null;
+  discountRate?: number;
+  discountAmount?: number;
+  baseGuestCount?: number;
+  basePrice?: number;
+  extraBedCount?: number;
+  extraBedUnitPrice?: number;
+  extraBedAmount?: number;
   specialDateLabel?: string | null;
   ruleSetId: string;
   ruleSetName: string;

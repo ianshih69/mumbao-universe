@@ -46,7 +46,7 @@ const emptyRuleSetForm: RuleSetForm = {
   name: "",
   effective_from: "",
   effective_to: "",
-  deposit_rate: "0.30",
+  deposit_rate: "0.50",
   is_active: true,
   notes: "",
 };
@@ -79,7 +79,7 @@ function normalizeRuleSetForm(ruleSet: BookingPriceRuleSet | null): RuleSetForm 
     name: ruleSet.name || "",
     effective_from: ruleSet.effective_from || "",
     effective_to: ruleSet.effective_to || "",
-    deposit_rate: String(ruleSet.deposit_rate ?? "0.30"),
+    deposit_rate: String(ruleSet.deposit_rate ?? "0.50"),
     is_active: Boolean(ruleSet.is_active),
     notes: ruleSet.notes || "",
   };

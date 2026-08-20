@@ -1289,7 +1289,7 @@ function normalizeRuleSetPayload(body) {
     name,
     effective_from: effectiveFrom,
     effective_to: effectiveTo,
-    deposit_rate: parsePricingDepositRate(body?.deposit_rate ?? body?.depositRate ?? 0.3),
+    deposit_rate: parsePricingDepositRate(body?.deposit_rate ?? body?.depositRate ?? 0.5),
     is_active: parsePricingBoolean(body?.is_active ?? body?.isActive, true),
     notes: cleanText(body?.notes, 1000) || null,
   };

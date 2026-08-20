@@ -22,6 +22,7 @@ import {
   fetchBookingCalendar,
   submitBookingRequest,
   type BookingCalendarResult,
+  type BookingRequestPayload,
   type StayType,
 } from "@/lib/bookings/bookingApi";
 import {
@@ -73,6 +74,7 @@ const emptyForm: BookingForm = {
   stay_type: "villa",
   adults: 2,
   children: 0,
+  infants: 0,
   room_count: DEFAULT_BOOKING_SETTINGS.totalRoomCount,
   has_pets: false,
   pet_count: 0,
@@ -115,6 +117,12 @@ function fieldClassName() {
 
 function textareaClassName() {
   return "min-h-28 rounded-[8px] border border-[#eadfce] bg-white px-3 py-2 text-sm text-stone-900 outline-none transition focus:border-[#b7957c] focus:ring-2 focus:ring-[#eadfce]";
+}
+
+function buildBookingRequestNotes(notes: string, infants: number) {
+  const trimmedNotes = notes.trim();
+  const infantNote = infants > 0 ? `嬰幼兒：${infants} 位` : "";
+  return [trimmedNotes, infantNote].filter(Boolean).join("\n");
 }
 
 function toDateText(date: Date) {
@@ -350,6 +358,7 @@ export default function Booking() {
   const [calendarFilter, setCalendarFilter] = useState<BookingCalendarFilter>("all");
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
+  const [showContactForm, setShowContactForm] = useState(false);
   const [selectionMode, setSelectionMode] = useState<CalendarSelectionMode>("checkIn");
   const [selectedGalleryIndex, setSelectedGalleryIndex] = useState(0);
   const [maxDate, setMaxDate] = useState(() => addMonthsToDate(todayText(), DEFAULT_BOOKING_SETTINGS.bookingWindowMonths));
@@ -368,6 +377,7 @@ export default function Booking() {
   const bookingSearchRef = useRef<HTMLDivElement | null>(null);
   const calendarPanelRef = useRef<HTMLElement | null>(null);
   const peoplePanelRef = useRef<HTMLElement | null>(null);
+  const contactFormRef = useRef<HTMLFormElement | null>(null);
 
   const minDate = todayText();
   const maxMonth = monthStart(maxDate);
@@ -400,10 +410,11 @@ export default function Booking() {
   const guestSummary = [
     `${form.adults} 位成人`,
     form.children > 0 ? `${form.children} 位孩童` : null,
+    form.infants > 0 ? `${form.infants} 位嬰幼兒` : null,
   ].filter(Boolean).join("｜");
   const contactDetailsComplete = Boolean(form.guest_name.trim() && isValidEmail(form.email) && isValidPhone(form.phone));
   const canShowStayOptions = bookingIsOpen && selectedIsAvailable && !submittedRequestId;
-  const canShowContactForm = canShowStayOptions;
+  const canShowContactForm = canShowStayOptions && showContactForm;
   const guestCount = form.adults + form.children;
   const activeGalleryImage = bookingGalleryImages[selectedGalleryIndex] || bookingGalleryImages[0];
 
@@ -654,6 +665,34 @@ export default function Booking() {
     }
   }
 
+  function handleStartBooking() {
+    if (!form.check_in || !form.check_out) {
+      setError("請先確認入住與退房日期。");
+      return;
+    }
+    if (selectedRangeIssue !== "ok") {
+      setError(rangeIssueMessage(form.stay_type, selectedRangeIssue));
+      return;
+    }
+    if (!bookingIsOpen || !selectedIsAvailable) {
+      setError("這段日期目前無法預約，請重新選擇日期。");
+      return;
+    }
+    if (form.adults < 1) {
+      setError("成人至少需 1 位。");
+      return;
+    }
+
+    setShowContactForm(true);
+    setCalendarOpen(false);
+    setPeopleOpen(false);
+    setMessage("");
+    setError("");
+    window.requestAnimationFrame(() => {
+      contactFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (selectedRangeIssue !== "ok") {
@@ -665,13 +704,21 @@ export default function Booking() {
     setError("");
     setSubmittedRequestId("");
     try {
-      const payload: BookingForm = {
-        ...form,
+      const payload: BookingRequestPayload = {
+        guest_name: form.guest_name,
+        email: form.email,
+        phone: form.phone,
+        check_in: form.check_in,
+        check_out: form.check_out,
+        stay_type: form.stay_type,
+        adults: form.adults,
+        children: form.children,
         room_count: form.stay_type === "villa" ? settings.totalRoomCount : form.room_count,
         has_pets: false,
         pet_count: 0,
         pet_type: "",
         pet_notes: "",
+        notes: buildBookingRequestNotes(form.notes, form.infants),
       };
       const result = await submitBookingRequest(payload, session?.access_token || null);
       setSubmittedRequestId(result.request.id);
@@ -1042,12 +1089,32 @@ export default function Booking() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-4 rounded-[12px] bg-[#fbf7f1] px-3 py-3">
+                  <div className="flex items-center justify-between gap-4 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-3 py-3">
                     <div>
-                      <p className="text-sm font-semibold text-stone-700">嬰幼兒</p>
+                      <p className="text-sm font-semibold text-stone-800">嬰幼兒</p>
                       <p className="mt-0.5 text-xs text-stone-500">0～1歲</p>
                     </div>
-                    <span className="text-xs text-stone-500">可於備註補充</span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={form.infants <= 0}
+                        onClick={() => updateField("infants", form.infants - 1)}
+                        aria-label="嬰幼兒減少"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </button>
+                      <span className="min-w-6 text-center text-base font-semibold text-stone-900">{form.infants}</span>
+                      <button
+                        type="button"
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={form.infants >= 30}
+                        onClick={() => updateField("infants", form.infants + 1)}
+                        aria-label="嬰幼兒增加"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -1143,13 +1210,24 @@ export default function Booking() {
                       ))}
                     </div>
                   </div>
+
+                  <div className="flex flex-col gap-2 border-t border-[#eadfce] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs leading-5 text-stone-500">下訂後填寫聯絡資料，我們會再確認房況與訂房細節。</p>
+                    <Button
+                      type="button"
+                      className="h-12 bg-[#8b6f5b] px-6 hover:bg-[#765d4a] sm:w-auto"
+                      onClick={handleStartBooking}
+                    >
+                      下訂
+                    </Button>
+                  </div>
                 </div>
               </div>
             </section>
           )}
 
           {canShowContactForm && (
-            <form className="mt-6 rounded-[20px] border border-[#eadfce] bg-white p-5 shadow-sm md:p-6" onSubmit={handleSubmit}>
+            <form ref={contactFormRef} className="mt-6 scroll-mt-24 rounded-[20px] border border-[#eadfce] bg-white p-5 shadow-sm md:p-6" onSubmit={handleSubmit}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-2xl font-semibold text-stone-900">聯絡資料</h2>

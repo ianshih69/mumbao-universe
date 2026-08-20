@@ -11,6 +11,7 @@ export type BookingDraftForm = {
   stay_type: StayType;
   adults: number;
   children: number;
+  infants: number;
   room_count: number;
   has_pets: boolean;
   pet_count: number;
@@ -52,6 +53,7 @@ export function normalizeBookingDraft(value: unknown, fallback: BookingDraftForm
     stay_type: cleanStayType(draft.stay_type, fallback.stay_type),
     adults: cleanCount(draft.adults, fallback.adults, 1, 30),
     children: cleanCount(draft.children, fallback.children, 0, 30),
+    infants: cleanCount(draft.infants, fallback.infants, 0, 30),
     room_count: cleanCount(draft.room_count, fallback.room_count, 1, 20),
     has_pets: Boolean(draft.has_pets),
     pet_count: cleanCount(draft.pet_count, fallback.pet_count, 0, 20),

@@ -1,4 +1,4 @@
-import type { BookingPetTypeValue, StayType } from "./bookingApi";
+import type { BookingPackageType, BookingPetTypeValue, StayType } from "./bookingApi";
 
 export const bookingDraftStorageKey = "mumbao_booking_draft_v1";
 
@@ -12,6 +12,7 @@ export type BookingDraftForm = {
   adults: number;
   children: number;
   infants: number;
+  selected_package_type: BookingPackageType;
   selected_package_quantity: number;
   room_count: number;
   has_pets: boolean;
@@ -42,6 +43,10 @@ function cleanPetType(value: unknown, fallback: BookingPetTypeValue): BookingPet
   return value === "dog" || value === "cat" || value === "other" ? value : fallback;
 }
 
+function cleanPackageType(value: unknown, fallback: BookingPackageType): BookingPackageType {
+  return value === "villa_10" || value === "villa_18" ? value : fallback;
+}
+
 export function normalizeBookingDraft(value: unknown, fallback: BookingDraftForm): BookingDraftForm {
   const draft = value && typeof value === "object" ? (value as Partial<BookingDraftForm>) : {};
 
@@ -55,6 +60,7 @@ export function normalizeBookingDraft(value: unknown, fallback: BookingDraftForm
     adults: cleanCount(draft.adults, fallback.adults, 1, 30),
     children: cleanCount(draft.children, fallback.children, 0, 30),
     infants: cleanCount(draft.infants, fallback.infants, 0, 30),
+    selected_package_type: cleanPackageType(draft.selected_package_type, fallback.selected_package_type),
     selected_package_quantity: cleanCount(draft.selected_package_quantity, fallback.selected_package_quantity, 0, 1),
     room_count: cleanCount(draft.room_count, fallback.room_count, 1, 20),
     has_pets: Boolean(draft.has_pets),

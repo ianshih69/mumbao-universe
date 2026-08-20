@@ -1,6 +1,7 @@
 export type StayType = "villa" | "room";
 export type PetType = "dog" | "cat" | "other";
 export type BookingPetTypeValue = PetType | "";
+export type BookingPackageType = "villa_10" | "villa_18";
 
 export type BookingPublicSettings = {
   bookingWindowMonths: number;
@@ -37,6 +38,59 @@ export type BookingCalendarResult = {
   settings: BookingPublicSettings;
 };
 
+export type BookingPricingBreakdownNight = {
+  date: string;
+  dayType: "weekday" | "friday" | "holiday";
+  dayTypeLabel: string;
+  price: number;
+  specialDateLabel?: string | null;
+  ruleSetId: string;
+  ruleSetName: string;
+  actualGuestCount: number;
+  pricingGuestCount: number;
+  packageType: BookingPackageType;
+  packageLabel: string;
+};
+
+export type BookingPricingResult = {
+  status: "resolved" | "unavailable";
+  reason?: string;
+  ruleSetId: string | null;
+  ruleSetName: string | null;
+  ruleSets: Array<{
+    id: string;
+    name: string;
+    effectiveFrom: string;
+    effectiveTo: string;
+    depositRate: number;
+  }>;
+  breakdown: BookingPricingBreakdownNight[];
+  subtotal: number | null;
+  total: number | null;
+  depositRate: number | null;
+  depositAmount: number | null;
+  balanceAmount: number | null;
+  missingDate?: string;
+  missingDayType?: string;
+  missingGuestCount?: number;
+  missingRuleSetId?: string;
+};
+
+export type BookingPriceQuoteResult = {
+  status: "resolved" | "unavailable";
+  checkIn: string;
+  checkOut: string;
+  stayType: StayType;
+  adults: number;
+  children: number;
+  guestCount: number;
+  pricingGuestCount: number | null;
+  packageType: BookingPackageType;
+  packageLabel: string;
+  nights: number;
+  pricing: BookingPricingResult;
+};
+
 export type BookingRequestPayload = {
   guest_name: string;
   email: string;
@@ -44,6 +98,7 @@ export type BookingRequestPayload = {
   check_in: string;
   check_out: string;
   stay_type: StayType;
+  selected_package_type: BookingPackageType;
   adults: number;
   children: number;
   room_count: number;
@@ -79,6 +134,36 @@ export function checkBookingAvailability(checkIn: string, checkOut: string) {
 export function fetchBookingCalendar(from: string) {
   const params = new URLSearchParams({ action: "calendar", from });
   return bookingRequest<BookingCalendarResult & { ok: boolean }>(`?${params.toString()}`);
+}
+
+export function fetchBookingQuote({
+  checkIn,
+  checkOut,
+  stayType,
+  packageType,
+  adults,
+  children,
+  roomCount,
+}: {
+  checkIn: string;
+  checkOut: string;
+  stayType: StayType;
+  packageType: BookingPackageType;
+  adults: number;
+  children: number;
+  roomCount: number;
+}) {
+  const params = new URLSearchParams({
+    action: "quote",
+    checkIn,
+    checkOut,
+    stayType,
+    packageType,
+    adults: String(adults),
+    children: String(children),
+    roomCount: String(roomCount),
+  });
+  return bookingRequest<BookingPriceQuoteResult & { ok: boolean }>(`?${params.toString()}`);
 }
 
 export function submitBookingRequest(payload: BookingRequestPayload, customerAccessToken?: string | null) {

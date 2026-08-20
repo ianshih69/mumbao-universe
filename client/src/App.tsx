@@ -39,6 +39,7 @@ import AdminShopUsers from "./pages/AdminShopUsers";
 import AdminShopAuditLogs from "./pages/AdminShopAuditLogs";
 import AdminShopAccount from "./pages/AdminShopAccount";
 import AdminBookings from "./pages/AdminBookings";
+import AdminBookingPricing from "./pages/AdminBookingPricing";
 import AdminSite from "./pages/AdminSite";
 import AiChat from "./pages/AiChat";
 import Chat from "./pages/Chat";
@@ -152,6 +153,11 @@ function Router() {
       <Route path={"/admin/shop"}>
         <AdminPage title="商城總覽">
           <AdminShopHome />
+        </AdminPage>
+      </Route>
+      <Route path={"/admin/bookings/pricing"}>
+        <AdminPage title="房價管理">
+          <AdminBookingPricing />
         </AdminPage>
       </Route>
       <Route path={"/admin/bookings"}>

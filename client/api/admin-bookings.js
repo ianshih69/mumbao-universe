@@ -1241,6 +1241,226 @@ async function handleCompleteStay(req, res, requestId) {
     points_award: pointsAward,
   });
 }
+
+const pricingDayTypes = new Set(["weekday", "friday", "holiday"]);
+const pricingPackageGuestCounts = Array.from({ length: 9 }, (_, index) => index + 10);
+
+function parsePricingBoolean(value, fallback = true) {
+  if (typeof value === "boolean") return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return fallback;
+}
+
+function parsePricingInteger(value, fieldName, min = 0, max = 10000000) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+    throw httpError(400, `${fieldName} is invalid.`, "invalid_pricing_payload");
+  }
+  return parsed;
+}
+
+function parsePricingDepositRate(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+    throw httpError(400, "deposit_rate is invalid.", "invalid_pricing_payload");
+  }
+  return parsed;
+}
+
+function normalizePricingDayType(value) {
+  const dayType = cleanText(value, 20);
+  if (!pricingDayTypes.has(dayType)) {
+    throw httpError(400, "day_type is invalid.", "invalid_pricing_payload");
+  }
+  return dayType;
+}
+
+function normalizeRuleSetPayload(body) {
+  const name = cleanText(body?.name, 120);
+  const effectiveFrom = normalizeDate(body?.effective_from || body?.effectiveFrom);
+  const effectiveTo = normalizeDate(body?.effective_to || body?.effectiveTo);
+  if (!name) throw httpError(400, "name is required.", "invalid_pricing_payload");
+  if (!effectiveFrom || !effectiveTo || effectiveTo < effectiveFrom) {
+    throw httpError(400, "effective dates are invalid.", "invalid_pricing_payload");
+  }
+
+  return {
+    name,
+    effective_from: effectiveFrom,
+    effective_to: effectiveTo,
+    deposit_rate: parsePricingDepositRate(body?.deposit_rate ?? body?.depositRate ?? 0.3),
+    is_active: parsePricingBoolean(body?.is_active ?? body?.isActive, true),
+    notes: cleanText(body?.notes, 1000) || null,
+  };
+}
+
+async function assertNoActiveRuleSetOverlap(payload, currentId = "") {
+  if (!payload.is_active) return;
+  const rows = await supabaseRequest(
+    `/booking_price_rule_sets?is_active=eq.true&effective_from=lte.${encodeURIComponent(
+      payload.effective_to
+    )}&effective_to=gte.${encodeURIComponent(
+      payload.effective_from
+    )}&select=id,name,effective_from,effective_to&limit=10`
+  );
+  const conflict = Array.isArray(rows)
+    ? rows.find((row) => row.id && row.id !== currentId)
+    : null;
+  if (conflict) {
+    throw httpError(409, "Active booking price rule sets cannot overlap.", "active_rule_set_overlap");
+  }
+}
+
+function normalizePricingRateRow(row, fallbackRuleSetId) {
+  const ruleSetId = cleanText(row?.rule_set_id || row?.ruleSetId || fallbackRuleSetId, 80);
+  if (!ruleSetId) throw httpError(400, "rule_set_id is required.", "invalid_pricing_payload");
+  const guestCount = parsePricingInteger(row?.guest_count ?? row?.guestCount, "guest_count", 10, 18);
+  const dayType = normalizePricingDayType(row?.day_type || row?.dayType);
+  const nightlyPrice = parsePricingInteger(row?.nightly_price ?? row?.nightlyPrice, "nightly_price", 0, 10000000);
+  return {
+    rule_set_id: ruleSetId,
+    guest_count: guestCount,
+    day_type: dayType,
+    nightly_price: nightlyPrice,
+    is_active: parsePricingBoolean(row?.is_active ?? row?.isActive, true),
+  };
+}
+
+function normalizeSpecialDatePayload(body) {
+  const ruleSetId = cleanText(body?.rule_set_id || body?.ruleSetId, 80);
+  const date = normalizeDate(body?.date);
+  if (!ruleSetId) throw httpError(400, "rule_set_id is required.", "invalid_pricing_payload");
+  if (!date) throw httpError(400, "date is invalid.", "invalid_pricing_payload");
+  return {
+    rule_set_id: ruleSetId,
+    date,
+    day_type: normalizePricingDayType(body?.day_type || body?.dayType),
+    label: cleanText(body?.label, 120) || null,
+    is_active: parsePricingBoolean(body?.is_active ?? body?.isActive, true),
+  };
+}
+
+async function handlePricingGet(req, res, requestId) {
+  await requireAdmin(req);
+  const ruleSets = await supabaseRequest(
+    "/booking_price_rule_sets?select=*&order=effective_from.desc,name.asc"
+  );
+  const ruleSetIds = Array.isArray(ruleSets)
+    ? ruleSets.map((ruleSet) => ruleSet.id).filter(Boolean)
+    : [];
+  const inFilter = ruleSetIds.length ? `in.(${ruleSetIds.join(",")})` : "";
+  const rates = ruleSetIds.length
+    ? await supabaseRequest(
+        `/booking_package_rates?rule_set_id=${inFilter}&select=*&order=guest_count.asc,day_type.asc`
+      )
+    : [];
+  const specialDates = ruleSetIds.length
+    ? await supabaseRequest(
+        `/booking_special_dates?rule_set_id=${inFilter}&select=*&order=date.asc`
+      )
+    : [];
+
+  sendJson(res, 200, {
+    ok: true,
+    requestId,
+    dayTypes: Array.from(pricingDayTypes),
+    guestCounts: pricingPackageGuestCounts,
+    ruleSets: Array.isArray(ruleSets) ? ruleSets : [],
+    rates: Array.isArray(rates) ? rates : [],
+    specialDates: Array.isArray(specialDates) ? specialDates : [],
+  });
+}
+
+async function handlePricingRuleSetPost(req, res, requestId) {
+  const admin = await requireAdmin(req);
+  const body = sanitizePayload(await readBody(req));
+  const id = cleanText(body?.id, 80);
+  const payload = normalizeRuleSetPayload(body);
+  await assertNoActiveRuleSetOverlap(payload, id);
+  const rows = await supabaseRequest(
+    id
+      ? `/booking_price_rule_sets?id=eq.${encodeURIComponent(id)}&select=*`
+      : "/booking_price_rule_sets?select=*",
+    {
+      method: id ? "PATCH" : "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+  const ruleSet = Array.isArray(rows) ? rows[0] : rows;
+  await writeBookingAuditLog({
+    req,
+    requestId,
+    admin,
+    action: id ? "update_booking_price_rule_set" : "create_booking_price_rule_set",
+    targetType: "booking_price_rule_set",
+    targetId: ruleSet?.id || id || null,
+    description: "更新房價規則期間",
+    beforeData: null,
+    afterData: ruleSet,
+  });
+  sendJson(res, 200, { ok: true, requestId, ruleSet });
+}
+
+async function handlePricingRatesPost(req, res, requestId) {
+  const admin = await requireAdmin(req);
+  const body = sanitizePayload(await readBody(req));
+  const ruleSetId = cleanText(body?.rule_set_id || body?.ruleSetId, 80);
+  const rows = Array.isArray(body?.rates) ? body.rates : [];
+  if (!ruleSetId || rows.length === 0) {
+    throw httpError(400, "rates are required.", "invalid_pricing_payload");
+  }
+  const payload = rows.map((row) => normalizePricingRateRow(row, ruleSetId));
+  const savedRates = await supabaseRequest(
+    "/booking_package_rates?on_conflict=rule_set_id,guest_count,day_type&select=*",
+    {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify(payload),
+    }
+  );
+  await writeBookingAuditLog({
+    req,
+    requestId,
+    admin,
+    action: "update_booking_package_rates",
+    targetType: "booking_price_rule_set",
+    targetId: ruleSetId,
+    description: "更新包棟房價矩陣",
+    beforeData: null,
+    afterData: { rates: savedRates },
+  });
+  sendJson(res, 200, { ok: true, requestId, rates: Array.isArray(savedRates) ? savedRates : [] });
+}
+
+async function handlePricingSpecialDatePost(req, res, requestId) {
+  const admin = await requireAdmin(req);
+  const body = sanitizePayload(await readBody(req));
+  const id = cleanText(body?.id, 80);
+  const payload = normalizeSpecialDatePayload(body);
+  const rows = await supabaseRequest(
+    id
+      ? `/booking_special_dates?id=eq.${encodeURIComponent(id)}&select=*`
+      : "/booking_special_dates?select=*",
+    {
+      method: id ? "PATCH" : "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+  const specialDate = Array.isArray(rows) ? rows[0] : rows;
+  await writeBookingAuditLog({
+    req,
+    requestId,
+    admin,
+    action: id ? "update_booking_special_date" : "create_booking_special_date",
+    targetType: "booking_special_date",
+    targetId: specialDate?.id || id || null,
+    description: "更新特殊日期房價分類",
+    beforeData: null,
+    afterData: specialDate,
+  });
+  sendJson(res, 200, { ok: true, requestId, specialDate });
+}
 async function dispatch(req, res, requestId) {
   const action = firstQueryValue(req.query?.action) || "dashboard";
   if (req.method === "GET" && action === "dashboard") return handleDashboard(req, res, requestId);
@@ -1249,9 +1469,13 @@ async function dispatch(req, res, requestId) {
   if (req.method === "GET" && action === "alerts") return handleAlerts(req, res, requestId);
   if (req.method === "GET" && action === "reservations") return handleReservations(req, res, requestId);
   if (req.method === "GET" && action === "requests") return handleRequests(req, res, requestId);
+  if (req.method === "GET" && action === "pricing") return handlePricingGet(req, res, requestId);
   if (req.method === "POST" && action === "external-reservation") return handleExternalReservation(req, res, requestId);
   if (req.method === "POST" && action === "email-detection") return handleEmailDetection(req, res, requestId);
   if (req.method === "POST" && action === "settings") return handleSettingsPost(req, res, requestId);
+  if (req.method === "POST" && action === "pricing-rule-set") return handlePricingRuleSetPost(req, res, requestId);
+  if (req.method === "POST" && action === "pricing-rates") return handlePricingRatesPost(req, res, requestId);
+  if (req.method === "POST" && action === "pricing-special-date") return handlePricingSpecialDatePost(req, res, requestId);
   if (req.method === "POST" && action === "sync-ical") return handleSyncIcal(req, res, requestId);
   if (req.method === "PATCH" && action === "alert") return handleAlertPatch(req, res, requestId);
   if (req.method === "POST" && action === "complete-stay") return handleCompleteStay(req, res, requestId);

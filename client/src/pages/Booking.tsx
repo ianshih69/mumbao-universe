@@ -20,8 +20,12 @@ import {
 import {
   checkBookingAvailability,
   fetchBookingCalendar,
+  fetchBookingQuote,
   submitBookingRequest,
   type BookingCalendarResult,
+  type BookingPackageType,
+  type BookingPricingBreakdownNight,
+  type BookingPriceQuoteResult,
   type BookingRequestPayload,
   type StayType,
 } from "@/lib/bookings/bookingApi";
@@ -75,6 +79,7 @@ const emptyForm: BookingForm = {
   adults: 2,
   children: 0,
   infants: 0,
+  selected_package_type: "villa_10",
   selected_package_quantity: 0,
   room_count: DEFAULT_BOOKING_SETTINGS.totalRoomCount,
   has_pets: false,
@@ -110,6 +115,10 @@ const bookingGalleryImages = [
 ];
 
 const bookingAmenityLabels = ["客廳", "餐廳", "歡唱設備", "麻將房", "星空露臺", "戶外烤肉區"];
+const bookingPackageOptions: Array<{ value: BookingPackageType; label: string; description: string }> = [
+  { value: "villa_10", label: "10 人包棟", description: "適合 10 人以內入住" },
+  { value: "villa_18", label: "18 人包棟", description: "適合 11 至 18 人入住" },
+];
 
 const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
 function fieldClassName() {
@@ -192,6 +201,19 @@ function formatSearchDate(dateText: string) {
   return `${month}/${day}（${weekdays[date.getUTCDay()]}）`;
 }
 
+function formatCompactDate(dateText: string) {
+  if (!dateText) return "-";
+  const date = parseDate(dateText);
+  const month = date.getUTCMonth() + 1;
+  const day = date.getUTCDate();
+  return `${month}/${day}`;
+}
+
+function formatTwd(amount: number | null | undefined) {
+  if (!Number.isFinite(Number(amount))) return "—";
+  return `TWD ${Number(amount).toLocaleString("zh-TW")}`;
+}
+
 function formatFullDate(dateText: string) {
   if (!dateText) return "-";
   return new Intl.DateTimeFormat("zh-TW", {
@@ -233,10 +255,6 @@ function getMonthDates(month: string) {
     ...Array.from({ length: leadingBlanks }, () => ""),
     ...Array.from({ length: days }, (_, index) => `${month.slice(0, 7)}-${String(index + 1).padStart(2, "0")}`),
   ];
-}
-
-function isDateInRange(date: string, checkIn: string, checkOut: string) {
-  return Boolean(checkIn && checkOut && date >= checkIn && date < checkOut);
 }
 
 function getDefaultStayType(settings: PublicBookingSettings): StayType {
@@ -287,6 +305,36 @@ function selectedStayTitle(stayType: StayType) {
 
 function stayTypeDisplay(stayType: StayType) {
   return stayType === "villa" ? "整棟包棟" : "單間住宿";
+}
+
+function getPackageLabel(packageType: BookingPackageType) {
+  return bookingPackageOptions.find((option) => option.value === packageType)?.label || "10 人包棟";
+}
+
+function buildNightlyGroups(nightly: BookingPricingBreakdownNight[] = []) {
+  return nightly.reduce<Array<{ key: string; label: string; amount: number; nights: BookingPricingBreakdownNight[] }>>(
+    (groups, night) => {
+      const key = [
+        night.dayType,
+        night.price,
+        night.pricingGuestCount,
+        night.packageType,
+      ].join("|");
+      const existing = groups.find((group) => group.key === key);
+      if (existing) {
+        existing.nights.push(night);
+        return groups;
+      }
+      groups.push({
+        key,
+        label: night.dayTypeLabel,
+        amount: night.price,
+        nights: [night],
+      });
+      return groups;
+    },
+    []
+  );
 }
 
 function isValidEmail(value: string) {
@@ -361,12 +409,16 @@ export default function Booking() {
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [showContactForm, setShowContactForm] = useState(false);
   const [selectionMode, setSelectionMode] = useState<CalendarSelectionMode>("checkIn");
+  const [hoverPreviewDate, setHoverPreviewDate] = useState("");
   const [selectedGalleryIndex, setSelectedGalleryIndex] = useState(0);
   const [maxDate, setMaxDate] = useState(() => addMonthsToDate(todayText(), DEFAULT_BOOKING_SETTINGS.bookingWindowMonths));
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [isCalendarLoading, setIsCalendarLoading] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
+  const [isQuoteLoading, setIsQuoteLoading] = useState(false);
+  const [priceQuote, setPriceQuote] = useState<BookingPriceQuoteResult | null>(null);
+  const [priceQuoteError, setPriceQuoteError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedRequestId, setSubmittedRequestId] = useState("");
   const [isBookingTestUnlocked, setIsBookingTestUnlocked] = useState(() => {
@@ -417,6 +469,16 @@ export default function Booking() {
   const canShowStayOptions = bookingIsOpen && selectedIsAvailable && !submittedRequestId;
   const selectedPackageQuantity = form.selected_package_quantity;
   const canShowOrderSummary = canShowStayOptions && selectedPackageQuantity === 1;
+  const selectedPackageLabel = getPackageLabel(form.selected_package_type);
+  const quoteReady = priceQuote?.pricing.status === "resolved";
+  const quoteTotal = quoteReady ? priceQuote?.pricing.total ?? null : null;
+  const quoteNights = priceQuote?.pricing.breakdown || [];
+  const quoteDepositRatePercent =
+    quoteReady && priceQuote?.pricing.depositRate != null ? Math.round(priceQuote.pricing.depositRate * 100) : null;
+  const quoteBalanceRatePercent = quoteDepositRatePercent == null ? null : 100 - quoteDepositRatePercent;
+  const nightlyGroups = buildNightlyGroups(quoteNights);
+  const showGroupedNightly = quoteReady && nightlyGroups.length === 1 && quoteNights.length > 1;
+  const canProceedToContact = canShowOrderSummary && quoteReady && !isQuoteLoading && !priceQuoteError;
   const canShowContactForm = canShowOrderSummary && showContactForm;
   const guestCount = form.adults + form.children;
   const activeGalleryImage = bookingGalleryImages[selectedGalleryIndex] || bookingGalleryImages[0];
@@ -502,6 +564,59 @@ export default function Booking() {
   }, [bookingIsOpen, form.check_in, form.check_out, form.selected_package_quantity, isCalendarLoading, selectedRangeIssue]);
 
   useEffect(() => {
+    if (!canShowOrderSummary) {
+      setIsQuoteLoading(false);
+      setPriceQuote(null);
+      setPriceQuoteError("");
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsQuoteLoading(true);
+    setPriceQuote(null);
+    setPriceQuoteError("");
+
+    fetchBookingQuote({
+      checkIn: form.check_in,
+      checkOut: form.check_out,
+      stayType: form.stay_type,
+      packageType: form.selected_package_type,
+      adults: form.adults,
+      children: form.children,
+      roomCount: form.stay_type === "villa" ? settings.totalRoomCount : form.room_count,
+    })
+      .then((quote) => {
+        if (controller.signal.aborted) return;
+        setPriceQuote(quote);
+        if (quote.pricing.status !== "resolved") {
+          setPriceQuoteError("目前無法取得此住宿期間的房價，請重新選擇日期或聯絡我們。");
+          return;
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setPriceQuote(null);
+          setPriceQuoteError("目前無法取得此住宿期間的房價，請重新選擇日期或聯絡我們。");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsQuoteLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [
+    canShowOrderSummary,
+    form.adults,
+    form.check_in,
+    form.check_out,
+    form.children,
+    form.room_count,
+    form.selected_package_type,
+    form.stay_type,
+    settings.totalRoomCount,
+  ]);
+
+  useEffect(() => {
     if (!calendarOpen && !peopleOpen) return;
 
     function handlePointerDown(event: MouseEvent | TouchEvent) {
@@ -545,6 +660,7 @@ export default function Booking() {
         check_in: "",
         check_out: "",
         stay_type: stayType,
+        selected_package_type: "villa_10",
         selected_package_quantity: 0,
         room_count: stayType === "villa" ? settings.totalRoomCount : clampRoomCount(current.room_count, settings.totalRoomCount),
       };
@@ -559,6 +675,7 @@ export default function Booking() {
   function handleCalendarFilterChange(nextFilter: BookingCalendarFilter) {
     setCalendarFilter(nextFilter);
     clearDateSelection();
+    setHoverPreviewDate("");
     setCalendarOpen(true);
   }
 
@@ -567,6 +684,7 @@ export default function Booking() {
     setSelectionMode(nextMode);
     setCalendarOpen(true);
     setPeopleOpen(false);
+    setHoverPreviewDate("");
     setError("");
     if (nextMode === "checkIn" && form.check_in) {
       setVisibleMonth(monthStart(form.check_in));
@@ -593,7 +711,7 @@ export default function Booking() {
     setForm((current) => {
       const clickedDay = getCalendarDay(date);
       const currentSaleMode = stayTypeToSaleMode(current.stay_type);
-      const selectingCheckout = selectionMode === "checkOut" || Boolean(current.check_in && !current.check_out && date > current.check_in);
+      const selectingCheckout = selectionMode === "checkOut" || Boolean(current.check_in && !current.check_out);
       const canUseAsCheckout =
         selectingCheckout &&
         current.check_in &&
@@ -618,6 +736,7 @@ export default function Booking() {
         setMessage("");
         setCalendarOpen(false);
         setSelectionMode("checkIn");
+        setHoverPreviewDate("");
         return nextForm;
       }
 
@@ -625,14 +744,14 @@ export default function Booking() {
 
       if (!current.check_in || (current.check_in && current.check_out) || date < current.check_in) {
         const stayType = saleModeToStayType(clickedDay.saleMode) || getDefaultStayType(settings);
-        const nextCheckOut = current.check_out && date < current.check_out ? current.check_out : addDays(date, 1);
         setMessage(`您已選擇${stayType === "villa" ? "包棟" : "單間"}住宿，請選擇退房日期。`);
         setSelectionMode("checkOut");
         setCalendarOpen(true);
+        setHoverPreviewDate("");
         return {
           ...current,
           check_in: date,
-          check_out: current.check_out ? nextCheckOut : "",
+          check_out: "",
           stay_type: stayType,
           room_count: stayType === "villa" ? settings.totalRoomCount : clampRoomCount(current.room_count, settings.totalRoomCount),
         };
@@ -656,6 +775,7 @@ export default function Booking() {
       setMessage("");
       setCalendarOpen(false);
       setSelectionMode("checkIn");
+      setHoverPreviewDate("");
       return nextForm;
     });
   }
@@ -698,6 +818,17 @@ export default function Booking() {
     setError("");
   }
 
+  function handlePackageSelect(packageType: BookingPackageType) {
+    setForm((current) => ({
+      ...current,
+      selected_package_type: packageType,
+      selected_package_quantity: 1,
+    }));
+    setShowContactForm(false);
+    setMessage("");
+    setError("");
+  }
+
   function handleStartBooking() {
     if (!form.check_in || !form.check_out) {
       setError("請先確認入住與退房日期。");
@@ -719,6 +850,10 @@ export default function Booking() {
       setError("請先選擇包棟方案。");
       return;
     }
+    if (!quoteReady || isQuoteLoading || priceQuoteError) {
+      setError("目前無法取得此住宿期間的房價，請重新選擇日期或聯絡我們。");
+      return;
+    }
 
     setShowContactForm(true);
     setCalendarOpen(false);
@@ -736,6 +871,10 @@ export default function Booking() {
       setError(rangeIssueMessage(form.stay_type, selectedRangeIssue));
       return;
     }
+    if (!quoteReady || isQuoteLoading || priceQuoteError) {
+      setError("目前無法取得此住宿期間的房價，請重新選擇日期或聯絡我們。");
+      return;
+    }
     setIsSubmitting(true);
     setMessage("");
     setError("");
@@ -748,6 +887,7 @@ export default function Booking() {
         check_in: form.check_in,
         check_out: form.check_out,
         stay_type: form.stay_type,
+        selected_package_type: form.selected_package_type,
         adults: form.adults,
         children: form.children,
         room_count: form.stay_type === "villa" ? settings.totalRoomCount : form.room_count,
@@ -844,17 +984,22 @@ export default function Booking() {
 
   function renderMonth(month: string) {
     const dates = getMonthDates(month);
+    const previewCheckOut =
+      selectionMode === "checkOut" && form.check_in && hoverPreviewDate > form.check_in ? hoverPreviewDate : "";
+    const displayCheckOut = previewCheckOut || form.check_out;
+    const hasDisplayRange = Boolean(form.check_in && displayCheckOut && displayCheckOut > form.check_in);
+    const rangeBackgroundClass = previewCheckOut ? "before:bg-[#f8efe6]" : "before:bg-[#f3eadf]";
 
     return (
       <div>
-        <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-stone-400">
+        <div className="grid grid-cols-7 text-center text-xs font-medium text-stone-400">
           {weekdays.map((weekday) => (
             <span key={weekday}>{weekday}</span>
           ))}
         </div>
-        <div className="mt-2 grid grid-cols-7 gap-1">
+        <div className="mt-2 grid grid-cols-7 gap-y-1" onMouseLeave={() => setHoverPreviewDate("")}>
           {dates.map((date, index) => {
-            if (!date) return <div key={`blank-${month}-${index}`} className="h-9" />;
+            if (!date) return <div key={`blank-${month}-${index}`} className="h-10" />;
 
             const unavailable = unavailableDates.has(date);
             const outOfRange = date < minDate || date > maxDate || !bookingIsOpen;
@@ -873,31 +1018,58 @@ export default function Booking() {
               }) === "ok";
             const isCheckIn = date === form.check_in;
             const isCheckOut = date === form.check_out;
-            const inRange = isDateInRange(date, form.check_in, form.check_out);
+            const isPreviewCheckOut = Boolean(previewCheckOut && date === previewCheckOut && !isCheckOut);
+            const rangeStart = Boolean(hasDisplayRange && date === form.check_in);
+            const rangeEnd = Boolean(hasDisplayRange && date === displayCheckOut);
+            const rangeMiddle = Boolean(hasDisplayRange && date > form.check_in && date < displayCheckOut);
             const filteredOut = isCalendarFilterMismatch(day, calendarFilter) && !canUseAsCheckout;
-            const disabled = outOfRange || filteredOut || (!isBookableStayNight(day, minDate, maxDate) && !canUseAsCheckout);
+            const disabled =
+              outOfRange ||
+              filteredOut ||
+              (selectingCheckout && form.check_in
+                ? !canUseAsCheckout
+                : !isBookableStayNight(day, minDate, maxDate) && !canUseAsCheckout);
             const muted = disabled || filteredOut || unavailable || !day.isAvailable || day.saleMode === "closed";
             const isToday = date === minDate;
 
             return (
-              <button
+              <div
                 key={date}
-                type="button"
-                disabled={disabled}
-                onClick={() => selectDate(date)}
                 className={cn(
-                  "flex h-9 items-center justify-center rounded-full text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
-                  muted && "text-stone-300",
-                  disabled && "cursor-not-allowed",
-                  !disabled && "text-stone-700 hover:bg-[#f7f1e9]",
-                  isToday && !isCheckIn && !isCheckOut && "ring-1 ring-[#d7c5b2]",
-                  inRange && !disabled && !isCheckIn && !isCheckOut && "bg-[#f3eadf] text-[#765d4a]",
-                  (isCheckIn || isCheckOut) && "bg-[#8b6f5b] text-white shadow-sm hover:bg-[#765d4a]"
+                  "relative flex h-10 items-center justify-center overflow-hidden",
+                  (rangeStart || rangeEnd || rangeMiddle) &&
+                    "before:absolute before:top-1/2 before:h-8 before:-translate-y-1/2",
+                  (rangeStart || rangeEnd || rangeMiddle) && rangeBackgroundClass,
+                  rangeStart && !rangeEnd && "before:left-1/2 before:right-0",
+                  rangeEnd && !rangeStart && "before:left-0 before:right-1/2",
+                  rangeMiddle && "before:left-0 before:right-0"
                 )}
-                aria-label={calendarDayAriaLabel(day, minDate, maxDate)}
+                onMouseEnter={() => {
+                  if (selectionMode === "checkOut" && canUseAsCheckout) setHoverPreviewDate(date);
+                }}
+                onFocus={() => {
+                  if (selectionMode === "checkOut" && canUseAsCheckout) setHoverPreviewDate(date);
+                }}
               >
-                {Number(date.slice(8, 10))}
-              </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => selectDate(date)}
+                  className={cn(
+                    "relative z-10 flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
+                    muted && "text-stone-300",
+                    disabled && "cursor-not-allowed",
+                    !disabled && "text-stone-700 hover:bg-[#f7f1e9]",
+                    isToday && !isCheckIn && !isCheckOut && "ring-1 ring-[#d7c5b2]",
+                    rangeMiddle && !disabled && "text-[#765d4a]",
+                    isPreviewCheckOut && !disabled && "border border-[#d7c5b2] bg-[#fff8ea] text-[#765d4a]",
+                    (isCheckIn || isCheckOut) && "bg-[#8b6f5b] text-white shadow-sm hover:bg-[#765d4a]"
+                  )}
+                  aria-label={calendarDayAriaLabel(day, minDate, maxDate)}
+                >
+                  {Number(date.slice(8, 10))}
+                </button>
+              </div>
             );
           })}
         </div>
@@ -945,13 +1117,13 @@ export default function Booking() {
             ref={bookingSearchRef}
             className="relative mt-6 rounded-[20px] border border-[#eadfce] bg-white p-3 shadow-sm md:p-4"
           >
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_0.8fr]">
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-[1fr_1fr_0.8fr]">
               <button
                 type="button"
                 className={cn(
                   "min-h-[72px] rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
                   calendarOpen && selectionMode === "checkIn"
-                    ? "border-[#8b6f5b] bg-[#fff8ea]"
+                    ? "border-[#8b6f5b] bg-[#fff8ea] shadow-[inset_0_-3px_0_rgba(139,111,91,0.18)]"
                     : "border-[#eadfce] bg-[#fffdf9]"
                 )}
                 onClick={() => openCalendar("checkIn")}
@@ -967,7 +1139,7 @@ export default function Booking() {
                 className={cn(
                   "min-h-[72px] rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
                   calendarOpen && selectionMode === "checkOut"
-                    ? "border-[#8b6f5b] bg-[#fff8ea]"
+                    ? "border-[#8b6f5b] bg-[#fff8ea] shadow-[inset_0_-3px_0_rgba(139,111,91,0.18)]"
                     : "border-[#eadfce] bg-[#fffdf9]"
                 )}
                 onClick={() => openCalendar("checkOut")}
@@ -981,7 +1153,7 @@ export default function Booking() {
               <button
                 type="button"
                 className={cn(
-                  "min-h-[72px] rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce] sm:col-span-2 lg:col-span-1",
+                  "col-span-2 min-h-[72px] rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce] lg:col-span-1",
                   peopleOpen ? "border-[#8b6f5b] bg-[#fff8ea]" : "border-[#eadfce] bg-[#fffdf9]"
                 )}
                 onClick={togglePeoplePopover}
@@ -996,10 +1168,7 @@ export default function Booking() {
             {calendarOpen && (
               <section
                 ref={calendarPanelRef}
-                className={cn(
-                  "absolute left-0 right-0 top-full z-40 mt-3 rounded-[18px] border border-[#eadfce] bg-white p-4 shadow-xl sm:right-auto sm:w-[340px]",
-                  selectionMode === "checkOut" ? "sm:left-[calc(50%+0.25rem)] lg:left-[calc(33.333%+0.25rem)]" : "sm:left-0"
-                )}
+                className="absolute left-0 right-0 top-full z-40 mt-3 w-full max-w-[calc(100vw-2rem)] rounded-[18px] border border-[#eadfce] bg-white p-4 shadow-xl sm:right-auto sm:w-[380px]"
               >
                 <div className="flex items-center justify-between gap-3">
                   <Button
@@ -1008,7 +1177,10 @@ export default function Booking() {
                     size="icon"
                     className="h-9 w-9 rounded-full"
                     disabled={visibleMonth <= monthStart(minDate)}
-                    onClick={() => setVisibleMonth((current) => addMonths(current, -1))}
+                    onClick={() => {
+                      setHoverPreviewDate("");
+                      setVisibleMonth((current) => addMonths(current, -1));
+                    }}
                     aria-label="上一個月"
                   >
                     <ChevronLeft className="h-4 w-4" />
@@ -1020,7 +1192,10 @@ export default function Booking() {
                     size="icon"
                     className="h-9 w-9 rounded-full"
                     disabled={visibleMonth >= maxMonth}
-                    onClick={() => setVisibleMonth((current) => addMonths(current, 1))}
+                    onClick={() => {
+                      setHoverPreviewDate("");
+                      setVisibleMonth((current) => addMonths(current, 1));
+                    }}
                     aria-label="下一個月"
                   >
                     <ChevronRight className="h-4 w-4" />
@@ -1214,18 +1389,42 @@ export default function Booking() {
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-3 border-t border-[#eadfce] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="grid gap-3 border-t border-[#eadfce] pt-4">
                     <div>
                       <p className="text-xs font-medium text-stone-500">包棟方案</p>
-                      <p className="mt-1 text-sm text-stone-600">選擇這組住宿方案後，右側會顯示訂單摘要。</p>
+                      <p className="mt-1 text-sm text-stone-600">
+                        選擇本次住宿方案後，右側會顯示正式房價明細。
+                      </p>
                     </div>
-                    <div className="flex w-full items-center justify-between rounded-full border border-[#d7c5b2] bg-[#fffdf9] px-3 py-2 sm:w-auto sm:min-w-[156px]">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {bookingPackageOptions.map((option) => {
+                        const selected = form.selected_package_type === option.value && selectedPackageQuantity === 1;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={cn(
+                              "rounded-[14px] border px-4 py-3 text-left transition",
+                              selected
+                                ? "border-[#8b6f5b] bg-[#fff8ea] shadow-sm"
+                                : "border-[#eadfce] bg-[#fffdf9] hover:border-[#b7957c]"
+                            )}
+                            onClick={() => handlePackageSelect(option.value)}
+                            aria-pressed={selected}
+                          >
+                            <span className="block text-sm font-semibold text-stone-900">{option.label}</span>
+                            <span className="mt-1 block text-xs leading-5 text-stone-500">{option.description}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="flex w-full items-center justify-between rounded-full border border-[#d7c5b2] bg-[#fffdf9] px-3 py-2 sm:w-auto sm:max-w-[180px]">
                       <button
                         type="button"
                         className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
                         disabled={selectedPackageQuantity <= 0}
                         onClick={() => handlePackageQuantityChange(selectedPackageQuantity - 1)}
-                        aria-label="減少包棟方案"
+                        aria-label="取消包棟方案"
                       >
                         <Minus className="h-4 w-4" />
                       </button>
@@ -1235,14 +1434,14 @@ export default function Booking() {
                         className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
                         disabled={selectedPackageQuantity >= 1}
                         onClick={() => handlePackageQuantityChange(selectedPackageQuantity + 1)}
-                        aria-label="增加包棟方案"
+                        aria-label="選擇包棟方案"
                       >
                         <Plus className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
-                </div>
 
+                </div>
                 <div className="grid gap-5 p-5 md:p-6">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">STAY</p>
@@ -1281,7 +1480,7 @@ export default function Booking() {
                   {canShowOrderSummary && (
                     <div className="rounded-[16px] border border-[#eadfce] bg-[#fffdf9] p-4">
                       <div className="border-b border-[#eadfce] pb-3">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">SELECTED STAY</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">ORDER SUMMARY</p>
                         <h2 className="mt-2 text-2xl font-semibold text-stone-900">訂單摘要</h2>
                       </div>
 
@@ -1303,12 +1502,12 @@ export default function Booking() {
 
                         <div className="grid gap-3 rounded-[12px] border border-[#eadfce] bg-white px-4 py-3">
                           <div className="flex items-center justify-between gap-3">
-                            <span className="text-xs font-medium text-stone-500">已選住宿</span>
-                            <span className="font-semibold text-stone-900">{form.stay_type === "villa" ? "包棟" : "單間住宿"}</span>
+                            <span className="text-xs font-medium text-stone-500">已選方案</span>
+                            <span className="text-right font-semibold text-stone-900">{selectedPackageLabel}</span>
                           </div>
                           <div className="flex items-center justify-between gap-3">
                             <span className="text-xs font-medium text-stone-500">數量</span>
-                            <span className="font-semibold text-stone-900">{selectedPackageQuantity}</span>
+                            <span className="font-semibold text-stone-900">{selectedPackageQuantity} 組</span>
                           </div>
                           <div className="flex items-center justify-between gap-3">
                             <span className="text-xs font-medium text-stone-500">住宿方式</span>
@@ -1316,14 +1515,82 @@ export default function Booking() {
                           </div>
                         </div>
 
-                        <div className="rounded-[12px] bg-[#f7f1e9] px-4 py-3 text-sm leading-6 text-stone-600">
-                          房價將依入住日期、人數確認，送出後由我們確認房況及訂房細節。
+                        <div className="grid gap-3 rounded-[12px] border border-[#eadfce] bg-white px-4 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-xs font-medium text-stone-500">價格明細</p>
+                            {isQuoteLoading && <span className="text-xs text-stone-500">房價計算中…</span>}
+                          </div>
+
+                          {priceQuoteError && (
+                            <div className="rounded-[8px] border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">
+                              {priceQuoteError}
+                            </div>
+                          )}
+
+                          {quoteReady && showGroupedNightly && nightlyGroups[0] && (
+                            <div className="flex flex-wrap items-start justify-between gap-2 text-sm">
+                              <div>
+                                <p className="font-semibold text-stone-900">{nightlyGroups[0].label}</p>
+                                <p className="mt-0.5 text-xs text-stone-500">
+                                  {quoteNights[0]?.packageLabel || selectedPackageLabel}｜計價人數 {quoteNights[0]?.pricingGuestCount} 人
+                                </p>
+                              </div>
+                              <p className="text-right font-semibold text-stone-900">
+                                {formatTwd(nightlyGroups[0].amount)} × {nightlyGroups[0].nights.length} 晚
+                              </p>
+                            </div>
+                          )}
+
+                          {quoteReady && !showGroupedNightly && (
+                            <div className="grid gap-2">
+                              {quoteNights.map((night) => (
+                                <div key={night.date} className="flex flex-wrap items-start justify-between gap-2 text-sm">
+                                  <div>
+                                    <p className="font-semibold text-stone-900">
+                                      {formatCompactDate(night.date)} {night.dayTypeLabel}
+                                      {night.specialDateLabel ? "｜" + night.specialDateLabel : ""}
+                                    </p>
+                                    <p className="mt-0.5 text-xs text-stone-500">
+                                      {night.packageLabel}｜計價人數 {night.pricingGuestCount} 人
+                                    </p>
+                                  </div>
+                                  <p className="text-right font-semibold text-stone-900">{formatTwd(night.price)}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="border-t border-[#eadfce] pt-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                              <span className="font-medium text-stone-600">住宿小計</span>
+                              <span className="font-semibold text-stone-900">{formatTwd(priceQuote?.pricing.subtotal)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 rounded-[14px] border border-[#ead9bd] bg-[#fff8ea] px-4 py-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <span className="text-sm font-semibold text-[#765d4a]">總價</span>
+                            <span className="text-2xl font-semibold text-stone-900">{formatTwd(quoteTotal)}</span>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                            <span className="text-stone-600">訂金 {quoteDepositRatePercent ?? 30}%</span>
+                            <span className="font-semibold text-stone-900">{formatTwd(priceQuote?.pricing.depositAmount)}</span>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                            <span className="text-stone-600">尾款 {quoteBalanceRatePercent ?? 70}%</span>
+                            <span className="font-semibold text-stone-900">{formatTwd(priceQuote?.pricing.balanceAmount)}</span>
+                          </div>
+                          <p className="text-xs leading-5 text-stone-500">
+                            此頁不需付款。送出後，我們將依此房價明細與您確認房況及訂房細節。
+                          </p>
                         </div>
 
                         <Button
                           type="button"
                           className="h-12 bg-[#8b6f5b] hover:bg-[#765d4a]"
                           onClick={handleStartBooking}
+                          disabled={!canProceedToContact}
                         >
                           下一步
                         </Button>

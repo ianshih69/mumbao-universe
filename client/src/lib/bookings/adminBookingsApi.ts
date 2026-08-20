@@ -93,6 +93,38 @@ export type BookingPlatformSetting = {
   last_error?: string | null;
 };
 
+export type BookingPricingDayType = "weekday" | "friday" | "holiday";
+
+export type BookingPriceRuleSet = {
+  id: string;
+  name: string;
+  effective_from: string;
+  effective_to: string;
+  deposit_rate: number | string;
+  is_active: boolean;
+  notes?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type BookingPackageRate = {
+  id?: string;
+  rule_set_id: string;
+  guest_count: number;
+  day_type: BookingPricingDayType;
+  nightly_price: number;
+  is_active: boolean;
+};
+
+export type BookingSpecialDate = {
+  id?: string;
+  rule_set_id: string;
+  date: string;
+  day_type: BookingPricingDayType;
+  label?: string | null;
+  is_active: boolean;
+};
+
 export type BookingEmailResult = {
   isBookingLike: boolean;
   confidence: number;
@@ -229,4 +261,51 @@ export function completeBookingStay(
       finalLodgingAmount: payload.finalLodgingAmount,
     }),
   });
+}
+
+export function fetchBookingPricing(token: string) {
+  return adminBookingRequest<{
+    ok: true;
+    dayTypes: BookingPricingDayType[];
+    guestCounts: number[];
+    ruleSets: BookingPriceRuleSet[];
+    rates: BookingPackageRate[];
+    specialDates: BookingSpecialDate[];
+  }>(token, "?action=pricing");
+}
+
+export function saveBookingPriceRuleSet(token: string, payload: Partial<BookingPriceRuleSet>) {
+  return adminBookingRequest<{ ok: true; ruleSet: BookingPriceRuleSet }>(
+    token,
+    "?action=pricing-rule-set",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export function saveBookingPackageRates(
+  token: string,
+  payload: { rule_set_id: string; rates: Array<Partial<BookingPackageRate>> }
+) {
+  return adminBookingRequest<{ ok: true; rates: BookingPackageRate[] }>(
+    token,
+    "?action=pricing-rates",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export function saveBookingSpecialDate(token: string, payload: Partial<BookingSpecialDate>) {
+  return adminBookingRequest<{ ok: true; specialDate: BookingSpecialDate }>(
+    token,
+    "?action=pricing-special-date",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
 }

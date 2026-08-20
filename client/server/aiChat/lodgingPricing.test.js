@@ -141,6 +141,95 @@ describe("official lodging pricing", () => {
     });
   });
 
+  it("calculates 10-person multi-night lodging totals and nightly breakdowns", async () => {
+    const knowledge = await loadGuesthouseKnowledge();
+    const price = calculateVillaLodgingPriceFromKnowledge(
+      {
+        active_intent: "pricing",
+        stay_type: "villa",
+        check_in: "2026-09-07",
+        check_out: "2026-09-10",
+        guest_count: 10,
+        pet_count: 0,
+      },
+      knowledge
+    );
+
+    expect(price).toMatchObject({
+      status: "resolved",
+      amount: 75000,
+      nights: 3,
+      guest_count: 10,
+    });
+    expect(price.nightly).toHaveLength(3);
+    expect(price.nightly.every((night) => night.amount === 25000)).toBe(true);
+    expect(price.nightly.every((night) => night.date_type === "平日（日～四）")).toBe(true);
+  });
+
+  it("splits 10-person lodging price across different date types", async () => {
+    const knowledge = await loadGuesthouseKnowledge();
+    const price = calculateVillaLodgingPriceFromKnowledge(
+      {
+        active_intent: "pricing",
+        stay_type: "villa",
+        check_in: "2026-09-10",
+        check_out: "2026-09-13",
+        guest_count: 10,
+        pet_count: 0,
+      },
+      knowledge
+    );
+
+    expect(price).toMatchObject({
+      status: "resolved",
+      amount: 96000,
+      nights: 3,
+    });
+    expect(price.nightly.map((night) => [night.date, night.date_type, night.amount])).toEqual([
+      ["2026-09-10", "平日（日～四）", 25000],
+      ["2026-09-11", "週五", 32000],
+      ["2026-09-12", "假日／連續假日", 39000],
+    ]);
+  });
+
+  it("calculates 18-person villa lodging prices", async () => {
+    const knowledge = await loadGuesthouseKnowledge();
+    const oneNight = calculateVillaLodgingPriceFromKnowledge(
+      {
+        active_intent: "pricing",
+        stay_type: "villa",
+        check_in: "2026-09-09",
+        check_out: "2026-09-10",
+        guest_count: 18,
+        pet_count: 0,
+      },
+      knowledge
+    );
+    const multiNight = calculateVillaLodgingPriceFromKnowledge(
+      {
+        active_intent: "pricing",
+        stay_type: "villa",
+        check_in: "2026-09-10",
+        check_out: "2026-09-13",
+        guest_count: 18,
+        pet_count: 0,
+      },
+      knowledge
+    );
+
+    expect(oneNight).toMatchObject({
+      status: "resolved",
+      amount: 35000,
+      nights: 1,
+    });
+    expect(multiNight).toMatchObject({
+      status: "resolved",
+      amount: 126000,
+      nights: 3,
+    });
+    expect(multiNight.nightly.map((night) => night.amount)).toEqual([35000, 42000, 49000]);
+  });
+
   it("splits known lodging price from unresolved pet fee", async () => {
     const pricing = await buildOfficialPricingResolution(completeDogContext);
 

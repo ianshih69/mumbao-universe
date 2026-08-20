@@ -6,6 +6,10 @@ import {
   sendJson,
   supabaseRequest,
 } from "../server/shopShared.js";
+import {
+  buildBookingPricingSnapshot,
+  calculateBookingQuote,
+} from "../server/bookingPricing/index.js";
 
 const DEFAULT_BOOKING_SETTINGS = {
   bookingWindowMonths: 6,
@@ -318,6 +322,46 @@ async function handleAvailability(req, res, requestId) {
   });
 }
 
+async function handleQuote(req, res, requestId) {
+  const settings = await loadBookingSettings();
+  const { checkIn, checkOut } = validateDateRange(
+    firstQueryValue(req.query?.checkIn || req.query?.check_in),
+    firstQueryValue(req.query?.checkOut || req.query?.check_out),
+    settings
+  );
+  const stayDetails = validateStayDetails(
+    {
+      stay_type: firstQueryValue(req.query?.stayType || req.query?.stay_type),
+      adults: firstQueryValue(req.query?.adults),
+      children: firstQueryValue(req.query?.children),
+      room_count: firstQueryValue(req.query?.roomCount || req.query?.room_count),
+      has_pets: false,
+    },
+    settings
+  );
+
+  const quote = await calculateBookingQuote(
+    {
+      checkIn,
+      checkOut,
+      stayType: stayDetails.stayType,
+      adults: stayDetails.adults,
+      children: stayDetails.children,
+      guestCount: stayDetails.guestCount,
+      packageType: firstQueryValue(
+        req.query?.packageType || req.query?.package_type || req.query?.selectedPackageType || req.query?.selected_package_type
+      ),
+    },
+    { supabaseRequest }
+  );
+
+  sendJson(res, 200, {
+    ok: true,
+    requestId,
+    ...quote,
+  });
+}
+
 async function handleRequest(req, res, requestId) {
   const settings = await loadBookingSettings();
   const body = await readBody(req);
@@ -349,6 +393,30 @@ async function handleRequest(req, res, requestId) {
       message: "這段日期目前無法預約，請重新選擇日期。",
     });
   }
+  const quote = await calculateBookingQuote(
+    {
+      checkIn,
+      checkOut,
+      stayType: stayDetails.stayType,
+      adults: stayDetails.adults,
+      children: stayDetails.children,
+      guestCount: stayDetails.guestCount,
+      packageType: body.selected_package_type || body.packageType || body.package_type || body.selectedPackageType,
+    },
+    { supabaseRequest }
+  );
+  const pricingSnapshot = buildBookingPricingSnapshot(quote);
+  if (!pricingSnapshot) {
+    return sendJson(res, 409, {
+      ok: false,
+      requestId,
+      error: "pricing_unavailable",
+      code: "pricing_unavailable",
+      message: "目前無法取得此住宿期間的房價，請重新選擇日期或聯絡我們。",
+      pricing: quote.pricing,
+    });
+  }
+
   const customerProfile = await getOptionalCustomerProfile(req);
 
   const rows = await supabaseRequest("/booking_requests", {
@@ -370,6 +438,14 @@ async function handleRequest(req, res, requestId) {
       pet_type: stayDetails.petType,
       pet_notes: stayDetails.petNotes || null,
       notes: notes || null,
+      selected_package_type: pricingSnapshot.selected_package_type,
+      pricing_rule_set_id: pricingSnapshot.pricing_rule_set_id,
+      quoted_total: pricingSnapshot.quoted_total,
+      deposit_rate: pricingSnapshot.deposit_rate,
+      deposit_amount: pricingSnapshot.deposit_amount,
+      balance_amount: pricingSnapshot.balance_amount,
+      pricing_breakdown: pricingSnapshot.pricing_breakdown,
+      quoted_at: pricingSnapshot.quoted_at,
       status: "pending_review",
       source: "official_site",
       raw_payload: {
@@ -377,6 +453,9 @@ async function handleRequest(req, res, requestId) {
         adults: stayDetails.adults,
         children: stayDetails.children,
         room_count: stayDetails.roomCount,
+        selected_package_type: pricingSnapshot.selected_package_type,
+        actual_guest_count: quote.guestCount,
+        pricing_guest_count: quote.pricingGuestCount,
         has_pets: stayDetails.hasPets,
         pet_type: stayDetails.petType,
       },
@@ -414,6 +493,7 @@ async function dispatch(req, res, requestId) {
   const action = firstQueryValue(req.query?.action) || "availability";
   if (req.method === "GET" && action === "calendar") return handleCalendar(req, res, requestId);
   if (req.method === "GET" && action === "availability") return handleAvailability(req, res, requestId);
+  if (req.method === "GET" && action === "quote") return handleQuote(req, res, requestId);
   if (req.method === "POST" && action === "request") return handleRequest(req, res, requestId);
   throw httpError(404, "Unknown booking action.", "unknown_action");
 }

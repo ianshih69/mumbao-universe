@@ -24,7 +24,9 @@ export const adminNavigationSections: AdminNavSection[] = [
   },
   {
     label: "房況與訂房",
-    items: [{ key: "bookings", label: "房況與訂房管理", href: "/admin/bookings" }],
+    items: [{ key: "bookings", label: "房況與訂房管理", href: "/admin/bookings", match: ["/admin/bookings"] },
+      { key: "booking-pricing", label: "房價管理", href: "/admin/bookings/pricing" },
+    ],
   },
   {
     label: "官網內容",

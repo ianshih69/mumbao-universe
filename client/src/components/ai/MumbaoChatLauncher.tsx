@@ -545,7 +545,7 @@ export function MumbaoChatLauncher() {
             draggable={false}
           />
           <span className="-mt-1 rounded-full border border-white/80 bg-[#fff8ec]/95 px-4 py-1.5 text-sm font-semibold tracking-wide text-[#66584f] shadow-[0_8px_18px_rgba(111,88,71,0.14)] backdrop-blur-md">
-            問慢寶
+            慢寶客服
           </span>
         </button>
       ) : null}

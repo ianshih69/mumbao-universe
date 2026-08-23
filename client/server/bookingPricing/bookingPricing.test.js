@@ -11,7 +11,7 @@ const trialRuleSet = {
   name: "試營運包棟房價",
   effective_from: "2026-11-01",
   effective_to: "2027-02-01",
-  deposit_rate: 0.5,
+  deposit_rate: 0.3,
   is_active: true,
 };
 
@@ -151,7 +151,7 @@ describe("bookingPricing", () => {
     await expect(quote({ adults: 8, packageType: "villa_10", checkIn: "2026-11-02", checkOut: "2026-11-03" })).resolves.toMatchObject({
       status: "resolved",
       pricingGuestCount: 10,
-      pricing: { total: 25000, depositAmount: 12500, balanceAmount: 12500 },
+      pricing: { total: 25000, depositAmount: 7500, balanceAmount: 17500 },
     });
     await expect(quote({ adults: 12, packageType: "villa_10", checkIn: "2026-11-02", checkOut: "2026-11-03" })).resolves.toMatchObject({
       pricingGuestCount: 12,
@@ -326,16 +326,32 @@ describe("bookingPricing", () => {
     const result = await quote({ checkIn: "2026-11-05", checkOut: "2026-11-07" });
     expect(result.pricing.breakdown.map((night) => night.date)).toEqual(["2026-11-05", "2026-11-06"]);
     expect(result.pricing.total).toBe(57000);
-    expect(result.pricing.depositAmount).toBe(28500);
-    expect(result.pricing.balanceAmount).toBe(28500);
+    expect(result.pricing.depositAmount).toBe(17100);
+    expect(result.pricing.balanceAmount).toBe(39900);
 
     const oneNight = await quote({ checkIn: "2026-11-05", checkOut: "2026-11-06" });
     expect(oneNight.pricing.breakdown.map((night) => night.date)).toEqual(["2026-11-05"]);
     expect(oneNight.pricing).toMatchObject({
       total: 25000,
-      depositAmount: 12500,
-      balanceAmount: 12500,
+      depositAmount: 7500,
+      balanceAmount: 17500,
     });
+  });
+
+  it("calculates a 30% deposit and 70% balance for custom totals", async () => {
+    const customMatrix = { ...matrix, 10: { ...matrix[10], weekday: 48750 } };
+    const result = await quote(
+      { adults: 10, packageType: "villa_10", checkIn: "2026-11-02", checkOut: "2026-11-03" },
+      { rates: makeRateRows(customMatrix) }
+    );
+
+    expect(result.pricing).toMatchObject({
+      total: 48750,
+      depositRate: 0.3,
+      depositAmount: 14625,
+      balanceAmount: 34125,
+    });
+    expect(result.pricing.depositAmount + result.pricing.balanceAmount).toBe(result.pricing.total);
   });
 
   it("applies the 95% weekday consecutive-stay discount to the second night only", async () => {
@@ -368,8 +384,8 @@ describe("bookingPricing", () => {
       price: 25000,
     });
     expect(result.pricing.total).toBe(73750);
-    expect(result.pricing.depositAmount).toBe(36875);
-    expect(result.pricing.balanceAmount).toBe(36875);
+    expect(result.pricing.depositAmount).toBe(22125);
+    expect(result.pricing.balanceAmount).toBe(51625);
   });
 
   it("rounds second-night discounts to whole TWD", async () => {
@@ -389,8 +405,8 @@ describe("bookingPricing", () => {
       price: 24938,
     });
     expect(result.pricing.total).toBe(51188);
-    expect(result.pricing.depositAmount).toBe(25594);
-    expect(result.pricing.balanceAmount).toBe(25594);
+    expect(result.pricing.depositAmount).toBe(15356);
+    expect(result.pricing.balanceAmount).toBe(35832);
   });
 
   it("does not apply the weekday consecutive-stay discount to Sunday starts, Fridays, or special-date overrides", async () => {
@@ -457,8 +473,8 @@ describe("bookingPricing", () => {
       }),
     ]);
     expect(result.pricing.total).toBe(80200);
-    expect(result.pricing.depositAmount).toBe(40100);
-    expect(result.pricing.balanceAmount).toBe(40100);
+    expect(result.pricing.depositAmount).toBe(24060);
+    expect(result.pricing.balanceAmount).toBe(56140);
     expect(result.pricing.depositAmount + result.pricing.balanceAmount).toBe(result.pricing.total);
   });
 
@@ -499,8 +515,8 @@ describe("bookingPricing", () => {
       }),
     ]);
     expect(result.pricing.total).toBe(71370);
-    expect(result.pricing.depositAmount).toBe(35685);
-    expect(result.pricing.balanceAmount).toBe(35685);
+    expect(result.pricing.depositAmount).toBe(21411);
+    expect(result.pricing.balanceAmount).toBe(49959);
     expect(result.pricing.depositAmount + result.pricing.balanceAmount).toBe(result.pricing.total);
   });
 
@@ -535,7 +551,7 @@ describe("bookingPricing", () => {
 
     await expect(quote({ checkIn: "2026-11-01", checkOut: "2026-11-02" })).resolves.toMatchObject({
       status: "resolved",
-      pricing: { total: 25000, depositAmount: 12500, balanceAmount: 12500 },
+      pricing: { total: 25000, depositAmount: 7500, balanceAmount: 17500 },
     });
   });
 

@@ -1860,11 +1860,11 @@ export default function Booking() {
                                 <span className="shrink-0 whitespace-nowrap text-2xl font-semibold text-stone-900">{formatTwd(quoteTotal)}</span>
                               </div>
                               <div className="grid gap-1 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
-                                <span className="text-stone-600">訂金 {quoteDepositRatePercent ?? 50}%</span>
+                                <span className="text-stone-600">訂金 {quoteDepositRatePercent ?? 30}%</span>
                                 <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">{formatTwd(priceQuote?.pricing.depositAmount)}</span>
                               </div>
                               <div className="grid gap-1 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
-                                <span className="text-stone-600">尾款 {quoteBalanceRatePercent ?? 50}%</span>
+                                <span className="text-stone-600">尾款 {quoteBalanceRatePercent ?? 70}%</span>
                                 <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">{formatTwd(priceQuote?.pricing.balanceAmount)}</span>
                               </div>
                               <p className="text-xs leading-5 text-stone-500">

@@ -252,6 +252,13 @@ function formatNegativeTwd(amount: number | null | undefined) {
   return formatted.startsWith("TWD ") ? `-${formatted}` : formatted;
 }
 
+function formatDayTypeSummary(dayType: BookingPricingBreakdownNight["dayType"], fallbackLabel: string) {
+  if (dayType === "weekday") return "平日（日～四）";
+  if (dayType === "friday") return "週五";
+  if (dayType === "holiday") return "週六／假日";
+  return fallbackLabel;
+}
+
 function formatFullDate(dateText: string) {
   if (!dateText) return "-";
   return new Intl.DateTimeFormat("zh-TW", {
@@ -390,32 +397,6 @@ function getQuoteUnavailableMessage(reason?: string) {
     return "目前最多可接待 23 位入住。";
   }
   return "目前無法取得此住宿期間的房價，請重新選擇日期或聯絡我們。";
-}
-
-function buildNightlyGroups(nightly: BookingPricingBreakdownNight[] = []) {
-  return nightly.reduce<Array<{ key: string; label: string; amount: number; nights: BookingPricingBreakdownNight[] }>>(
-    (groups, night) => {
-      const key = [
-        night.dayType,
-        night.price,
-        night.pricingGuestCount,
-        night.packageType,
-      ].join("|");
-      const existing = groups.find((group) => group.key === key);
-      if (existing) {
-        existing.nights.push(night);
-        return groups;
-      }
-      groups.push({
-        key,
-        label: night.dayTypeLabel,
-        amount: night.price,
-        nights: [night],
-      });
-      return groups;
-    },
-    []
-  );
 }
 
 function isValidEmail(value: string) {
@@ -564,12 +545,9 @@ export default function Booking() {
   const quoteReady = priceQuote?.pricing.status === "resolved";
   const quoteTotal = quoteReady ? priceQuote?.pricing.total ?? null : null;
   const quoteNights = priceQuote?.pricing.breakdown || [];
-  const quoteHasExtraBeds = quoteNights.some((night) => (night.extraBedCount || 0) > 0);
   const quoteDepositRatePercent =
     quoteReady && priceQuote?.pricing.depositRate != null ? Math.round(priceQuote.pricing.depositRate * 100) : null;
   const quoteBalanceRatePercent = quoteDepositRatePercent == null ? null : 100 - quoteDepositRatePercent;
-  const nightlyGroups = buildNightlyGroups(quoteNights);
-  const showGroupedNightly = false;
   const canProceedToContact = canShowOrderSummary && !guestCountExceedsLimit && quoteReady && !isQuoteLoading && !priceQuoteError;
   const canShowContactForm = canShowOrderSummary && showContactForm;
   const activeGalleryImage = bookingGalleryImages[selectedGalleryIndex] || bookingGalleryImages[0];
@@ -1221,8 +1199,8 @@ export default function Booking() {
   return (
     <div className="min-h-screen bg-[#fbf7f1] text-stone-900">
       <Header />
-      <main className="overflow-x-clip px-3 pb-16 pt-32 sm:px-4 md:px-8 md:pt-40">
-        <div className="mx-auto mb-4 flex w-full max-w-6xl min-w-0 flex-col gap-3 rounded-[12px] border border-[#eadfce] bg-white/80 px-4 py-3 text-sm text-stone-600 shadow-sm md:flex-row md:items-center md:justify-between">
+      <main className="overflow-x-clip px-4 pb-16 pt-32 sm:px-5 md:px-8 md:pt-36">
+        <div className="mx-auto mb-4 flex w-full max-w-[1280px] min-w-0 flex-col gap-2 border-b border-[#eadfce] pb-3 text-sm text-stone-500 md:flex-row md:items-center md:justify-between">
           <span>測試模式｜目前訂房系統尚未正式開放</span>
           <button
             type="button"
@@ -1232,15 +1210,15 @@ export default function Booking() {
             退出測試
           </button>
         </div>
-        <section className="mx-auto w-full max-w-6xl min-w-0">
-          <div className="w-full min-w-0 rounded-[24px] border border-[#eadfce] bg-white/90 p-5 shadow-sm md:p-6">
-            <h1 className="font-serif text-3xl font-light tracking-wide text-stone-900 md:text-4xl">
+        <section className="mx-auto w-full max-w-[1280px] min-w-0">
+          <div className="w-full min-w-0 py-5 md:py-7">
+            <h1 className="font-serif text-[2rem] font-light leading-tight tracking-wide text-stone-900 md:text-[2.4rem]">
               線上預約
             </h1>
-            <p className="mt-3 text-base leading-7 text-stone-600">
-              選擇入住與退房日期，送出後由我們確認房況。
+            <p className="mt-3 max-w-2xl text-base leading-7 text-stone-600">
+              選擇入住日期與人數，我們將依房況與方案顯示可預約內容。
             </p>
-            <div className="mt-3 inline-flex max-w-full items-start gap-2 rounded-[10px] border border-[#ead9bd] bg-[#fff8ea] px-3 py-2 text-sm leading-6 text-stone-700">
+            <div className="mt-4 inline-flex max-w-full items-start gap-2 rounded-[10px] border border-[#ead9bd] bg-[#fffaf3] px-3 py-2 text-sm leading-6 text-stone-700">
               <Gift className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#a47a4f]" />
               <p>
                 <span className="font-semibold text-[#765d4a]">官網限定</span>｜完成訂房並入住，每筆訂單贈慢寶精美文創禮 1 份
@@ -1256,20 +1234,20 @@ export default function Booking() {
 
           <div
             ref={bookingSearchRef}
-            className="relative mt-6 w-full max-w-full min-w-0 rounded-[20px] border border-[#eadfce] bg-white p-3 shadow-sm md:p-4"
+            className="relative mt-3 w-full max-w-full min-w-0"
           >
-            <div className="mb-3 max-w-full min-w-0 rounded-[12px] border border-[#ead9bd] bg-[#fff8ea] px-3 py-2 text-sm leading-6 text-stone-700 md:flex md:flex-wrap md:items-center md:gap-3">
+            <div className="mb-3 max-w-full min-w-0 rounded-[12px] border border-[#ead9bd] bg-[#fff8ea] px-4 py-2.5 text-sm leading-6 text-stone-700 md:flex md:flex-wrap md:items-center md:gap-3">
               <p className="font-semibold text-[#765d4a]">試營運預約｜{MIN_BOOKING_DATE_LABEL} 起開放入住</p>
               <p className="text-stone-600">目前可預約 {MIN_BOOKING_DATE_LABEL} 起的住宿日期。</p>
             </div>
-            <div className="grid min-w-0 grid-cols-2 gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
+            <div className="grid min-w-0 grid-cols-2 overflow-hidden rounded-[16px] border border-[#eadfce] bg-white shadow-[0_8px_22px_rgba(120,90,65,0.035)] md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.85fr)]">
               <button
                 type="button"
                 className={cn(
-                  "min-h-[72px] min-w-0 rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
+                  "min-h-[76px] min-w-0 px-4 py-3 text-left transition hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#eadfce] md:border-r md:border-[#eadfce]",
                   calendarOpen && selectionMode === "checkIn"
-                    ? "border-[#8b6f5b] bg-[#fff8ea] shadow-[inset_0_-3px_0_rgba(139,111,91,0.18)]"
-                    : "border-[#eadfce] bg-[#fffdf9]"
+                    ? "bg-[#fff8ea] shadow-[inset_0_-3px_0_rgba(139,111,91,0.18)]"
+                    : "bg-white"
                 )}
                 onClick={() => openCalendar("checkIn")}
                 aria-expanded={calendarOpen && selectionMode === "checkIn"}
@@ -1282,10 +1260,10 @@ export default function Booking() {
               <button
                 type="button"
                 className={cn(
-                  "min-h-[72px] min-w-0 rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
+                  "min-h-[76px] min-w-0 border-l border-[#eadfce] px-4 py-3 text-left transition hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#eadfce] md:border-l-0 md:border-r",
                   calendarOpen && selectionMode === "checkOut"
-                    ? "border-[#8b6f5b] bg-[#fff8ea] shadow-[inset_0_-3px_0_rgba(139,111,91,0.18)]"
-                    : "border-[#eadfce] bg-[#fffdf9]"
+                    ? "bg-[#fff8ea] shadow-[inset_0_-3px_0_rgba(139,111,91,0.18)]"
+                    : "bg-white"
                 )}
                 onClick={() => openCalendar("checkOut")}
                 aria-expanded={calendarOpen && selectionMode === "checkOut"}
@@ -1298,8 +1276,8 @@ export default function Booking() {
               <button
                 type="button"
                 className={cn(
-                  "col-span-2 min-h-[72px] min-w-0 rounded-[14px] border px-4 py-3 text-left transition hover:border-[#b7957c] hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-[#eadfce] lg:col-span-1",
-                  peopleOpen ? "border-[#8b6f5b] bg-[#fff8ea]" : "border-[#eadfce] bg-[#fffdf9]"
+                  "col-span-2 min-h-[76px] min-w-0 border-t border-[#eadfce] px-4 py-3 text-left transition hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#eadfce] md:col-span-1 md:border-t-0",
+                  peopleOpen ? "bg-[#fff8ea]" : "bg-white"
                 )}
                 onClick={togglePeoplePopover}
                 aria-expanded={peopleOpen}
@@ -1493,27 +1471,27 @@ export default function Booking() {
             </div>
           )}
           {canShowStayOptions && (
-            <section className="mt-6 w-full max-w-full min-w-0 overflow-hidden rounded-[16px] border border-[#efe5d8] bg-white shadow-[0_10px_28px_rgba(120,90,65,0.05)]">
-              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0 min-[900px]:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-                <div className="grid min-w-0 content-start grid-cols-[minmax(0,1fr)] gap-6 border-b border-[#efe5d8] p-4 min-[900px]:border-b-0 min-[900px]:border-r min-[900px]:p-5">
+            <section className="mt-8 w-full max-w-full min-w-0 rounded-[18px] border border-[#efe5d8] bg-white/95">
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0 min-[1000px]:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)]">
+                <div className="grid min-w-0 content-start grid-cols-[minmax(0,1fr)] gap-6 border-b border-[#efe5d8] p-4 sm:p-5 min-[1000px]:border-b-0 min-[1000px]:border-r min-[1000px]:p-6">
                   <div className="min-w-0">
                     <div className="w-full min-w-0 overflow-hidden rounded-[16px] bg-[#fbf7f1]">
                       <img
                         src={activeGalleryImage.src}
                         alt={activeGalleryImage.alt}
-                        className="block aspect-[4/3] w-full max-w-full object-cover sm:aspect-[16/10] lg:aspect-[4/3]"
+                        className="block aspect-[4/3] w-full max-w-full object-cover sm:aspect-[16/10] min-[1000px]:aspect-[16/10]"
                       />
                     </div>
-                    <div className="mt-3 flex w-full max-w-full min-w-0 gap-2 overflow-x-auto overscroll-x-contain pb-1">
+                    <div className="mt-4 flex w-full max-w-full min-w-0 gap-2.5 overflow-x-auto overscroll-x-contain pb-1">
                       {bookingGalleryImages.map((image, index) => (
                         <button
                           key={image.src}
                           type="button"
                           className={cn(
-                            "h-16 w-20 flex-none overflow-hidden rounded-[10px] border transition",
+                            "h-16 w-20 flex-none overflow-hidden rounded-[10px] border bg-white transition sm:h-[74px] sm:w-24",
                             selectedGalleryIndex === index
                               ? "border-[#8b6f5b] ring-2 ring-[#eadfce]"
-                              : "border-[#eadfce] hover:border-[#b7957c]"
+                              : "border-[#eadfce] opacity-90 hover:border-[#b7957c] hover:opacity-100"
                           )}
                           onClick={() => setSelectedGalleryIndex(index)}
                           aria-label="切換住宿空間照片"
@@ -1525,12 +1503,12 @@ export default function Booking() {
                   </div>
 
                   <div>
-                    <p className="text-xs font-medium text-stone-500">設施</p>
+                    <p className="text-sm font-semibold text-stone-900">設施</p>
                     <div className="mt-2 flex min-w-0 flex-wrap gap-2">
                       {bookingAmenityLabels.map((amenity) => (
                         <span
                           key={amenity}
-                          className="max-w-full break-words rounded-full border border-[#eadfce] bg-[#fbf7f1] px-3 py-1 text-xs font-medium text-[#765d4a]"
+                          className="max-w-full break-words rounded-full border border-[#eadfce] bg-[#fffdf9] px-3 py-1.5 text-xs font-medium text-[#765d4a] sm:text-sm"
                         >
                           {amenity}
                         </span>
@@ -1538,14 +1516,14 @@ export default function Booking() {
                     </div>
                   </div>
 
-                  <div className="grid min-w-0 gap-3 border-t border-[#eadfce] pt-5">
+                  <div className="grid min-w-0 gap-4 border-t border-[#eadfce] pt-6">
                     <div>
-                      <p className="text-sm font-semibold text-stone-900">包棟方案</p>
+                      <p className="text-lg font-semibold text-stone-900">包棟方案</p>
                       <p className="mt-1 text-sm text-stone-600">
                         選擇適合本次入住的包棟方案。
                       </p>
                     </div>
-                    <div className="grid min-w-0 gap-2">
+                    <div className="grid min-w-0 gap-3">
                       {bookingPackageOptions.map((option) => {
                         const selected = form.selected_package_type === option.value && selectedPackageQuantity === 1;
                         const expanded = expandedPackageType === option.value;
@@ -1556,7 +1534,7 @@ export default function Booking() {
                           <div
                             key={option.value}
                             className={cn(
-                              "min-w-0 overflow-hidden rounded-[12px] border transition",
+                              "min-w-0 overflow-hidden rounded-[12px] border transition-colors duration-200",
                               unavailable
                                 ? "border-[#eadfce] bg-[#fbf7f1] text-stone-500"
                                 : "",
@@ -1564,12 +1542,12 @@ export default function Booking() {
                                 ? "border-[#b7957c] bg-[#fffaf3]"
                                 : unavailable
                                   ? ""
-                                  : "border-[#eadfce] bg-white hover:border-[#d7c5b2]"
+                                  : "border-[#eadfce] bg-white hover:border-[#d7c5b2] hover:bg-[#fffdf9]"
                             )}
                           >
                             <button
                               type="button"
-                              className="flex w-full min-w-0 items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-[#fffaf3] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#eadfce]"
+                              className="flex w-full min-w-0 items-center justify-between gap-4 px-4 py-4 text-left transition focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#eadfce] sm:px-5"
                               onClick={() => togglePackageDetails(option.value)}
                               aria-expanded={expanded}
                               aria-controls={detailsId}
@@ -1578,18 +1556,18 @@ export default function Booking() {
                             >
                               <span className="min-w-0">
                                 <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                                  <span className={cn("text-base font-semibold", unavailable ? "text-stone-500" : "text-stone-900")}>{option.label}</span>
+                                  <span className={cn("text-lg font-semibold leading-tight", unavailable ? "text-stone-500" : "text-stone-900")}>{option.label}</span>
                                   {selected && (
-                                    <span className="rounded-full bg-[#eadfce] px-2 py-0.5 text-[11px] font-medium text-[#765d4a]">
+                                    <span className="rounded-full border border-[#d7c5b2] bg-white/70 px-2 py-0.5 text-[11px] font-medium text-[#765d4a]">
                                       已選擇
                                     </span>
                                   )}
                                 </span>
-                                <span className="mt-1 block text-xs leading-5 text-stone-500">{option.description}</span>
+                                <span className="mt-1.5 block text-sm leading-5 text-stone-500">{option.description}</span>
                               </span>
                               <ChevronRight
                                 className={cn(
-                                  "h-4 w-4 flex-none text-[#8b6f5b] transition-transform",
+                                  "h-4 w-4 flex-none text-[#8b6f5b] transition-transform duration-200 ease-out",
                                   expanded ? "rotate-90" : ""
                                 )}
                                 aria-hidden="true"
@@ -1603,15 +1581,15 @@ export default function Booking() {
                             {expanded && (
                               <div
                                 id={detailsId}
-                                className="border-t border-[#eadfce] bg-[#fffdf9] px-4 py-4 text-sm leading-7 text-stone-600"
+                                className="border-t border-[#eadfce] bg-[#fffdf9] px-4 py-4 text-sm leading-7 text-stone-600 sm:px-5"
                               >
                                 <BookingPackageDetails packageType={option.value} />
-                                <div className="mt-4 flex min-w-0 flex-col gap-3 border-t border-[#eadfce] pt-4 sm:flex-row sm:items-center sm:justify-between">
-                                  <span className="text-sm font-medium text-stone-700">選擇此方案</span>
-                                  <div className="grid w-full max-w-full grid-cols-[40px_minmax(0,1fr)_40px] items-center rounded-full border border-[#d7c5b2] bg-white px-2 py-1.5 sm:w-[160px]">
+                                <div className="mt-5 flex min-w-0 flex-col gap-3 border-t border-[#eadfce] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                                  <span className="text-sm font-medium text-stone-700">{selected ? "已選擇" : "選擇此方案"}</span>
+                                  <div className="grid w-full max-w-full grid-cols-[42px_minmax(0,1fr)_42px] items-center rounded-full border border-[#d7c5b2] bg-white px-2 py-1.5 sm:w-[172px]">
                                     <button
                                       type="button"
-                                      className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
+                                      className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d7c5b2] bg-[#fffdf9] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
                                       disabled={!selected}
                                       onClick={() => handlePackageQuantityChange(0)}
                                       aria-label={`取消${option.label}`}
@@ -1623,7 +1601,7 @@ export default function Booking() {
                                     </span>
                                     <button
                                       type="button"
-                                      className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
+                                      className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d7c5b2] bg-[#fffdf9] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
                                       disabled={selected || unavailable}
                                       onClick={() => handlePackageSelect(option.value)}
                                       aria-label={`選擇${option.label}`}
@@ -1641,40 +1619,45 @@ export default function Booking() {
                   </div>
 
                 </div>
-                <div className="grid min-w-0 content-start grid-cols-[minmax(0,1fr)] gap-5 p-4 md:p-6">
+                <div className="grid min-w-0 content-start grid-cols-[minmax(0,1fr)] gap-6 self-start p-5 sm:p-6 min-[1200px]:sticky min-[1200px]:top-28">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">STAY</p>
-                    <h2 className="mt-2 font-serif text-3xl font-light text-stone-900">
+                    <h2 className="mt-2 font-serif text-[1.75rem] font-light leading-tight text-stone-900">
                       {form.stay_type === "villa" ? "包棟" : "單間住宿"}
                     </h2>
-                    <p className="mt-2 text-sm leading-6 text-stone-500">
-                      依目前選擇的日期與人數，送出後由我們確認房況及訂房細節。
+                    <p className="mt-3 text-sm leading-6 text-stone-500">
+                      依目前選擇的日期與人數，顯示可預約方案與住宿費用。
                     </p>
                   </div>
 
-                  <div className="grid min-w-0 gap-4 text-sm text-stone-600">
-                    <div className="border-t border-[#eadfce] pt-4">
-                      <p className="text-xs font-medium text-stone-500">住宿日期</p>
-                      <p className="mt-1 break-words font-semibold text-stone-900">
-                        {formatSearchDate(form.check_in)}－{formatSearchDate(form.check_out)}
-                      </p>
-                      <p className="mt-1 text-xs text-stone-500">共 {nightCount} 晚</p>
-                    </div>
-
+                  <div className="grid min-w-0 gap-5 border-t border-[#eadfce] pt-5 text-sm text-stone-600">
                     <div>
-                      <p className="flex items-center gap-2 text-xs font-medium text-stone-500">
-                        <Users className="h-3.5 w-3.5" />
-                        入住人數
-                      </p>
-                      <p className="mt-1 break-words font-semibold text-stone-900">{guestSummary}</p>
+                      <p className="text-base font-semibold text-stone-900">住宿資訊</p>
+                      <div className="mt-4 grid min-w-0 gap-4">
+                        <div>
+                          <p className="text-xs font-medium text-stone-500">住宿日期</p>
+                          <p className="mt-1 break-words font-semibold text-stone-900">
+                            {formatSearchDate(form.check_in)}－{formatSearchDate(form.check_out)}
+                          </p>
+                          <p className="mt-1 text-xs text-stone-500">共 {nightCount} 晚</p>
+                        </div>
+
+                        <div>
+                          <p className="flex items-center gap-2 text-xs font-medium text-stone-500">
+                            <Users className="h-3.5 w-3.5" />
+                            入住人數
+                          </p>
+                          <p className="mt-1 break-words font-semibold text-stone-900">{guestSummary}</p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-medium text-stone-500">住宿方式</p>
+                          <p className="mt-1 break-words font-semibold text-stone-900">{stayTypeDisplay(form.stay_type)}</p>
+                        </div>
+                      </div>
                     </div>
 
-                    <div>
-                      <p className="text-xs font-medium text-stone-500">住宿方式</p>
-                      <p className="mt-1 break-words font-semibold text-stone-900">{stayTypeDisplay(form.stay_type)}</p>
-                    </div>
-
-                    <div className="border-t border-[#eadfce] pt-4">
+                    <div className="border-t border-[#eadfce] pt-5">
                       {!canShowOrderSummary ? (
                         <p className="text-sm leading-6 text-stone-500">請選擇左側包棟方案。</p>
                       ) : (
@@ -1684,9 +1667,9 @@ export default function Booking() {
                             <p className="mt-1 font-semibold text-stone-900">{selectedPackageLabel}</p>
                           </div>
 
-                          <div className="grid min-w-0 gap-3 border-t border-[#eadfce] pt-4">
+                          <div className="grid min-w-0 gap-4 border-t border-[#eadfce] pt-5">
                             <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
-                              <p className="text-xs font-medium text-stone-500">住宿費用</p>
+                              <p className="text-base font-semibold text-stone-900">住宿費用</p>
                               {isQuoteLoading && <span className="text-xs text-stone-500">房價計算中…</span>}
                             </div>
 
@@ -1696,107 +1679,72 @@ export default function Booking() {
                               </div>
                             )}
 
-                            {quoteReady && showGroupedNightly && nightlyGroups[0] && (
-                              <div className="grid gap-1 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
-                                <div className="min-w-0">
-                                  <p className="font-semibold text-stone-900">{nightlyGroups[0].label}</p>
-                                  <p className="mt-0.5 text-xs text-stone-500">
-                                    {quoteNights[0]?.packageLabel || selectedPackageLabel}｜計價人數 {quoteNights[0]?.pricingGuestCount} 人
-                                  </p>
-                                </div>
-                                <p className="shrink-0 whitespace-nowrap font-semibold text-stone-900 sm:text-right">
-                                  {formatTwd(nightlyGroups[0].amount)} × {nightlyGroups[0].nights.length} 晚
-                                </p>
-                              </div>
-                            )}
+                            {quoteReady && (
+                              <div className="grid gap-4">
+                                {quoteNights.map((night) => {
+                                  const extraBedCount = night.extraBedCount || 0;
+                                  const hasExtraBed = extraBedCount > 0;
+                                  const discountAmount = night.discountAmount || 0;
+                                  const hasDiscount = discountAmount > 0;
+                                  return (
+                                    <div key={night.date} className="grid gap-2 border-b border-[#eadfce] pb-4 last:border-b-0 last:pb-0">
+                                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-4">
+                                        <div className="min-w-0">
+                                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                            <p className="font-semibold text-stone-900">{formatSearchDate(night.date)}</p>
+                                            {hasDiscount && (
+                                              <span className="rounded-full bg-[#f3eadf] px-2 py-0.5 text-[11px] font-medium text-[#765d4a]">
+                                                平日連住 95 折
+                                              </span>
+                                            )}
+                                          </div>
+                                          <p className="mt-1 text-xs leading-5 text-stone-500">
+                                            {formatDayTypeSummary(night.dayType, night.dayTypeLabel)}
+                                            {night.specialDateLabel ? "｜" + night.specialDateLabel : ""}
+                                          </p>
+                                        </div>
+                                        <p className="shrink-0 whitespace-nowrap font-semibold text-stone-900 sm:text-right">{formatTwd(night.price)}</p>
+                                      </div>
 
-                            {quoteReady && quoteHasExtraBeds && (
-                              <div className="grid gap-3">
-                                {quoteNights.map((night) => (
-                                  <div key={night.date} className="grid gap-2 border-b border-[#eadfce] pb-3 last:border-b-0 last:pb-0">
-                                    <div className="grid gap-1 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
-                                      <div className="min-w-0">
-                                        <p className="font-semibold text-stone-900">
-                                          {formatCompactDate(night.date)} {night.dayTypeLabel}
-                                          {night.specialDateLabel ? "｜" + night.specialDateLabel : ""}
-                                        </p>
-                                        <p className="mt-0.5 text-xs text-stone-500">
-                                          {night.packageLabel}｜計價人數 {night.actualGuestCount} 人
-                                        </p>
-                                      </div>
-                                      <p className="shrink-0 whitespace-nowrap font-semibold text-stone-900 sm:text-right">{formatTwd(night.price)}</p>
-                                    </div>
-
-                                    <div className="grid gap-1 rounded-[10px] bg-[#fffdf9] px-3 py-2 text-xs leading-5 text-stone-600">
-                                      <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
-                                        <span>基本住宿費｜{night.baseGuestCount ?? night.pricingGuestCount} 人包棟</span>
-                                        <span className="shrink-0 whitespace-nowrap font-medium text-stone-800">
-                                          {formatTwd(night.basePrice ?? night.price)}
-                                        </span>
-                                      </div>
-                                      <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
-                                        <span>
-                                          單人加床 {(night.extraBedCount || 0)} 張｜{(night.extraBedCount || 0)} 位 ×{" "}
-                                          {formatTwd(night.extraBedUnitPrice || 0)}
-                                        </span>
-                                        <span className="shrink-0 whitespace-nowrap font-medium text-stone-800">
-                                          {formatTwd(night.extraBedAmount || 0)}
-                                        </span>
-                                      </div>
-                                      {(night.discountAmount || 0) > 0 && (
-                                        <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
-                                          <span>平日連住第 2 晚 95 折</span>
-                                          <span className="shrink-0 whitespace-nowrap font-medium text-[#9b6f4c]">
-                                            {formatNegativeTwd(night.discountAmount)}
-                                          </span>
+                                      {(hasExtraBed || hasDiscount) && (
+                                        <div className="grid gap-1.5 pl-0 text-xs leading-5 text-stone-600 sm:pl-3">
+                                          <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
+                                            <span>{night.baseGuestCount ?? night.pricingGuestCount} 人包棟基本住宿費</span>
+                                            <span className={cn("shrink-0 whitespace-nowrap font-medium text-stone-700", hasDiscount && !hasExtraBed ? "line-through decoration-stone-400" : "")}>
+                                              {formatTwd(night.basePrice ?? night.preDiscountPrice ?? night.price)}
+                                            </span>
+                                          </div>
+                                          {hasExtraBed && (
+                                            <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
+                                              <span>單人加床 {extraBedCount} 張</span>
+                                              <span className="shrink-0 whitespace-nowrap font-medium text-stone-700">
+                                                {formatTwd(night.extraBedUnitPrice || 0)} × {extraBedCount}｜{formatTwd(night.extraBedAmount || 0)}
+                                              </span>
+                                            </div>
+                                          )}
+                                          {hasDiscount && (
+                                            <>
+                                              {hasExtraBed && (
+                                                <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
+                                                  <span>折扣前小計</span>
+                                                  <span className="shrink-0 whitespace-nowrap font-medium text-stone-700 line-through decoration-stone-400">
+                                                    {formatTwd(night.preDiscountPrice ?? night.price)}
+                                                  </span>
+                                                </div>
+                                              )}
+                                              <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
+                                                <span>平日連住 95 折優惠</span>
+                                                <span className="shrink-0 whitespace-nowrap font-medium text-[#9b6f4c]">
+                                                  {formatNegativeTwd(discountAmount)}
+                                                </span>
+                                              </div>
+                                            </>
+                                          )}
                                         </div>
                                       )}
-                                      <div className="grid gap-1 border-t border-[#eadfce] pt-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
-                                        <span>本晚小計</span>
-                                        <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">
-                                          {formatTwd(night.price)}
-                                        </span>
-                                      </div>
                                     </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
-                            {quoteReady && !quoteHasExtraBeds && !showGroupedNightly && (
-                              <div className="grid gap-3">
-                                {quoteNights.map((night) => (
-                                  <div key={night.date} className="grid gap-2 border-b border-[#eadfce] pb-3 last:border-b-0 last:pb-0">
-                                    <div className="grid gap-1 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
-                                      <div className="min-w-0">
-                                        <p className="font-semibold text-stone-900">
-                                          {formatCompactDate(night.date)} {night.dayTypeLabel}
-                                          {night.specialDateLabel ? "｜" + night.specialDateLabel : ""}
-                                        </p>
-                                        <p className="mt-0.5 text-xs text-stone-500">
-                                          {night.packageLabel}｜計價人數 {night.pricingGuestCount} 人
-                                        </p>
-                                      </div>
-                                      <p className="shrink-0 whitespace-nowrap font-semibold text-stone-900 sm:text-right">{formatTwd(night.price)}</p>
-                                    </div>
-                                    {(night.discountAmount || 0) > 0 && (
-                                      <div className="grid gap-1 rounded-[10px] bg-[#fffdf9] px-3 py-2 text-xs leading-5 text-stone-600">
-                                        <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
-                                          <span>折扣前小計</span>
-                                          <span className="shrink-0 whitespace-nowrap font-medium text-stone-800">
-                                            {formatTwd(night.preDiscountPrice ?? night.price)}
-                                          </span>
-                                        </div>
-                                        <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
-                                          <span>平日連住第 2 晚 95 折</span>
-                                          <span className="shrink-0 whitespace-nowrap font-medium text-[#9b6f4c]">
-                                            {formatNegativeTwd(night.discountAmount)}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             )}
 

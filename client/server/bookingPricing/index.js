@@ -101,18 +101,6 @@ function shouldApplyWeekdaySecondNightDiscount({ nightIndex, firstNight, date, d
   return isMondayThroughThursday(firstNight.date) && isMondayThroughThursday(date);
 }
 
-export function hasSaturdayStayNight(checkIn, checkOut) {
-  const normalizedCheckIn = normalizeIsoDate(checkIn);
-  const normalizedCheckOut = normalizeIsoDate(checkOut);
-  if (!normalizedCheckIn || !normalizedCheckOut || normalizedCheckOut <= normalizedCheckIn) return false;
-  const nights = daysBetween(normalizedCheckIn, normalizedCheckOut);
-  for (let index = 0; index < nights; index += 1) {
-    const nightDate = addDays(normalizedCheckIn, index);
-    if (new Date(`${nightDate}T00:00:00Z`).getUTCDay() === 6) return true;
-  }
-  return false;
-}
-
 export function normalizeGuestCount({ guestCount, adults, children }) {
   const explicit = Number.parseInt(String(guestCount ?? ""), 10);
   if (Number.isInteger(explicit) && explicit > 0) return explicit;
@@ -128,11 +116,10 @@ export function resolvePricingGuestCount(guestCount, packageType = "villa_10", d
   if (!Number.isInteger(guestCount) || guestCount <= 0) {
     return { ok: false, reason: "invalid_guest_count", pricingGuestCount: null };
   }
-  const includesSaturdayStayNight = hasSaturdayStayNight(dateRange.checkIn, dateRange.checkOut);
+  if (guestCount > maxBookingPricingGuests) {
+    return { ok: false, reason: "unsupported_guest_count", pricingGuestCount: null };
+  }
   if (packageType === "villa_10") {
-    if (includesSaturdayStayNight) {
-      return { ok: false, reason: "saturday_small_package_unavailable", pricingGuestCount: null };
-    }
     if (guestCount >= extraBedBaseGuestCount) {
       return { ok: false, reason: "guest_count_requires_full_villa", pricingGuestCount: null };
     }
@@ -144,7 +131,7 @@ export function resolvePricingGuestCount(guestCount, packageType = "villa_10", d
   if (packageType !== "villa_18") {
     return { ok: false, reason: "unsupported_package_type", pricingGuestCount: null };
   }
-  if (guestCount < extraBedBaseGuestCount && !includesSaturdayStayNight) {
+  if (guestCount < extraBedBaseGuestCount) {
     return { ok: false, reason: "full_villa_requires_18_guests", pricingGuestCount: null };
   }
   if (guestCount <= extraBedBaseGuestCount) {

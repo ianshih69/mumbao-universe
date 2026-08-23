@@ -124,8 +124,8 @@ const bookingGalleryImages = [
 
 const bookingAmenityLabels = ["客廳", "餐廳", "歡唱設備", "麻將房", "星空露臺", "戶外烤肉區"];
 const bookingPackageOptions: Array<{ value: BookingPackageType; label: string; description: string }> = [
-  { value: "villa_10", label: "10 人包棟", description: "適合 10 人以內入住" },
-  { value: "villa_18", label: "18 人包棟", description: "適合 11 至 18 人入住" },
+  { value: "villa_10", label: "10 人包棟", description: "適合 1 至 17 位入住" },
+  { value: "villa_18", label: "18 人包棟", description: "適合 18 至 23 位入住" },
 ];
 
 function BookingPackageDetails({ packageType }: { packageType: BookingPackageType }) {
@@ -137,7 +137,6 @@ function BookingPackageDetails({ packageType }: { packageType: BookingPackageTyp
           <li>・超過 10 人後，每增加 1 位加收 <strong className="font-semibold text-stone-800">NT$1,250</strong>。</li>
           <li>・週一至週四平日連續入住，第 2 晚享 <strong className="font-semibold text-stone-800">95 折優惠</strong>，並加贈慢寶文創禮。</li>
           <li>・跨年、農曆春節及特殊國定連假期間之訂房，如因個人因素取消，<strong className="font-semibold text-stone-800">訂金恕不退還</strong>，亦無法辦理改期。</li>
-          <li>・週六不提供小包棟方案，以全房開放之包棟方案為主，敬請見諒。</li>
         </ul>
       </div>
     );
@@ -363,54 +362,29 @@ function getPackageLabel(packageType: BookingPackageType) {
   return bookingPackageOptions.find((option) => option.value === packageType)?.label || "10 人包棟";
 }
 
-function hasSaturdayStayNight(checkIn: string, checkOut: string) {
-  if (!checkIn || !checkOut || checkOut <= checkIn) return false;
-  const totalNights = nightsBetween(checkIn, checkOut);
-  for (let index = 0; index < totalNights; index += 1) {
-    if (parseDate(addDays(checkIn, index)).getUTCDay() === 6) return true;
-  }
-  return false;
-}
-
 function getPackageUnavailableReason(
   packageType: BookingPackageType,
-  guestCount: number,
-  checkIn: string,
-  checkOut: string
+  guestCount: number
 ) {
-  const includesSaturdayStayNight = hasSaturdayStayNight(checkIn, checkOut);
   if (packageType === "villa_18") {
-    if (!includesSaturdayStayNight && guestCount < 18) {
-      return "18 人包棟適用於 18 位以上入住；住宿期間包含週六時則不受此限制。";
+    if (guestCount < 18) {
+      return "18 人包棟適用於 18 位以上入住。";
     }
     return "";
   }
   if (packageType !== "villa_10") return "";
-  if (includesSaturdayStayNight) {
-    return "此住宿期間包含週六，週六不提供小包棟方案，請選擇 18 人包棟。";
-  }
   if (guestCount >= 18) {
     return "18 位以上入住請選擇 18 人包棟方案。";
   }
   return "";
 }
 
-function getPackageSelectionNote(packageType: BookingPackageType, guestCount: number, checkIn: string, checkOut: string) {
-  if (packageType === "villa_18" && guestCount < 18 && hasSaturdayStayNight(checkIn, checkOut)) {
-    return "此住宿期間包含週六，可選擇 18 人包棟；未滿 18 位入住仍依 18 人包棟房價計算。";
-  }
-  return "";
-}
-
 function getQuoteUnavailableMessage(reason?: string) {
-  if (reason === "saturday_small_package_unavailable") {
-    return "此住宿期間包含週六，週六不提供小包棟方案，請選擇 18 人包棟。";
-  }
   if (reason === "guest_count_requires_full_villa") {
     return "18 位以上入住請選擇 18 人包棟方案。";
   }
   if (reason === "full_villa_requires_18_guests") {
-    return "18 人包棟適用於 18 位以上入住；住宿期間包含週六時則不受此限制。";
+    return "18 人包棟適用於 18 位以上入住。";
   }
   if (reason === "unsupported_guest_count") {
     return "目前最多可接待 23 位入住。";
@@ -583,15 +557,7 @@ export default function Booking() {
   const guestCount = form.adults + form.children;
   const selectedPackageUnavailableReason = getPackageUnavailableReason(
     form.selected_package_type,
-    guestCount,
-    form.check_in,
-    form.check_out
-  );
-  const selectedPackageSelectionNote = getPackageSelectionNote(
-    form.selected_package_type,
-    guestCount,
-    form.check_in,
-    form.check_out
+    guestCount
   );
   const canShowOrderSummary = canShowStayOptions && selectedPackageQuantity === 1 && !selectedPackageUnavailableReason;
   const guestCountExceedsLimit = guestCount > MAX_BOOKING_PRICING_GUESTS;
@@ -967,7 +933,7 @@ export default function Booking() {
   }
 
   function handlePackageSelect(packageType: BookingPackageType) {
-    const unavailableReason = getPackageUnavailableReason(packageType, guestCount, form.check_in, form.check_out);
+    const unavailableReason = getPackageUnavailableReason(packageType, guestCount);
     if (unavailableReason) {
       setExpandedPackageType(packageType);
       setMessage("");
@@ -1583,8 +1549,7 @@ export default function Booking() {
                       {bookingPackageOptions.map((option) => {
                         const selected = form.selected_package_type === option.value && selectedPackageQuantity === 1;
                         const expanded = expandedPackageType === option.value;
-                        const unavailableReason = getPackageUnavailableReason(option.value, guestCount, form.check_in, form.check_out);
-                        const selectionNote = getPackageSelectionNote(option.value, guestCount, form.check_in, form.check_out);
+                        const unavailableReason = getPackageUnavailableReason(option.value, guestCount);
                         const unavailable = Boolean(unavailableReason);
                         const detailsId = `booking-package-${option.value}-details`;
                         return (
@@ -1641,11 +1606,6 @@ export default function Booking() {
                                 className="border-t border-[#eadfce] bg-[#fffdf9] px-4 py-4 text-sm leading-7 text-stone-600"
                               >
                                 <BookingPackageDetails packageType={option.value} />
-                                {selectionNote && (
-                                  <p className="mt-3 rounded-[10px] border border-[#eadfce] bg-white px-3 py-2 text-xs leading-5 text-stone-500">
-                                    {selectionNote}
-                                  </p>
-                                )}
                                 <div className="mt-4 flex min-w-0 flex-col gap-3 border-t border-[#eadfce] pt-4 sm:flex-row sm:items-center sm:justify-between">
                                   <span className="text-sm font-medium text-stone-700">選擇此方案</span>
                                   <div className="grid w-full max-w-full grid-cols-[40px_minmax(0,1fr)_40px] items-center rounded-full border border-[#d7c5b2] bg-white px-2 py-1.5 sm:w-[160px]">
@@ -1722,9 +1682,6 @@ export default function Booking() {
                           <div>
                             <p className="text-xs font-medium text-stone-500">已選方案</p>
                             <p className="mt-1 font-semibold text-stone-900">{selectedPackageLabel}</p>
-                            {selectedPackageSelectionNote && (
-                              <p className="mt-1 text-xs leading-5 text-stone-500">{selectedPackageSelectionNote}</p>
-                            )}
                           </div>
 
                           <div className="grid min-w-0 gap-3 border-t border-[#eadfce] pt-4">

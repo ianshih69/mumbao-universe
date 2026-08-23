@@ -120,10 +120,10 @@ describe("bookingPricing", () => {
       reason: "full_villa_requires_18_guests",
       pricingGuestCount: null,
     });
-    expect(resolvePricingGuestCount(2, "villa_18", { checkIn: "2026-11-07", checkOut: "2026-11-08" })).toMatchObject({
-      ok: true,
-      pricingGuestCount: 18,
-      extraBedCount: 0,
+    expect(resolvePricingGuestCount(2, "villa_18", { checkIn: "2026-11-07", checkOut: "2026-11-08" })).toEqual({
+      ok: false,
+      reason: "full_villa_requires_18_guests",
+      pricingGuestCount: null,
     });
     expect(resolvePricingGuestCount(18, "villa_18")).toMatchObject({ ok: true, pricingGuestCount: 18, extraBedCount: 0 });
     expect(resolvePricingGuestCount(19, "villa_18")).toMatchObject({
@@ -141,6 +141,11 @@ describe("bookingPricing", () => {
       extraBedAmount: 4000,
     });
     expect(resolvePricingGuestCount(24, "villa_18")).toEqual({
+      ok: false,
+      reason: "unsupported_guest_count",
+      pricingGuestCount: null,
+    });
+    expect(resolvePricingGuestCount(24, "villa_10")).toEqual({
       ok: false,
       reason: "unsupported_guest_count",
       pricingGuestCount: null,
@@ -166,7 +171,7 @@ describe("bookingPricing", () => {
     });
   });
 
-  it("enforces package availability by guest count and Saturday stay nights", async () => {
+  it("enforces package availability by guest count only", async () => {
     await expect(quote({ adults: 2, packageType: "villa_10", checkIn: "2026-11-01", checkOut: "2026-11-02" })).resolves.toMatchObject({
       status: "resolved",
       pricingGuestCount: 10,
@@ -202,18 +207,27 @@ describe("bookingPricing", () => {
       pricing: { reason: "guest_count_requires_full_villa" },
     });
     await expect(quote({ adults: 2, packageType: "villa_10", checkIn: "2026-11-07", checkOut: "2026-11-08" })).resolves.toMatchObject({
-      status: "unavailable",
-      pricing: { reason: "saturday_small_package_unavailable" },
+      status: "resolved",
+      pricingGuestCount: 10,
+      pricing: { total: 39000 },
     });
     await expect(quote({ adults: 2, packageType: "villa_18", checkIn: "2026-11-07", checkOut: "2026-11-08" })).resolves.toMatchObject({
+      status: "unavailable",
+      pricing: { reason: "full_villa_requires_18_guests" },
+    });
+    await expect(quote({ adults: 10, packageType: "villa_10", checkIn: "2026-11-07", checkOut: "2026-11-08" })).resolves.toMatchObject({
       status: "resolved",
-      pricingGuestCount: 18,
-      pricing: { total: 49000 },
+      pricingGuestCount: 10,
+      pricing: { total: 39000 },
     });
     await expect(quote({ adults: 10, packageType: "villa_18", checkIn: "2026-11-07", checkOut: "2026-11-08" })).resolves.toMatchObject({
+      status: "unavailable",
+      pricing: { reason: "full_villa_requires_18_guests" },
+    });
+    await expect(quote({ adults: 15, packageType: "villa_10", checkIn: "2026-11-07", checkOut: "2026-11-08" })).resolves.toMatchObject({
       status: "resolved",
-      pricingGuestCount: 18,
-      pricing: { total: 49000 },
+      pricingGuestCount: 15,
+      pricing: { total: 45250 },
     });
     await expect(quote({ adults: 17, packageType: "villa_10", checkIn: "2026-11-06", checkOut: "2026-11-07" })).resolves.toMatchObject({
       status: "resolved",
@@ -225,13 +239,13 @@ describe("bookingPricing", () => {
       pricing: { reason: "full_villa_requires_18_guests" },
     });
     await expect(quote({ adults: 17, packageType: "villa_10", checkIn: "2026-11-06", checkOut: "2026-11-08" })).resolves.toMatchObject({
-      status: "unavailable",
-      pricing: { reason: "saturday_small_package_unavailable" },
+      status: "resolved",
+      pricingGuestCount: 17,
+      pricing: { total: 88500 },
     });
     await expect(quote({ adults: 17, packageType: "villa_18", checkIn: "2026-11-06", checkOut: "2026-11-08" })).resolves.toMatchObject({
-      status: "resolved",
-      pricingGuestCount: 18,
-      pricing: { total: 91000 },
+      status: "unavailable",
+      pricing: { reason: "full_villa_requires_18_guests" },
     });
   });
 
@@ -289,6 +303,10 @@ describe("bookingPricing", () => {
       status: "unavailable",
       pricing: { reason: "unsupported_guest_count" },
     });
+    await expect(quote({ adults: 24, packageType: "villa_10" })).resolves.toMatchObject({
+      status: "unavailable",
+      pricing: { reason: "unsupported_guest_count" },
+    });
   });
 
   it("covers every 11-17 matrix entry", async () => {
@@ -303,18 +321,20 @@ describe("bookingPricing", () => {
     }
   });
 
-  it("makes villa_10 unavailable for 18 or more guests and Saturday stay nights", async () => {
+  it("keeps villa_10 available across Saturday stay nights for 1-17 guests", async () => {
     await expect(quote({ adults: 18, packageType: "villa_10", checkIn: "2026-11-02", checkOut: "2026-11-03" })).resolves.toMatchObject({
       status: "unavailable",
       pricing: { reason: "guest_count_requires_full_villa" },
     });
     await expect(quote({ adults: 10, packageType: "villa_10", checkIn: "2026-11-07", checkOut: "2026-11-08" })).resolves.toMatchObject({
-      status: "unavailable",
-      pricing: { reason: "saturday_small_package_unavailable" },
+      status: "resolved",
+      pricingGuestCount: 10,
+      pricing: { total: 39000 },
     });
     await expect(quote({ adults: 10, packageType: "villa_10", checkIn: "2026-11-06", checkOut: "2026-11-08" })).resolves.toMatchObject({
-      status: "unavailable",
-      pricing: { reason: "saturday_small_package_unavailable" },
+      status: "resolved",
+      pricingGuestCount: 10,
+      pricing: { total: 71000 },
     });
     await expect(quote({ adults: 10, packageType: "villa_10", checkIn: "2026-11-06", checkOut: "2026-11-07" })).resolves.toMatchObject({
       status: "resolved",
@@ -540,6 +560,27 @@ describe("bookingPricing", () => {
     expect(result.pricing.breakdown[0]).toMatchObject({
       dayType: "holiday",
       specialDateLabel: "Manual holiday",
+    });
+
+    const smallPackageResult = await quote(
+      { adults: 17, packageType: "villa_10", checkIn: "2026-11-02", checkOut: "2026-11-03" },
+      {
+        specialDates: [
+          {
+            id: "special-17",
+            rule_set_id: trialRuleSet.id,
+            date: "2026-11-02",
+            day_type: "holiday",
+            label: "Manual holiday",
+            is_active: true,
+          },
+        ],
+      }
+    );
+    expect(smallPackageResult).toMatchObject({
+      status: "resolved",
+      pricingGuestCount: 17,
+      pricing: { total: 47750 },
     });
   });
 

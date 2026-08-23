@@ -1504,13 +1504,16 @@ export default function Booking() {
 
                   <div>
                     <p className="text-sm font-semibold text-stone-900">設施</p>
-                    <div className="mt-2 flex min-w-0 flex-wrap gap-2">
+                    <div className="mt-2 flex min-w-0 flex-wrap gap-x-5 gap-y-2">
                       {bookingAmenityLabels.map((amenity) => (
                         <span
                           key={amenity}
-                          className="max-w-full break-words rounded-full border border-[#eadfce] bg-[#fffdf9] px-3 py-1.5 text-xs font-medium text-[#765d4a] sm:text-sm"
+                          className="inline-flex max-w-full items-center gap-1.5 text-sm font-medium leading-6 text-[#765d4a]"
                         >
-                          {amenity}
+                          <span className="text-[13px] leading-none text-[#b7957c]" aria-hidden="true">
+                            ○
+                          </span>
+                          <span className="min-w-0 break-words">{amenity}</span>
                         </span>
                       ))}
                     </div>

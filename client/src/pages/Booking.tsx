@@ -1620,7 +1620,8 @@ export default function Booking() {
                   </div>
 
                 </div>
-                <div className="grid min-w-0 content-start grid-cols-[minmax(0,1fr)] gap-6 self-start border-t border-[#f3ece4] p-5 sm:p-6 min-[1000px]:border-l min-[1000px]:border-t-0">
+                <div className="min-w-0 self-start">
+                  <div className="grid h-fit min-w-0 content-start grid-cols-[minmax(0,1fr)] gap-6 self-start border-t border-[#f3ece4] p-5 sm:p-6 min-[1000px]:border-l min-[1000px]:border-t-0">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">STAY</p>
                     <h2 className="mt-2 font-serif text-[1.75rem] font-light leading-tight text-stone-900">
@@ -1788,6 +1789,7 @@ export default function Booking() {
                   >
                     下一步
                   </Button>
+                  </div>
                 </div>
               </div>
             </section>

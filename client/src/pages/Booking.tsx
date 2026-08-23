@@ -536,7 +536,7 @@ export default function Booking() {
   const selectedPackageQuantity = form.selected_package_quantity;
   const selectedPackageLabel = getPackageLabel(form.selected_package_type);
   const guestCount = form.adults + form.children;
-  const searchGuestSummary = form.infants > 0 ? `${guestCount} 位＋${form.infants} 位嬰幼兒` : `${guestCount} 位`;
+  const searchGuestSummary = form.infants > 0 ? `${guestCount} 位・另有 ${form.infants} 位嬰幼兒` : `${guestCount} 位`;
   const selectedPackageUnavailableReason = getPackageUnavailableReason(
     form.selected_package_type,
     guestCount
@@ -1540,7 +1540,7 @@ export default function Booking() {
                                 ? "border-[#eadfce] bg-[#fbf7f1] text-stone-500"
                                 : "",
                               selected
-                                ? "border-[#b7957c] bg-[#fffaf3]"
+                                ? "border-[#e8d9c6] bg-[#fffaf3]"
                                 : unavailable
                                   ? ""
                                   : "border-[#eadfce] bg-white hover:border-[#d7c5b2] hover:bg-[#fffdf9]"
@@ -1620,7 +1620,7 @@ export default function Booking() {
                   </div>
 
                 </div>
-                <div className="grid min-w-0 content-start grid-cols-[minmax(0,1fr)] gap-6 self-start border-t border-[#efe5d8] p-5 sm:p-6 min-[1000px]:border-l min-[1000px]:border-t-0">
+                <div className="grid min-w-0 content-start grid-cols-[minmax(0,1fr)] gap-6 self-start border-t border-[#f3ece4] p-5 sm:p-6 min-[1000px]:border-l min-[1000px]:border-t-0">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">STAY</p>
                     <h2 className="mt-2 font-serif text-[1.75rem] font-light leading-tight text-stone-900">
@@ -1631,7 +1631,7 @@ export default function Booking() {
                     </p>
                   </div>
 
-                  <div className="grid min-w-0 gap-5 border-t border-[#eadfce] pt-5 text-sm text-stone-600">
+                  <div className="grid min-w-0 gap-5 border-t border-[#f1e8dc] pt-5 text-sm text-stone-600">
                     <div className="grid min-w-0 gap-4">
                       <div>
                         <p className="text-xs font-medium text-stone-500">住宿日期</p>
@@ -1655,7 +1655,7 @@ export default function Booking() {
                       </div>
                     </div>
 
-                    <div className="border-t border-[#eadfce] pt-5">
+                    <div className="border-t border-[#f1e8dc] pt-5">
                       {!canShowOrderSummary ? (
                         <p className="text-sm leading-6 text-stone-500">請選擇左側包棟方案。</p>
                       ) : (
@@ -1665,7 +1665,7 @@ export default function Booking() {
                             <p className="mt-1 font-semibold text-stone-900">{selectedPackageLabel}</p>
                           </div>
 
-                          <div className="grid min-w-0 gap-4 border-t border-[#eadfce] pt-5">
+                          <div className="grid min-w-0 gap-4 border-t border-[#f1e8dc] pt-5">
                             <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
                               <p className="text-base font-semibold text-stone-900">住宿費用</p>
                               {isQuoteLoading && <span className="text-xs text-stone-500">房價計算中…</span>}
@@ -1685,7 +1685,7 @@ export default function Booking() {
                                   const discountAmount = night.discountAmount || 0;
                                   const hasDiscount = discountAmount > 0;
                                   return (
-                                    <div key={night.date} className="grid gap-2 border-b border-[#eadfce] pb-4 last:border-b-0 last:pb-0">
+                                    <div key={night.date} className="grid gap-2 border-b border-[#f1e8dc] pb-4 last:border-b-0 last:pb-0">
                                       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-4">
                                         <div className="min-w-0">
                                           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -1747,7 +1747,7 @@ export default function Booking() {
                             )}
 
                             {quoteReady && (
-                              <div className="border-t border-[#eadfce] pt-3">
+                              <div className="border-t border-[#f1e8dc] pt-3">
                                 <div className="grid gap-1 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
                                   <span className="font-medium text-stone-600">住宿小計</span>
                                   <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">{formatTwd(priceQuote?.pricing.subtotal)}</span>

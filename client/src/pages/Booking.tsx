@@ -536,6 +536,7 @@ export default function Booking() {
   const selectedPackageQuantity = form.selected_package_quantity;
   const selectedPackageLabel = getPackageLabel(form.selected_package_type);
   const guestCount = form.adults + form.children;
+  const searchGuestSummary = form.infants > 0 ? `${guestCount} 位＋${form.infants} 位嬰幼兒` : `${guestCount} 位`;
   const selectedPackageUnavailableReason = getPackageUnavailableReason(
     form.selected_package_type,
     guestCount
@@ -1283,7 +1284,7 @@ export default function Booking() {
                 aria-expanded={peopleOpen}
               >
                 <span className="block text-xs font-medium text-stone-500">入住人數</span>
-                <span className="mt-1 block text-base font-semibold text-stone-900">{guestCount} 位</span>
+                <span className="mt-1 block text-base font-semibold text-stone-900">{searchGuestSummary}</span>
               </button>
             </div>
             {isCalendarLoading && <p className="mt-3 text-sm text-stone-500">房況載入中...</p>}
@@ -1472,8 +1473,8 @@ export default function Booking() {
           )}
           {canShowStayOptions && (
             <section className="mt-8 w-full max-w-full min-w-0 rounded-[18px] border border-[#efe5d8] bg-white/95">
-              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0 min-[1000px]:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)]">
-                <div className="grid min-w-0 content-start grid-cols-[minmax(0,1fr)] gap-6 border-b border-[#efe5d8] p-4 sm:p-5 min-[1000px]:border-b-0 min-[1000px]:border-r min-[1000px]:p-6">
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-0 min-[1000px]:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)]">
+                <div className="grid min-w-0 content-start grid-cols-[minmax(0,1fr)] gap-6 border-b border-[#efe5d8] p-4 sm:p-5 min-[1000px]:border-b-0 min-[1000px]:p-6">
                   <div className="min-w-0">
                     <div className="w-full min-w-0 overflow-hidden rounded-[16px] bg-[#fbf7f1]">
                       <img
@@ -1504,16 +1505,13 @@ export default function Booking() {
 
                   <div>
                     <p className="text-sm font-semibold text-stone-900">設施</p>
-                    <div className="mt-2 flex min-w-0 flex-wrap gap-x-5 gap-y-2">
+                    <div className="mt-2 flex min-w-0 flex-wrap gap-2">
                       {bookingAmenityLabels.map((amenity) => (
                         <span
                           key={amenity}
-                          className="inline-flex max-w-full items-center gap-1.5 text-sm font-medium leading-6 text-[#765d4a]"
+                          className="max-w-full break-words rounded-full border border-[#eadfce] bg-[#fffdf9] px-3 py-1.5 text-xs font-medium text-[#765d4a] sm:text-sm"
                         >
-                          <span className="text-[13px] leading-none text-[#b7957c]" aria-hidden="true">
-                            ○
-                          </span>
-                          <span className="min-w-0 break-words">{amenity}</span>
+                          {amenity}
                         </span>
                       ))}
                     </div>
@@ -1622,7 +1620,7 @@ export default function Booking() {
                   </div>
 
                 </div>
-                <div className="grid min-w-0 content-start grid-cols-[minmax(0,1fr)] gap-6 self-start p-5 sm:p-6 min-[1200px]:sticky min-[1200px]:top-28">
+                <div className="grid min-w-0 content-start grid-cols-[minmax(0,1fr)] gap-6 self-start border-t border-[#efe5d8] p-5 sm:p-6 min-[1000px]:border-l min-[1000px]:border-t-0">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">STAY</p>
                     <h2 className="mt-2 font-serif text-[1.75rem] font-light leading-tight text-stone-900">
@@ -1634,29 +1632,26 @@ export default function Booking() {
                   </div>
 
                   <div className="grid min-w-0 gap-5 border-t border-[#eadfce] pt-5 text-sm text-stone-600">
-                    <div>
-                      <p className="text-base font-semibold text-stone-900">住宿資訊</p>
-                      <div className="mt-4 grid min-w-0 gap-4">
-                        <div>
-                          <p className="text-xs font-medium text-stone-500">住宿日期</p>
-                          <p className="mt-1 break-words font-semibold text-stone-900">
-                            {formatSearchDate(form.check_in)}－{formatSearchDate(form.check_out)}
-                          </p>
-                          <p className="mt-1 text-xs text-stone-500">共 {nightCount} 晚</p>
-                        </div>
+                    <div className="grid min-w-0 gap-4">
+                      <div>
+                        <p className="text-xs font-medium text-stone-500">住宿日期</p>
+                        <p className="mt-1 break-words font-semibold text-stone-900">
+                          {formatSearchDate(form.check_in)}－{formatSearchDate(form.check_out)}
+                        </p>
+                        <p className="mt-1 text-xs text-stone-500">共 {nightCount} 晚</p>
+                      </div>
 
-                        <div>
-                          <p className="flex items-center gap-2 text-xs font-medium text-stone-500">
-                            <Users className="h-3.5 w-3.5" />
-                            入住人數
-                          </p>
-                          <p className="mt-1 break-words font-semibold text-stone-900">{guestSummary}</p>
-                        </div>
+                      <div>
+                        <p className="flex items-center gap-2 text-xs font-medium text-stone-500">
+                          <Users className="h-3.5 w-3.5" />
+                          入住人數
+                        </p>
+                        <p className="mt-1 break-words font-semibold text-stone-900">{guestSummary}</p>
+                      </div>
 
-                        <div>
-                          <p className="text-xs font-medium text-stone-500">住宿方式</p>
-                          <p className="mt-1 break-words font-semibold text-stone-900">{stayTypeDisplay(form.stay_type)}</p>
-                        </div>
+                      <div>
+                        <p className="text-xs font-medium text-stone-500">住宿方式</p>
+                        <p className="mt-1 break-words font-semibold text-stone-900">{stayTypeDisplay(form.stay_type)}</p>
                       </div>
                     </div>
 

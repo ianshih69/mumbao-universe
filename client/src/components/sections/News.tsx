@@ -5,9 +5,13 @@ import { useState } from "react"; // Added useState
 import { Link } from "wouter";
 import { newsItems } from "@/data/news";
 
+const homeNewsItems = newsItems.filter(
+  (item) => item.slug !== "stime-villa-summer-preview-preparation"
+);
+
 export function News() {
-  const [activeNews, setActiveNews] = useState(newsItems[0]); // State for interactive preview
-  const sideNews = newsItems.slice(1, 4);
+  const [activeNews, setActiveNews] = useState(homeNewsItems[0]); // State for interactive preview
+  const sideNews = homeNewsItems.slice(1, 4);
 
   return (
     <section className="py-24 bg-white overflow-hidden">
@@ -40,23 +44,23 @@ export function News() {
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
           >
-            <Link href={`/news/${newsItems[0].slug}`} className="block">
+            <Link href={`/news/${homeNewsItems[0].slug}`} className="block">
               <div className="relative mb-4 flex aspect-video items-center justify-center overflow-hidden rounded-none border border-[rgba(120,95,70,0.08)] bg-[#fbf7f1]">
                 <img
-                  src={newsItems[0].image}
-                  alt={newsItems[0].alt}
+                  src={homeNewsItems[0].image}
+                  alt={homeNewsItems[0].alt}
                   className="block h-full w-full object-contain transition-transform duration-700"
                 />
                 <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-2 py-1 text-[10px] uppercase tracking-wider rounded-sm font-medium">
-                  {newsItems[0].category}
+                  {homeNewsItems[0].category}
                 </div>
               </div>
               <div className="space-y-2 px-1">
                 <span className="text-xs text-gray-400 tracking-wider font-mono block">
-                  {newsItems[0].date}
+                  {homeNewsItems[0].date}
                 </span>
                 <h3 className="font-serif text-lg text-primary group-hover:text-[#E8A0BF] transition-colors duration-300 leading-snug line-clamp-2">
-                  {newsItems[0].title}
+                  {homeNewsItems[0].title}
                 </h3>
               </div>
             </Link>
@@ -140,7 +144,7 @@ export function News() {
           {/* Right: Side List (Interactive Triggers) */}
           <div
             className="flex w-full min-w-0 flex-col gap-6"
-            onMouseLeave={() => setActiveNews(newsItems[0])} // Reset on leave
+            onMouseLeave={() => setActiveNews(homeNewsItems[0])} // Reset on leave
           >
             {sideNews.map((item, idx) => {
               const isActive = activeNews.id === item.id;

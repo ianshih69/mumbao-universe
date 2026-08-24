@@ -9,7 +9,6 @@ import FixedViewport from "@/components/utils/FixedViewport";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { CustomerAuthProvider } from "./contexts/CustomerAuthContext";
 import { MumbaoChatLauncher } from "./components/ai/MumbaoChatLauncher";
-import { SiteConstructionNotice } from "./components/layout/SiteConstructionNotice";
 import { ScrollToTop } from "./components/layout/ScrollToTop";
 import { ShopTestGate } from "./components/shop/ShopTestGate";
 import Home from "./pages/Home";
@@ -244,8 +243,6 @@ function Router() {
 function App() {
   const [pathname] = useLocation();
   const isAdminRoute = pathname.startsWith("/admin");
-  const isAiRoute = pathname === "/ai-chat" || pathname === "/chat";
-  const showFrontendNotice = !isAdminRoute && !isAiRoute;
 
   return (
     <ErrorBoundary>
@@ -257,7 +254,6 @@ function App() {
         <TooltipProvider>
           <CustomerAuthProvider>
             <Toaster />
-            {showFrontendNotice && <SiteConstructionNotice />}
             <ScrollToTop />
             <Router />
             {!isAdminRoute && <MumbaoChatLauncher />}

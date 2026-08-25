@@ -38,7 +38,7 @@ export const rooms: RoomDetailContent[] = [
       },
     ],
     image: "/images/Room/S521.jpg",
-    alt: "雲心 S521 房型圖片",
+    alt: "雲心 S521 雙子 × 水瓶主題房空間",
     tagline: "也許你的靈感，就藏在今晚的雲裡。",
     subtitle: "雙子 × 水瓶",
     intro: [
@@ -72,7 +72,7 @@ export const rooms: RoomDetailContent[] = [
       },
     ],
     image: "/images/Room/S360.jpg",
-    alt: "畫雲 S360 房型圖片",
+    alt: "畫雲 S360 天蠍 × 雙魚主題房空間",
     tagline: "有些夢，不用急著醒。",
     subtitle: "天蠍 × 雙魚",
     intro: [
@@ -106,7 +106,7 @@ export const rooms: RoomDetailContent[] = [
       },
     ],
     image: "/images/Room/S530.jpg",
-    alt: "雲間 S530 房型圖片",
+    alt: "雲間 S530 處女 × 射手主題房空間",
     tagline: "也許你的下一段故事，就在雲與雲之間。",
     subtitle: "處女 × 射手",
     intro: [
@@ -139,7 +139,7 @@ export const rooms: RoomDetailContent[] = [
       },
     ],
     image: "/images/Room/S666.jpg",
-    alt: "牧雲 S666 房型圖片",
+    alt: "牧雲 S666 牡羊 × 獅子主題房空間",
     tagline: "如果你想發光，那就勇敢地站在雲上。",
     subtitle: "牡羊 × 獅子",
     intro: [
@@ -173,7 +173,7 @@ export const rooms: RoomDetailContent[] = [
       },
     ],
     image: "/images/Room/S888.jpg",
-    alt: "雲容 S888 房型圖片",
+    alt: "雲容 S888 天秤 × 金牛主題房空間",
     tagline: "美好的事物，都值得慢慢感受。",
     subtitle: "天秤 × 金牛",
     intro: [

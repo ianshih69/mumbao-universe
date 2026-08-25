@@ -8,26 +8,80 @@ const breakfastMobileImage = "/images/Main/breakfast.jpg";
 const breakfastSeoTitle = "宜蘭在地名店早餐代訂｜慢慢蒔光 STime Villa";
 const breakfastSeoDescription =
   "慢慢蒔光 STime Villa 提供宜蘭在地名店早餐代訂服務，每份 NT$250，讓旅人在入住的早晨以更自在的節奏慢慢開始一天。";
+const breakfastCanonicalUrl = "https://www.mumbao.tw/experience/breakfast";
 
 function setMetaContent(selector: string, content: string) {
-  const meta = document.head.querySelector<HTMLMetaElement>(selector);
+  const metaElements = Array.from(document.head.querySelectorAll<HTMLMetaElement>(selector));
+  let meta = metaElements[0];
+
+  if (!meta) {
+    const nameMatch = selector.match(/^meta\[name="([^"]+)"\]$/);
+    const propertyMatch = selector.match(/^meta\[property="([^"]+)"\]$/);
+
+    if (nameMatch || propertyMatch) {
+      meta = document.createElement("meta");
+
+      if (nameMatch) {
+        meta.name = nameMatch[1];
+      } else if (propertyMatch) {
+        meta.setAttribute("property", propertyMatch[1]);
+      }
+
+      document.head.appendChild(meta);
+    }
+  }
 
   if (meta) {
     meta.content = content;
   }
+
+  metaElements.slice(1).forEach((element) => element.remove());
+}
+
+function setCanonicalUrl(url: string) {
+  const canonicalLinks = Array.from(
+    document.head.querySelectorAll<HTMLLinkElement>('link[rel="canonical"]')
+  );
+  let canonical = canonicalLinks[0];
+
+  if (!canonical) {
+    canonical = document.createElement("link");
+    canonical.rel = "canonical";
+    document.head.appendChild(canonical);
+  }
+
+  canonical.href = url;
+  canonicalLinks.slice(1).forEach((link) => link.remove());
+}
+
+function removeNoindexRobots() {
+  document.head.querySelectorAll<HTMLMetaElement>('meta[name="robots"]').forEach((meta) => {
+    if (meta.content.toLowerCase().includes("noindex")) {
+      meta.remove();
+    }
+  });
+}
+
+function removeNewsArticleJsonLd() {
+  document.getElementById("news-article-json-ld")?.remove();
 }
 
 export default function Breakfast() {
   useEffect(() => {
     document.title = breakfastSeoTitle;
     setMetaContent('meta[name="description"]', breakfastSeoDescription);
+    setMetaContent('meta[property="og:url"]', breakfastCanonicalUrl);
     setMetaContent('meta[property="og:title"]', breakfastSeoTitle);
     setMetaContent('meta[property="og:description"]', breakfastSeoDescription);
+    setMetaContent('meta[property="twitter:url"]', breakfastCanonicalUrl);
     setMetaContent('meta[property="twitter:title"]', breakfastSeoTitle);
     setMetaContent(
       'meta[property="twitter:description"]',
       breakfastSeoDescription
     );
+    setCanonicalUrl(breakfastCanonicalUrl);
+    removeNoindexRobots();
+    removeNewsArticleJsonLd();
   }, []);
 
   return (

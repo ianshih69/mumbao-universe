@@ -76,6 +76,34 @@ function setCanonicalUrl(url: string) {
   canonical.href = url;
 }
 
+function removeMetaElements(selector: string) {
+  document.head.querySelectorAll<HTMLMetaElement>(selector).forEach((meta) => {
+    meta.remove();
+  });
+}
+
+function removeCanonicalUrl() {
+  document.head.querySelectorAll<HTMLLinkElement>('link[rel="canonical"]').forEach((canonical) => {
+    canonical.remove();
+  });
+}
+
+function setRobotsNoindex() {
+  const robotsMeta = Array.from(
+    document.head.querySelectorAll<HTMLMetaElement>('meta[name="robots"]'),
+  );
+  let primaryRobotsMeta = robotsMeta[0];
+
+  if (!primaryRobotsMeta) {
+    primaryRobotsMeta = document.createElement("meta");
+    primaryRobotsMeta.name = "robots";
+    document.head.appendChild(primaryRobotsMeta);
+  }
+
+  primaryRobotsMeta.content = "noindex,follow";
+  robotsMeta.slice(1).forEach((meta) => meta.remove());
+}
+
 export default function RoomDetail() {
   const [, params] = useRoute("/rooms/:slug");
   const room = getRoomBySlug(params?.slug || "");
@@ -85,6 +113,10 @@ export default function RoomDetail() {
       const notFoundTitle = "找不到這間房型｜慢慢蒔光 STime Villa";
       document.title = notFoundTitle;
       setMetaContent("meta[name=\"description\"]", "找不到這間房型。");
+      setRobotsNoindex();
+      removeCanonicalUrl();
+      removeMetaElements("meta[property=\"og:url\"]");
+      removeMetaElements("meta[property=\"twitter:url\"]");
       return;
     }
 
@@ -101,6 +133,7 @@ export default function RoomDetail() {
     setMetaContent("meta[property=\"twitter:title\"]", pageTitle);
     setMetaContent("meta[property=\"twitter:description\"]", pageDescription);
     setCanonicalUrl(canonicalUrl);
+    removeMetaElements("meta[name=\"robots\"]");
   }, [room]);
 
   if (!room) {

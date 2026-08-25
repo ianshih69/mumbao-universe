@@ -3,10 +3,16 @@ import { Link, useRoute } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-import { getNewsBySlug } from "@/data/news";
+import { getNewsBySlug, type NewsItem } from "@/data/news";
 
 const siteOrigin = "https://www.mumbao.tw";
 const noindexNewsSlugs = new Set(["stime-villa-summer-preview-preparation"]);
+const newsArticleJsonLdId = "news-article-json-ld";
+const newsArticleSlugs = new Set([
+  "mumbao-line-stickers-coming-soon",
+  "mumbao-goods-coming-soon",
+  "stime-villa-website-updates",
+]);
 
 function setMetaContent(selector: string, content: string) {
   let meta = document.head.querySelector<HTMLMetaElement>(selector);
@@ -73,6 +79,45 @@ function setRobotsNoindex() {
   robotsMeta.slice(1).forEach((meta) => meta.remove());
 }
 
+function getAbsoluteUrl(path: string) {
+  return new URL(path, `${siteOrigin}/`).href;
+}
+
+function removeNewsArticleJsonLd() {
+  document.getElementById(newsArticleJsonLdId)?.remove();
+}
+
+function upsertNewsArticleJsonLd(news: NewsItem, canonicalUrl: string) {
+  let script = document.getElementById(newsArticleJsonLdId) as HTMLScriptElement | null;
+
+  if (!script) {
+    script = document.createElement("script");
+    script.id = newsArticleJsonLdId;
+    script.type = "application/ld+json";
+    document.head.appendChild(script);
+  }
+
+  script.textContent = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    headline: news.title,
+    description: news.excerpt,
+    image: getAbsoluteUrl(news.image),
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": canonicalUrl,
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "慢慢蒔光 STime Villa",
+      logo: {
+        "@type": "ImageObject",
+        url: `${siteOrigin}/images/logo.webp`,
+      },
+    },
+  });
+}
+
 export default function NewsDetail() {
   const [, params] = useRoute("/news/:slug");
   const news = getNewsBySlug(params?.slug || "");
@@ -91,6 +136,7 @@ export default function NewsDetail() {
       removeCanonicalUrl();
       removeMetaElements("meta[property=\"og:url\"]");
       removeMetaElements("meta[property=\"twitter:url\"]");
+      removeNewsArticleJsonLd();
       return;
     }
 
@@ -109,8 +155,15 @@ export default function NewsDetail() {
 
     if (noindexNewsSlugs.has(news.slug)) {
       setRobotsNoindex();
+      removeNewsArticleJsonLd();
     } else {
       removeMetaElements("meta[name=\"robots\"]");
+    }
+
+    if (newsArticleSlugs.has(news.slug)) {
+      upsertNewsArticleJsonLd(news, canonicalUrl);
+    } else {
+      removeNewsArticleJsonLd();
     }
   }, [news]);
 

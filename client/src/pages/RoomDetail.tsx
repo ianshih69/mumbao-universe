@@ -10,6 +10,21 @@ const sharedNotice = [
   "慢慢蒔光每一間房都有不同主題與氛圍，實際開放房型將依訂房狀況與包棟安排為準。",
 ];
 
+const siteOrigin = "https://www.mumbao.tw";
+
+const roomSeoDescriptions: Record<string, string> = {
+  "room-521-yunxin":
+    "雲心 S521 是慢慢蒔光 STime Villa 的雙子 × 水瓶主題房，融合慢寶宇宙與十二星座創作，在宜蘭員山感受屬於雙子與水瓶的自由靈感。",
+  "room-360-senguang":
+    "畫雲 S360 是慢慢蒔光 STime Villa 的天蠍 × 雙魚主題房，融合慢寶宇宙與十二星座創作，在宜蘭員山展開帶有夢境與想像的住宿體驗。",
+  "room-530-nuanjin":
+    "雲間 S530 是慢慢蒔光 STime Villa 的處女 × 射手主題房，融合慢寶宇宙與十二星座創作，在宜蘭員山感受細膩與自由交會的住宿空間。",
+  "room-666-anhe":
+    "牧雲 S666 是慢慢蒔光 STime Villa 的牡羊 × 獅子主題房，融合慢寶宇宙與十二星座創作，在宜蘭員山感受熱情、自信與勇氣交織的住宿氛圍。",
+  "room-888-xinghuo":
+    "雲容 S888 是慢慢蒔光 STime Villa 的天秤 × 金牛主題房，融合慢寶宇宙與十二星座創作，在宜蘭員山感受美感、平衡與慢生活交織的住宿空間。",
+};
+
 const zodiacIconScale: Record<string, number> = {
   Gemini: 1.8,
   Aquarius: 1.1,
@@ -49,6 +64,18 @@ function setMetaContent(selector: string, content: string) {
   }
 }
 
+function setCanonicalUrl(url: string) {
+  let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+
+  if (!canonical) {
+    canonical = document.createElement("link");
+    canonical.rel = "canonical";
+    document.head.appendChild(canonical);
+  }
+
+  canonical.href = url;
+}
+
 export default function RoomDetail() {
   const [, params] = useRoute("/rooms/:slug");
   const room = getRoomBySlug(params?.slug || "");
@@ -62,12 +89,18 @@ export default function RoomDetail() {
     }
 
     const pageTitle = `${room.name}｜ROOM ${room.roomNumber}｜慢慢蒔光 STime Villa`;
+    const pageDescription = roomSeoDescriptions[room.slug] || room.subtitle || room.tagline;
+    const canonicalUrl = `${siteOrigin}/rooms/${room.slug}`;
+
     document.title = pageTitle;
-    setMetaContent("meta[name=\"description\"]", room.subtitle || room.tagline);
+    setMetaContent("meta[name=\"description\"]", pageDescription);
+    setMetaContent("meta[property=\"og:url\"]", canonicalUrl);
     setMetaContent("meta[property=\"og:title\"]", pageTitle);
-    setMetaContent("meta[property=\"og:description\"]", room.subtitle || room.tagline);
+    setMetaContent("meta[property=\"og:description\"]", pageDescription);
+    setMetaContent("meta[property=\"twitter:url\"]", canonicalUrl);
     setMetaContent("meta[property=\"twitter:title\"]", pageTitle);
-    setMetaContent("meta[property=\"twitter:description\"]", room.subtitle || room.tagline);
+    setMetaContent("meta[property=\"twitter:description\"]", pageDescription);
+    setCanonicalUrl(canonicalUrl);
   }, [room]);
 
   if (!room) {

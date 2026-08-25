@@ -8,6 +8,7 @@ import { rooms } from "@/data/rooms";
 const roomsSeoTitle = "房型介紹｜慢慢蒔光 STime Villa";
 const roomsSeoDescription =
   "慢慢蒔光 STime Villa 五間公開主題房，結合房號、雙星守護與慢生活住宿氛圍，另有一間留給宇宙的隱藏星房。";
+const roomsCanonicalUrl = "https://www.mumbao.tw/rooms";
 
 const zodiacIconScale: Record<string, number> = {
   Gemini: 1.8,
@@ -48,14 +49,29 @@ function setMetaContent(selector: string, content: string) {
   }
 }
 
+function setCanonicalUrl(url: string) {
+  let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+
+  if (!canonical) {
+    canonical = document.createElement("link");
+    canonical.rel = "canonical";
+    document.head.appendChild(canonical);
+  }
+
+  canonical.href = url;
+}
+
 export default function RoomsPage() {
   useEffect(() => {
     document.title = roomsSeoTitle;
     setMetaContent('meta[name="description"]', roomsSeoDescription);
+    setMetaContent('meta[property="og:url"]', roomsCanonicalUrl);
     setMetaContent('meta[property="og:title"]', roomsSeoTitle);
     setMetaContent('meta[property="og:description"]', roomsSeoDescription);
+    setMetaContent('meta[property="twitter:url"]', roomsCanonicalUrl);
     setMetaContent('meta[property="twitter:title"]', roomsSeoTitle);
     setMetaContent('meta[property="twitter:description"]', roomsSeoDescription);
+    setCanonicalUrl(roomsCanonicalUrl);
   }, []);
 
   return (

@@ -107,6 +107,11 @@ function upsertNewsArticleJsonLd(news: NewsItem, canonicalUrl: string) {
       "@type": "WebPage",
       "@id": canonicalUrl,
     },
+    author: {
+      "@type": "Organization",
+      name: "慢慢蒔光 STime Villa",
+      url: `${siteOrigin}/`,
+    },
     publisher: {
       "@type": "Organization",
       name: "慢慢蒔光 STime Villa",

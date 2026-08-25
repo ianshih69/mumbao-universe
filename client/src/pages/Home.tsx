@@ -14,11 +14,11 @@ import { consumeCustomerEmailVerificationSuccessNotice } from "@/lib/shop/custom
 const enableCruisingMascot =
   import.meta.env.NEXT_PUBLIC_ENABLE_CRUISING_MASCOT === "true";
 const homeSeoTitle =
-  "慢慢蒔光 STime Villa 民宿｜宜蘭包棟住宿・寵物友善｜官網";
+  "慢慢蒔光 STime Villa｜宜蘭包棟民宿・慢寶宇宙主題住宿";
 const homeSeoDescription =
-  "慢慢蒔光 STime Villa 是位於宜蘭的包棟民宿，結合慢寶宇宙 MUMBAO Universe 原創 IP、寵物友善與療癒住宿空間，適合家庭旅遊、朋友聚會、生日慶祝與宜蘭包棟住宿。這裡是慢慢蒔光 STime Villa 官方網站。";
+  "慢慢蒔光 STime Villa 位於宜蘭員山，是以慢寶宇宙 MUMBAO Universe 原創 IP 與十二星座房型打造的主題包棟民宿，提供寵物友善住宿，適合家庭旅行、好友聚會與多人包棟。";
 const homeSocialDescription =
-  "慢慢蒔光 STime Villa 是位於宜蘭的包棟民宿，結合慢寶宇宙 MUMBAO Universe 原創 IP、寵物友善與療癒住宿空間，提供宜蘭包棟住宿、家庭旅遊、朋友聚會與療癒主題住宿體驗。";
+  "慢慢蒔光 STime Villa 位於宜蘭員山，是以慢寶宇宙 MUMBAO Universe 原創 IP 與十二星座房型打造的主題包棟民宿，提供寵物友善住宿，適合家庭旅行、好友聚會與多人包棟。";
 const homeCanonicalUrl = "https://www.mumbao.tw/";
 
 function setMetaContent(selector: string, content: string) {

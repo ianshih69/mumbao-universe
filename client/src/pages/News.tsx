@@ -7,15 +7,51 @@ import { newsItems } from "@/data/news";
 
 const newsSeoTitle = "最新消息｜慢慢蒔光 STime Villa";
 const newsSeoDescription =
-  "慢慢蒔光 STime Villa 最新消息，包含試營運籌備、慢寶 MUMBAO 原創 IP、文創商品與 LINE 貼圖相關公告。";
+  "慢慢蒔光 STime Villa 最新消息，分享慢寶 MUMBAO 原創 IP、LINE 貼圖、文創商品、官網更新與品牌動態。";
+const newsCanonicalUrl = "https://www.mumbao.tw/news";
 const newsItemsPerPage = 6;
 
 function setMetaContent(selector: string, content: string) {
-  const meta = document.head.querySelector<HTMLMetaElement>(selector);
+  let meta = document.head.querySelector<HTMLMetaElement>(selector);
+
+  if (!meta) {
+    const nameMatch = selector.match(/^meta\[name="([^"]+)"\]$/);
+    const propertyMatch = selector.match(/^meta\[property="([^"]+)"\]$/);
+
+    if (nameMatch || propertyMatch) {
+      meta = document.createElement("meta");
+
+      if (nameMatch) {
+        meta.name = nameMatch[1];
+      } else if (propertyMatch) {
+        meta.setAttribute("property", propertyMatch[1]);
+      }
+
+      document.head.appendChild(meta);
+    }
+  }
 
   if (meta) {
     meta.content = content;
   }
+}
+
+function setCanonicalUrl(url: string) {
+  let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+
+  if (!canonical) {
+    canonical = document.createElement("link");
+    canonical.rel = "canonical";
+    document.head.appendChild(canonical);
+  }
+
+  canonical.href = url;
+}
+
+function removeMetaElements(selector: string) {
+  document.head.querySelectorAll<HTMLMetaElement>(selector).forEach((meta) => {
+    meta.remove();
+  });
 }
 
 function getNewsTimeValue(date: string) {
@@ -47,10 +83,14 @@ export default function NewsPage() {
   useEffect(() => {
     document.title = newsSeoTitle;
     setMetaContent('meta[name="description"]', newsSeoDescription);
+    setMetaContent('meta[property="og:url"]', newsCanonicalUrl);
     setMetaContent('meta[property="og:title"]', newsSeoTitle);
     setMetaContent('meta[property="og:description"]', newsSeoDescription);
+    setMetaContent('meta[property="twitter:url"]', newsCanonicalUrl);
     setMetaContent('meta[property="twitter:title"]', newsSeoTitle);
     setMetaContent('meta[property="twitter:description"]', newsSeoDescription);
+    setCanonicalUrl(newsCanonicalUrl);
+    removeMetaElements('meta[name="robots"]');
   }, []);
 
   const sortedNewsItems = newsItems

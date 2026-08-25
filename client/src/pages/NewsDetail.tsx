@@ -5,12 +5,72 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { getNewsBySlug } from "@/data/news";
 
+const siteOrigin = "https://www.mumbao.tw";
+const noindexNewsSlugs = new Set(["stime-villa-summer-preview-preparation"]);
+
 function setMetaContent(selector: string, content: string) {
-  const meta = document.head.querySelector<HTMLMetaElement>(selector);
+  let meta = document.head.querySelector<HTMLMetaElement>(selector);
+
+  if (!meta) {
+    const nameMatch = selector.match(/^meta\[name="([^"]+)"\]$/);
+    const propertyMatch = selector.match(/^meta\[property="([^"]+)"\]$/);
+
+    if (nameMatch || propertyMatch) {
+      meta = document.createElement("meta");
+
+      if (nameMatch) {
+        meta.name = nameMatch[1];
+      } else if (propertyMatch) {
+        meta.setAttribute("property", propertyMatch[1]);
+      }
+
+      document.head.appendChild(meta);
+    }
+  }
 
   if (meta) {
     meta.content = content;
   }
+}
+
+function setCanonicalUrl(url: string) {
+  let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+
+  if (!canonical) {
+    canonical = document.createElement("link");
+    canonical.rel = "canonical";
+    document.head.appendChild(canonical);
+  }
+
+  canonical.href = url;
+}
+
+function removeMetaElements(selector: string) {
+  document.head.querySelectorAll<HTMLMetaElement>(selector).forEach((meta) => {
+    meta.remove();
+  });
+}
+
+function removeCanonicalUrl() {
+  document.head.querySelectorAll<HTMLLinkElement>('link[rel="canonical"]').forEach((canonical) => {
+    canonical.remove();
+  });
+}
+
+function setRobotsNoindex() {
+  const robotsMeta = Array.from(
+    document.head.querySelectorAll<HTMLMetaElement>('meta[name="robots"]'),
+  );
+  let primaryRobotsMeta = robotsMeta[0];
+
+  if (!primaryRobotsMeta) {
+    primaryRobotsMeta = document.createElement("meta");
+    primaryRobotsMeta.name = "robots";
+    document.head.appendChild(primaryRobotsMeta);
+  }
+
+  primaryRobotsMeta.content = "noindex,follow";
+  robotsMeta.slice(1).forEach((meta) => meta.remove());
 }
 
 export default function NewsDetail() {
@@ -20,18 +80,38 @@ export default function NewsDetail() {
   useEffect(() => {
     if (!news) {
       const notFoundTitle = "找不到這篇最新消息｜慢慢蒔光 STime Villa";
+      const notFoundDescription = "找不到這篇最新消息。";
       document.title = notFoundTitle;
-      setMetaContent("meta[name=\"description\"]", "找不到這篇最新消息。");
+      setMetaContent("meta[name=\"description\"]", notFoundDescription);
+      setMetaContent("meta[property=\"og:title\"]", notFoundTitle);
+      setMetaContent("meta[property=\"og:description\"]", notFoundDescription);
+      setMetaContent("meta[property=\"twitter:title\"]", notFoundTitle);
+      setMetaContent("meta[property=\"twitter:description\"]", notFoundDescription);
+      setRobotsNoindex();
+      removeCanonicalUrl();
+      removeMetaElements("meta[property=\"og:url\"]");
+      removeMetaElements("meta[property=\"twitter:url\"]");
       return;
     }
 
     const pageTitle = `${news.title}｜最新消息｜慢慢蒔光 STime Villa`;
+    const canonicalUrl = `${siteOrigin}/news/${news.slug}`;
+
     document.title = pageTitle;
     setMetaContent("meta[name=\"description\"]", news.excerpt);
+    setMetaContent("meta[property=\"og:url\"]", canonicalUrl);
     setMetaContent("meta[property=\"og:title\"]", pageTitle);
     setMetaContent("meta[property=\"og:description\"]", news.excerpt);
+    setMetaContent("meta[property=\"twitter:url\"]", canonicalUrl);
     setMetaContent("meta[property=\"twitter:title\"]", pageTitle);
     setMetaContent("meta[property=\"twitter:description\"]", news.excerpt);
+    setCanonicalUrl(canonicalUrl);
+
+    if (noindexNewsSlugs.has(news.slug)) {
+      setRobotsNoindex();
+    } else {
+      removeMetaElements("meta[name=\"robots\"]");
+    }
   }, [news]);
 
   if (!news) {

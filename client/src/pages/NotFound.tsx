@@ -1,10 +1,81 @@
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, Home } from "lucide-react";
 import { useLocation } from "wouter";
 
+const notFoundTitle = "找不到頁面｜慢慢蒔光 STime Villa";
+const notFoundDescription =
+  "您造訪的頁面不存在或已移動，請返回慢慢蒔光 STime Villa 官方網站繼續瀏覽。";
+const notFoundRobotsContent = "noindex,follow";
+
+function setDescriptionMeta(content: string) {
+  let description = document.head.querySelector<HTMLMetaElement>(
+    'meta[name="description"]'
+  );
+
+  if (!description) {
+    description = document.createElement("meta");
+    description.name = "description";
+    document.head.appendChild(description);
+  }
+
+  description.content = content;
+}
+
+function setNotFoundRobotsMeta() {
+  const robotsMeta = Array.from(
+    document.head.querySelectorAll<HTMLMetaElement>('meta[name="robots"]')
+  );
+  let primaryRobotsMeta = robotsMeta[0];
+
+  if (!primaryRobotsMeta) {
+    primaryRobotsMeta = document.createElement("meta");
+    primaryRobotsMeta.name = "robots";
+    document.head.appendChild(primaryRobotsMeta);
+  }
+
+  primaryRobotsMeta.name = "robots";
+  primaryRobotsMeta.content = notFoundRobotsContent;
+  primaryRobotsMeta.dataset.notFoundRobots = "true";
+  robotsMeta.slice(1).forEach((meta) => meta.remove());
+}
+
+function removeHeadElements(selector: string) {
+  document.head.querySelectorAll(selector).forEach((element) => {
+    element.remove();
+  });
+}
+
+function removeNotFoundRobotsMeta() {
+  document.head
+    .querySelectorAll<HTMLMetaElement>('meta[name="robots"]')
+    .forEach((meta) => {
+      if (
+        meta.dataset.notFoundRobots === "true" &&
+        meta.content === notFoundRobotsContent
+      ) {
+        meta.remove();
+      }
+    });
+}
+
 export default function NotFound() {
   const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    document.title = notFoundTitle;
+    setDescriptionMeta(notFoundDescription);
+    setNotFoundRobotsMeta();
+    removeHeadElements('link[rel="canonical"]');
+    removeHeadElements('meta[property="og:url"]');
+    removeHeadElements('meta[property="twitter:url"]');
+    document.getElementById("news-article-json-ld")?.remove();
+
+    return () => {
+      removeNotFoundRobotsMeta();
+    };
+  }, []);
 
   const handleGoHome = () => {
     setLocation("/");

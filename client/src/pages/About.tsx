@@ -123,9 +123,9 @@ export default function About() {
                   <span className="text-xs uppercase tracking-[0.3em] text-gray-400">
                     {aboutOriginContent.eyebrow}
                   </span>
-                  <h2 className="text-3xl font-light tracking-wide text-gray-800 md:text-5xl">
+                  <h1 className="text-3xl font-light tracking-wide text-gray-800 md:text-5xl">
                     {aboutOriginContent.title}
-                  </h2>
+                  </h1>
                 </div>
 
                 <div className="mx-auto max-w-3xl space-y-6 text-justify text-base leading-[2.15] text-[#75685d] md:text-center md:text-lg md:leading-[2.18]">

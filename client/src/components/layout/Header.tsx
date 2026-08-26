@@ -27,6 +27,17 @@ type MenuItem = {
   sort_order?: number;
 };
 
+function resolveMenuItemHref(label: string, href: string) {
+  if (
+    label === "認識慢寶" &&
+    /^\/(?:(?:zh-TW|en|ja|ko)\/)?about-mumbao$/.test(href)
+  ) {
+    return "/mumbao";
+  }
+
+  return href;
+}
+
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -52,13 +63,10 @@ export function Header() {
     }
   };
 
-  const localeMatch = location.match(/^\/(zh-TW|en|ja|ko)(?=\/|$)/);
-  const localePrefix = localeMatch ? `/${localeMatch[1]}` : "";
-
   const fallbackMenuItems: MenuItem[] = [
     { label: "關於我們", href: "/about", internal: true },
     { label: "最新消息", href: "/#news", internal: false },
-    { label: "認識慢寶", href: `${localePrefix}/about-mumbao`, internal: true },
+    { label: "認識慢寶", href: "/mumbao", internal: true },
     { label: "房型介紹", href: "/#rooms", internal: false },
     { label: "線上訂房", href: "/booking", internal: true },
     { label: "宇宙碎品", href: "/shop", internal: true },
@@ -76,9 +84,10 @@ export function Header() {
         const nextItems = asArray<Record<string, unknown>>(navigation?.items)
           .filter((item) => asBoolean(item.is_visible, true))
           .map((item) => {
-            const href = asString(item.href, "/");
+            const label = asString(item.label, "");
+            const href = resolveMenuItemHref(label, asString(item.href, "/"));
             return {
-              label: asString(item.label, ""),
+              label,
               href,
               internal: typeof item.internal === "boolean" ? item.internal : href.startsWith("/"),
               sort_order: Number(item.sort_order || 0),

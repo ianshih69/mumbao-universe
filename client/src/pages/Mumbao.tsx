@@ -1,8 +1,23 @@
 import { useEffect } from "react";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
+import { useLocation } from "wouter";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+
+const siteOrigin = "https://www.mumbao.tw";
+const mumbaoTitle = "認識慢寶｜MUMBAO";
+const mumbaoDescription =
+  "認識慢寶 MUMBAO，來自宇宙的療癒之光，用慢的哲學陪伴旅人放慢腳步，回到自己。";
+const mumbaoCanonicalUrl = `${siteOrigin}/mumbao`;
+const noindexMumbaoRoutes = new Set([
+  "/about-mumbao",
+  "/zh-TW/about-mumbao",
+  "/en/about-mumbao",
+  "/ja/about-mumbao",
+  "/ko/about-mumbao",
+]);
+const mumbaoNoindexContent = "noindex,follow";
 
 const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 28 },
@@ -90,7 +105,10 @@ const closingParagraphs = [
 ];
 
 function setMetaDescription(content: string) {
-  const selector = 'meta[name="description"]';
+  setMetaContent('meta[name="description"]', content);
+}
+
+function setMetaContent(selector: string, content: string) {
   const existingMeta = document.querySelector<HTMLMetaElement>(selector);
 
   if (existingMeta) {
@@ -99,9 +117,78 @@ function setMetaDescription(content: string) {
   }
 
   const meta = document.createElement("meta");
-  meta.name = "description";
+  const nameMatch = selector.match(/^meta\[name="([^"]+)"\]$/);
+  const propertyMatch = selector.match(/^meta\[property="([^"]+)"\]$/);
+
+  if (nameMatch) {
+    meta.name = nameMatch[1];
+  } else if (propertyMatch) {
+    meta.setAttribute("property", propertyMatch[1]);
+  }
+
   meta.content = content;
   document.head.appendChild(meta);
+}
+
+function setCanonicalUrl(url: string) {
+  const canonicalLinks = Array.from(
+    document.head.querySelectorAll<HTMLLinkElement>('link[rel="canonical"]')
+  );
+  let canonical = canonicalLinks[0];
+
+  if (!canonical) {
+    canonical = document.createElement("link");
+    canonical.rel = "canonical";
+    document.head.appendChild(canonical);
+  }
+
+  canonical.href = url;
+  canonicalLinks.slice(1).forEach((link) => link.remove());
+}
+
+function setMumbaoNoindexRobots() {
+  const robotsMeta = Array.from(
+    document.head.querySelectorAll<HTMLMetaElement>('meta[name="robots"]')
+  );
+  let primaryRobotsMeta = robotsMeta[0];
+
+  if (!primaryRobotsMeta) {
+    primaryRobotsMeta = document.createElement("meta");
+    primaryRobotsMeta.name = "robots";
+    document.head.appendChild(primaryRobotsMeta);
+  }
+
+  primaryRobotsMeta.name = "robots";
+  primaryRobotsMeta.content = mumbaoNoindexContent;
+  primaryRobotsMeta.dataset.mumbaoRouteRobots = "true";
+  robotsMeta.slice(1).forEach((meta) => meta.remove());
+}
+
+function removeManagedMumbaoNoindexRobots() {
+  document.head
+    .querySelectorAll<HTMLMetaElement>('meta[name="robots"]')
+    .forEach((meta) => {
+      if (
+        meta.dataset.mumbaoRouteRobots === "true" &&
+        meta.content === mumbaoNoindexContent
+      ) {
+        meta.remove();
+      }
+    });
+}
+
+function removeStaleNoindexRobots() {
+  document.head
+    .querySelectorAll<HTMLMetaElement>('meta[name="robots"]')
+    .forEach((meta) => {
+      if (meta.content === mumbaoNoindexContent) {
+        meta.remove();
+      }
+    });
+}
+
+function removeNewsArticleJsonLd() {
+  document.getElementById("news-article-json-ld")?.remove();
 }
 
 function StoryImage({
@@ -144,12 +231,35 @@ function SectionLabel({ children }: { children: string }) {
 }
 
 export default function Mumbao() {
+  const [location] = useLocation();
+
   useEffect(() => {
-    document.title = "認識慢寶｜MUMBAO";
-    setMetaDescription(
-      "認識慢寶 MUMBAO，來自宇宙的療癒之光，用慢的哲學陪伴旅人放慢腳步，回到自己。"
-    );
-  }, []);
+    const pathname = location.split(/[?#]/)[0] || "/mumbao";
+    const shouldNoindex = noindexMumbaoRoutes.has(pathname);
+
+    document.title = mumbaoTitle;
+    setMetaDescription(mumbaoDescription);
+    setMetaContent('meta[property="og:url"]', mumbaoCanonicalUrl);
+    setMetaContent('meta[property="og:title"]', mumbaoTitle);
+    setMetaContent('meta[property="og:description"]', mumbaoDescription);
+    setMetaContent('meta[property="twitter:url"]', mumbaoCanonicalUrl);
+    setMetaContent('meta[property="twitter:title"]', mumbaoTitle);
+    setMetaContent('meta[property="twitter:description"]', mumbaoDescription);
+    setCanonicalUrl(mumbaoCanonicalUrl);
+    removeNewsArticleJsonLd();
+
+    if (shouldNoindex) {
+      setMumbaoNoindexRobots();
+    } else {
+      removeStaleNoindexRobots();
+    }
+
+    return () => {
+      if (shouldNoindex) {
+        removeManagedMumbaoNoindexRobots();
+      }
+    };
+  }, [location]);
 
   return (
     <div className="min-h-[100svh] overflow-hidden bg-[#FFF9F2] text-[#5F5148] font-serif selection:bg-[#E8B6B6] selection:text-white">

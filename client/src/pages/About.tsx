@@ -9,13 +9,60 @@ const aboutSeoTitle =
   "關於慢慢蒔光｜宜蘭員山包棟民宿・寵物友善住宿・慢寶 MUMBAO 原創 IP";
 const aboutSeoDescription =
   "慢慢蒔光 STime Villa 是位於宜蘭員山的包棟民宿，以療癒空間、寵物友善與慢寶 MUMBAO 原創 IP 為核心，提供家庭、朋友與毛孩同行的宜蘭住宿體驗。";
+const aboutCanonicalUrl = "https://www.mumbao.tw/about";
 
 function setMetaContent(selector: string, content: string) {
-  const meta = document.head.querySelector<HTMLMetaElement>(selector);
+  const metas = Array.from(
+    document.head.querySelectorAll<HTMLMetaElement>(selector)
+  );
+  let meta = metas[0];
 
-  if (meta) {
-    meta.content = content;
+  if (!meta) {
+    meta = document.createElement("meta");
+    const nameMatch = selector.match(/^meta\[name="([^"]+)"\]$/);
+    const propertyMatch = selector.match(/^meta\[property="([^"]+)"\]$/);
+
+    if (nameMatch) {
+      meta.name = nameMatch[1];
+    } else if (propertyMatch) {
+      meta.setAttribute("property", propertyMatch[1]);
+    }
+
+    document.head.appendChild(meta);
   }
+
+  meta.content = content;
+  metas.slice(1).forEach((duplicate) => duplicate.remove());
+}
+
+function setCanonicalUrl(url: string) {
+  const canonicalLinks = Array.from(
+    document.head.querySelectorAll<HTMLLinkElement>('link[rel="canonical"]')
+  );
+  let canonical = canonicalLinks[0];
+
+  if (!canonical) {
+    canonical = document.createElement("link");
+    canonical.rel = "canonical";
+    document.head.appendChild(canonical);
+  }
+
+  canonical.href = url;
+  canonicalLinks.slice(1).forEach((link) => link.remove());
+}
+
+function removeStaleNoindexRobots() {
+  document.head
+    .querySelectorAll<HTMLMetaElement>('meta[name="robots"]')
+    .forEach((meta) => {
+      if (meta.content === "noindex,follow") {
+        meta.remove();
+      }
+    });
+}
+
+function removeNewsArticleJsonLd() {
+  document.getElementById("news-article-json-ld")?.remove();
 }
 
 export default function About() {
@@ -35,6 +82,11 @@ export default function About() {
     setMetaContent('meta[property="og:description"]', aboutSeoDescription);
     setMetaContent('meta[property="twitter:title"]', aboutSeoTitle);
     setMetaContent('meta[property="twitter:description"]', aboutSeoDescription);
+    setMetaContent('meta[property="og:url"]', aboutCanonicalUrl);
+    setMetaContent('meta[property="twitter:url"]', aboutCanonicalUrl);
+    setCanonicalUrl(aboutCanonicalUrl);
+    removeStaleNoindexRobots();
+    removeNewsArticleJsonLd();
   }, []);
 
   return (

@@ -6,7 +6,7 @@ import { Footer } from "@/components/layout/Footer";
 const slowGuideSeoTitle =
   "慢遊私選｜宜蘭散步風景・在地小吃・午後小食｜慢慢蒔光 STime Villa";
 const slowGuideSeoDescription =
-  "慢慢蒔光 STime Villa 整理屋主走過也喜歡的宜蘭日常，包含散步風景、在地小吃與午後小食，留給想慢慢走的旅人參考。";
+  "慢慢蒔光 STime Villa 整理館主走過也喜歡的宜蘭日常，包含散步風景、在地小吃與午後小食，留給想慢慢走的旅人參考。";
 const slowGuideCanonicalUrl = "https://www.mumbao.tw/experience/slow-guide";
 
 const guideSections = [
@@ -18,7 +18,7 @@ const guideSections = [
   {
     title: "在地小吃",
     description:
-      "屋主自己喜歡，也適合旅人順路品嚐的小吃。不是排行榜，而是一些住在宜蘭時會想再去一次的日常味道。",
+      "館主親自吃過也喜歡，適合旅人順路品嚐的小吃。不是排行榜，而是一些來到宜蘭時，會讓人想再去一次的日常味道。",
   },
   {
     title: "午後小食",
@@ -115,7 +115,7 @@ export default function SlowGuide() {
               慢遊・私選
             </h1>
             <p className="mt-6 text-lg leading-9 text-[#75685d] md:text-xl">
-              屋主走過也喜歡的宜蘭日常，留給想慢慢走的旅人。
+              館主走過也喜歡的宜蘭日常，留給想慢慢走的旅人。
             </p>
           </header>
 
@@ -124,10 +124,10 @@ export default function SlowGuide() {
               慢慢蒔光不只是一個停留的地方，也是一段認識宜蘭的入口。
             </p>
             <p>
-              我們整理了一些自己去過、喜歡，也覺得適合旅人慢慢走訪的地方。它們不一定是祕境，也不一定是最熱門的打卡點，但有些適合散步，有些適合吃點東西，有些適合午後坐下來，讓時間慢一點。
+              我們整理了一些親自走過、喜歡，也覺得適合旅人慢慢走訪的地方。它們不一定是秘境，也不一定是最熱門的打卡點；但有些適合散步，有些適合吃點東西，有些適合午後坐下來，讓時間慢一點。
             </p>
             <p>
-              這份清單會依季節、營業狀況與屋主實際走訪經驗慢慢更新。出發前仍建議確認店家營業時間與現場狀況。
+              這份清單會依季節、營業狀況與館主實際走訪經驗慢慢更新。出發前仍建議確認店家營業時間與現場狀況。
             </p>
           </article>
 

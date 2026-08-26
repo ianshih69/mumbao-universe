@@ -96,7 +96,7 @@ export function Experience() {
                   SLOW GUIDE <br /> <span className="text-2xl md:text-3xl mt-3 block">慢遊・私選</span>
                 </h3>
                 <p className="text-sm md:text-base tracking-wider opacity-90 max-w-md mb-6 md:mb-8 transform translate-y-4 group-hover:translate-y-0 transition-all duration-500 delay-100 leading-relaxed px-4 md:px-0">
-                  屋主走過也喜歡的宜蘭日常。
+                  館主走過也喜歡的宜蘭日常。
                   <br />
                   從散步風景、在地小吃到午後小食，
                   <br />

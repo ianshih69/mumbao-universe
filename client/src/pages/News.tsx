@@ -54,6 +54,10 @@ function removeMetaElements(selector: string) {
   });
 }
 
+function removeNewsArticleJsonLd() {
+  document.getElementById("news-article-json-ld")?.remove();
+}
+
 function getNewsTimeValue(date: string) {
   const [year, month] = date.split(".").map((value) => Number.parseInt(value, 10));
 
@@ -91,6 +95,7 @@ export default function NewsPage() {
     setMetaContent('meta[property="twitter:description"]', newsSeoDescription);
     setCanonicalUrl(newsCanonicalUrl);
     removeMetaElements('meta[name="robots"]');
+    removeNewsArticleJsonLd();
   }, []);
 
   const sortedNewsItems = newsItems

@@ -104,11 +104,17 @@ function setRobotsNoindex() {
   robotsMeta.slice(1).forEach((meta) => meta.remove());
 }
 
+function removeNewsArticleJsonLd() {
+  document.getElementById("news-article-json-ld")?.remove();
+}
+
 export default function RoomDetail() {
   const [, params] = useRoute("/rooms/:slug");
   const room = getRoomBySlug(params?.slug || "");
 
   useEffect(() => {
+    removeNewsArticleJsonLd();
+
     if (!room) {
       const notFoundTitle = "找不到這間房型｜慢慢蒔光 STime Villa";
       document.title = notFoundTitle;

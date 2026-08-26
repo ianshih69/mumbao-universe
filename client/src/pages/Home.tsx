@@ -41,6 +41,18 @@ function setCanonicalUrl(url: string) {
   canonical.href = url;
 }
 
+function removeNoindexRobotsMeta() {
+  document.head.querySelectorAll<HTMLMetaElement>('meta[name="robots"]').forEach((meta) => {
+    if (meta.content.toLowerCase().includes("noindex")) {
+      meta.remove();
+    }
+  });
+}
+
+function removeNewsArticleJsonLd() {
+  document.getElementById("news-article-json-ld")?.remove();
+}
+
 export default function Home() {
   const [verificationNotice, setVerificationNotice] = useState("");
 
@@ -54,6 +66,8 @@ export default function Home() {
     setMetaContent('meta[property="twitter:title"]', homeSeoTitle);
     setMetaContent('meta[property="twitter:description"]', homeSocialDescription);
     setCanonicalUrl(homeCanonicalUrl);
+    removeNoindexRobotsMeta();
+    removeNewsArticleJsonLd();
   }, []);
 
   useEffect(() => {

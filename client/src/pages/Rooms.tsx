@@ -61,6 +61,18 @@ function setCanonicalUrl(url: string) {
   canonical.href = url;
 }
 
+function removeNoindexRobotsMeta() {
+  document.head.querySelectorAll<HTMLMetaElement>('meta[name="robots"]').forEach((meta) => {
+    if (meta.content.toLowerCase().includes("noindex")) {
+      meta.remove();
+    }
+  });
+}
+
+function removeNewsArticleJsonLd() {
+  document.getElementById("news-article-json-ld")?.remove();
+}
+
 export default function RoomsPage() {
   useEffect(() => {
     document.title = roomsSeoTitle;
@@ -72,6 +84,8 @@ export default function RoomsPage() {
     setMetaContent('meta[property="twitter:title"]', roomsSeoTitle);
     setMetaContent('meta[property="twitter:description"]', roomsSeoDescription);
     setCanonicalUrl(roomsCanonicalUrl);
+    removeNoindexRobotsMeta();
+    removeNewsArticleJsonLd();
   }, []);
 
   return (

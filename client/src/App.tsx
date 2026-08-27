@@ -15,6 +15,7 @@ import Home from "./pages/Home";
 import About from "./pages/About";
 import Breakfast from "./pages/Breakfast";
 import SlowGuide from "./pages/SlowGuide";
+import WholeHouse from "./pages/WholeHouse";
 import RoomsPage from "./pages/Rooms";
 import RoomDetail from "./pages/RoomDetail";
 import NewsPage from "./pages/News";
@@ -175,6 +176,7 @@ function Router() {
         </AdminPage>
       </Route>
       <Route path={"/about"} component={About} />
+      <Route path={"/stay/whole-house"} component={WholeHouse} />
       <Route path={"/experience/breakfast"} component={Breakfast} />
       <Route path={"/experience/slow-guide"} component={SlowGuide} />
       <Route path={"/rooms/:slug"} component={RoomDetail} />

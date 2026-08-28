@@ -242,7 +242,7 @@ describe("bookingPricing", () => {
     await expect(quote({ adults: 17, packageType: "villa_10", checkIn: "2026-11-06", checkOut: "2026-11-08" })).resolves.toMatchObject({
       status: "resolved",
       pricingGuestCount: 17,
-      pricing: { total: 88500 },
+      pricing: { total: 86113 },
     });
     await expect(quote({ adults: 17, packageType: "villa_18", checkIn: "2026-11-06", checkOut: "2026-11-08" })).resolves.toMatchObject({
       status: "unavailable",
@@ -368,14 +368,14 @@ describe("bookingPricing", () => {
     });
 
     const caseC = await quote({ adults: 8, children: 3, packageType: "villa_10", checkIn: "2026-11-05", checkOut: "2026-11-07" });
-    expect(caseC.pricing.childFeeTotal).toBe(1000);
+    expect(caseC.pricing.childFeeTotal).toBe(975);
 
     const caseD = await quote({ adults: 10, children: 3, packageType: "villa_10", checkIn: "2026-11-05", checkOut: "2026-11-07" });
     expect(caseD).toMatchObject({
       pricingGuestCount: 10,
       pricing: {
         chargeableChildCount: 3,
-        childFeeTotal: 3000,
+        childFeeTotal: 2925,
         roomPlanHeadcount: 10,
         doubleBedCount: 5,
         roomCountMin: 3,
@@ -576,7 +576,7 @@ describe("bookingPricing", () => {
     await expect(quote({ adults: 10, packageType: "villa_10", checkIn: "2026-11-06", checkOut: "2026-11-08" })).resolves.toMatchObject({
       status: "resolved",
       pricingGuestCount: 10,
-      pricing: { total: 71000 },
+      pricing: { total: 69050 },
     });
     await expect(quote({ adults: 10, packageType: "villa_10", checkIn: "2026-11-06", checkOut: "2026-11-07" })).resolves.toMatchObject({
       status: "resolved",
@@ -587,9 +587,10 @@ describe("bookingPricing", () => {
   it("calculates multi-night totals and does not charge checkout date", async () => {
     const result = await quote({ checkIn: "2026-11-05", checkOut: "2026-11-07" });
     expect(result.pricing.breakdown.map((night) => night.date)).toEqual(["2026-11-05", "2026-11-06"]);
-    expect(result.pricing.total).toBe(57000);
-    expect(result.pricing.depositAmount).toBe(17100);
-    expect(result.pricing.balanceAmount).toBe(39900);
+    expect(result.pricing.breakdown.map((night) => night.price)).toEqual([25000, 30400]);
+    expect(result.pricing.total).toBe(55400);
+    expect(result.pricing.depositAmount).toBe(16620);
+    expect(result.pricing.balanceAmount).toBe(38780);
 
     const oneNight = await quote({ checkIn: "2026-11-05", checkOut: "2026-11-06" });
     expect(oneNight.pricing.breakdown.map((night) => night.date)).toEqual(["2026-11-05"]);
@@ -616,10 +617,10 @@ describe("bookingPricing", () => {
     expect(result.pricing.depositAmount + result.pricing.balanceAmount).toBe(result.pricing.total);
   });
 
-  it("applies the 95% weekday consecutive-stay discount to the second night only", async () => {
+  it("applies the 95% consecutive-stay discount from the second night onward", async () => {
     const result = await quote({ checkIn: "2026-11-02", checkOut: "2026-11-05" });
 
-    expect(result.pricing.breakdown.map((night) => night.price)).toEqual([25000, 23750, 25000]);
+    expect(result.pricing.breakdown.map((night) => night.price)).toEqual([25000, 23750, 23750]);
     expect(result.pricing.breakdown[0]).toMatchObject({
       date: "2026-11-02",
       dayType: "weekday",
@@ -633,21 +634,21 @@ describe("bookingPricing", () => {
       date: "2026-11-03",
       dayType: "weekday",
       preDiscountPrice: 25000,
-      discountType: "weekday_second_night_95",
+      discountType: "consecutive_stay_95",
       discountRate: 0.95,
       discountAmount: 1250,
       price: 23750,
     });
     expect(result.pricing.breakdown[2]).toMatchObject({
       date: "2026-11-04",
-      discountType: null,
-      discountRate: 1,
-      discountAmount: 0,
-      price: 25000,
+      discountType: "consecutive_stay_95",
+      discountRate: 0.95,
+      discountAmount: 1250,
+      price: 23750,
     });
-    expect(result.pricing.total).toBe(73750);
-    expect(result.pricing.depositAmount).toBe(22125);
-    expect(result.pricing.balanceAmount).toBe(51625);
+    expect(result.pricing.total).toBe(72500);
+    expect(result.pricing.depositAmount).toBe(21750);
+    expect(result.pricing.balanceAmount).toBe(50750);
   });
 
   it("rounds second-night discounts to whole TWD", async () => {
@@ -661,7 +662,7 @@ describe("bookingPricing", () => {
     expect(result.pricing.breakdown.map((night) => night.price)).toEqual([26250, 24938]);
     expect(result.pricing.breakdown[1]).toMatchObject({
       preDiscountPrice: 26250,
-      discountType: "weekday_second_night_95",
+      discountType: "consecutive_stay_95",
       discountRate: 0.95,
       discountAmount: 1312,
       price: 24938,
@@ -671,14 +672,14 @@ describe("bookingPricing", () => {
     expect(result.pricing.balanceAmount).toBe(35832);
   });
 
-  it("does not apply the weekday consecutive-stay discount to Sunday starts, Fridays, or special-date overrides", async () => {
+  it("applies the consecutive-stay discount to Sundays, Fridays, and special-date overrides", async () => {
     const sundayStart = await quote({ checkIn: "2026-11-01", checkOut: "2026-11-03" });
-    expect(sundayStart.pricing.breakdown.map((night) => night.price)).toEqual([25000, 25000]);
-    expect(sundayStart.pricing.breakdown.map((night) => night.discountType)).toEqual([null, null]);
+    expect(sundayStart.pricing.breakdown.map((night) => night.price)).toEqual([25000, 23750]);
+    expect(sundayStart.pricing.breakdown.map((night) => night.discountType)).toEqual([null, "consecutive_stay_95"]);
 
     const thursdayFriday = await quote({ checkIn: "2026-11-05", checkOut: "2026-11-07" });
-    expect(thursdayFriday.pricing.breakdown.map((night) => night.price)).toEqual([25000, 32000]);
-    expect(thursdayFriday.pricing.breakdown.map((night) => night.discountType)).toEqual([null, null]);
+    expect(thursdayFriday.pricing.breakdown.map((night) => night.price)).toEqual([25000, 30400]);
+    expect(thursdayFriday.pricing.breakdown.map((night) => night.discountType)).toEqual([null, "consecutive_stay_95"]);
 
     const specialDateSecondNight = await quote(
       { checkIn: "2026-11-02", checkOut: "2026-11-04" },
@@ -695,12 +696,12 @@ describe("bookingPricing", () => {
         ],
       }
     );
-    expect(specialDateSecondNight.pricing.breakdown.map((night) => night.price)).toEqual([25000, 39000]);
+    expect(specialDateSecondNight.pricing.breakdown.map((night) => night.price)).toEqual([25000, 37050]);
     expect(specialDateSecondNight.pricing.breakdown[1]).toMatchObject({
       dayType: "holiday",
       specialDateLabel: "Manual holiday",
-      discountType: null,
-      discountAmount: 0,
+      discountType: "consecutive_stay_95",
+      discountAmount: 1950,
     });
   });
 
@@ -714,7 +715,7 @@ describe("bookingPricing", () => {
     });
 
     expect(result.pricing.breakdown.map((night) => night.date)).toEqual(["2026-11-05", "2026-11-06"]);
-    expect(result.pricing.breakdown.map((night) => night.price)).toEqual([36000, 43000]);
+    expect(result.pricing.breakdown.map((night) => night.price)).toEqual([36000, 40850]);
     expect(result.pricing.breakdown).toEqual([
       expect.objectContaining({
         dayType: "weekday",
@@ -731,14 +732,17 @@ describe("bookingPricing", () => {
         basePrice: 42000,
         chargeableChildCount: 2,
         childFeeUnitPrice: 500,
-        childFeeAmount: 1000,
-        price: 43000,
+        childFeeAmount: 950,
+        preDiscountPrice: 43000,
+        discountType: "consecutive_stay_95",
+        discountAmount: 2100,
+        price: 40850,
       }),
     ]);
-    expect(result.pricing.childFeeTotal).toBe(2000);
-    expect(result.pricing.total).toBe(79000);
-    expect(result.pricing.depositAmount).toBe(23700);
-    expect(result.pricing.balanceAmount).toBe(55300);
+    expect(result.pricing.childFeeTotal).toBe(1950);
+    expect(result.pricing.total).toBe(76850);
+    expect(result.pricing.depositAmount).toBe(23055);
+    expect(result.pricing.balanceAmount).toBe(53795);
     expect(result.pricing.depositAmount + result.pricing.balanceAmount).toBe(result.pricing.total);
   });
 
@@ -914,7 +918,7 @@ describe("bookingPricing", () => {
       { rates: makeRateRows(customMatrix) }
     );
 
-    expect(result.pricing.total).toBe(93000);
+    expect(result.pricing.total).toBe(90500);
     expect(result.pricing.breakdown).toEqual([
       expect.objectContaining({
         date: "2026-11-06",
@@ -934,7 +938,9 @@ describe("bookingPricing", () => {
         adultIncrementRate: 1000,
         regularExtraAdultCount: 2,
         regularExtraAdultFeeAmount: 2000,
-        price: 50000,
+        discountType: "consecutive_stay_95",
+        discountAmount: 2500,
+        price: 47500,
       }),
     ]);
   });
@@ -978,11 +984,11 @@ describe("bookingPricing", () => {
       checkIn: "2026-11-05",
       checkOut: "2026-11-07",
     });
-    expect(nineteenAdults.pricing.breakdown.map((night) => night.price)).toEqual([35800, 42800]);
+    expect(nineteenAdults.pricing.breakdown.map((night) => night.price)).toEqual([35800, 40660]);
     expect(nineteenAdults.pricing.extraAdultFeeTotal).toBe(1600);
-    expect(nineteenAdults.pricing.total).toBe(78600);
-    expect(nineteenAdults.pricing.depositAmount).toBe(23580);
-    expect(nineteenAdults.pricing.balanceAmount).toBe(55020);
+    expect(nineteenAdults.pricing.total).toBe(76460);
+    expect(nineteenAdults.pricing.depositAmount).toBe(22938);
+    expect(nineteenAdults.pricing.balanceAmount).toBe(53522);
     expect(nineteenAdults.pricing.depositAmount + nineteenAdults.pricing.balanceAmount).toBe(nineteenAdults.pricing.total);
 
     const twentyAdults = await quote({
@@ -992,14 +998,14 @@ describe("bookingPricing", () => {
       checkIn: "2026-11-05",
       checkOut: "2026-11-07",
     });
-    expect(twentyAdults.pricing.breakdown.map((night) => night.price)).toEqual([41100, 48100]);
+    expect(twentyAdults.pricing.breakdown.map((night) => night.price)).toEqual([41100, 45695]);
     expect(twentyAdults.pricing.extraAdultFeeTotal).toBe(3200);
-    expect(twentyAdults.pricing.childFeeTotal).toBe(9000);
-    expect(twentyAdults.pricing.total).toBe(89200);
+    expect(twentyAdults.pricing.childFeeTotal).toBe(8775);
+    expect(twentyAdults.pricing.total).toBe(86795);
     expect(twentyAdults.pricing.depositAmount + twentyAdults.pricing.balanceAmount).toBe(twentyAdults.pricing.total);
   });
 
-  it("keeps non-bed child fees separate from the second-night weekday discount", async () => {
+  it("applies consecutive-stay discount to both adult lodging and non-bed child fees", async () => {
     const result = await quote({
       adults: 8,
       children: 3,
@@ -1030,18 +1036,142 @@ describe("bookingPricing", () => {
         basePrice: 25000,
         chargeableChildCount: 1,
         childFeeUnitPrice: 500,
-        childFeeAmount: 500,
+        childFeeAmount: 475,
         preDiscountPrice: 25500,
-        discountType: "weekday_second_night_95",
+        discountType: "consecutive_stay_95",
         discountRate: 0.95,
         discountAmount: 1250,
-        price: 24250,
+        price: 24225,
       }),
     ]);
-    expect(result.pricing.childFeeTotal).toBe(1000);
-    expect(result.pricing.total).toBe(49750);
-    expect(result.pricing.depositAmount).toBe(14925);
-    expect(result.pricing.balanceAmount).toBe(34825);
+    expect(result.pricing.childFeeTotal).toBe(975);
+    expect(result.pricing.total).toBe(49725);
+    expect(result.pricing.depositAmount).toBe(14918);
+    expect(result.pricing.balanceAmount).toBe(34807);
+    expect(result.pricing.depositAmount + result.pricing.balanceAmount).toBe(result.pricing.total);
+  });
+
+  it("adds dog lodging fees per night and keeps the refundable pet deposit out of totals", async () => {
+    const noDogs = await quote({ checkIn: "2026-11-12", checkOut: "2026-11-16" });
+    expect(noDogs.pricing).toMatchObject({
+      petFeeTotal: 0,
+      nightlyPetFeeAmount: 0,
+      petDepositAmount: 0,
+      total: 116200,
+    });
+
+    const result = await quote({
+      checkIn: "2026-11-12",
+      checkOut: "2026-11-16",
+      dogUnder10kgCount: 1,
+      dog10To20kgCount: 1,
+      dogOver20kgCount: 1,
+    });
+
+    expect(result.pricing.breakdown.map((night) => night.adultLodgingAmount)).toEqual([25000, 30400, 37050, 23750]);
+    expect(result.pricing.breakdown.map((night) => night.petFeeOriginalAmount)).toEqual([2500, 2500, 2500, 2500]);
+    expect(result.pricing.breakdown.map((night) => night.petFeeAmount)).toEqual([2500, 2375, 2375, 2375]);
+    expect(result.pricing.breakdown.map((night) => night.price)).toEqual([27500, 32775, 39425, 26125]);
+    expect(result.pricing).toMatchObject({
+      dogUnder10kgCount: 1,
+      dog10To20kgCount: 1,
+      dogOver20kgCount: 1,
+      dogCount: 3,
+      nightlyPetFeeAmount: 2500,
+      discountedNightlyPetFeeAmount: 2375,
+      petFeeOriginalTotal: 10000,
+      petFeeDiscountTotal: 375,
+      petFeeTotal: 9625,
+      petDepositAmount: 3000,
+      total: 125825,
+      depositAmount: 37748,
+      balanceAmount: 88077,
+    });
+    expect(result.pricing.depositAmount + result.pricing.balanceAmount).toBe(result.pricing.total);
+    expect(result.pricing.total + result.pricing.petDepositAmount).toBe(128825);
+    expect(result.pricing.petFeeBreakdown).toEqual([
+      expect.objectContaining({ key: "under10kg", count: 1, unitPrice: 500, total: 1925 }),
+      expect.objectContaining({ key: "mid10to20kg", count: 1, unitPrice: 800, total: 3080 }),
+      expect.objectContaining({ key: "over20kg", count: 1, unitPrice: 1200, total: 4620 }),
+    ]);
+  });
+
+  it("charges over-20kg dog fees per night", async () => {
+    const result = await quote({
+      checkIn: "2026-11-02",
+      checkOut: "2026-11-04",
+      dogOver20kgCount: 1,
+    });
+
+    expect(result.pricing.breakdown.map((night) => night.petFeeAmount)).toEqual([1200, 1140]);
+    expect(result.pricing.breakdown.map((night) => night.price)).toEqual([26200, 24890]);
+    expect(result.pricing).toMatchObject({
+      dogOver20kgCount: 1,
+      dogCount: 1,
+      nightlyPetFeeAmount: 1200,
+      discountedNightlyPetFeeAmount: 1140,
+      petFeeTotal: 2340,
+      petDepositAmount: 3000,
+      total: 51090,
+      depositAmount: 15327,
+      balanceAmount: 35763,
+    });
+    expect(result.pricing.depositAmount + result.pricing.balanceAmount).toBe(result.pricing.total);
+  });
+
+  it("allows more than three dogs across all weight tiers", async () => {
+    await expect(
+      quote({
+        dogUnder10kgCount: 3,
+        dog10To20kgCount: 2,
+        dogOver20kgCount: 2,
+      })
+    ).resolves.toMatchObject({
+      status: "resolved",
+      pricing: {
+        dogCount: 7,
+        petFeeTotal: 5500,
+        total: 30500,
+        depositAmount: 9150,
+      },
+    });
+  });
+
+  it("keeps 19 adult, child, pet, and consecutive-stay pricing separate", async () => {
+    const result = await quote({
+      adults: 19,
+      children: 7,
+      packageType: "villa_18",
+      checkIn: "2026-11-12",
+      checkOut: "2026-11-16",
+      dogUnder10kgCount: 2,
+      dog10To20kgCount: 1,
+    });
+
+    expect(result.pricing.breakdown.map((night) => night.adultLodgingAmount)).toEqual([35800, 40660, 47310, 34010]);
+    expect(result.pricing.breakdown.map((night) => night.childFeeAmount)).toEqual([3500, 3325, 3325, 3325]);
+    expect(result.pricing.breakdown.map((night) => night.petFeeAmount)).toEqual([1800, 1710, 1710, 1710]);
+    expect(result.pricing.breakdown.map((night) => night.price)).toEqual([41100, 45695, 52345, 39045]);
+    expect(result.pricing.breakdown.map((night) => night.discountType)).toEqual([
+      null,
+      "consecutive_stay_95",
+      "consecutive_stay_95",
+      "consecutive_stay_95",
+    ]);
+    expect(result).toMatchObject({
+      pricingGuestCount: 19,
+      pricing: {
+        extraAdultCount: 1,
+        extraAdultFeeTotal: 3200,
+        chargeableChildCount: 7,
+        childFeeTotal: 13475,
+        petFeeTotal: 6930,
+        petDepositAmount: 3000,
+        total: 178185,
+        depositAmount: 53456,
+        balanceAmount: 124729,
+      },
+    });
     expect(result.pricing.depositAmount + result.pricing.balanceAmount).toBe(result.pricing.total);
   });
 

@@ -22,6 +22,9 @@ const fallbackDraft: BookingDraftForm = {
   pet_count: 0,
   pet_type: "",
   pet_notes: "",
+  dog_under_10kg_count: 0,
+  dog_10_to_20kg_count: 0,
+  dog_over_20kg_count: 0,
   notes: "",
 };
 
@@ -53,8 +56,11 @@ describe("booking draft persistence", () => {
       stay_type: "room",
       has_pets: true,
       pet_count: 2,
-      pet_type: "cat",
-      pet_notes: "兩隻貓",
+      pet_type: "dog",
+      pet_notes: "兩隻狗",
+      dog_under_10kg_count: 1,
+      dog_10_to_20kg_count: 1,
+      dog_over_20kg_count: 0,
     };
 
     writeBookingDraft(storage, draft);

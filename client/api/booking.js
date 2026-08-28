@@ -13,6 +13,7 @@ import {
 import {
   bookingGuestRules,
   resolveBookingGuestPlan,
+  resolveBookingPetPlan,
 } from "../src/lib/bookings/bookingGuestRules.js";
 
 const DEFAULT_BOOKING_SETTINGS = {
@@ -23,7 +24,7 @@ const DEFAULT_BOOKING_SETTINGS = {
   allowPets: true,
 };
 const VALID_STAY_TYPES = new Set(["villa", "room"]);
-const VALID_PET_TYPES = new Set(["dog", "cat", "other"]);
+const VALID_PET_TYPES = new Set(["dog"]);
 
 function makeRequestId() {
   return `booking-public-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -75,6 +76,11 @@ function parseInteger(value, fallback = null) {
   if (value === "" || value === undefined || value === null) return fallback;
   const numberValue = Number(value);
   return Number.isInteger(numberValue) ? numberValue : Number.NaN;
+}
+
+function parseNonNegativeInteger(value, fallback = 0) {
+  const parsed = parseInteger(value, fallback);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : Number.NaN;
 }
 
 function normalizeDate(value) {
@@ -280,25 +286,49 @@ function validateStayDetails(body, settings) {
     throw httpError(400, "孩童最多 9 位。", "child_count_exceeds_capacity");
   }
 
+  const dogUnder10kgCount = parseNonNegativeInteger(
+    body.dog_under_10kg_count ?? body.dogUnder10kgCount ?? body.under10kgCount,
+    0
+  );
+  const dog10To20kgCount = parseNonNegativeInteger(
+    body.dog_10_to_20kg_count ?? body.dog10To20kgCount ?? body.midDogCount,
+    0
+  );
+  const dogOver20kgCount = parseNonNegativeInteger(
+    body.dog_over_20kg_count ?? body.dogOver20kgCount ?? body.over20kgCount,
+    0
+  );
+  if (![dogUnder10kgCount, dog10To20kgCount, dogOver20kgCount].every(Number.isInteger)) {
+    throw httpError(400, "狗狗數量不正確。", "invalid_dog_count");
+  }
+  const petPlan = resolveBookingPetPlan({
+    dogUnder10kgCount,
+    dog10To20kgCount,
+    dogOver20kgCount,
+  });
+
   let roomCount = selectedStayType === "villa" ? settings.totalRoomCount : parseInteger(body.room_count, null);
   if (selectedStayType === "room" && (!Number.isInteger(roomCount) || roomCount < 1 || roomCount > settings.totalRoomCount)) {
     throw httpError(400, `單間客房數需為 1 到 ${settings.totalRoomCount} 間。`, "invalid_room_count");
   }
 
-  const hasPets = body.has_pets === true;
+  const hasPets = petPlan.dogCount > 0 || body.has_pets === true;
   if (hasPets && !settings.allowPets) {
     throw httpError(400, "目前暫未開放攜帶寵物的線上申請。", "pet_booking_disabled");
   }
 
-  let petCount = hasPets ? parseInteger(body.pet_count, 1) : null;
-  let petType = hasPets ? cleanText(body.pet_type, 20) || "dog" : null;
+  let petCount = petPlan.dogCount > 0 ? petPlan.dogCount : null;
+  let petType = petPlan.dogCount > 0 ? cleanText(body.pet_type, 20) || "dog" : null;
   const petNotes = hasPets ? cleanText(body.pet_notes, 500) : "";
 
-  if (hasPets && (!Number.isInteger(petCount) || petCount < 1 || petCount > 20)) {
+  if (hasPets && petPlan.dogCount <= 0) {
+    throw httpError(400, "攜帶狗狗時，請填寫狗狗重量級距數量。", "missing_dog_counts");
+  }
+  if (hasPets && (!Number.isInteger(petCount) || petCount < 1)) {
     throw httpError(400, "攜帶寵物時，寵物數量至少需要 1。", "invalid_pet_count");
   }
   if (hasPets && !VALID_PET_TYPES.has(petType)) {
-    throw httpError(400, "寵物類型不正確。", "invalid_pet_type");
+    throw httpError(400, "目前僅開放狗狗入住。", "invalid_pet_type");
   }
 
   return {
@@ -311,6 +341,10 @@ function validateStayDetails(body, settings) {
     petCount,
     petType,
     petNotes,
+    dogUnder10kgCount,
+    dog10To20kgCount,
+    dogOver20kgCount,
+    petPlan,
     guestCount: guestPlan.actualGuestCount,
     guestPlan,
   };
@@ -366,6 +400,9 @@ async function handleQuote(req, res, requestId) {
       adults: firstQueryValue(req.query?.adults),
       children: firstQueryValue(req.query?.children),
       infants: firstQueryValue(req.query?.infants),
+      dogUnder10kgCount: firstQueryValue(req.query?.dogUnder10kgCount || req.query?.dog_under_10kg_count),
+      dog10To20kgCount: firstQueryValue(req.query?.dog10To20kgCount || req.query?.dog_10_to_20kg_count),
+      dogOver20kgCount: firstQueryValue(req.query?.dogOver20kgCount || req.query?.dog_over_20kg_count),
       selected_room_option_id: firstQueryValue(req.query?.selectedRoomOptionId || req.query?.selected_room_option_id),
       room_count: firstQueryValue(req.query?.roomCount || req.query?.room_count),
       has_pets: false,
@@ -382,6 +419,9 @@ async function handleQuote(req, res, requestId) {
       children: stayDetails.children,
       infants: stayDetails.infants,
       guestCount: stayDetails.guestCount,
+      dogUnder10kgCount: stayDetails.dogUnder10kgCount,
+      dog10To20kgCount: stayDetails.dog10To20kgCount,
+      dogOver20kgCount: stayDetails.dogOver20kgCount,
       packageType: firstQueryValue(
         req.query?.packageType || req.query?.package_type || req.query?.selectedPackageType || req.query?.selected_package_type
       ),
@@ -437,6 +477,9 @@ async function handleRequest(req, res, requestId) {
       children: stayDetails.children,
       infants: stayDetails.infants,
       guestCount: stayDetails.guestCount,
+      dogUnder10kgCount: stayDetails.dogUnder10kgCount,
+      dog10To20kgCount: stayDetails.dog10To20kgCount,
+      dogOver20kgCount: stayDetails.dogOver20kgCount,
       packageType: body.selected_package_type || body.packageType || body.package_type || body.selectedPackageType,
       selectedRoomOptionId: body.selected_room_option_id || body.selectedRoomOptionId,
     },
@@ -506,12 +549,28 @@ async function handleRequest(req, res, requestId) {
         extra_bed_adult_fee_total: quote.pricing.extraBedAdultFeeTotal,
         chargeable_child_count: quote.pricing.chargeableChildCount,
         child_fee_total: quote.pricing.childFeeTotal,
+        dog_under_10kg_count: quote.pricing.dogUnder10kgCount || 0,
+        dog_10_to_20kg_count: quote.pricing.dog10To20kgCount || 0,
+        dog_over_20kg_count: quote.pricing.dogOver20kgCount || 0,
+        dog_count: quote.pricing.dogCount || 0,
+        pet_fee_breakdown: quote.pricing.petFeeBreakdown || [],
+        nightly_pet_fee_amount: quote.pricing.nightlyPetFeeAmount || 0,
+        nightly_pet_fee_original_amount: quote.pricing.nightlyPetFeeOriginalAmount || 0,
+        discounted_nightly_pet_fee_amount: quote.pricing.discountedNightlyPetFeeAmount || 0,
+        discounted_pet_night_count: quote.pricing.discountedPetNightCount || 0,
+        pet_fee_discount_rate: quote.pricing.petFeeDiscountRate || 0,
+        pet_fee_original_total: quote.pricing.petFeeOriginalTotal || 0,
+        pet_fee_discount_total: quote.pricing.petFeeDiscountTotal || 0,
+        pet_fee_total: quote.pricing.petFeeTotal || 0,
+        pet_deposit_amount: quote.pricing.petDepositAmount || 0,
+        gift_quantity: quote.nights,
         room_plan_headcount: quote.pricing.roomPlanHeadcount,
         double_bed_count: quote.pricing.doubleBedCount,
         single_bed_count: quote.pricing.singleBedCount,
         room_count_min: quote.pricing.roomCountMin,
         room_count_max: quote.pricing.roomCountMax,
         has_pets: stayDetails.hasPets,
+        pet_count: stayDetails.petCount || 0,
         pet_type: stayDetails.petType,
       },
     }),

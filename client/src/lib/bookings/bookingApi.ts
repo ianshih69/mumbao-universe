@@ -44,9 +44,11 @@ export type BookingPricingBreakdownNight = {
   dayTypeLabel: string;
   price: number;
   preDiscountPrice?: number;
-  discountType?: "weekday_second_night_95" | string | null;
+  discountType?: "consecutive_stay_95" | string | null;
   discountRate?: number;
   discountAmount?: number;
+  adultLodgingPreDiscountAmount?: number;
+  adultLodgingAmount?: number;
   adultRateBreakdownStatus?: "resolved" | "fallback";
   adultRateBreakdownMatches?: boolean;
   base10GuestRate?: number | null;
@@ -71,6 +73,17 @@ export type BookingPricingBreakdownNight = {
   chargeableChildCount?: number;
   childFeeUnitPrice?: number;
   childFeeAmount?: number;
+  petFeeOriginalAmount?: number;
+  petFeeAmount?: number;
+  petFeeDiscountRate?: number;
+  petFeeDiscountType?: string | null;
+  petFeeDiscountAmount?: number;
+  petFeeBreakdown?: BookingPetFeeBreakdownItem[];
+  dogUnder10kgCount?: number;
+  dog10To20kgCount?: number;
+  dogOver20kgCount?: number;
+  dogCount?: number;
+  petDepositAmount?: number;
   specialDateLabel?: string | null;
   ruleSetId: string;
   ruleSetName: string;
@@ -98,6 +111,21 @@ export type BookingRoomOption = {
   sleepCapacity: number;
 };
 
+export type BookingPetFeeBreakdownItem = {
+  key: "under10kg" | "mid10to20kg" | "over20kg" | string;
+  label: string;
+  count: number;
+  unitPrice: number;
+  nightlyAmount?: number;
+  discountedNightlyAmount?: number;
+  discountedNightCount?: number;
+  discountType?: string | null;
+  discountRate?: number;
+  discountAmount?: number;
+  originalAmount?: number;
+  total: number;
+};
+
 export type BookingPricingResult = {
   status: "resolved" | "unavailable";
   reason?: string;
@@ -122,7 +150,26 @@ export type BookingPricingResult = {
   actualGuestCount?: number;
   chargeableChildCount?: number;
   childFeeUnitPrice?: number;
+  nightlyChildFeeOriginalAmount?: number;
+  discountedNightlyChildFeeAmount?: number;
+  childFeeDiscountRate?: number;
+  childFeeOriginalTotal?: number;
+  childFeeDiscountTotal?: number;
   childFeeTotal?: number;
+  dogUnder10kgCount?: number;
+  dog10To20kgCount?: number;
+  dogOver20kgCount?: number;
+  dogCount?: number;
+  petFeeBreakdown?: BookingPetFeeBreakdownItem[];
+  nightlyPetFeeAmount?: number;
+  nightlyPetFeeOriginalAmount?: number;
+  discountedNightlyPetFeeAmount?: number;
+  discountedPetNightCount?: number;
+  petFeeDiscountRate?: number;
+  petFeeOriginalTotal?: number;
+  petFeeDiscountTotal?: number;
+  petFeeTotal?: number;
+  petDepositAmount?: number;
   regularExtraAdultCount?: number;
   regularExtraAdultFeeTotal?: number;
   extraAdultCount?: number;
@@ -181,6 +228,9 @@ export type BookingRequestPayload = {
   pet_count: number;
   pet_type: BookingPetTypeValue;
   pet_notes: string;
+  dog_under_10kg_count: number;
+  dog_10_to_20kg_count: number;
+  dog_over_20kg_count: number;
   notes: string;
 };
 
@@ -219,6 +269,9 @@ export function fetchBookingQuote({
   adults,
   children,
   infants,
+  dogUnder10kgCount,
+  dog10To20kgCount,
+  dogOver20kgCount,
   selectedRoomOptionId,
   roomCount,
 }: {
@@ -229,6 +282,9 @@ export function fetchBookingQuote({
   adults: number;
   children: number;
   infants: number;
+  dogUnder10kgCount: number;
+  dog10To20kgCount: number;
+  dogOver20kgCount: number;
   selectedRoomOptionId: string;
   roomCount: number;
 }) {
@@ -241,6 +297,9 @@ export function fetchBookingQuote({
     adults: String(adults),
     children: String(children),
     infants: String(infants),
+    dogUnder10kgCount: String(dogUnder10kgCount),
+    dog10To20kgCount: String(dog10To20kgCount),
+    dogOver20kgCount: String(dogOver20kgCount),
     selectedRoomOptionId,
     roomCount: String(roomCount),
   });

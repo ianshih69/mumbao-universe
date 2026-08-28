@@ -19,6 +19,9 @@ export type BookingDraftForm = {
   pet_count: number;
   pet_type: BookingPetTypeValue;
   pet_notes: string;
+  dog_under_10kg_count: number;
+  dog_10_to_20kg_count: number;
+  dog_over_20kg_count: number;
   notes: string;
 };
 
@@ -38,13 +41,38 @@ function cleanStayType(value: unknown, fallback: StayType): StayType {
   return value === "villa" || value === "room" ? value : fallback;
 }
 
-function cleanPetType(value: unknown, fallback: BookingPetTypeValue): BookingPetTypeValue {
-  if (value === "") return "";
-  return value === "dog" || value === "cat" || value === "other" ? value : fallback;
+function cleanDogDraftCounts(draft: Partial<BookingDraftForm>, fallback: BookingDraftForm) {
+  const dogUnder10kgCount = cleanCount(
+    draft.dog_under_10kg_count,
+    fallback.dog_under_10kg_count || 0,
+    0,
+    Number.MAX_SAFE_INTEGER
+  );
+  const dog10To20kgCount = cleanCount(
+    draft.dog_10_to_20kg_count,
+    fallback.dog_10_to_20kg_count || 0,
+    0,
+    Number.MAX_SAFE_INTEGER
+  );
+  const dogOver20kgCount = cleanCount(
+    draft.dog_over_20kg_count,
+    fallback.dog_over_20kg_count || 0,
+    0,
+    Number.MAX_SAFE_INTEGER
+  );
+
+  return {
+    dog_under_10kg_count: dogUnder10kgCount,
+    dog_10_to_20kg_count: dog10To20kgCount,
+    dog_over_20kg_count: dogOver20kgCount,
+    dog_count: dogUnder10kgCount + dog10To20kgCount + dogOver20kgCount,
+  };
 }
 
 export function normalizeBookingDraft(value: unknown, fallback: BookingDraftForm): BookingDraftForm {
   const draft = value && typeof value === "object" ? (value as Partial<BookingDraftForm>) : {};
+  const dogCounts = cleanDogDraftCounts(draft, fallback);
+  const petCount = dogCounts.dog_count;
 
   return {
     guest_name: cleanText(draft.guest_name),
@@ -58,10 +86,13 @@ export function normalizeBookingDraft(value: unknown, fallback: BookingDraftForm
     infants: cleanCount(draft.infants, fallback.infants, 0, Number.MAX_SAFE_INTEGER),
     selected_room_option_id: cleanText(draft.selected_room_option_id),
     room_count: cleanCount(draft.room_count, fallback.room_count, 1, 20),
-    has_pets: Boolean(draft.has_pets),
-    pet_count: cleanCount(draft.pet_count, fallback.pet_count, 0, 20),
-    pet_type: cleanPetType(draft.pet_type, fallback.pet_type),
-    pet_notes: cleanText(draft.pet_notes),
+    has_pets: dogCounts.dog_count > 0,
+    pet_count: petCount,
+    pet_type: dogCounts.dog_count > 0 ? "dog" : "",
+    pet_notes: dogCounts.dog_count > 0 ? cleanText(draft.pet_notes) : "",
+    dog_under_10kg_count: dogCounts.dog_under_10kg_count,
+    dog_10_to_20kg_count: dogCounts.dog_10_to_20kg_count,
+    dog_over_20kg_count: dogCounts.dog_over_20kg_count,
     notes: cleanText(draft.notes),
   };
 }

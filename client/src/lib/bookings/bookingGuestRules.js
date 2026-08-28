@@ -6,6 +6,12 @@ export const bookingGuestRules = {
   maxChildCount: 9,
   childFeeUnitPrice: 500,
   extraAdultUnitPrice: 800,
+  petDepositAmount: 3000,
+  dogFeeTiers: [
+    { key: "under10kg", countField: "dog_under_10kg_count", label: "10 公斤以下", unitPrice: 500 },
+    { key: "mid10to20kg", countField: "dog_10_to_20kg_count", label: "超過 10 公斤至 20 公斤", unitPrice: 800 },
+    { key: "over20kg", countField: "dog_over_20kg_count", label: "超過 20 公斤", unitPrice: 1200 },
+  ],
   roomPlans: {
     10: {
       roomPlanHeadcount: 10,
@@ -117,6 +123,99 @@ export function normalizeGuestRuleCounts(input = {}) {
     children: Math.max(0, parseGuestCount(input.children, 0)),
     infants: Math.max(0, parseGuestCount(input.infants, 0)),
     nights: Math.max(0, parseGuestCount(input.nights, 0)),
+  };
+}
+
+export function normalizeDogCounts(input = {}) {
+  return {
+    dogUnder10kgCount: Math.max(
+      0,
+      parseGuestCount(
+        input.dogUnder10kgCount ??
+          input.dog_under_10kg_count ??
+          input.under10kgCount ??
+          input.under_10kg_count ??
+          input.under10kg,
+        0
+      )
+    ),
+    dog10To20kgCount: Math.max(
+      0,
+      parseGuestCount(
+        input.dog10To20kgCount ??
+          input.dog_10_to_20kg_count ??
+          input.dog_10_20kg_count ??
+          input.midDogCount ??
+          input.mid_dog_count,
+        0
+      )
+    ),
+    dogOver20kgCount: Math.max(
+      0,
+      parseGuestCount(
+        input.dogOver20kgCount ??
+          input.dog_over_20kg_count ??
+          input.over20kgCount ??
+          input.over_20kg_count ??
+          input.over20kg,
+        0
+      )
+    ),
+  };
+}
+
+export function calculateDogCount(input = {}) {
+  const counts = normalizeDogCounts(input);
+  return counts.dogUnder10kgCount + counts.dog10To20kgCount + counts.dogOver20kgCount;
+}
+
+export function resolveBookingPetPlan(input = {}) {
+  const counts = normalizeDogCounts(input);
+  const nights = Math.max(0, parseGuestCount(input.nights, 0));
+  const dogCount = counts.dogUnder10kgCount + counts.dog10To20kgCount + counts.dogOver20kgCount;
+  const discountedPetNightCount = Math.max(0, nights - 1);
+  const petFeeDiscountRate = 0.95;
+  const petFeeBreakdown = bookingGuestRules.dogFeeTiers.map((tier) => {
+    const count =
+      tier.key === "under10kg"
+        ? counts.dogUnder10kgCount
+        : tier.key === "mid10to20kg"
+          ? counts.dog10To20kgCount
+          : counts.dogOver20kgCount;
+    const nightlyAmount = count * tier.unitPrice;
+    const discountedNightlyAmount = Math.round(nightlyAmount * petFeeDiscountRate);
+    return {
+      key: tier.key,
+      label: tier.label,
+      count,
+      unitPrice: tier.unitPrice,
+      nightlyAmount,
+      discountedNightlyAmount,
+      discountedNightCount: discountedPetNightCount,
+      discountRate: petFeeDiscountRate,
+      discountAmount: nightlyAmount - discountedNightlyAmount,
+      total: nights > 0 ? nightlyAmount + discountedNightlyAmount * discountedPetNightCount : 0,
+    };
+  });
+  const nightlyPetFeeAmount = petFeeBreakdown.reduce((total, item) => total + item.nightlyAmount, 0);
+  const discountedNightlyPetFeeAmount = Math.round(nightlyPetFeeAmount * petFeeDiscountRate);
+  const petFeeTotal = nights > 0 ? nightlyPetFeeAmount + discountedNightlyPetFeeAmount * discountedPetNightCount : 0;
+  const petFeeOriginalTotal = nightlyPetFeeAmount * nights;
+  const petFeeDiscountTotal = petFeeOriginalTotal - petFeeTotal;
+
+  return {
+    ...counts,
+    dogCount,
+    petFeeBreakdown,
+    nightlyPetFeeAmount,
+    nightlyPetFeeOriginalAmount: nightlyPetFeeAmount,
+    discountedNightlyPetFeeAmount,
+    discountedPetNightCount,
+    petFeeDiscountRate,
+    petFeeOriginalTotal,
+    petFeeDiscountTotal,
+    petFeeTotal,
+    petDepositAmount: dogCount > 0 ? bookingGuestRules.petDepositAmount : 0,
   };
 }
 

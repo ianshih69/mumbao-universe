@@ -23,6 +23,7 @@ import {
   bookingGuestRules,
   formatRoomOptionLabel,
   resolveBookingGuestPlan,
+  resolveBookingPetPlan,
 } from "@/lib/bookings/bookingGuestRules.js";
 import {
   checkBookingAvailability,
@@ -100,6 +101,9 @@ const emptyForm: BookingForm = {
   pet_count: 0,
   pet_type: "",
   pet_notes: "",
+  dog_under_10kg_count: 0,
+  dog_10_to_20kg_count: 0,
+  dog_over_20kg_count: 0,
   notes: "",
 };
 
@@ -303,15 +307,21 @@ function reconcileFormWithSettings(form: BookingForm, settings: PublicBookingSet
   let stayType = form.stay_type;
   if (stayType === "villa" && !settings.allowVillaBooking) stayType = getDefaultStayType(settings);
   if (stayType === "room" && !settings.allowRoomBooking) stayType = getDefaultStayType(settings);
+  const dogCount = settings.allowPets
+    ? form.dog_under_10kg_count + form.dog_10_to_20kg_count + form.dog_over_20kg_count
+    : 0;
 
   return {
     ...form,
     stay_type: stayType,
     room_count: stayType === "villa" ? settings.totalRoomCount : clampRoomCount(form.room_count, settings.totalRoomCount),
-    has_pets: false,
-    pet_count: 0,
-    pet_type: "",
-    pet_notes: "",
+    has_pets: dogCount > 0,
+    pet_count: dogCount,
+    pet_type: dogCount > 0 ? "dog" : "",
+    pet_notes: settings.allowPets ? form.pet_notes : "",
+    dog_under_10kg_count: settings.allowPets ? form.dog_under_10kg_count : 0,
+    dog_10_to_20kg_count: settings.allowPets ? form.dog_10_to_20kg_count : 0,
+    dog_over_20kg_count: settings.allowPets ? form.dog_over_20kg_count : 0,
   };
 }
 
@@ -319,12 +329,34 @@ function normalizePricingGuestLimit(form: BookingForm): BookingForm {
   const adults = Math.min(Math.max(form.adults || 1, 1), MAX_BOOKING_ADULTS);
   const children = Math.min(Math.max(form.children || 0, 0), MAX_BOOKING_CHILDREN);
   const infants = Math.max(form.infants || 0, 0);
-  if (adults === form.adults && children === form.children && infants === form.infants) return form;
+  const dogUnder10kgCount = Math.max(form.dog_under_10kg_count || 0, 0);
+  const dog10To20kgCount = Math.max(form.dog_10_to_20kg_count || 0, 0);
+  const dogOver20kgCount = Math.max(form.dog_over_20kg_count || 0, 0);
+  const dogCount = dogUnder10kgCount + dog10To20kgCount + dogOver20kgCount;
+  if (
+    adults === form.adults &&
+    children === form.children &&
+    infants === form.infants &&
+    dogUnder10kgCount === form.dog_under_10kg_count &&
+    dog10To20kgCount === form.dog_10_to_20kg_count &&
+    dogOver20kgCount === form.dog_over_20kg_count &&
+    dogCount === form.pet_count &&
+    (dogCount > 0) === form.has_pets &&
+    (dogCount > 0 ? "dog" : "") === form.pet_type
+  ) {
+    return form;
+  }
   return {
     ...form,
     adults,
     children,
     infants,
+    has_pets: dogCount > 0,
+    pet_count: dogCount,
+    pet_type: dogCount > 0 ? "dog" : "",
+    dog_under_10kg_count: dogUnder10kgCount,
+    dog_10_to_20kg_count: dog10To20kgCount,
+    dog_over_20kg_count: dogOver20kgCount,
   };
 }
 
@@ -471,6 +503,7 @@ export default function Booking() {
   const [calendarFilter, setCalendarFilter] = useState<BookingCalendarFilter>("all");
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
+  const [otherNeedsOpen, setOtherNeedsOpen] = useState(false);
   const [showContactForm, setShowContactForm] = useState(false);
   const [dailyPriceDetailsOpen, setDailyPriceDetailsOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState<CalendarSelectionMode>("checkIn");
@@ -537,6 +570,16 @@ export default function Booking() {
     () => resolveBookingGuestPlan({ adults: form.adults, children: form.children, infants: form.infants, nights: nightCount }),
     [form.adults, form.children, form.infants, nightCount]
   );
+  const petPlan = useMemo(
+    () =>
+      resolveBookingPetPlan({
+        dogUnder10kgCount: form.dog_under_10kg_count,
+        dog10To20kgCount: form.dog_10_to_20kg_count,
+        dogOver20kgCount: form.dog_over_20kg_count,
+        nights: nightCount,
+      }),
+    [form.dog_10_to_20kg_count, form.dog_over_20kg_count, form.dog_under_10kg_count, nightCount]
+  );
   const automaticPackageType = getAutomaticPackageType(guestPlan);
   const roomOptions = guestPlan.roomOptions || [];
   const roomOptionIdsSignature = roomOptions.map((option) => option.id).join("|");
@@ -552,7 +595,8 @@ export default function Booking() {
   const pricingDisplayGuestCount = form.adults + form.children;
   const searchGuestSummary = form.infants > 0 ? `${pricingDisplayGuestCount} 位・另有 ${form.infants} 位嬰幼兒` : `${pricingDisplayGuestCount} 位`;
   const guestLimitUnavailableReason = getGuestLimitUnavailableReason(guestPlan);
-  const canShowOrderSummary = canShowStayOptions && !guestLimitUnavailableReason;
+  const capacityUnavailableReason = guestLimitUnavailableReason;
+  const canShowOrderSummary = canShowStayOptions && !capacityUnavailableReason;
   const guestCountExceedsLimit = !guestPlan.isAdultCountSupported || !guestPlan.isChildCountSupported;
   const adultIncrementDisabled = form.adults >= MAX_BOOKING_ADULTS;
   const childIncrementDisabled = form.children >= MAX_BOOKING_CHILDREN;
@@ -566,6 +610,12 @@ export default function Booking() {
   const quoteChargeableChildCount = quoteReady ? priceQuote?.pricing.chargeableChildCount || 0 : 0;
   const quoteChildFeeUnitPrice = quoteReady ? priceQuote?.pricing.childFeeUnitPrice || bookingGuestRules.childFeeUnitPrice : bookingGuestRules.childFeeUnitPrice;
   const quoteChildFeeTotal = quoteReady ? priceQuote?.pricing.childFeeTotal || 0 : 0;
+  const quoteChildFeeOriginalNightly = quoteReady ? priceQuote?.pricing.nightlyChildFeeOriginalAmount || 0 : 0;
+  const quoteChildDiscountedNightCount = quoteReady && nightCount > 1 ? nightCount - 1 : 0;
+  const quotePetFeeBreakdown = quoteReady ? priceQuote?.pricing.petFeeBreakdown || [] : [];
+  const quotePetFeeTotal = quoteReady ? priceQuote?.pricing.petFeeTotal || 0 : 0;
+  const quotePetDepositAmount = quoteReady ? priceQuote?.pricing.petDepositAmount || 0 : 0;
+  const quoteDogCount = quoteReady ? priceQuote?.pricing.dogCount || 0 : petPlan.dogCount;
   const displayDoubleBedCount = quoteReady ? priceQuote?.pricing.doubleBedCount : guestPlan.doubleBedCount;
   const displaySingleBedCount = quoteReady ? priceQuote?.pricing.singleBedCount ?? guestPlan.singleBedCount : guestPlan.singleBedCount;
   const displaySleepCapacity = quoteReady ? priceQuote?.pricing.sleepCapacity : guestPlan.sleepCapacity;
@@ -650,7 +700,17 @@ export default function Booking() {
 
   useEffect(() => {
     setDailyPriceDetailsOpen(false);
-  }, [form.adults, form.check_in, form.check_out, form.children, form.infants, selectedRoomOptionId]);
+  }, [
+    form.adults,
+    form.check_in,
+    form.check_out,
+    form.children,
+    form.dog_10_to_20kg_count,
+    form.dog_over_20kg_count,
+    form.dog_under_10kg_count,
+    form.infants,
+    selectedRoomOptionId,
+  ]);
 
   useEffect(() => {
     if (!canShowOrderSummary) {
@@ -662,7 +722,7 @@ export default function Booking() {
     if (guestCountExceedsLimit) {
       setIsQuoteLoading(false);
       setPriceQuote(null);
-      setPriceQuoteError(guestPlan.isAdultCountSupported ? "孩童最多 9 位。" : "成人最多 20 位。");
+      setPriceQuoteError(capacityUnavailableReason || "目前無法支援此入住人數。");
       return;
     }
 
@@ -679,6 +739,9 @@ export default function Booking() {
       adults: form.adults,
       children: form.children,
       infants: form.infants,
+      dogUnder10kgCount: form.dog_under_10kg_count,
+      dog10To20kgCount: form.dog_10_to_20kg_count,
+      dogOver20kgCount: form.dog_over_20kg_count,
       selectedRoomOptionId,
       roomCount: form.stay_type === "villa" ? settings.totalRoomCount : form.room_count,
     })
@@ -707,10 +770,14 @@ export default function Booking() {
     form.check_in,
     form.check_out,
     form.children,
+    form.dog_10_to_20kg_count,
+    form.dog_over_20kg_count,
+    form.dog_under_10kg_count,
     form.infants,
     form.room_count,
     form.stay_type,
     automaticPackageType,
+    capacityUnavailableReason,
     guestCountExceedsLimit,
     selectedRoomOptionId,
     settings.totalRoomCount,
@@ -749,8 +816,29 @@ export default function Booking() {
   function updateField<K extends keyof BookingForm>(field: K, value: BookingForm[K]) {
     setForm((current) => {
       const next = { ...current, [field]: value };
-      return field === "adults" || field === "children" || field === "infants" ? normalizePricingGuestLimit(next) : next;
+      return field === "adults" ||
+        field === "children" ||
+        field === "infants" ||
+        field === "dog_under_10kg_count" ||
+        field === "dog_10_to_20kg_count" ||
+        field === "dog_over_20kg_count"
+        ? normalizePricingGuestLimit(next)
+        : next;
     });
+    setMessage("");
+    setError("");
+  }
+
+  function updateDogCount(
+    field: "dog_under_10kg_count" | "dog_10_to_20kg_count" | "dog_over_20kg_count",
+    nextCount: number
+  ) {
+    setForm((current) =>
+      normalizePricingGuestLimit({
+        ...current,
+        [field]: nextCount,
+      })
+    );
     setMessage("");
     setError("");
   }
@@ -937,11 +1025,11 @@ export default function Booking() {
       return;
     }
     if (guestCountExceedsLimit) {
-      setError(guestPlan.isAdultCountSupported ? "孩童最多 9 位。" : "成人最多 20 位。");
+      setError(capacityUnavailableReason || "目前無法支援此入住人數。");
       return;
     }
-    if (guestLimitUnavailableReason) {
-      setError(guestLimitUnavailableReason);
+    if (capacityUnavailableReason) {
+      setError(capacityUnavailableReason);
       return;
     }
     if (!quoteReady || isQuoteLoading || priceQuoteError) {
@@ -966,11 +1054,11 @@ export default function Booking() {
       return;
     }
     if (guestCountExceedsLimit) {
-      setError(guestPlan.isAdultCountSupported ? "孩童最多 9 位。" : "成人最多 20 位。");
+      setError(capacityUnavailableReason || "目前無法支援此入住人數。");
       return;
     }
-    if (guestLimitUnavailableReason) {
-      setError(guestLimitUnavailableReason);
+    if (capacityUnavailableReason) {
+      setError(capacityUnavailableReason);
       return;
     }
     if (!quoteReady || isQuoteLoading || priceQuoteError) {
@@ -995,10 +1083,13 @@ export default function Booking() {
         children: form.children,
         infants: form.infants,
         room_count: form.stay_type === "villa" ? settings.totalRoomCount : form.room_count,
-        has_pets: false,
-        pet_count: 0,
-        pet_type: "",
+        has_pets: petPlan.dogCount > 0,
+        pet_count: petPlan.dogCount,
+        pet_type: petPlan.dogCount > 0 ? "dog" : "",
         pet_notes: "",
+        dog_under_10kg_count: form.dog_under_10kg_count,
+        dog_10_to_20kg_count: form.dog_10_to_20kg_count,
+        dog_over_20kg_count: form.dog_over_20kg_count,
         notes: buildBookingRequestNotes(form.notes, form.infants),
       };
       const result = await submitBookingRequest(payload, session?.access_token || null);
@@ -1044,8 +1135,49 @@ export default function Booking() {
     setIsBookingTestUnlocked(false);
   }
 
+  function renderDogCounter({
+    field,
+    label,
+    count,
+    unitPrice,
+  }: {
+    field: "dog_under_10kg_count" | "dog_10_to_20kg_count" | "dog_over_20kg_count";
+    label: string;
+    count: number;
+    unitPrice: number;
+  }) {
+    return (
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-[#f1e8dc] pt-3 first:border-t-0 first:pt-0">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-stone-700">{label}</p>
+          <p className="mt-0.5 text-xs text-stone-500">每隻每晚 {formatTwd(unitPrice)}</p>
+        </div>
+        <div className="grid w-[128px] max-w-full grid-cols-[36px_minmax(0,1fr)_36px] items-center gap-2">
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={count <= 0}
+            onClick={() => updateDogCount(field, count - 1)}
+            aria-label={`${label}狗狗減少`}
+          >
+            <Minus className="h-4 w-4" />
+          </button>
+          <span className="min-w-6 text-center text-base font-semibold text-stone-900">{count}</span>
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => updateDogCount(field, count + 1)}
+            aria-label={`${label}狗狗增加`}
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   function getNightAdultStayAmount(night: BookingPricingBreakdownNight) {
-    return night.price - (night.childFeeAmount || 0);
+    return night.adultLodgingAmount ?? night.price - (night.childFeeAmount || 0) - (night.petFeeAmount || 0);
   }
 
   function renderNightCalculation(night: BookingPricingBreakdownNight, showDateHeader = true) {
@@ -1053,7 +1185,8 @@ export default function Booking() {
     const hasDiscount = discountAmount > 0;
     const hasAdultBreakdown = night.adultRateBreakdownStatus === "resolved";
     const adultStayAmount = getNightAdultStayAmount(night);
-    const fallbackAdultAmount = night.formalAdultPrice ?? night.basePrice ?? adultStayAmount + discountAmount;
+    const adultPreDiscountAmount = night.adultLodgingPreDiscountAmount ?? adultStayAmount + discountAmount;
+    const fallbackAdultAmount = night.formalAdultPrice ?? night.basePrice ?? adultPreDiscountAmount;
 
     return (
       <div key={night.date} className="grid gap-2 border-b border-[#f1e8dc] pb-4 last:border-b-0 last:pb-0">
@@ -1063,7 +1196,7 @@ export default function Booking() {
               <p className="font-semibold text-stone-900">{formatSearchDate(night.date)}</p>
               {hasDiscount && (
                 <span className="rounded-full bg-[#f3eadf] px-2 py-0.5 text-[11px] font-medium text-[#765d4a]">
-                  平日連住 95 折
+                  續住 95 折
                 </span>
               )}
             </div>
@@ -1113,13 +1246,26 @@ export default function Booking() {
             </div>
           )}
           {hasDiscount && (
-            <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3 text-[#8b6f5b]">
-              <span>平日連住 95 折</span>
+            <div className="mt-1 grid gap-1 border-t border-[#f1e8dc] pt-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
+              <span className="font-semibold text-stone-800">當晚住宿費</span>
+              <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">
+                {formatTwd(adultPreDiscountAmount)}
+              </span>
+            </div>
+          )}
+          {hasDiscount && (
+            <div className="grid gap-1 text-[#8b6f5b] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
+              <span>續住優惠 -5%</span>
               <span className="shrink-0 whitespace-nowrap font-semibold">-{formatTwd(discountAmount)}</span>
             </div>
           )}
-          <div className="mt-1 grid gap-1 border-t border-[#f1e8dc] pt-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
-            <span className="font-semibold text-stone-800">當晚住宿費</span>
+          <div
+            className={cn(
+              "grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3",
+              !hasDiscount && "mt-1 border-t border-[#f1e8dc] pt-2"
+            )}
+          >
+            <span className="font-semibold text-stone-800">{hasDiscount ? "折後當晚住宿費" : "當晚住宿費"}</span>
             <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">{formatTwd(adultStayAmount)}</span>
           </div>
         </div>
@@ -1289,7 +1435,7 @@ export default function Booking() {
             <div className="mt-4 inline-flex max-w-full items-start gap-2 rounded-[10px] border border-[#ead9bd] bg-[#fffaf3] px-3 py-2 text-sm leading-6 text-stone-700">
               <Gift className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#a47a4f]" />
               <p>
-                <span className="font-semibold text-[#765d4a]">官網限定</span>｜完成訂房並入住，每筆訂單贈慢寶精美文創禮 1 份
+                <span className="font-semibold text-[#765d4a]">官網限定</span>｜每入住 1 晚，贈慢寶精美文創禮 1 份
               </p>
             </div>
           </div>
@@ -1520,6 +1666,63 @@ export default function Booking() {
                       </button>
                     </div>
                   </div>
+
+                  {settings.allowPets && (
+                    <div className="rounded-[12px] border border-[#f1e8dc] bg-white px-3 py-2.5">
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between gap-3 text-left text-sm font-medium text-stone-600 transition hover:text-[#765d4a]"
+                        aria-expanded={otherNeedsOpen}
+                        onClick={() => setOtherNeedsOpen((current) => !current)}
+                      >
+                        <span>其他需求（選填）</span>
+                        <span className="flex shrink-0 items-center gap-2 text-xs text-stone-500">
+                          {petPlan.dogCount > 0 && <span>已填寫</span>}
+                          <ChevronRight
+                            className={cn(
+                              "h-4 w-4 transition-transform",
+                              otherNeedsOpen && "rotate-90"
+                            )}
+                          />
+                        </span>
+                      </button>
+
+                      {otherNeedsOpen && (
+                        <div className="mt-3 grid gap-3 border-t border-[#f1e8dc] pt-3">
+                          <div>
+                            <p className="text-sm font-semibold text-stone-800">攜帶狗狗</p>
+                            <p className="mt-1 text-xs leading-5 text-stone-500">目前僅開放狗狗入住。</p>
+                          </div>
+                          <div className="grid gap-3">
+                            {renderDogCounter({
+                              field: "dog_under_10kg_count",
+                              label: "10 公斤以下",
+                              count: form.dog_under_10kg_count,
+                              unitPrice: bookingGuestRules.dogFeeTiers[0].unitPrice,
+                            })}
+                            {renderDogCounter({
+                              field: "dog_10_to_20kg_count",
+                              label: "超過 10 公斤至 20 公斤",
+                              count: form.dog_10_to_20kg_count,
+                              unitPrice: bookingGuestRules.dogFeeTiers[1].unitPrice,
+                            })}
+                            {renderDogCounter({
+                              field: "dog_over_20kg_count",
+                              label: "超過 20 公斤",
+                              count: form.dog_over_20kg_count,
+                              unitPrice: bookingGuestRules.dogFeeTiers[2].unitPrice,
+                            })}
+                          </div>
+                          <div className="rounded-[10px] border border-[#eadfce] bg-[#fffaf3] px-3 py-2 text-xs leading-5 text-stone-500">
+                            <p>連續入住第2晚起，狗狗住宿費享95折。</p>
+                            <p className="mt-1">
+                              入住時另收 {formatTwd(bookingGuestRules.petDepositAmount)} 寵物押金，退房確認環境、寢具、家具及設備無污損後全額退還。
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <p className="mt-3 rounded-[10px] border border-[#eadfce] bg-[#fffaf3] px-3 py-2 text-xs leading-5 text-stone-500">
                   成人最多 {MAX_BOOKING_ADULTS} 位，孩童最多 {MAX_BOOKING_CHILDREN} 位；嬰幼兒不佔床免費。超過包棟內含人數後，不佔床孩童每位每晚 NT$500。
@@ -1739,17 +1942,32 @@ export default function Booking() {
                                       {quoteNights.map((night) => {
                                         const daySummary = formatDayTypeSummary(night.dayType, night.dayTypeLabel);
                                         const specialDateSummary = night.specialDateLabel ? "｜" + night.specialDateLabel : "";
+                                        const discountAmount = night.discountAmount || 0;
+                                        const hasDiscount = discountAmount > 0;
+                                        const adultStayAmount = getNightAdultStayAmount(night);
+                                        const adultPreDiscountAmount =
+                                          night.adultLodgingPreDiscountAmount ?? adultStayAmount + discountAmount;
                                         return (
                                           <div
                                             key={night.date}
                                             className="grid gap-1 border-b border-[#f1e8dc] pb-2 text-sm last:border-b-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3"
                                           >
-                                            <span className="min-w-0 font-medium text-stone-700">
-                                              {formatSearchDate(night.date)}｜{daySummary}
-                                              {specialDateSummary}
-                                            </span>
+                                            <div className="min-w-0">
+                                              <p className="font-medium text-stone-700">
+                                                {formatSearchDate(night.date)}｜{daySummary}
+                                                {specialDateSummary}
+                                              </p>
+                                              {hasDiscount && (
+                                                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs leading-5 text-stone-500">
+                                                  <span className="line-through">{formatTwd(adultPreDiscountAmount)}</span>
+                                                  <span className="rounded-full bg-[#f3eadf] px-2 py-0.5 font-medium text-[#765d4a]">
+                                                    續住 95 折
+                                                  </span>
+                                                </div>
+                                              )}
+                                            </div>
                                             <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">
-                                              {formatTwd(getNightAdultStayAmount(night))}
+                                              {formatTwd(adultStayAmount)}
                                             </span>
                                           </div>
                                         );
@@ -1790,11 +2008,73 @@ export default function Booking() {
                                 <div className="grid gap-1.5 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:gap-3">
                                   <div className="min-w-0">
                                     <p className="font-semibold text-stone-800">額外不佔床孩童</p>
-                                    <p className="mt-1 text-xs leading-5 text-stone-500">
-                                      {quoteChargeableChildCount} 位 × {formatTwd(quoteChildFeeUnitPrice)} × {nightCount} 晚
-                                    </p>
+                                    {quoteChildDiscountedNightCount > 0 ? (
+                                      <div className="mt-0.5 grid gap-0.5 text-xs leading-5 text-stone-500">
+                                        <p>{quoteChargeableChildCount} 位 × {formatTwd(quoteChildFeeUnitPrice)}</p>
+                                        <p>第1晚原價</p>
+                                        <p>續住{quoteChildDiscountedNightCount}晚｜95折</p>
+                                      </div>
+                                    ) : (
+                                      <p className="mt-1 text-xs leading-5 text-stone-500">
+                                        {quoteChargeableChildCount} 位 × {formatTwd(quoteChildFeeUnitPrice)} × 1 晚
+                                      </p>
+                                    )}
                                   </div>
                                   <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">{formatTwd(quoteChildFeeTotal)}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {quoteReady && quoteDogCount > 0 && quotePetFeeTotal > 0 && (
+                              <div className="border-t border-[#f1e8dc] pt-3">
+                                <div className="grid gap-3 text-sm">
+                                  <div>
+                                    <p className="font-semibold text-stone-800">寵物住宿費</p>
+                                    <div className="mt-2 grid gap-2">
+                                      {quotePetFeeBreakdown
+                                        .filter((item) => item.count > 0)
+                                        .map((item) => {
+                                          const discountedNightCount = Math.max(0, nightCount - 1);
+                                          return (
+                                            <div
+                                              key={item.key}
+                                              className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:gap-3"
+                                            >
+                                              <div className="min-w-0">
+                                                <p className="text-stone-700">
+                                                  {item.label}｜{item.count}隻
+                                                </p>
+                                                {discountedNightCount > 0 ? (
+                                                  <div className="mt-0.5 grid gap-0.5 text-xs leading-5 text-stone-500">
+                                                    <p>第1晚 {formatTwd(item.nightlyAmount)}</p>
+                                                    <p>續住{discountedNightCount}晚｜95折</p>
+                                                  </div>
+                                                ) : (
+                                                  <p className="mt-0.5 text-xs leading-5 text-stone-500">
+                                                    {item.count} 隻 × {formatTwd(item.unitPrice)} × 1 晚
+                                                  </p>
+                                                )}
+                                              </div>
+                                              <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">
+                                                {formatTwd(item.total)}
+                                              </span>
+                                            </div>
+                                          );
+                                        })}
+                                    </div>
+                                  </div>
+                                  <div className="grid gap-1 border-t border-[#f1e8dc] pt-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
+                                    <span className="font-semibold text-stone-800">寵物住宿費合計</span>
+                                    <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">
+                                      {formatTwd(quotePetFeeTotal)}
+                                    </span>
+                                  </div>
+                                  {quotePetDepositAmount > 0 && (
+                                    <div className="rounded-[10px] border border-[#eadfce] bg-[#fffaf3] px-3 py-2 text-xs leading-5 text-stone-500">
+                                      <p className="font-semibold text-stone-700">寵物押金 {formatTwd(quotePetDepositAmount)}</p>
+                                      <p className="mt-0.5">入住時另收，退房確認無污損後全額退還。</p>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )}

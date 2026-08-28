@@ -247,10 +247,69 @@ function bookingChildFeeSummary(request: BookingRequest) {
   return `${pricing.chargeableChildCount} 位 × NT$${Number(pricing.childFeeUnitPrice || 0).toLocaleString("zh-TW")} = NT$${Number(pricing.childFeeTotal).toLocaleString("zh-TW")}`;
 }
 
-function petSummary(request: BookingRequest) {
-  if (!request.has_pets) return "不攜帶寵物";
-  const petTypeLabel = request.pet_type === "cat" ? "貓" : request.pet_type === "other" ? "其他" : "狗";
-  return `攜帶 ${request.pet_count || 1} 隻${petTypeLabel}`;
+function getRequestDogCounts(request: BookingRequest) {
+  const pricing = request.pricing_breakdown;
+  const rawPayload = request.raw_payload;
+  const dogUnder10kgCount =
+    pricing?.dogUnder10kgCount ?? payloadNumber(rawPayload, "dog_under_10kg_count");
+  const dog10To20kgCount =
+    pricing?.dog10To20kgCount ?? payloadNumber(rawPayload, "dog_10_to_20kg_count");
+  const dogOver20kgCount =
+    pricing?.dogOver20kgCount ?? payloadNumber(rawPayload, "dog_over_20kg_count");
+  const storedDogCount = pricing?.dogCount ?? payloadNumber(rawPayload, "dog_count");
+  const dogCount = storedDogCount || dogUnder10kgCount + dog10To20kgCount + dogOver20kgCount;
+
+  return {
+    dogUnder10kgCount,
+    dog10To20kgCount,
+    dogOver20kgCount,
+    dogCount,
+  };
+}
+
+function dogSummary(request: BookingRequest) {
+  const { dogCount } = getRequestDogCounts(request);
+  if (!dogCount) return "";
+  return `狗狗 ${dogCount} 隻`;
+}
+
+function dogDetailLines(request: BookingRequest) {
+  const counts = getRequestDogCounts(request);
+  return [
+    counts.dogUnder10kgCount > 0 ? `10公斤以下：${counts.dogUnder10kgCount} 隻` : "",
+    counts.dog10To20kgCount > 0 ? `10～20公斤：${counts.dog10To20kgCount} 隻` : "",
+    counts.dogOver20kgCount > 0 ? `20公斤以上：${counts.dogOver20kgCount} 隻` : "",
+  ].filter(Boolean);
+}
+
+function bookingPetFeeSummary(request: BookingRequest) {
+  const petFeeTotal = request.pricing_breakdown?.petFeeTotal ?? payloadNumber(request.raw_payload, "pet_fee_total");
+  if (!petFeeTotal) return "";
+  return formatAmount(petFeeTotal);
+}
+
+function bookingPetNightlyRateSummary(request: BookingRequest) {
+  const nightlyPetFeeAmount =
+    request.pricing_breakdown?.nightlyPetFeeOriginalAmount ??
+    request.pricing_breakdown?.nightlyPetFeeAmount ??
+    payloadNumber(request.raw_payload, "nightly_pet_fee_original_amount") ??
+    payloadNumber(request.raw_payload, "nightly_pet_fee_amount");
+  if (!nightlyPetFeeAmount) return "";
+  return formatAmount(nightlyPetFeeAmount);
+}
+
+function bookingPetDiscountSummary(request: BookingRequest) {
+  const petFeeDiscountTotal =
+    request.pricing_breakdown?.petFeeDiscountTotal ?? payloadNumber(request.raw_payload, "pet_fee_discount_total");
+  if (!petFeeDiscountTotal) return "";
+  return `-${formatAmount(petFeeDiscountTotal)}（第2晚起95折）`;
+}
+
+function bookingPetDepositSummary(request: BookingRequest) {
+  const petDepositAmount =
+    request.pricing_breakdown?.petDepositAmount ?? payloadNumber(request.raw_payload, "pet_deposit_amount");
+  if (!petDepositAmount) return "";
+  return `${formatAmount(petDepositAmount)}（入住時另收）`;
 }
 
 function requestOverlapsDate(request: BookingRequest, date: string) {
@@ -835,7 +894,7 @@ export default function AdminBookings() {
                   <div className="mt-3 grid gap-2 text-sm text-stone-700 sm:grid-cols-2">
                     <p>住宿方式：{stayTypeLabel(request)}</p>
                     <p>人數：{guestSummary(request)}</p>
-                    <p>寵物：{petSummary(request)}</p>
+                    {dogSummary(request) && <p>{dogSummary(request)}</p>}
                     <p>姓名：{request.guest_name || "-"}</p>
                     <p>電話：{request.guest_phone || "-"}</p>
                     <p>Email：{request.guest_email || "-"}</p>
@@ -849,7 +908,19 @@ export default function AdminBookings() {
                       <div className="mt-2 rounded-[8px] border border-stone-200 bg-white p-3 text-xs leading-5 text-stone-600">
                         <p>ID：{request.id}</p>
                         <p>備註：{request.notes || "-"}</p>
-                        <p>寵物備註：{request.pet_notes || "-"}</p>
+                        {dogSummary(request) && (
+                          <>
+                            <p>{dogSummary(request)}</p>
+                            {dogDetailLines(request).map((line) => (
+                              <p key={line}>{line}</p>
+                            ))}
+                            {bookingPetNightlyRateSummary(request) && <p>寵物每晚原價：{bookingPetNightlyRateSummary(request)}</p>}
+                            {bookingPetDiscountSummary(request) && <p>續住折扣：{bookingPetDiscountSummary(request)}</p>}
+                            {bookingPetFeeSummary(request) && <p>寵物住宿費：{bookingPetFeeSummary(request)}</p>}
+                            {bookingPetDepositSummary(request) && <p>寵物押金：{bookingPetDepositSummary(request)}</p>}
+                            {request.pet_notes && <p>寵物備註：{request.pet_notes}</p>}
+                          </>
+                        )}
                         {bookingRoomPlanSummary(request) && <p>住宿配置：{bookingRoomPlanSummary(request)}</p>}
                         {bookingRoomOptionSummary(request) && <p>房型組合：{bookingRoomOptionSummary(request)}</p>}
                         {bookingChildFeeSummary(request) && <p>額外不佔床孩童：{bookingChildFeeSummary(request)}</p>}

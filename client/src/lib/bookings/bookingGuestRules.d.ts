@@ -5,6 +5,55 @@ export type BookingGuestCountsInput = {
   nights?: number | string | null;
 };
 
+export type BookingDogCountsInput = {
+  dogUnder10kgCount?: number | string | null;
+  dog_under_10kg_count?: number | string | null;
+  under10kgCount?: number | string | null;
+  under_10kg_count?: number | string | null;
+  under10kg?: number | string | null;
+  dog10To20kgCount?: number | string | null;
+  dog_10_to_20kg_count?: number | string | null;
+  dog_10_20kg_count?: number | string | null;
+  midDogCount?: number | string | null;
+  mid_dog_count?: number | string | null;
+  dogOver20kgCount?: number | string | null;
+  dog_over_20kg_count?: number | string | null;
+  over20kgCount?: number | string | null;
+  over_20kg_count?: number | string | null;
+  over20kg?: number | string | null;
+  nights?: number | string | null;
+};
+
+export type BookingPetFeeBreakdownItem = {
+  key: "under10kg" | "mid10to20kg" | "over20kg";
+  label: string;
+  count: number;
+  unitPrice: number;
+  nightlyAmount: number;
+  discountedNightlyAmount: number;
+  discountedNightCount: number;
+  discountRate: number;
+  discountAmount: number;
+  total: number;
+};
+
+export type BookingPetPlan = {
+  dogUnder10kgCount: number;
+  dog10To20kgCount: number;
+  dogOver20kgCount: number;
+  dogCount: number;
+  petFeeBreakdown: BookingPetFeeBreakdownItem[];
+  nightlyPetFeeAmount: number;
+  nightlyPetFeeOriginalAmount: number;
+  discountedNightlyPetFeeAmount: number;
+  discountedPetNightCount: number;
+  petFeeDiscountRate: number;
+  petFeeOriginalTotal: number;
+  petFeeDiscountTotal: number;
+  petFeeTotal: number;
+  petDepositAmount: number;
+};
+
 export type BookingRoomPlan = {
   roomPlanHeadcount: number;
   doubleBedCount: number;
@@ -64,6 +113,13 @@ export const bookingGuestRules: {
   maxChildCount: 9;
   childFeeUnitPrice: 500;
   extraAdultUnitPrice: 800;
+  petDepositAmount: 3000;
+  dogFeeTiers: Array<{
+    key: "under10kg" | "mid10to20kg" | "over20kg";
+    countField: "dog_under_10kg_count" | "dog_10_to_20kg_count" | "dog_over_20kg_count";
+    label: string;
+    unitPrice: number;
+  }>;
   roomPlans: Record<number, BookingRoomPlan>;
 };
 
@@ -73,6 +129,13 @@ export function normalizeGuestRuleCounts(input?: BookingGuestCountsInput): {
   infants: number;
   nights: number;
 };
+export function normalizeDogCounts(input?: BookingDogCountsInput): {
+  dogUnder10kgCount: number;
+  dog10To20kgCount: number;
+  dogOver20kgCount: number;
+};
+export function calculateDogCount(input?: BookingDogCountsInput): number;
+export function resolveBookingPetPlan(input?: BookingDogCountsInput): BookingPetPlan;
 export function calculateActualGuestCount(input?: BookingGuestCountsInput): number;
 export function calculateChargeableChildCount(input?: BookingGuestCountsInput): number;
 export function calculateExtraAdultCount(input?: BookingGuestCountsInput): number;

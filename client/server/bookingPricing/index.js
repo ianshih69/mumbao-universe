@@ -2,6 +2,7 @@ import {
   bookingGuestRules,
   resolveAdultPricingGuestCount,
   resolveBookingGuestPlan,
+  resolveBookingPetPlan,
   resolveRoomOptionSelection,
 } from "../../src/lib/bookings/bookingGuestRules.js";
 
@@ -14,8 +15,8 @@ export const maxBookingAdultGuests = bookingGuestRules.maxAdultCount;
 export const maxBookingChildGuests = bookingGuestRules.maxChildCount;
 export const childFeeUnitPrice = bookingGuestRules.childFeeUnitPrice;
 export const extraAdultUnitPrice = bookingGuestRules.extraAdultUnitPrice;
-export const weekdaySecondNightDiscountType = "weekday_second_night_95";
-export const weekdaySecondNightDiscountRate = 0.95;
+export const consecutiveStayDiscountType = "consecutive_stay_95";
+export const consecutiveStayDiscountRate = 0.95;
 
 const msPerDay = 24 * 60 * 60 * 1000;
 const dayTypeLabels = {
@@ -41,9 +42,11 @@ function unavailableQuote({
   packageType = "villa_10",
   nights = 0,
   guestPlan = null,
+  petPlan = null,
   details = {},
 }) {
   const planDetails = guestPlan ? guestPlanPricingDetails(guestPlan) : {};
+  const petDetails = petPlan ? petPlanPricingDetails(petPlan) : {};
   return {
     status: "unavailable",
     checkIn,
@@ -70,6 +73,7 @@ function unavailableQuote({
       depositAmount: null,
       balanceAmount: null,
       ...planDetails,
+      ...petDetails,
       ...details,
     },
   };
@@ -100,6 +104,25 @@ function guestPlanPricingDetails(guestPlan) {
     roomOptions: guestPlan.roomOptions,
     defaultRoomOptionId: guestPlan.defaultRoomOptionId,
     defaultRoomOption: guestPlan.defaultRoomOption,
+  };
+}
+
+function petPlanPricingDetails(petPlan) {
+  return {
+    dogUnder10kgCount: petPlan.dogUnder10kgCount,
+    dog10To20kgCount: petPlan.dog10To20kgCount,
+    dogOver20kgCount: petPlan.dogOver20kgCount,
+    dogCount: petPlan.dogCount,
+    petFeeBreakdown: petPlan.petFeeBreakdown,
+    nightlyPetFeeAmount: petPlan.nightlyPetFeeAmount,
+    nightlyPetFeeOriginalAmount: petPlan.nightlyPetFeeOriginalAmount,
+    discountedNightlyPetFeeAmount: petPlan.discountedNightlyPetFeeAmount,
+    discountedPetNightCount: petPlan.discountedPetNightCount,
+    petFeeDiscountRate: petPlan.petFeeDiscountRate,
+    petFeeOriginalTotal: petPlan.petFeeOriginalTotal,
+    petFeeDiscountTotal: petPlan.petFeeDiscountTotal,
+    petFeeTotal: petPlan.petFeeTotal,
+    petDepositAmount: petPlan.petDepositAmount,
   };
 }
 
@@ -143,15 +166,8 @@ export function roundMoney(amount) {
   return Math.round(Number(amount));
 }
 
-function isMondayThroughThursday(dateText) {
-  const day = new Date(`${dateText}T00:00:00Z`).getUTCDay();
-  return day >= 1 && day <= 4;
-}
-
-function shouldApplyWeekdaySecondNightDiscount({ nightIndex, firstNight, date, dayType }) {
-  if (nightIndex !== 1) return false;
-  if (!firstNight || firstNight.dayType !== "weekday" || dayType !== "weekday") return false;
-  return isMondayThroughThursday(firstNight.date) && isMondayThroughThursday(date);
+function shouldApplyConsecutiveStayDiscount({ nightIndex }) {
+  return nightIndex > 0;
 }
 
 export function normalizeGuestCount({ guestCount, adults, children, infants }) {
@@ -266,6 +282,18 @@ export async function calculateBookingQuote(input, options = {}) {
   const adults = Math.max(0, Number.parseInt(String(input?.adults ?? "0"), 10) || 0);
   const children = Math.max(0, Number.parseInt(String(input?.children ?? "0"), 10) || 0);
   const infants = Math.max(0, Number.parseInt(String(input?.infants ?? "0"), 10) || 0);
+  const dogUnder10kgCount = Math.max(
+    0,
+    Number.parseInt(String(input?.dogUnder10kgCount ?? input?.dog_under_10kg_count ?? "0"), 10) || 0
+  );
+  const dog10To20kgCount = Math.max(
+    0,
+    Number.parseInt(String(input?.dog10To20kgCount ?? input?.dog_10_to_20kg_count ?? "0"), 10) || 0
+  );
+  const dogOver20kgCount = Math.max(
+    0,
+    Number.parseInt(String(input?.dogOver20kgCount ?? input?.dog_over_20kg_count ?? "0"), 10) || 0
+  );
   const selectedRoomOptionId = input?.selectedRoomOptionId || input?.selected_room_option_id || "";
   const guestCount = normalizeGuestCount({
     guestCount: input?.guestCount || input?.guest_count,
@@ -294,6 +322,12 @@ export async function calculateBookingQuote(input, options = {}) {
 
   const nights = daysBetween(checkIn, checkOut);
   const guestPlan = resolveBookingGuestPlan({ adults, children, infants, nights });
+  const petPlan = resolveBookingPetPlan({
+    dogUnder10kgCount,
+    dog10To20kgCount,
+    dogOver20kgCount,
+    nights,
+  });
   if (stayType !== "villa") {
     return unavailableQuote({
       reason: "unsupported_stay_type",
@@ -307,9 +341,9 @@ export async function calculateBookingQuote(input, options = {}) {
       packageType,
       nights,
       guestPlan,
+      petPlan,
     });
   }
-
   const pricingGuest = normalizePricingGuest({ adults, children, infants, nights, packageType });
   if (!pricingGuest.ok) {
     return unavailableQuote({
@@ -324,6 +358,7 @@ export async function calculateBookingQuote(input, options = {}) {
       packageType,
       nights,
       guestPlan: pricingGuest.plan,
+      petPlan,
     });
   }
 
@@ -342,6 +377,7 @@ export async function calculateBookingQuote(input, options = {}) {
       packageType,
       nights,
       guestPlan: pricingGuest.plan,
+      petPlan,
       details: { selectedRoomOptionId: selectedRoomOptionId || null },
     });
   }
@@ -375,6 +411,7 @@ export async function calculateBookingQuote(input, options = {}) {
         packageType,
         nights,
         guestPlan,
+        petPlan,
         details: { missingDate: date },
       });
     }
@@ -407,6 +444,7 @@ export async function calculateBookingQuote(input, options = {}) {
         packageType,
         nights,
         guestPlan,
+        petPlan,
         details: {
           missingDate: date,
           missingDayType: dayType,
@@ -440,18 +478,25 @@ export async function calculateBookingQuote(input, options = {}) {
       Number.isFinite(adultBreakdownTargetPrice) &&
       Math.abs(base10GuestRate + regularExtraAdultFeeAmount - adultBreakdownTargetPrice) < 0.0001;
     const nightlyExtraAdultFeeAmount = pricingGuest.plan.extraAdultCount * bookingGuestRules.extraAdultUnitPrice;
-    const nightlyChildFeeAmount = pricingGuest.plan.chargeableChildCount * bookingGuestRules.childFeeUnitPrice;
-    const hasWeekdaySecondNightDiscount = shouldApplyWeekdaySecondNightDiscount({
-      nightIndex: index,
-      firstNight: breakdown[0],
-      date,
-      dayType,
-    });
-    const discountRate = hasWeekdaySecondNightDiscount ? weekdaySecondNightDiscountRate : 1;
-    const discountedBasePrice = hasWeekdaySecondNightDiscount ? roundMoney(basePrice * discountRate) : basePrice;
-    const nightTotal = discountedBasePrice + nightlyExtraAdultFeeAmount + nightlyChildFeeAmount;
-    const preDiscountPrice = basePrice + nightlyExtraAdultFeeAmount + nightlyChildFeeAmount;
-    const discountAmount = basePrice - discountedBasePrice;
+    const nightlyChildFeeOriginalAmount = pricingGuest.plan.chargeableChildCount * bookingGuestRules.childFeeUnitPrice;
+    const adultLodgingPreDiscountAmount = basePrice + nightlyExtraAdultFeeAmount;
+    const hasConsecutiveStayDiscount = shouldApplyConsecutiveStayDiscount({ nightIndex: index });
+    const discountRate = hasConsecutiveStayDiscount ? consecutiveStayDiscountRate : 1;
+    const adultLodgingAmount = hasConsecutiveStayDiscount
+      ? roundMoney(adultLodgingPreDiscountAmount * discountRate)
+      : adultLodgingPreDiscountAmount;
+    const nightlyChildFeeAmount = hasConsecutiveStayDiscount
+      ? roundMoney(nightlyChildFeeOriginalAmount * discountRate)
+      : nightlyChildFeeOriginalAmount;
+    const nightlyPetOriginalAmount = petPlan.nightlyPetFeeOriginalAmount ?? petPlan.nightlyPetFeeAmount;
+    const nightlyPetFeeAmount = hasConsecutiveStayDiscount
+      ? roundMoney(nightlyPetOriginalAmount * discountRate)
+      : nightlyPetOriginalAmount;
+    const nightTotal = adultLodgingAmount + nightlyChildFeeAmount + nightlyPetFeeAmount;
+    const preDiscountPrice = adultLodgingPreDiscountAmount + nightlyChildFeeOriginalAmount + nightlyPetOriginalAmount;
+    const discountAmount = adultLodgingPreDiscountAmount - adultLodgingAmount;
+    const childFeeDiscountAmount = nightlyChildFeeOriginalAmount - nightlyChildFeeAmount;
+    const petFeeDiscountAmount = nightlyPetOriginalAmount - nightlyPetFeeAmount;
 
     breakdown.push({
       date,
@@ -459,9 +504,11 @@ export async function calculateBookingQuote(input, options = {}) {
       dayTypeLabel: dayTypeLabels[dayType] || dayType,
       price: nightTotal,
       preDiscountPrice,
-      discountType: hasWeekdaySecondNightDiscount ? weekdaySecondNightDiscountType : null,
+      discountType: hasConsecutiveStayDiscount ? consecutiveStayDiscountType : null,
       discountRate,
       discountAmount,
+      adultLodgingPreDiscountAmount,
+      adultLodgingAmount,
       adultRateBreakdownStatus: regularAdultBreakdownMatches ? "resolved" : "fallback",
       adultRateBreakdownMatches: regularAdultBreakdownMatches,
       base10GuestRate: regularAdultBreakdownMatches ? base10GuestRate : null,
@@ -484,7 +531,32 @@ export async function calculateBookingQuote(input, options = {}) {
       extraBedAmount: 0,
       chargeableChildCount: pricingGuest.plan.chargeableChildCount,
       childFeeUnitPrice: bookingGuestRules.childFeeUnitPrice,
+      childFeeOriginalAmount: nightlyChildFeeOriginalAmount,
       childFeeAmount: nightlyChildFeeAmount,
+      childFeeDiscountRate: discountRate,
+      childFeeDiscountType: hasConsecutiveStayDiscount ? consecutiveStayDiscountType : null,
+      childFeeDiscountAmount,
+      petFeeOriginalAmount: nightlyPetOriginalAmount,
+      petFeeAmount: nightlyPetFeeAmount,
+      petFeeDiscountRate: discountRate,
+      petFeeDiscountType: hasConsecutiveStayDiscount ? consecutiveStayDiscountType : null,
+      petFeeDiscountAmount,
+      petFeeBreakdown: petPlan.petFeeBreakdown.map((item) => {
+        const itemFinalAmount = hasConsecutiveStayDiscount ? roundMoney(item.nightlyAmount * discountRate) : item.nightlyAmount;
+        return {
+          ...item,
+          originalAmount: item.nightlyAmount,
+          discountType: hasConsecutiveStayDiscount ? consecutiveStayDiscountType : null,
+          discountRate,
+          discountAmount: item.nightlyAmount - itemFinalAmount,
+          total: itemFinalAmount,
+        };
+      }),
+      dogUnder10kgCount: petPlan.dogUnder10kgCount,
+      dog10To20kgCount: petPlan.dog10To20kgCount,
+      dogOver20kgCount: petPlan.dogOver20kgCount,
+      dogCount: petPlan.dogCount,
+      petDepositAmount: petPlan.petDepositAmount,
       specialDateLabel: specialDate?.label || null,
       ruleSetId: ruleSet.id,
       ruleSetName: ruleSet.name,
@@ -519,6 +591,7 @@ export async function calculateBookingQuote(input, options = {}) {
       packageType,
       nights,
       guestPlan,
+      petPlan,
       details: { ruleSets },
     });
   }
@@ -526,6 +599,11 @@ export async function calculateBookingQuote(input, options = {}) {
   const subtotal = breakdown.reduce((total, night) => total + night.price, 0);
   const regularExtraAdultFeeTotal = breakdown.reduce((total, night) => total + (night.regularExtraAdultFeeAmount || 0), 0);
   const extraBedAdultFeeTotal = breakdown.reduce((total, night) => total + (night.extraBedAdultFeeAmount || 0), 0);
+  const childFeeTotal = breakdown.reduce((total, night) => total + (night.childFeeAmount || 0), 0);
+  const childFeeOriginalTotal = breakdown.reduce((total, night) => total + (night.childFeeOriginalAmount || 0), 0);
+  const childFeeDiscountTotal = childFeeOriginalTotal - childFeeTotal;
+  const nightlyChildFeeOriginalAmount = pricingGuest.plan.chargeableChildCount * bookingGuestRules.childFeeUnitPrice;
+  const discountedNightlyChildFeeAmount = roundMoney(nightlyChildFeeOriginalAmount * consecutiveStayDiscountRate);
   const depositRate = depositRates[0];
   const depositAmount = roundMoney(subtotal * depositRate);
   const balanceAmount = subtotal - depositAmount;
@@ -556,6 +634,13 @@ export async function calculateBookingQuote(input, options = {}) {
       depositAmount,
       balanceAmount,
       ...guestPlanPricingDetails(pricingGuest.plan),
+      nightlyChildFeeOriginalAmount,
+      discountedNightlyChildFeeAmount,
+      childFeeDiscountRate: consecutiveStayDiscountRate,
+      childFeeOriginalTotal,
+      childFeeDiscountTotal,
+      childFeeTotal,
+      ...petPlanPricingDetails(petPlan),
       ...selectedRoomOptionPricingDetails(roomOptionSelection.selectedRoomOption),
       regularExtraAdultFeeTotal,
       extraAdultFeeTotal: extraBedAdultFeeTotal,

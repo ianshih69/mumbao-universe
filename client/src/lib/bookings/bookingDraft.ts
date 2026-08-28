@@ -1,4 +1,5 @@
-import type { BookingPackageType, BookingPetTypeValue, StayType } from "./bookingApi";
+import type { BookingPetTypeValue, StayType } from "./bookingApi";
+import { bookingGuestRules } from "./bookingGuestRules.js";
 
 export const bookingDraftStorageKey = "mumbao_booking_draft_v1";
 
@@ -12,8 +13,7 @@ export type BookingDraftForm = {
   adults: number;
   children: number;
   infants: number;
-  selected_package_type: BookingPackageType;
-  selected_package_quantity: number;
+  selected_room_option_id: string;
   room_count: number;
   has_pets: boolean;
   pet_count: number;
@@ -43,10 +43,6 @@ function cleanPetType(value: unknown, fallback: BookingPetTypeValue): BookingPet
   return value === "dog" || value === "cat" || value === "other" ? value : fallback;
 }
 
-function cleanPackageType(value: unknown, fallback: BookingPackageType): BookingPackageType {
-  return value === "villa_10" || value === "villa_18" ? value : fallback;
-}
-
 export function normalizeBookingDraft(value: unknown, fallback: BookingDraftForm): BookingDraftForm {
   const draft = value && typeof value === "object" ? (value as Partial<BookingDraftForm>) : {};
 
@@ -57,11 +53,10 @@ export function normalizeBookingDraft(value: unknown, fallback: BookingDraftForm
     check_in: cleanText(draft.check_in),
     check_out: cleanText(draft.check_out),
     stay_type: cleanStayType(draft.stay_type, fallback.stay_type),
-    adults: cleanCount(draft.adults, fallback.adults, 1, 30),
-    children: cleanCount(draft.children, fallback.children, 0, 30),
-    infants: cleanCount(draft.infants, fallback.infants, 0, 30),
-    selected_package_type: cleanPackageType(draft.selected_package_type, fallback.selected_package_type),
-    selected_package_quantity: cleanCount(draft.selected_package_quantity, fallback.selected_package_quantity, 0, 1),
+    adults: cleanCount(draft.adults, fallback.adults, 1, bookingGuestRules.maxAdultCount),
+    children: cleanCount(draft.children, fallback.children, 0, bookingGuestRules.maxChildCount),
+    infants: cleanCount(draft.infants, fallback.infants, 0, Number.MAX_SAFE_INTEGER),
+    selected_room_option_id: cleanText(draft.selected_room_option_id),
     room_count: cleanCount(draft.room_count, fallback.room_count, 1, 20),
     has_pets: Boolean(draft.has_pets),
     pet_count: cleanCount(draft.pet_count, fallback.pet_count, 0, 20),

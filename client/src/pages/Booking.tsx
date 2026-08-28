@@ -15,9 +15,15 @@ import { Button } from "@/components/ui/button";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import {
   DEFAULT_BOOKING_SETTINGS,
-  MAX_BOOKING_PRICING_GUESTS,
+  MAX_BOOKING_ADULTS,
+  MAX_BOOKING_CHILDREN,
   type PublicBookingSettings,
 } from "@/lib/bookings/bookingConstants";
+import {
+  bookingGuestRules,
+  formatRoomOptionLabel,
+  resolveBookingGuestPlan,
+} from "@/lib/bookings/bookingGuestRules.js";
 import {
   checkBookingAvailability,
   fetchBookingCalendar,
@@ -25,6 +31,7 @@ import {
   submitBookingRequest,
   type BookingCalendarResult,
   type BookingPackageType,
+  type BookingRoomOption,
   type BookingPricingBreakdownNight,
   type BookingPriceQuoteResult,
   type BookingRequestPayload,
@@ -87,8 +94,7 @@ const emptyForm: BookingForm = {
   adults: 2,
   children: 0,
   infants: 0,
-  selected_package_type: "villa_10",
-  selected_package_quantity: 0,
+  selected_room_option_id: "",
   room_count: DEFAULT_BOOKING_SETTINGS.totalRoomCount,
   has_pets: false,
   pet_count: 0,
@@ -123,35 +129,6 @@ const bookingGalleryImages = [
 ];
 
 const bookingAmenityLabels = ["客廳", "餐廳", "歡唱設備", "麻將房", "星空露臺", "戶外烤肉區"];
-const bookingPackageOptions: Array<{ value: BookingPackageType; label: string; description: string }> = [
-  { value: "villa_10", label: "10 人包棟", description: "適合 1 至 17 位入住" },
-  { value: "villa_18", label: "18 人包棟", description: "適合 18 至 23 位入住" },
-];
-
-function BookingPackageDetails({ packageType }: { packageType: BookingPackageType }) {
-  if (packageType === "villa_10") {
-    return (
-      <div className="space-y-3">
-        <p>此方案依入住人數安排 3～4 間客房，每間客房皆設有<strong className="font-semibold text-stone-800">獨立衛浴</strong>。</p>
-        <ul className="space-y-2">
-          <li>・超過 10 人後，每增加 1 位加收 <strong className="font-semibold text-stone-800">NT$1,250</strong>。</li>
-          <li>・週一至週四平日連續入住，第 2 晚享 <strong className="font-semibold text-stone-800">95 折優惠</strong>，並加贈慢寶文創禮。</li>
-          <li>・跨年、農曆春節及特殊國定連假期間之訂房，如因個人因素取消，<strong className="font-semibold text-stone-800">訂金恕不退還</strong>，亦無法辦理改期。</li>
-        </ul>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <p>18 人以上如有加床需求，提供<strong className="font-semibold text-stone-800">單人加床服務</strong>，每增加 1 位加收 <strong className="font-semibold text-stone-800">NT$800</strong>，並提供 1 張單人床。</p>
-      <ul className="space-y-2">
-        <li>・週一至週四平日連續入住，第 2 晚享 <strong className="font-semibold text-stone-800">95 折優惠</strong>，並加贈慢寶文創禮。</li>
-        <li>・跨年、農曆春節及特殊國定連假期間之訂房，如因個人因素取消，<strong className="font-semibold text-stone-800">訂金恕不退還</strong>，亦無法辦理改期。</li>
-      </ul>
-    </div>
-  );
-}
 
 const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
 function fieldClassName() {
@@ -247,9 +224,19 @@ function formatTwd(amount: number | null | undefined) {
   return `TWD ${Number(amount).toLocaleString("zh-TW")}`;
 }
 
-function formatNegativeTwd(amount: number | null | undefined) {
-  const formatted = formatTwd(amount);
-  return formatted.startsWith("TWD ") ? `-${formatted}` : formatted;
+function formatRoomOptionRoomCount(roomOption: BookingRoomOption | null | undefined) {
+  if (!roomOption) return "";
+  return `共 ${roomOption.roomCount} 間房`;
+}
+
+function getCurrentStayPlanLabel(guestPlan: ReturnType<typeof resolveBookingGuestPlan>) {
+  return guestPlan.adultCount <= bookingGuestRules.basePackageGuestCount
+    ? "10 人包棟"
+    : `${guestPlan.roomPlanHeadcount || guestPlan.adultCount} 人包棟`;
+}
+
+function getCurrentStayPlanTitle() {
+  return "本次住宿方案";
 }
 
 function formatDayTypeSummary(dayType: BookingPricingBreakdownNight["dayType"], fallbackLabel: string) {
@@ -329,14 +316,15 @@ function reconcileFormWithSettings(form: BookingForm, settings: PublicBookingSet
 }
 
 function normalizePricingGuestLimit(form: BookingForm): BookingForm {
-  const adults = Math.min(Math.max(form.adults || 1, 1), MAX_BOOKING_PRICING_GUESTS);
-  const children = Math.min(Math.max(form.children || 0, 0), Math.max(0, MAX_BOOKING_PRICING_GUESTS - adults));
-  if (adults === form.adults && children === form.children) return form;
+  const adults = Math.min(Math.max(form.adults || 1, 1), MAX_BOOKING_ADULTS);
+  const children = Math.min(Math.max(form.children || 0, 0), MAX_BOOKING_CHILDREN);
+  const infants = Math.max(form.infants || 0, 0);
+  if (adults === form.adults && children === form.children && infants === form.infants) return form;
   return {
     ...form,
     adults,
     children,
-    selected_package_quantity: 0,
+    infants,
   };
 }
 
@@ -347,8 +335,7 @@ function getInitialBookingForm() {
   if (typeof window === "undefined") return fallback;
   const draft = readBookingDraft(window.sessionStorage, fallback);
   const resolved = resolveBookingDraftDateRange(draft, fallback, minDate);
-  const dateResolvedDraft = resolved.adjusted ? { ...resolved.draft, selected_package_quantity: 0 } : resolved.draft;
-  return normalizePricingGuestLimit(dateResolvedDraft);
+  return normalizePricingGuestLimit(resolved.draft);
 }
 
 function saleModeLabel(saleMode: BookingSaleMode) {
@@ -365,25 +352,31 @@ function stayTypeDisplay(stayType: StayType) {
   return stayType === "villa" ? "整棟包棟" : "單間住宿";
 }
 
-function getPackageLabel(packageType: BookingPackageType) {
-  return bookingPackageOptions.find((option) => option.value === packageType)?.label || "10 人包棟";
-}
-
-function getPackageUnavailableReason(
-  packageType: BookingPackageType,
-  guestCount: number
-) {
-  if (packageType === "villa_18") {
-    if (guestCount < 18) {
-      return "18 人包棟適用於 18 位以上入住。";
-    }
-    return "";
+function getGuestLimitUnavailableReason(guestPlan: ReturnType<typeof resolveBookingGuestPlan>) {
+  if (!guestPlan.isAdultCountSupported) {
+    return "成人最多 20 位。";
   }
-  if (packageType !== "villa_10") return "";
-  if (guestCount >= 18) {
-    return "18 位以上入住請選擇 18 人包棟方案。";
+  if (!guestPlan.isChildCountSupported) {
+    return "孩童最多 9 位。";
   }
   return "";
+}
+
+function getAutomaticPackageType(guestPlan: ReturnType<typeof resolveBookingGuestPlan>): BookingPackageType {
+  return guestPlan.adultCount >= bookingGuestRules.fullVillaAdultCount ? "villa_18" : "villa_10";
+}
+
+function formatStayBedSummary(
+  doubleBedCount: number | null | undefined,
+  singleBedCount: number | null | undefined,
+  sleepCapacity: number | null | undefined
+) {
+  const bedParts = [
+    doubleBedCount ? `${doubleBedCount} 張雙人床` : "",
+    singleBedCount ? `${singleBedCount} 張單人加床` : "",
+  ].filter(Boolean);
+  if (!bedParts.length || !sleepCapacity) return "";
+  return `${bedParts.join("＋")}｜可睡 ${sleepCapacity} 人`;
 }
 
 function getQuoteUnavailableMessage(reason?: string) {
@@ -391,10 +384,19 @@ function getQuoteUnavailableMessage(reason?: string) {
     return "18 位以上入住請選擇 18 人包棟方案。";
   }
   if (reason === "full_villa_requires_18_guests") {
-    return "18 人包棟適用於 18 位以上入住。";
+    return "18 人包棟適用於 18 位成人入住。";
+  }
+  if (reason === "adult_count_exceeds_capacity") {
+    return "成人最多 20 位。";
+  }
+  if (reason === "child_count_exceeds_capacity") {
+    return "孩童最多 9 位。";
   }
   if (reason === "unsupported_guest_count") {
-    return "目前最多可接待 23 位入住。";
+    return "目前無法支援此入住人數。";
+  }
+  if (reason === "invalid_room_option" || reason === "missing_room_options") {
+    return "目前房型組合已不適用，請重新選擇房型組合。";
   }
   return "目前無法取得此住宿期間的房價，請重新選擇日期或聯絡我們。";
 }
@@ -470,12 +472,10 @@ export default function Booking() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [showContactForm, setShowContactForm] = useState(false);
+  const [dailyPriceDetailsOpen, setDailyPriceDetailsOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState<CalendarSelectionMode>("checkIn");
   const [hoverPreviewDate, setHoverPreviewDate] = useState("");
   const [selectedGalleryIndex, setSelectedGalleryIndex] = useState(0);
-  const [expandedPackageType, setExpandedPackageType] = useState<BookingPackageType | null>(() =>
-    form.selected_package_quantity === 1 ? form.selected_package_type : null
-  );
   const [maxDate, setMaxDate] = useState(() => addMonthsToDate(todayText(), DEFAULT_BOOKING_SETTINGS.bookingWindowMonths));
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -533,22 +533,43 @@ export default function Booking() {
   ].filter(Boolean).join("｜");
   const contactDetailsComplete = Boolean(form.guest_name.trim() && isValidEmail(form.email) && isValidPhone(form.phone));
   const canShowStayOptions = bookingIsOpen && selectedIsAvailable && !submittedRequestId;
-  const selectedPackageQuantity = form.selected_package_quantity;
-  const selectedPackageLabel = getPackageLabel(form.selected_package_type);
-  const guestCount = form.adults + form.children;
-  const searchGuestSummary = form.infants > 0 ? `${guestCount} 位・另有 ${form.infants} 位嬰幼兒` : `${guestCount} 位`;
-  const selectedPackageUnavailableReason = getPackageUnavailableReason(
-    form.selected_package_type,
-    guestCount
+  const guestPlan = useMemo(
+    () => resolveBookingGuestPlan({ adults: form.adults, children: form.children, infants: form.infants, nights: nightCount }),
+    [form.adults, form.children, form.infants, nightCount]
   );
-  const canShowOrderSummary = canShowStayOptions && selectedPackageQuantity === 1 && !selectedPackageUnavailableReason;
-  const guestCountExceedsLimit = guestCount > MAX_BOOKING_PRICING_GUESTS;
+  const automaticPackageType = getAutomaticPackageType(guestPlan);
+  const roomOptions = guestPlan.roomOptions || [];
+  const roomOptionIdsSignature = roomOptions.map((option) => option.id).join("|");
+  const defaultRoomOptionId = guestPlan.defaultRoomOptionId || "";
+  const selectedRoomOptionId = roomOptions.some((option) => option.id === form.selected_room_option_id)
+    ? form.selected_room_option_id
+    : defaultRoomOptionId;
+  const selectedRoomOption = roomOptions.find((option) => option.id === selectedRoomOptionId) || guestPlan.defaultRoomOption || null;
+  const stayPlanTitle = getCurrentStayPlanTitle();
+  const stayPlanLabel = getCurrentStayPlanLabel(guestPlan);
+  const showCompleteRoomConfiguration =
+    guestPlan.roomPlanHeadcount != null && guestPlan.roomPlanHeadcount >= 17 && guestPlan.roomPlanHeadcount <= 20;
+  const pricingDisplayGuestCount = form.adults + form.children;
+  const searchGuestSummary = form.infants > 0 ? `${pricingDisplayGuestCount} 位・另有 ${form.infants} 位嬰幼兒` : `${pricingDisplayGuestCount} 位`;
+  const guestLimitUnavailableReason = getGuestLimitUnavailableReason(guestPlan);
+  const canShowOrderSummary = canShowStayOptions && !guestLimitUnavailableReason;
+  const guestCountExceedsLimit = !guestPlan.isAdultCountSupported || !guestPlan.isChildCountSupported;
+  const adultIncrementDisabled = form.adults >= MAX_BOOKING_ADULTS;
+  const childIncrementDisabled = form.children >= MAX_BOOKING_CHILDREN;
+  const infantIncrementDisabled = false;
   const quoteReady = priceQuote?.pricing.status === "resolved";
   const quoteTotal = quoteReady ? priceQuote?.pricing.total ?? null : null;
   const quoteNights = priceQuote?.pricing.breakdown || [];
   const quoteDepositRatePercent =
     quoteReady && priceQuote?.pricing.depositRate != null ? Math.round(priceQuote.pricing.depositRate * 100) : null;
   const quoteBalanceRatePercent = quoteDepositRatePercent == null ? null : 100 - quoteDepositRatePercent;
+  const quoteChargeableChildCount = quoteReady ? priceQuote?.pricing.chargeableChildCount || 0 : 0;
+  const quoteChildFeeUnitPrice = quoteReady ? priceQuote?.pricing.childFeeUnitPrice || bookingGuestRules.childFeeUnitPrice : bookingGuestRules.childFeeUnitPrice;
+  const quoteChildFeeTotal = quoteReady ? priceQuote?.pricing.childFeeTotal || 0 : 0;
+  const displayDoubleBedCount = quoteReady ? priceQuote?.pricing.doubleBedCount : guestPlan.doubleBedCount;
+  const displaySingleBedCount = quoteReady ? priceQuote?.pricing.singleBedCount ?? guestPlan.singleBedCount : guestPlan.singleBedCount;
+  const displaySleepCapacity = quoteReady ? priceQuote?.pricing.sleepCapacity : guestPlan.sleepCapacity;
+  const stayBedSummary = formatStayBedSummary(displayDoubleBedCount, displaySingleBedCount, displaySleepCapacity);
   const canProceedToContact = canShowOrderSummary && !guestCountExceedsLimit && quoteReady && !isQuoteLoading && !priceQuoteError;
   const canShowContactForm = canShowOrderSummary && showContactForm;
   const activeGalleryImage = bookingGalleryImages[selectedGalleryIndex] || bookingGalleryImages[0];
@@ -616,38 +637,20 @@ export default function Booking() {
   }, [form]);
 
   useEffect(() => {
-    if (isCalendarLoading || form.selected_package_quantity === 0) return;
-    if (bookingIsOpen && form.check_in && form.check_out && selectedRangeIssue === "ok") return;
-
+    if (form.selected_room_option_id === selectedRoomOptionId) return;
     setForm((current) =>
-      current.selected_package_quantity === 0
+      current.selected_room_option_id === selectedRoomOptionId
         ? current
         : {
             ...current,
-            selected_package_quantity: 0,
+            selected_room_option_id: selectedRoomOptionId,
           }
     );
-    setShowContactForm(false);
-    if (form.check_in && form.check_out && selectedRangeIssue !== "ok") {
-      setError("日期或房況已變更，請重新確認可預約日期後再選擇方案。");
-    }
-  }, [bookingIsOpen, form.check_in, form.check_out, form.selected_package_quantity, isCalendarLoading, selectedRangeIssue]);
+  }, [form.selected_room_option_id, roomOptionIdsSignature, selectedRoomOptionId]);
 
   useEffect(() => {
-    if (form.selected_package_quantity === 0 || !selectedPackageUnavailableReason) return;
-    setForm((current) =>
-      current.selected_package_quantity === 0
-        ? current
-        : {
-            ...current,
-            selected_package_quantity: 0,
-          }
-    );
-    setShowContactForm(false);
-    setPriceQuote(null);
-    setPriceQuoteError("");
-    setError(selectedPackageUnavailableReason);
-  }, [form.selected_package_quantity, selectedPackageUnavailableReason]);
+    setDailyPriceDetailsOpen(false);
+  }, [form.adults, form.check_in, form.check_out, form.children, form.infants, selectedRoomOptionId]);
 
   useEffect(() => {
     if (!canShowOrderSummary) {
@@ -659,7 +662,7 @@ export default function Booking() {
     if (guestCountExceedsLimit) {
       setIsQuoteLoading(false);
       setPriceQuote(null);
-      setPriceQuoteError("目前最多可接待 23 位入住。");
+      setPriceQuoteError(guestPlan.isAdultCountSupported ? "孩童最多 9 位。" : "成人最多 20 位。");
       return;
     }
 
@@ -672,9 +675,11 @@ export default function Booking() {
       checkIn: form.check_in,
       checkOut: form.check_out,
       stayType: form.stay_type,
-      packageType: form.selected_package_type,
+      packageType: automaticPackageType,
       adults: form.adults,
       children: form.children,
+      infants: form.infants,
+      selectedRoomOptionId,
       roomCount: form.stay_type === "villa" ? settings.totalRoomCount : form.room_count,
     })
       .then((quote) => {
@@ -702,10 +707,12 @@ export default function Booking() {
     form.check_in,
     form.check_out,
     form.children,
+    form.infants,
     form.room_count,
-    form.selected_package_type,
     form.stay_type,
+    automaticPackageType,
     guestCountExceedsLimit,
+    selectedRoomOptionId,
     settings.totalRoomCount,
   ]);
 
@@ -740,7 +747,10 @@ export default function Booking() {
   }, [calendarOpen, peopleOpen]);
 
   function updateField<K extends keyof BookingForm>(field: K, value: BookingForm[K]) {
-    setForm((current) => ({ ...current, [field]: value }));
+    setForm((current) => {
+      const next = { ...current, [field]: value };
+      return field === "adults" || field === "children" || field === "infants" ? normalizePricingGuestLimit(next) : next;
+    });
     setMessage("");
     setError("");
   }
@@ -753,8 +763,6 @@ export default function Booking() {
         check_in: "",
         check_out: "",
         stay_type: stayType,
-        selected_package_type: "villa_10",
-        selected_package_quantity: 0,
         room_count: stayType === "villa" ? settings.totalRoomCount : clampRoomCount(current.room_count, settings.totalRoomCount),
       };
     });
@@ -901,36 +909,14 @@ export default function Booking() {
     }
   }
 
-  function handlePackageQuantityChange(nextQuantity: number) {
-    const quantity = Math.min(Math.max(nextQuantity, 0), 1);
-    setForm((current) => ({ ...current, selected_package_quantity: quantity }));
-    if (quantity === 0) {
-      setShowContactForm(false);
-    }
-    setMessage("");
-    setError("");
-  }
-
-  function handlePackageSelect(packageType: BookingPackageType) {
-    const unavailableReason = getPackageUnavailableReason(packageType, guestCount);
-    if (unavailableReason) {
-      setExpandedPackageType(packageType);
-      setMessage("");
-      setError(unavailableReason);
-      return;
-    }
+  function handleRoomOptionSelect(roomOptionId: string) {
+    if (!roomOptions.some((option) => option.id === roomOptionId)) return;
     setForm((current) => ({
       ...current,
-      selected_package_type: packageType,
-      selected_package_quantity: 1,
+      selected_room_option_id: roomOptionId,
     }));
-    setShowContactForm(false);
     setMessage("");
     setError("");
-  }
-
-  function togglePackageDetails(packageType: BookingPackageType) {
-    setExpandedPackageType((current) => (current === packageType ? null : packageType));
   }
 
   function handleStartBooking() {
@@ -951,15 +937,11 @@ export default function Booking() {
       return;
     }
     if (guestCountExceedsLimit) {
-      setError("目前最多可接待 23 位入住。");
+      setError(guestPlan.isAdultCountSupported ? "孩童最多 9 位。" : "成人最多 20 位。");
       return;
     }
-    if (selectedPackageUnavailableReason) {
-      setError(selectedPackageUnavailableReason);
-      return;
-    }
-    if (selectedPackageQuantity !== 1) {
-      setError("請先選擇包棟方案。");
+    if (guestLimitUnavailableReason) {
+      setError(guestLimitUnavailableReason);
       return;
     }
     if (!quoteReady || isQuoteLoading || priceQuoteError) {
@@ -984,11 +966,11 @@ export default function Booking() {
       return;
     }
     if (guestCountExceedsLimit) {
-      setError("目前最多可接待 23 位入住。");
+      setError(guestPlan.isAdultCountSupported ? "孩童最多 9 位。" : "成人最多 20 位。");
       return;
     }
-    if (selectedPackageUnavailableReason) {
-      setError(selectedPackageUnavailableReason);
+    if (guestLimitUnavailableReason) {
+      setError(guestLimitUnavailableReason);
       return;
     }
     if (!quoteReady || isQuoteLoading || priceQuoteError) {
@@ -1007,9 +989,11 @@ export default function Booking() {
         check_in: form.check_in,
         check_out: form.check_out,
         stay_type: form.stay_type,
-        selected_package_type: form.selected_package_type,
+        selected_package_type: automaticPackageType,
+        selected_room_option_id: selectedRoomOptionId,
         adults: form.adults,
         children: form.children,
+        infants: form.infants,
         room_count: form.stay_type === "villa" ? settings.totalRoomCount : form.room_count,
         has_pets: false,
         pet_count: 0,
@@ -1058,6 +1042,89 @@ export default function Booking() {
     setBookingTestError("");
     setBookingTestInput("");
     setIsBookingTestUnlocked(false);
+  }
+
+  function getNightAdultStayAmount(night: BookingPricingBreakdownNight) {
+    return night.price - (night.childFeeAmount || 0);
+  }
+
+  function renderNightCalculation(night: BookingPricingBreakdownNight, showDateHeader = true) {
+    const discountAmount = night.discountAmount || 0;
+    const hasDiscount = discountAmount > 0;
+    const hasAdultBreakdown = night.adultRateBreakdownStatus === "resolved";
+    const adultStayAmount = getNightAdultStayAmount(night);
+    const fallbackAdultAmount = night.formalAdultPrice ?? night.basePrice ?? adultStayAmount + discountAmount;
+
+    return (
+      <div key={night.date} className="grid gap-2 border-b border-[#f1e8dc] pb-4 last:border-b-0 last:pb-0">
+        {showDateHeader && (
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <p className="font-semibold text-stone-900">{formatSearchDate(night.date)}</p>
+              {hasDiscount && (
+                <span className="rounded-full bg-[#f3eadf] px-2 py-0.5 text-[11px] font-medium text-[#765d4a]">
+                  平日連住 95 折
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-xs leading-5 text-stone-500">
+              {formatDayTypeSummary(night.dayType, night.dayTypeLabel)}
+              {night.specialDateLabel ? "｜" + night.specialDateLabel : ""}
+            </p>
+          </div>
+        )}
+
+        <div className="grid gap-1.5 text-sm leading-5 text-stone-600 sm:pl-3">
+          {hasAdultBreakdown ? (
+            <>
+              <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
+                <span>10 人包棟基本價</span>
+                <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">
+                  {formatTwd(night.base10GuestRate)}
+                </span>
+              </div>
+              {Boolean(night.regularExtraAdultCount && night.regularExtraAdultFeeAmount) && (
+                <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
+                  <span>
+                    成人加人 {night.regularExtraAdultCount} 位 × {formatTwd(night.regularExtraAdultRate)}
+                  </span>
+                  <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">
+                    {formatTwd(night.regularExtraAdultFeeAmount)}
+                  </span>
+                </div>
+              )}
+              {Boolean(night.extraBedAdultCount && night.extraBedAdultFeeAmount) && (
+                <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
+                  <span>
+                    單人加床成人 {night.extraBedAdultCount} 位 × {formatTwd(night.extraBedAdultRate)}
+                  </span>
+                  <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">
+                    {formatTwd(night.extraBedAdultFeeAmount)}
+                  </span>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
+              <span>{night.formalAdultGuestCount ?? night.baseGuestCount ?? night.pricingGuestCount} 人包棟正式價格</span>
+              <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">
+                {formatTwd(fallbackAdultAmount)}
+              </span>
+            </div>
+          )}
+          {hasDiscount && (
+            <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3 text-[#8b6f5b]">
+              <span>平日連住 95 折</span>
+              <span className="shrink-0 whitespace-nowrap font-semibold">-{formatTwd(discountAmount)}</span>
+            </div>
+          )}
+          <div className="mt-1 grid gap-1 border-t border-[#f1e8dc] pt-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
+            <span className="font-semibold text-stone-800">當晚住宿費</span>
+            <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">{formatTwd(adultStayAmount)}</span>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!isBookingTestUnlocked) {
@@ -1373,7 +1440,7 @@ export default function Booking() {
                   <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-3 py-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-stone-800">成人</p>
-                      <p className="mt-0.5 text-xs text-stone-500">13歲以上</p>
+                      <p className="mt-0.5 text-xs text-stone-500">12 歲以上</p>
                     </div>
                     <div className="grid w-[136px] max-w-full grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-2">
                       <button
@@ -1389,8 +1456,8 @@ export default function Booking() {
                       <button
                         type="button"
                         className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
-                        disabled={guestCount >= MAX_BOOKING_PRICING_GUESTS}
-                        onClick={() => updateField("adults", Math.min(form.adults + 1, MAX_BOOKING_PRICING_GUESTS - form.children))}
+                        disabled={adultIncrementDisabled}
+                        onClick={() => updateField("adults", Math.min(form.adults + 1, MAX_BOOKING_ADULTS))}
                         aria-label="成人增加"
                       >
                         <Plus className="h-4 w-4" />
@@ -1401,7 +1468,7 @@ export default function Booking() {
                   <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-3 py-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-stone-800">孩童</p>
-                      <p className="mt-0.5 text-xs text-stone-500">2～12歲</p>
+                      <p className="mt-0.5 text-xs text-stone-500">4～11 歲・不佔床</p>
                     </div>
                     <div className="grid w-[136px] max-w-full grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-2">
                       <button
@@ -1417,8 +1484,8 @@ export default function Booking() {
                       <button
                         type="button"
                         className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
-                        disabled={guestCount >= MAX_BOOKING_PRICING_GUESTS}
-                        onClick={() => updateField("children", Math.min(form.children + 1, MAX_BOOKING_PRICING_GUESTS - form.adults))}
+                        disabled={childIncrementDisabled}
+                        onClick={() => updateField("children", form.children + 1)}
                         aria-label="孩童增加"
                       >
                         <Plus className="h-4 w-4" />
@@ -1429,7 +1496,7 @@ export default function Booking() {
                   <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-3 py-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-stone-800">嬰幼兒</p>
-                      <p className="mt-0.5 text-xs text-stone-500">0～1歲</p>
+                      <p className="mt-0.5 text-xs text-stone-500">0～3 歲・不佔床免費</p>
                     </div>
                     <div className="grid w-[136px] max-w-full grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-2">
                       <button
@@ -1445,7 +1512,7 @@ export default function Booking() {
                       <button
                         type="button"
                         className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d7c5b2] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
-                        disabled={form.infants >= 30}
+                        disabled={infantIncrementDisabled}
                         onClick={() => updateField("infants", form.infants + 1)}
                         aria-label="嬰幼兒增加"
                       >
@@ -1455,7 +1522,7 @@ export default function Booking() {
                   </div>
                 </div>
                 <p className="mt-3 rounded-[10px] border border-[#eadfce] bg-[#fffaf3] px-3 py-2 text-xs leading-5 text-stone-500">
-                  目前最多可接待 {MAX_BOOKING_PRICING_GUESTS} 位入住；嬰幼兒不計入住宿計價人數。
+                  成人最多 {MAX_BOOKING_ADULTS} 位，孩童最多 {MAX_BOOKING_CHILDREN} 位；嬰幼兒不佔床免費。超過包棟內含人數後，不佔床孩童每位每晚 NT$500。
                 </p>
               </section>
             )}
@@ -1517,105 +1584,19 @@ export default function Booking() {
                     </div>
                   </div>
 
-                  <div className="grid min-w-0 gap-4 border-t border-[#eadfce] pt-6">
+                  <div className="grid min-w-0 gap-3 border-t border-[#eadfce] pt-6">
                     <div>
                       <p className="text-lg font-semibold text-stone-900">包棟方案</p>
                       <p className="mt-1 text-sm text-stone-600">
-                        選擇適合本次入住的包棟方案。
+                        系統會依成人入住人數，自動判斷本次適用的包棟方案。
                       </p>
                     </div>
-                    <div className="grid min-w-0 gap-3">
-                      {bookingPackageOptions.map((option) => {
-                        const selected = form.selected_package_type === option.value && selectedPackageQuantity === 1;
-                        const expanded = expandedPackageType === option.value;
-                        const unavailableReason = getPackageUnavailableReason(option.value, guestCount);
-                        const unavailable = Boolean(unavailableReason);
-                        const detailsId = `booking-package-${option.value}-details`;
-                        return (
-                          <div
-                            key={option.value}
-                            className={cn(
-                              "min-w-0 overflow-hidden rounded-[12px] border transition-colors duration-200",
-                              unavailable
-                                ? "border-[#eadfce] bg-[#fbf7f1] text-stone-500"
-                                : "",
-                              selected
-                                ? "border-[#e8d9c6] bg-[#fffaf3]"
-                                : unavailable
-                                  ? ""
-                                  : "border-[#eadfce] bg-white hover:border-[#d7c5b2] hover:bg-[#fffdf9]"
-                            )}
-                          >
-                            <button
-                              type="button"
-                              className="flex w-full min-w-0 items-center justify-between gap-4 px-4 py-4 text-left transition focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#eadfce] sm:px-5"
-                              onClick={() => togglePackageDetails(option.value)}
-                              aria-expanded={expanded}
-                              aria-controls={detailsId}
-                              aria-pressed={selected}
-                              aria-disabled={unavailable}
-                            >
-                              <span className="min-w-0">
-                                <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                                  <span className={cn("text-lg font-semibold leading-tight", unavailable ? "text-stone-500" : "text-stone-900")}>{option.label}</span>
-                                  {selected && (
-                                    <span className="rounded-full border border-[#d7c5b2] bg-white/70 px-2 py-0.5 text-[11px] font-medium text-[#765d4a]">
-                                      已選擇
-                                    </span>
-                                  )}
-                                </span>
-                                <span className="mt-1.5 block text-sm leading-5 text-stone-500">{option.description}</span>
-                              </span>
-                              <ChevronRight
-                                className={cn(
-                                  "h-4 w-4 flex-none text-[#8b6f5b] transition-transform duration-200 ease-out",
-                                  expanded ? "rotate-90" : ""
-                                )}
-                                aria-hidden="true"
-                              />
-                            </button>
-                            {unavailableReason && (
-                              <p className="border-t border-[#eadfce] bg-[#fffaf3] px-4 py-2 text-xs leading-5 text-[#765d4a]">
-                                {unavailableReason}
-                              </p>
-                            )}
-                            {expanded && (
-                              <div
-                                id={detailsId}
-                                className="border-t border-[#eadfce] bg-[#fffdf9] px-4 py-4 text-sm leading-7 text-stone-600 sm:px-5"
-                              >
-                                <BookingPackageDetails packageType={option.value} />
-                                <div className="mt-5 flex min-w-0 flex-col gap-3 border-t border-[#eadfce] pt-4 sm:flex-row sm:items-center sm:justify-between">
-                                  <span className="text-sm font-medium text-stone-700">{selected ? "已選擇" : "選擇此方案"}</span>
-                                  <div className="grid w-full max-w-full grid-cols-[42px_minmax(0,1fr)_42px] items-center rounded-full border border-[#d7c5b2] bg-white px-2 py-1.5 sm:w-[172px]">
-                                    <button
-                                      type="button"
-                                      className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d7c5b2] bg-[#fffdf9] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
-                                      disabled={!selected}
-                                      onClick={() => handlePackageQuantityChange(0)}
-                                      aria-label={`取消${option.label}`}
-                                    >
-                                      <Minus className="h-4 w-4" />
-                                    </button>
-                                    <span className="min-w-0 text-center text-base font-semibold text-stone-900">
-                                      {selected ? selectedPackageQuantity : 0}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d7c5b2] bg-[#fffdf9] text-stone-700 transition hover:bg-[#f7f1e9] disabled:cursor-not-allowed disabled:opacity-40"
-                                      disabled={selected || unavailable}
-                                      onClick={() => handlePackageSelect(option.value)}
-                                      aria-label={`選擇${option.label}`}
-                                    >
-                                      <Plus className="h-4 w-4" />
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                    <div className="rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-4 py-4">
+                      <p className="text-xs font-medium text-stone-500">本次住宿方案</p>
+                      <p className="mt-1 text-lg font-semibold text-stone-900">{stayPlanLabel}</p>
+                      {guestLimitUnavailableReason && (
+                        <p className="mt-2 text-xs leading-5 text-[#765d4a]">{guestLimitUnavailableReason}</p>
+                      )}
                     </div>
                   </div>
 
@@ -1658,13 +1639,85 @@ export default function Booking() {
 
                     <div className="border-t border-[#f1e8dc] pt-5">
                       {!canShowOrderSummary ? (
-                        <p className="text-sm leading-6 text-stone-500">請選擇左側包棟方案。</p>
+                        <p className="text-sm leading-6 text-stone-500">
+                          {guestLimitUnavailableReason || "請確認入住日期與入住人數。"}
+                        </p>
                       ) : (
                         <div className="grid min-w-0 gap-4">
                           <div>
-                            <p className="text-xs font-medium text-stone-500">已選方案</p>
-                            <p className="mt-1 font-semibold text-stone-900">{selectedPackageLabel}</p>
+                            <p className="text-xs font-medium text-stone-500">{stayPlanTitle}</p>
+                            <p className="mt-1 font-semibold text-stone-900">{stayPlanLabel}</p>
                           </div>
+
+                          {stayBedSummary && (
+                            <div className="border-t border-[#f1e8dc] pt-5">
+                              <p className="text-xs font-medium text-stone-500">住宿配置</p>
+                              <p className="mt-1 font-semibold text-stone-900">{stayBedSummary}</p>
+                            </div>
+                          )}
+
+                          {selectedRoomOption && (
+                            <div className="border-t border-[#f1e8dc] pt-5">
+                              {showCompleteRoomConfiguration ? (
+                                <div>
+                                  <p className="font-semibold text-stone-900">完整住宿配置</p>
+                                  <p className="mt-1 text-xs leading-5 text-stone-500">
+                                    房間將依入住人數與同行組成安排。
+                                  </p>
+                                </div>
+                              ) : (
+                                <>
+                                  <p className="text-xs font-medium text-stone-500">可安排房型組合</p>
+                                  <div className="mt-3 grid gap-2">
+                                    {roomOptions.map((roomOption) => {
+                                      const selected = roomOption.id === selectedRoomOptionId;
+                                      const multipleOptions = roomOptions.length > 1;
+                                      return (
+                                        <button
+                                          key={roomOption.id}
+                                          type="button"
+                                          className={cn(
+                                            "grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-[10px] border px-3 py-3 text-left transition",
+                                            selected
+                                              ? "border-[#d9c9b7] bg-[#fffaf3]"
+                                              : "border-[#eadfce] bg-white hover:border-[#d9c9b7] hover:bg-[#fffdf9]",
+                                            !multipleOptions && "cursor-default hover:border-[#eadfce] hover:bg-white"
+                                          )}
+                                          onClick={() => multipleOptions && handleRoomOptionSelect(roomOption.id)}
+                                          disabled={!multipleOptions}
+                                          aria-pressed={selected}
+                                        >
+                                          <span
+                                            className={cn(
+                                              "mt-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border",
+                                              selected ? "border-[#8b6f5b]" : "border-[#d7c5b2]"
+                                            )}
+                                            aria-hidden="true"
+                                          >
+                                            {selected && <span className="h-1.5 w-1.5 rounded-full bg-[#8b6f5b]" />}
+                                          </span>
+                                          <span className="min-w-0">
+                                            <span className="flex min-w-0 flex-wrap items-center gap-2">
+                                              <span className="font-semibold text-stone-900">{formatRoomOptionLabel(roomOption)}</span>
+                                              {roomOption.id === defaultRoomOptionId && multipleOptions && (
+                                                <span className="rounded-full border border-[#eadfce] bg-white/70 px-2 py-0.5 text-[11px] font-medium text-[#765d4a]">
+                                                  建議
+                                                </span>
+                                              )}
+                                            </span>
+                                            <span className="mt-1 block text-xs leading-5 text-stone-500">{formatRoomOptionRoomCount(roomOption)}</span>
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  <p className="mt-2 text-xs leading-5 text-stone-500">
+                                    我們會依您選擇的房型組合安排，實際房間將依當日房況確認。
+                                  </p>
+                                </>
+                              )}
+                            </div>
+                          )}
 
                           <div className="grid min-w-0 gap-4 border-t border-[#f1e8dc] pt-5">
                             <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
@@ -1680,78 +1733,68 @@ export default function Booking() {
 
                             {quoteReady && (
                               <div className="grid gap-4">
-                                {quoteNights.map((night) => {
-                                  const extraBedCount = night.extraBedCount || 0;
-                                  const hasExtraBed = extraBedCount > 0;
-                                  const discountAmount = night.discountAmount || 0;
-                                  const hasDiscount = discountAmount > 0;
-                                  return (
-                                    <div key={night.date} className="grid gap-2 border-b border-[#f1e8dc] pb-4 last:border-b-0 last:pb-0">
-                                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-4">
-                                        <div className="min-w-0">
-                                          <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                            <p className="font-semibold text-stone-900">{formatSearchDate(night.date)}</p>
-                                            {hasDiscount && (
-                                              <span className="rounded-full bg-[#f3eadf] px-2 py-0.5 text-[11px] font-medium text-[#765d4a]">
-                                                平日連住 95 折
-                                              </span>
-                                            )}
-                                          </div>
-                                          <p className="mt-1 text-xs leading-5 text-stone-500">
-                                            {formatDayTypeSummary(night.dayType, night.dayTypeLabel)}
-                                            {night.specialDateLabel ? "｜" + night.specialDateLabel : ""}
-                                          </p>
-                                        </div>
-                                        <p className="shrink-0 whitespace-nowrap font-semibold text-stone-900 sm:text-right">{formatTwd(night.price)}</p>
-                                      </div>
-
-                                      {(hasExtraBed || hasDiscount) && (
-                                        <div className="grid gap-1.5 pl-0 text-xs leading-5 text-stone-600 sm:pl-3">
-                                          <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
-                                            <span>{night.baseGuestCount ?? night.pricingGuestCount} 人包棟基本住宿費</span>
-                                            <span className={cn("shrink-0 whitespace-nowrap font-medium text-stone-700", hasDiscount && !hasExtraBed ? "line-through decoration-stone-400" : "")}>
-                                              {formatTwd(night.basePrice ?? night.preDiscountPrice ?? night.price)}
+                                {quoteNights.length > 1 ? (
+                                  <>
+                                    <div className="grid gap-2">
+                                      {quoteNights.map((night) => {
+                                        const daySummary = formatDayTypeSummary(night.dayType, night.dayTypeLabel);
+                                        const specialDateSummary = night.specialDateLabel ? "｜" + night.specialDateLabel : "";
+                                        return (
+                                          <div
+                                            key={night.date}
+                                            className="grid gap-1 border-b border-[#f1e8dc] pb-2 text-sm last:border-b-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3"
+                                          >
+                                            <span className="min-w-0 font-medium text-stone-700">
+                                              {formatSearchDate(night.date)}｜{daySummary}
+                                              {specialDateSummary}
+                                            </span>
+                                            <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">
+                                              {formatTwd(getNightAdultStayAmount(night))}
                                             </span>
                                           </div>
-                                          {hasExtraBed && (
-                                            <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
-                                              <span>單人加床 {extraBedCount} 張</span>
-                                              <span className="shrink-0 whitespace-nowrap font-medium text-stone-700">
-                                                {formatTwd(night.extraBedUnitPrice || 0)} × {extraBedCount}｜{formatTwd(night.extraBedAmount || 0)}
-                                              </span>
-                                            </div>
+                                        );
+                                      })}
+                                    </div>
+
+                                    <div className="grid gap-3">
+                                      <button
+                                        type="button"
+                                        className="flex w-full items-center justify-between rounded-[10px] border border-[#f1e8dc] bg-[#fffaf4] px-3 py-2 text-left text-sm font-medium text-[#765d4a] transition hover:border-[#eadfce] hover:bg-[#fff7ed]"
+                                        aria-expanded={dailyPriceDetailsOpen}
+                                        onClick={() => setDailyPriceDetailsOpen((current) => !current)}
+                                      >
+                                        <span>查看每日計算方式</span>
+                                        <ChevronRight
+                                          className={cn(
+                                            "h-4 w-4 shrink-0 transition-transform",
+                                            dailyPriceDetailsOpen && "rotate-90"
                                           )}
-                                          {hasDiscount && (
-                                            <>
-                                              {hasExtraBed && (
-                                                <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
-                                                  <span>折扣前小計</span>
-                                                  <span className="shrink-0 whitespace-nowrap font-medium text-stone-700 line-through decoration-stone-400">
-                                                    {formatTwd(night.preDiscountPrice ?? night.price)}
-                                                  </span>
-                                                </div>
-                                              )}
-                                              <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
-                                                <span>平日連住 95 折優惠</span>
-                                                <span className="shrink-0 whitespace-nowrap font-medium text-[#9b6f4c]">
-                                                  {formatNegativeTwd(discountAmount)}
-                                                </span>
-                                              </div>
-                                            </>
-                                          )}
+                                        />
+                                      </button>
+
+                                      {dailyPriceDetailsOpen && (
+                                        <div className="grid gap-4 rounded-[12px] border border-[#f1e8dc] bg-white/70 p-3">
+                                          {quoteNights.map((night) => renderNightCalculation(night))}
                                         </div>
                                       )}
                                     </div>
-                                  );
-                                })}
+                                  </>
+                                ) : (
+                                  quoteNights.map((night) => renderNightCalculation(night))
+                                )}
                               </div>
                             )}
 
-                            {quoteReady && (
+                            {quoteReady && quoteChildFeeTotal > 0 && (
                               <div className="border-t border-[#f1e8dc] pt-3">
-                                <div className="grid gap-1 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
-                                  <span className="font-medium text-stone-600">住宿小計</span>
-                                  <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">{formatTwd(priceQuote?.pricing.subtotal)}</span>
+                                <div className="grid gap-1.5 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:gap-3">
+                                  <div className="min-w-0">
+                                    <p className="font-semibold text-stone-800">額外不佔床孩童</p>
+                                    <p className="mt-1 text-xs leading-5 text-stone-500">
+                                      {quoteChargeableChildCount} 位 × {formatTwd(quoteChildFeeUnitPrice)} × {nightCount} 晚
+                                    </p>
+                                  </div>
+                                  <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">{formatTwd(quoteChildFeeTotal)}</span>
                                 </div>
                               </div>
                             )}

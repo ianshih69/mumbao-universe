@@ -47,11 +47,30 @@ export type BookingPricingBreakdownNight = {
   discountType?: "weekday_second_night_95" | string | null;
   discountRate?: number;
   discountAmount?: number;
+  adultRateBreakdownStatus?: "resolved" | "fallback";
+  adultRateBreakdownMatches?: boolean;
+  base10GuestRate?: number | null;
+  adult18GuestRate?: number | null;
+  adultIncrementRate?: number | null;
+  formalAdultGuestCount?: number;
+  formalAdultPrice?: number;
   baseGuestCount?: number;
   basePrice?: number;
+  regularExtraAdultCount?: number;
+  regularExtraAdultRate?: number | null;
+  regularExtraAdultFeeAmount?: number;
+  extraAdultCount?: number;
+  extraAdultUnitPrice?: number;
+  extraAdultFeeAmount?: number;
+  extraBedAdultCount?: number;
+  extraBedAdultRate?: number;
+  extraBedAdultFeeAmount?: number;
   extraBedCount?: number;
   extraBedUnitPrice?: number;
   extraBedAmount?: number;
+  chargeableChildCount?: number;
+  childFeeUnitPrice?: number;
+  childFeeAmount?: number;
   specialDateLabel?: string | null;
   ruleSetId: string;
   ruleSetName: string;
@@ -59,6 +78,24 @@ export type BookingPricingBreakdownNight = {
   pricingGuestCount: number;
   packageType: BookingPackageType;
   packageLabel: string;
+  roomPlanHeadcount?: number | null;
+  doubleBedCount?: number | null;
+  singleBedCount?: number | null;
+  sleepCapacity?: number | null;
+  roomCountMin?: number | null;
+  roomCountMax?: number | null;
+  selectedRoomOptionId?: string | null;
+  selectedRoomOption?: BookingRoomOption | null;
+};
+
+export type BookingRoomOption = {
+  id: string;
+  quadRoomCount: number;
+  doubleRoomCount: number;
+  roomCount: number;
+  doubleBedCount: number;
+  singleBedCount?: number;
+  sleepCapacity: number;
 };
 
 export type BookingPricingResult = {
@@ -79,6 +116,32 @@ export type BookingPricingResult = {
   depositRate: number | null;
   depositAmount: number | null;
   balanceAmount: number | null;
+  adultCount?: number;
+  childCount?: number;
+  infantCount?: number;
+  actualGuestCount?: number;
+  chargeableChildCount?: number;
+  childFeeUnitPrice?: number;
+  childFeeTotal?: number;
+  regularExtraAdultCount?: number;
+  regularExtraAdultFeeTotal?: number;
+  extraAdultCount?: number;
+  extraAdultUnitPrice?: number;
+  extraAdultFeeTotal?: number;
+  extraBedAdultCount?: number;
+  extraBedAdultUnitPrice?: number;
+  extraBedAdultFeeTotal?: number;
+  roomPlanHeadcount?: number | null;
+  doubleBedCount?: number | null;
+  singleBedCount?: number | null;
+  sleepCapacity?: number | null;
+  roomCountMin?: number | null;
+  roomCountMax?: number | null;
+  roomOptions?: BookingRoomOption[];
+  defaultRoomOptionId?: string;
+  defaultRoomOption?: BookingRoomOption | null;
+  selectedRoomOptionId?: string | null;
+  selectedRoomOption?: BookingRoomOption | null;
   missingDate?: string;
   missingDayType?: string;
   missingGuestCount?: number;
@@ -92,6 +155,7 @@ export type BookingPriceQuoteResult = {
   stayType: StayType;
   adults: number;
   children: number;
+  infants: number;
   guestCount: number;
   pricingGuestCount: number | null;
   packageType: BookingPackageType;
@@ -110,6 +174,8 @@ export type BookingRequestPayload = {
   selected_package_type: BookingPackageType;
   adults: number;
   children: number;
+  infants: number;
+  selected_room_option_id: string;
   room_count: number;
   has_pets: boolean;
   pet_count: number;
@@ -152,6 +218,8 @@ export function fetchBookingQuote({
   packageType,
   adults,
   children,
+  infants,
+  selectedRoomOptionId,
   roomCount,
 }: {
   checkIn: string;
@@ -160,6 +228,8 @@ export function fetchBookingQuote({
   packageType: BookingPackageType;
   adults: number;
   children: number;
+  infants: number;
+  selectedRoomOptionId: string;
   roomCount: number;
 }) {
   const params = new URLSearchParams({
@@ -170,6 +240,8 @@ export function fetchBookingQuote({
     packageType,
     adults: String(adults),
     children: String(children),
+    infants: String(infants),
+    selectedRoomOptionId,
     roomCount: String(roomCount),
   });
   return bookingRequest<BookingPriceQuoteResult & { ok: boolean }>(`?${params.toString()}`);

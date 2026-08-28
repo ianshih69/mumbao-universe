@@ -1,3 +1,5 @@
+import { bookingGuestRules } from "./bookingGuestRules.js";
+
 export const DEFAULT_BOOKING_SETTINGS = {
   bookingWindowMonths: 6,
   bookingWindowLabel: "6 個月",
@@ -8,7 +10,8 @@ export const DEFAULT_BOOKING_SETTINGS = {
 } as const;
 
 export const MIN_ADULTS = 1;
-export const MAX_BOOKING_PRICING_GUESTS = 23;
+export const MAX_BOOKING_ADULTS = bookingGuestRules.maxAdultCount;
+export const MAX_BOOKING_CHILDREN = bookingGuestRules.maxChildCount;
 
 export type PublicBookingSettings = {
   bookingWindowMonths: number;

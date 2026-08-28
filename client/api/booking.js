@@ -10,6 +10,10 @@ import {
   buildBookingPricingSnapshot,
   calculateBookingQuote,
 } from "../server/bookingPricing/index.js";
+import {
+  bookingGuestRules,
+  resolveBookingGuestPlan,
+} from "../src/lib/bookings/bookingGuestRules.js";
 
 const DEFAULT_BOOKING_SETTINGS = {
   bookingWindowMonths: 6,
@@ -144,6 +148,19 @@ function publicSettings(settings) {
   };
 }
 
+function selectedRoomOptionPayload(roomOption) {
+  if (!roomOption) return null;
+  return {
+    id: roomOption.id,
+    double_room_count: roomOption.doubleRoomCount,
+    quad_room_count: roomOption.quadRoomCount,
+    room_count: roomOption.roomCount,
+    double_bed_count: roomOption.doubleBedCount,
+    single_bed_count: roomOption.singleBedCount || 0,
+    sleep_capacity: roomOption.sleepCapacity,
+  };
+}
+
 async function loadBookingSettings() {
   try {
     const rows = await supabaseRequest(
@@ -244,11 +261,23 @@ function validateStayDetails(body, settings) {
 
   const adults = parseInteger(body.adults, 2);
   const children = parseInteger(body.children, 0);
+  const infants = parseInteger(body.infants, 0);
   if (!Number.isInteger(adults) || adults < 1 || adults > 30) {
     throw httpError(400, "成人至少需要 1 位。", "invalid_adults");
   }
-  if (!Number.isInteger(children) || children < 0 || children > 30) {
+  if (!Number.isInteger(children) || children < 0) {
     throw httpError(400, "孩童人數不正確。", "invalid_children");
+  }
+  if (!Number.isInteger(infants) || infants < 0) {
+    throw httpError(400, "嬰幼兒人數不正確。", "invalid_infants");
+  }
+
+  const guestPlan = resolveBookingGuestPlan({ adults, children, infants });
+  if (adults > bookingGuestRules.maxAdultCount) {
+    throw httpError(400, "成人最多 20 位。", "adult_count_exceeds_capacity");
+  }
+  if (children > bookingGuestRules.maxChildCount) {
+    throw httpError(400, "孩童最多 9 位。", "child_count_exceeds_capacity");
   }
 
   let roomCount = selectedStayType === "villa" ? settings.totalRoomCount : parseInteger(body.room_count, null);
@@ -276,12 +305,14 @@ function validateStayDetails(body, settings) {
     stayType: selectedStayType,
     adults,
     children,
+    infants,
     roomCount,
     hasPets,
     petCount,
     petType,
     petNotes,
-    guestCount: adults + children,
+    guestCount: guestPlan.actualGuestCount,
+    guestPlan,
   };
 }
 
@@ -334,6 +365,8 @@ async function handleQuote(req, res, requestId) {
       stay_type: firstQueryValue(req.query?.stayType || req.query?.stay_type),
       adults: firstQueryValue(req.query?.adults),
       children: firstQueryValue(req.query?.children),
+      infants: firstQueryValue(req.query?.infants),
+      selected_room_option_id: firstQueryValue(req.query?.selectedRoomOptionId || req.query?.selected_room_option_id),
       room_count: firstQueryValue(req.query?.roomCount || req.query?.room_count),
       has_pets: false,
     },
@@ -347,10 +380,12 @@ async function handleQuote(req, res, requestId) {
       stayType: stayDetails.stayType,
       adults: stayDetails.adults,
       children: stayDetails.children,
+      infants: stayDetails.infants,
       guestCount: stayDetails.guestCount,
       packageType: firstQueryValue(
         req.query?.packageType || req.query?.package_type || req.query?.selectedPackageType || req.query?.selected_package_type
       ),
+      selectedRoomOptionId: firstQueryValue(req.query?.selectedRoomOptionId || req.query?.selected_room_option_id),
     },
     { supabaseRequest }
   );
@@ -400,8 +435,10 @@ async function handleRequest(req, res, requestId) {
       stayType: stayDetails.stayType,
       adults: stayDetails.adults,
       children: stayDetails.children,
+      infants: stayDetails.infants,
       guestCount: stayDetails.guestCount,
       packageType: body.selected_package_type || body.packageType || body.package_type || body.selectedPackageType,
+      selectedRoomOptionId: body.selected_room_option_id || body.selectedRoomOptionId,
     },
     { supabaseRequest }
   );
@@ -452,10 +489,28 @@ async function handleRequest(req, res, requestId) {
         stay_type: stayDetails.stayType,
         adults: stayDetails.adults,
         children: stayDetails.children,
+        infants: stayDetails.infants,
         room_count: stayDetails.roomCount,
         selected_package_type: pricingSnapshot.selected_package_type,
+        selected_room_option_id: quote.pricing.selectedRoomOptionId || null,
+        selected_room_option: selectedRoomOptionPayload(quote.pricing.selectedRoomOption),
         actual_guest_count: quote.guestCount,
         pricing_guest_count: quote.pricingGuestCount,
+        regular_extra_adult_count: quote.pricing.regularExtraAdultCount,
+        regular_extra_adult_fee_total: quote.pricing.regularExtraAdultFeeTotal,
+        extra_adult_count: quote.pricing.extraAdultCount,
+        extra_adult_unit_price: quote.pricing.extraAdultUnitPrice,
+        extra_adult_fee_total: quote.pricing.extraAdultFeeTotal,
+        extra_bed_adult_count: quote.pricing.extraBedAdultCount,
+        extra_bed_adult_unit_price: quote.pricing.extraBedAdultUnitPrice,
+        extra_bed_adult_fee_total: quote.pricing.extraBedAdultFeeTotal,
+        chargeable_child_count: quote.pricing.chargeableChildCount,
+        child_fee_total: quote.pricing.childFeeTotal,
+        room_plan_headcount: quote.pricing.roomPlanHeadcount,
+        double_bed_count: quote.pricing.doubleBedCount,
+        single_bed_count: quote.pricing.singleBedCount,
+        room_count_min: quote.pricing.roomCountMin,
+        room_count_max: quote.pricing.roomCountMax,
         has_pets: stayDetails.hasPets,
         pet_type: stayDetails.petType,
       },

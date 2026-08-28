@@ -1,8 +1,19 @@
+import {
+  bookingGuestRules,
+  resolveAdultPricingGuestCount,
+  resolveBookingGuestPlan,
+  resolveRoomOptionSelection,
+} from "../../src/lib/bookings/bookingGuestRules.js";
+
+export { resolveBookingGuestPlan };
+
 export const bookingDayTypes = ["weekday", "friday", "holiday"];
 export const bookingPackageTypes = ["villa_10", "villa_18"];
-export const maxBookingPricingGuests = 23;
-export const extraBedBaseGuestCount = 18;
-export const extraBedUnitPrice = 800;
+export const maxBookingPricingGuests = bookingGuestRules.maxAdultCount;
+export const maxBookingAdultGuests = bookingGuestRules.maxAdultCount;
+export const maxBookingChildGuests = bookingGuestRules.maxChildCount;
+export const childFeeUnitPrice = bookingGuestRules.childFeeUnitPrice;
+export const extraAdultUnitPrice = bookingGuestRules.extraAdultUnitPrice;
 export const weekdaySecondNightDiscountType = "weekday_second_night_95";
 export const weekdaySecondNightDiscountRate = 0.95;
 
@@ -24,12 +35,15 @@ function unavailableQuote({
   stayType = "villa",
   adults = 0,
   children = 0,
+  infants = 0,
   guestCount = 0,
   pricingGuestCount = null,
   packageType = "villa_10",
   nights = 0,
+  guestPlan = null,
   details = {},
 }) {
+  const planDetails = guestPlan ? guestPlanPricingDetails(guestPlan) : {};
   return {
     status: "unavailable",
     checkIn,
@@ -37,6 +51,7 @@ function unavailableQuote({
     stayType,
     adults,
     children,
+    infants,
     guestCount,
     pricingGuestCount,
     packageType,
@@ -54,9 +69,47 @@ function unavailableQuote({
       depositRate: null,
       depositAmount: null,
       balanceAmount: null,
+      ...planDetails,
       ...details,
     },
   };
+}
+
+function guestPlanPricingDetails(guestPlan) {
+  return {
+    adultCount: guestPlan.adultCount,
+    childCount: guestPlan.childCount,
+    infantCount: guestPlan.infantCount,
+    actualGuestCount: guestPlan.actualGuestCount,
+    chargeableChildCount: guestPlan.chargeableChildCount,
+    childFeeUnitPrice: guestPlan.childFeeUnitPrice,
+    childFeeTotal: guestPlan.childFeeTotal,
+    regularExtraAdultCount: guestPlan.regularExtraAdultCount,
+    extraAdultCount: guestPlan.extraAdultCount,
+    extraAdultUnitPrice: guestPlan.extraAdultUnitPrice,
+    extraAdultFeeTotal: guestPlan.extraAdultFeeTotal,
+    extraBedAdultCount: guestPlan.extraAdultCount,
+    extraBedAdultUnitPrice: guestPlan.extraAdultUnitPrice,
+    extraBedAdultFeeTotal: guestPlan.extraAdultFeeTotal,
+    roomPlanHeadcount: guestPlan.roomPlanHeadcount,
+    doubleBedCount: guestPlan.doubleBedCount,
+    singleBedCount: guestPlan.singleBedCount,
+    sleepCapacity: guestPlan.sleepCapacity,
+    roomCountMin: guestPlan.roomCountMin,
+    roomCountMax: guestPlan.roomCountMax,
+    roomOptions: guestPlan.roomOptions,
+    defaultRoomOptionId: guestPlan.defaultRoomOptionId,
+    defaultRoomOption: guestPlan.defaultRoomOption,
+  };
+}
+
+function selectedRoomOptionPricingDetails(selectedRoomOption) {
+  return selectedRoomOption
+    ? {
+        selectedRoomOptionId: selectedRoomOption.id,
+        selectedRoomOption,
+      }
+    : {};
 }
 
 export function normalizeIsoDate(value) {
@@ -101,59 +154,67 @@ function shouldApplyWeekdaySecondNightDiscount({ nightIndex, firstNight, date, d
   return isMondayThroughThursday(firstNight.date) && isMondayThroughThursday(date);
 }
 
-export function normalizeGuestCount({ guestCount, adults, children }) {
+export function normalizeGuestCount({ guestCount, adults, children, infants }) {
   const explicit = Number.parseInt(String(guestCount ?? ""), 10);
   if (Number.isInteger(explicit) && explicit > 0) return explicit;
 
   const adultCount = Number.parseInt(String(adults ?? ""), 10);
   const childCount = Number.parseInt(String(children ?? ""), 10);
+  const infantCount = Number.parseInt(String(infants ?? ""), 10);
   const safeAdults = Number.isInteger(adultCount) ? adultCount : 0;
   const safeChildren = Number.isInteger(childCount) ? childCount : 0;
-  return safeAdults + safeChildren;
+  const safeInfants = Number.isInteger(infantCount) ? infantCount : 0;
+  return safeAdults + safeChildren + safeInfants;
 }
 
-export function resolvePricingGuestCount(guestCount, packageType = "villa_10", dateRange = {}) {
+export function resolvePricingGuestCount(guestCount, packageType = "villa_10") {
   if (!Number.isInteger(guestCount) || guestCount <= 0) {
     return { ok: false, reason: "invalid_guest_count", pricingGuestCount: null };
   }
-  if (guestCount > maxBookingPricingGuests) {
-    return { ok: false, reason: "unsupported_guest_count", pricingGuestCount: null };
+  const resolved = resolveAdultPricingGuestCount({ adults: guestCount, children: 0, infants: 0 }, packageType);
+  if (!resolved.ok) {
+    return { ok: false, reason: resolved.reason, pricingGuestCount: null, plan: resolved.plan };
   }
-  if (packageType === "villa_10") {
-    if (guestCount >= extraBedBaseGuestCount) {
-      return { ok: false, reason: "guest_count_requires_full_villa", pricingGuestCount: null };
-    }
-    if (guestCount <= 10) {
-      return { ok: true, pricingGuestCount: 10, extraBedCount: 0, extraBedUnitPrice, extraBedAmount: 0 };
-    }
-    return { ok: true, pricingGuestCount: guestCount, extraBedCount: 0, extraBedUnitPrice, extraBedAmount: 0 };
-  }
-  if (packageType !== "villa_18") {
-    return { ok: false, reason: "unsupported_package_type", pricingGuestCount: null };
-  }
-  if (guestCount < extraBedBaseGuestCount) {
-    return { ok: false, reason: "full_villa_requires_18_guests", pricingGuestCount: null };
-  }
-  if (guestCount <= extraBedBaseGuestCount) {
-    return { ok: true, pricingGuestCount: extraBedBaseGuestCount, extraBedCount: 0, extraBedUnitPrice, extraBedAmount: 0 };
-  }
-  if (guestCount <= maxBookingPricingGuests) {
-    const extraBedCount = guestCount - extraBedBaseGuestCount;
-    const extraBedAmount = extraBedCount * extraBedUnitPrice;
-    return {
-      ok: true,
-      pricingGuestCount: extraBedBaseGuestCount,
-      extraBedCount,
-      extraBedUnitPrice,
-      extraBedAmount,
-    };
-  }
-  return { ok: false, reason: "unsupported_guest_count", pricingGuestCount: null };
+  return {
+    ok: true,
+    pricingGuestCount: resolved.pricingGuestCount,
+    rateGuestCount:
+      resolved.plan.extraAdultCount > 0 ? bookingGuestRules.fullVillaAdultCount : resolved.pricingGuestCount,
+    regularExtraAdultCount: resolved.plan.regularExtraAdultCount,
+    extraAdultCount: resolved.plan.extraAdultCount,
+    extraAdultUnitPrice: bookingGuestRules.extraAdultUnitPrice,
+    extraAdultFeeTotal: 0,
+    extraBedAdultCount: resolved.plan.extraAdultCount,
+    extraBedAdultUnitPrice: bookingGuestRules.extraAdultUnitPrice,
+    extraBedAdultFeeTotal: 0,
+    extraBedCount: 0,
+    extraBedAmount: 0,
+    plan: resolved.plan,
+    ...guestPlanPricingDetails(resolved.plan),
+  };
 }
 
-export function normalizePackageType(value, guestCount = 0) {
+export function normalizePackageType(value, adultCount = 0) {
   if (bookingPackageTypes.includes(value)) return value;
-  return guestCount >= 18 ? "villa_18" : "villa_10";
+  return adultCount >= bookingGuestRules.fullVillaAdultCount ? "villa_18" : "villa_10";
+}
+
+function normalizePricingGuest({ adults, children, infants, nights, packageType }) {
+  const resolved = resolveAdultPricingGuestCount({ adults, children, infants, nights }, packageType);
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      reason: resolved.reason,
+      pricingGuestCount: null,
+      plan: resolved.plan,
+    };
+  }
+  return {
+    ok: true,
+    reason: "",
+    pricingGuestCount: resolved.pricingGuestCount,
+    plan: resolved.plan,
+  };
 }
 
 function encodeFilterValue(value) {
@@ -204,14 +265,17 @@ export async function calculateBookingQuote(input, options = {}) {
   const stayType = input?.stayType || input?.stay_type || "villa";
   const adults = Math.max(0, Number.parseInt(String(input?.adults ?? "0"), 10) || 0);
   const children = Math.max(0, Number.parseInt(String(input?.children ?? "0"), 10) || 0);
+  const infants = Math.max(0, Number.parseInt(String(input?.infants ?? "0"), 10) || 0);
+  const selectedRoomOptionId = input?.selectedRoomOptionId || input?.selected_room_option_id || "";
   const guestCount = normalizeGuestCount({
     guestCount: input?.guestCount || input?.guest_count,
     adults,
     children,
+    infants,
   });
   const packageType = normalizePackageType(
     input?.packageType || input?.package_type || input?.selectedPackageType || input?.selected_package_type,
-    guestCount
+    adults
   );
 
   if (!checkIn || !checkOut || checkOut <= checkIn) {
@@ -222,12 +286,14 @@ export async function calculateBookingQuote(input, options = {}) {
       stayType,
       adults,
       children,
+      infants,
       guestCount,
       packageType,
     });
   }
 
   const nights = daysBetween(checkIn, checkOut);
+  const guestPlan = resolveBookingGuestPlan({ adults, children, infants, nights });
   if (stayType !== "villa") {
     return unavailableQuote({
       reason: "unsupported_stay_type",
@@ -236,13 +302,15 @@ export async function calculateBookingQuote(input, options = {}) {
       stayType,
       adults,
       children,
+      infants,
       guestCount,
       packageType,
       nights,
+      guestPlan,
     });
   }
 
-  const pricingGuest = resolvePricingGuestCount(guestCount, packageType, { checkIn, checkOut });
+  const pricingGuest = normalizePricingGuest({ adults, children, infants, nights, packageType });
   if (!pricingGuest.ok) {
     return unavailableQuote({
       reason: pricingGuest.reason,
@@ -251,15 +319,44 @@ export async function calculateBookingQuote(input, options = {}) {
       stayType,
       adults,
       children,
+      infants,
       guestCount,
       packageType,
       nights,
+      guestPlan: pricingGuest.plan,
+    });
+  }
+
+  const roomOptionSelection = resolveRoomOptionSelection(pricingGuest.plan, selectedRoomOptionId);
+  if (!roomOptionSelection.ok) {
+    return unavailableQuote({
+      reason: roomOptionSelection.reason,
+      checkIn,
+      checkOut,
+      stayType,
+      adults,
+      children,
+      infants,
+      guestCount,
+      pricingGuestCount: pricingGuest.pricingGuestCount,
+      packageType,
+      nights,
+      guestPlan: pricingGuest.plan,
+      details: { selectedRoomOptionId: selectedRoomOptionId || null },
     });
   }
 
   const breakdown = [];
   const ruleSetMap = new Map();
   const rateCache = new Map();
+  async function fetchCachedNightlyRate(ruleSetId, guestCount, dayType) {
+    const rateKey = `${ruleSetId}|${guestCount}|${dayType}`;
+    if (!rateCache.has(rateKey)) {
+      const nextRate = await fetchNightlyRate(ruleSetId, guestCount, dayType, supabaseRequest);
+      rateCache.set(rateKey, nextRate || null);
+    }
+    return rateCache.get(rateKey);
+  }
 
   for (let index = 0; index < nights; index += 1) {
     const date = addDays(checkIn, index);
@@ -272,10 +369,12 @@ export async function calculateBookingQuote(input, options = {}) {
         stayType,
         adults,
         children,
+        infants,
         guestCount,
         pricingGuestCount: pricingGuest.pricingGuestCount,
         packageType,
         nights,
+        guestPlan,
         details: { missingDate: date },
       });
     }
@@ -290,12 +389,9 @@ export async function calculateBookingQuote(input, options = {}) {
 
     const specialDate = await fetchSpecialDate(ruleSet.id, date, supabaseRequest);
     const dayType = specialDate?.day_type || classifyFallbackDayType(date);
-    const rateKey = `${ruleSet.id}|${pricingGuest.pricingGuestCount}|${dayType}`;
-    let rate = rateCache.get(rateKey);
-    if (!rateCache.has(rateKey)) {
-      rate = await fetchNightlyRate(ruleSet.id, pricingGuest.pricingGuestCount, dayType, supabaseRequest);
-      rateCache.set(rateKey, rate || null);
-    }
+    const rateGuestCount =
+      pricingGuest.plan.extraAdultCount > 0 ? bookingGuestRules.fullVillaAdultCount : pricingGuest.pricingGuestCount;
+    const rate = await fetchCachedNightlyRate(ruleSet.id, rateGuestCount, dayType);
 
     if (!rate?.nightly_price && rate?.nightly_price !== 0) {
       return unavailableQuote({
@@ -305,23 +401,46 @@ export async function calculateBookingQuote(input, options = {}) {
         stayType,
         adults,
         children,
+        infants,
         guestCount,
         pricingGuestCount: pricingGuest.pricingGuestCount,
         packageType,
         nights,
+        guestPlan,
         details: {
           missingDate: date,
           missingDayType: dayType,
-          missingGuestCount: pricingGuest.pricingGuestCount,
+          missingGuestCount: rateGuestCount,
+          requestedPricingGuestCount: pricingGuest.pricingGuestCount,
           missingRuleSetId: ruleSet.id,
         },
       });
     }
 
     const basePrice = Number(rate.nightly_price);
-    const extraBedCount = pricingGuest.extraBedCount || 0;
-    const nightlyExtraBedAmount = extraBedCount * extraBedUnitPrice;
-    const preDiscountPrice = basePrice + nightlyExtraBedAmount;
+    const base10Rate = await fetchCachedNightlyRate(ruleSet.id, bookingGuestRules.basePackageGuestCount, dayType);
+    const adult18Rate = await fetchCachedNightlyRate(ruleSet.id, bookingGuestRules.fullVillaAdultCount, dayType);
+    const base10GuestRate =
+      base10Rate?.nightly_price || base10Rate?.nightly_price === 0 ? Number(base10Rate.nightly_price) : null;
+    const adult18GuestRate =
+      adult18Rate?.nightly_price || adult18Rate?.nightly_price === 0 ? Number(adult18Rate.nightly_price) : null;
+    const regularExtraAdultCount = pricingGuest.plan.regularExtraAdultCount;
+    const extraBedAdultCount = pricingGuest.plan.extraAdultCount;
+    const extraBedAdultRate = bookingGuestRules.extraAdultUnitPrice;
+    const extraBedAdultFeeAmount = extraBedAdultCount * extraBedAdultRate;
+    const canBuildRegularAdultBreakdown = Number.isFinite(base10GuestRate) && Number.isFinite(adult18GuestRate);
+    const adultIncrementRate = canBuildRegularAdultBreakdown
+      ? (adult18GuestRate - base10GuestRate) /
+        (bookingGuestRules.fullVillaAdultCount - bookingGuestRules.basePackageGuestCount)
+      : null;
+    const regularExtraAdultFeeAmount = adultIncrementRate == null ? 0 : regularExtraAdultCount * adultIncrementRate;
+    const adultBreakdownTargetPrice = extraBedAdultCount > 0 ? adult18GuestRate : basePrice;
+    const regularAdultBreakdownMatches =
+      canBuildRegularAdultBreakdown &&
+      Number.isFinite(adultBreakdownTargetPrice) &&
+      Math.abs(base10GuestRate + regularExtraAdultFeeAmount - adultBreakdownTargetPrice) < 0.0001;
+    const nightlyExtraAdultFeeAmount = pricingGuest.plan.extraAdultCount * bookingGuestRules.extraAdultUnitPrice;
+    const nightlyChildFeeAmount = pricingGuest.plan.chargeableChildCount * bookingGuestRules.childFeeUnitPrice;
     const hasWeekdaySecondNightDiscount = shouldApplyWeekdaySecondNightDiscount({
       nightIndex: index,
       firstNight: breakdown[0],
@@ -329,8 +448,10 @@ export async function calculateBookingQuote(input, options = {}) {
       dayType,
     });
     const discountRate = hasWeekdaySecondNightDiscount ? weekdaySecondNightDiscountRate : 1;
-    const nightTotal = hasWeekdaySecondNightDiscount ? roundMoney(preDiscountPrice * discountRate) : preDiscountPrice;
-    const discountAmount = preDiscountPrice - nightTotal;
+    const discountedBasePrice = hasWeekdaySecondNightDiscount ? roundMoney(basePrice * discountRate) : basePrice;
+    const nightTotal = discountedBasePrice + nightlyExtraAdultFeeAmount + nightlyChildFeeAmount;
+    const preDiscountPrice = basePrice + nightlyExtraAdultFeeAmount + nightlyChildFeeAmount;
+    const discountAmount = basePrice - discountedBasePrice;
 
     breakdown.push({
       date,
@@ -341,11 +462,29 @@ export async function calculateBookingQuote(input, options = {}) {
       discountType: hasWeekdaySecondNightDiscount ? weekdaySecondNightDiscountType : null,
       discountRate,
       discountAmount,
-      baseGuestCount: pricingGuest.pricingGuestCount,
+      adultRateBreakdownStatus: regularAdultBreakdownMatches ? "resolved" : "fallback",
+      adultRateBreakdownMatches: regularAdultBreakdownMatches,
+      base10GuestRate: regularAdultBreakdownMatches ? base10GuestRate : null,
+      adult18GuestRate: regularAdultBreakdownMatches ? adult18GuestRate : null,
+      adultIncrementRate: regularAdultBreakdownMatches ? adultIncrementRate : null,
+      formalAdultGuestCount: pricingGuest.pricingGuestCount,
+      formalAdultPrice: basePrice,
+      baseGuestCount: rateGuestCount,
       basePrice,
-      extraBedCount,
-      extraBedUnitPrice,
-      extraBedAmount: nightlyExtraBedAmount,
+      regularExtraAdultCount: regularAdultBreakdownMatches ? regularExtraAdultCount : 0,
+      regularExtraAdultRate: regularAdultBreakdownMatches ? adultIncrementRate : null,
+      regularExtraAdultFeeAmount: regularAdultBreakdownMatches ? regularExtraAdultFeeAmount : 0,
+      extraAdultCount: pricingGuest.plan.extraAdultCount,
+      extraAdultUnitPrice: bookingGuestRules.extraAdultUnitPrice,
+      extraAdultFeeAmount: nightlyExtraAdultFeeAmount,
+      extraBedAdultCount,
+      extraBedAdultRate,
+      extraBedAdultFeeAmount,
+      extraBedCount: 0,
+      extraBedAmount: 0,
+      chargeableChildCount: pricingGuest.plan.chargeableChildCount,
+      childFeeUnitPrice: bookingGuestRules.childFeeUnitPrice,
+      childFeeAmount: nightlyChildFeeAmount,
       specialDateLabel: specialDate?.label || null,
       ruleSetId: ruleSet.id,
       ruleSetName: ruleSet.name,
@@ -353,6 +492,14 @@ export async function calculateBookingQuote(input, options = {}) {
       pricingGuestCount: pricingGuest.pricingGuestCount,
       packageType,
       packageLabel: packageLabels[packageType] || packageType,
+      roomPlanHeadcount: pricingGuest.plan.roomPlanHeadcount,
+      doubleBedCount: pricingGuest.plan.doubleBedCount,
+      singleBedCount: pricingGuest.plan.singleBedCount,
+      sleepCapacity: pricingGuest.plan.sleepCapacity,
+      roomCountMin: pricingGuest.plan.roomCountMin,
+      roomCountMax: pricingGuest.plan.roomCountMax,
+      selectedRoomOptionId: roomOptionSelection.selectedRoomOption.id,
+      selectedRoomOption: roomOptionSelection.selectedRoomOption,
     });
   }
 
@@ -366,15 +513,19 @@ export async function calculateBookingQuote(input, options = {}) {
       stayType,
       adults,
       children,
+      infants,
       guestCount,
       pricingGuestCount: pricingGuest.pricingGuestCount,
       packageType,
       nights,
+      guestPlan,
       details: { ruleSets },
     });
   }
 
   const subtotal = breakdown.reduce((total, night) => total + night.price, 0);
+  const regularExtraAdultFeeTotal = breakdown.reduce((total, night) => total + (night.regularExtraAdultFeeAmount || 0), 0);
+  const extraBedAdultFeeTotal = breakdown.reduce((total, night) => total + (night.extraBedAdultFeeAmount || 0), 0);
   const depositRate = depositRates[0];
   const depositAmount = roundMoney(subtotal * depositRate);
   const balanceAmount = subtotal - depositAmount;
@@ -387,6 +538,7 @@ export async function calculateBookingQuote(input, options = {}) {
     stayType,
     adults,
     children,
+    infants,
     guestCount,
     pricingGuestCount: pricingGuest.pricingGuestCount,
     packageType,
@@ -403,6 +555,11 @@ export async function calculateBookingQuote(input, options = {}) {
       depositRate,
       depositAmount,
       balanceAmount,
+      ...guestPlanPricingDetails(pricingGuest.plan),
+      ...selectedRoomOptionPricingDetails(roomOptionSelection.selectedRoomOption),
+      regularExtraAdultFeeTotal,
+      extraAdultFeeTotal: extraBedAdultFeeTotal,
+      extraBedAdultFeeTotal,
     },
   };
 }

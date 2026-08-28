@@ -32,6 +32,7 @@ import {
   type BookingRequest,
   type BookingReservation,
 } from "@/lib/bookings/adminBookingsApi";
+import { formatRoomOptionLabel } from "@/lib/bookings/bookingGuestRules.js";
 import { cn } from "@/lib/utils";
 
 type ManualReservationForm = {
@@ -199,8 +200,51 @@ function stayTypeLabel(request: BookingRequest) {
   return `${request.room_count || 1} 間客房`;
 }
 
+function payloadNumber(payload: Record<string, unknown> | null | undefined, key: string) {
+  const value = payload?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
 function guestSummary(request: BookingRequest) {
-  return `${request.adults || 0} 位成人・${request.children || 0} 位孩童`;
+  const infants = payloadNumber(request.raw_payload, "infants");
+  return [
+    `${request.adults || 0} 位成人`,
+    `${request.children || 0} 位孩童`,
+    infants > 0 ? `${infants} 位嬰幼兒` : null,
+  ].filter(Boolean).join("・");
+}
+
+function bookingRoomPlanSummary(request: BookingRequest) {
+  const pricing = request.pricing_breakdown;
+  if (!pricing?.doubleBedCount) return "";
+  return `${pricing.doubleBedCount} 張雙人床・可睡 ${pricing.sleepCapacity || "-"} 人`;
+}
+
+function normalizeRawRoomOption(value: unknown) {
+  if (!value || typeof value !== "object") return null;
+  const option = value as Record<string, unknown>;
+  const id = typeof option.id === "string" ? option.id : "";
+  const quadRoomCount = Number(option.quadRoomCount ?? option.quad_room_count ?? 0);
+  const doubleRoomCount = Number(option.doubleRoomCount ?? option.double_room_count ?? 0);
+  const roomCount = Number(option.roomCount ?? option.room_count ?? 0);
+  const doubleBedCount = Number(option.doubleBedCount ?? option.double_bed_count ?? 0);
+  const sleepCapacity = Number(option.sleepCapacity ?? option.sleep_capacity ?? 0);
+  if (!id || !Number.isFinite(roomCount) || roomCount <= 0) return null;
+  return { id, quadRoomCount, doubleRoomCount, roomCount, doubleBedCount, sleepCapacity };
+}
+
+function bookingRoomOptionSummary(request: BookingRequest) {
+  const selectedRoomOption =
+    normalizeRawRoomOption(request.pricing_breakdown?.selectedRoomOption) ||
+    normalizeRawRoomOption(request.raw_payload?.selected_room_option);
+  if (!selectedRoomOption) return "";
+  return `${formatRoomOptionLabel(selectedRoomOption)}・共 ${selectedRoomOption.roomCount} 間房`;
+}
+
+function bookingChildFeeSummary(request: BookingRequest) {
+  const pricing = request.pricing_breakdown;
+  if (!pricing?.chargeableChildCount || !pricing?.childFeeTotal) return "";
+  return `${pricing.chargeableChildCount} 位 × NT$${Number(pricing.childFeeUnitPrice || 0).toLocaleString("zh-TW")} = NT$${Number(pricing.childFeeTotal).toLocaleString("zh-TW")}`;
 }
 
 function petSummary(request: BookingRequest) {
@@ -806,6 +850,10 @@ export default function AdminBookings() {
                         <p>ID：{request.id}</p>
                         <p>備註：{request.notes || "-"}</p>
                         <p>寵物備註：{request.pet_notes || "-"}</p>
+                        {bookingRoomPlanSummary(request) && <p>住宿配置：{bookingRoomPlanSummary(request)}</p>}
+                        {bookingRoomOptionSummary(request) && <p>房型組合：{bookingRoomOptionSummary(request)}</p>}
+                        {bookingChildFeeSummary(request) && <p>額外不佔床孩童：{bookingChildFeeSummary(request)}</p>}
+                        {request.quoted_total != null && <p>報價總額：{formatAmount(request.quoted_total)}</p>}
                       </div>
                     </details>
                     <Button type="button" size="sm" variant="outline" disabled title="需要新增確認成訂 API 後才能啟用">

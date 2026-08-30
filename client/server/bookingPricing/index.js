@@ -15,6 +15,7 @@ export const maxBookingAdultGuests = bookingGuestRules.maxAdultCount;
 export const maxBookingChildGuests = bookingGuestRules.maxChildCount;
 export const childFeeUnitPrice = bookingGuestRules.childFeeUnitPrice;
 export const extraAdultUnitPrice = bookingGuestRules.extraAdultUnitPrice;
+export const breakfastAddonUnitPrice = 250;
 export const consecutiveStayDiscountType = "consecutive_stay_95";
 export const consecutiveStayDiscountRate = 0.95;
 
@@ -72,6 +73,10 @@ function unavailableQuote({
       depositRate: null,
       depositAmount: null,
       balanceAmount: null,
+      breakfastUnitPrice: breakfastAddonUnitPrice,
+      breakfastAddonEntries: [],
+      breakfastAddonQuantity: 0,
+      breakfastAddonTotal: 0,
       ...planDetails,
       ...petDetails,
       ...details,
@@ -153,6 +158,93 @@ export function daysBetween(checkIn, checkOut) {
   const start = Date.parse(`${checkIn}T00:00:00Z`);
   const end = Date.parse(`${checkOut}T00:00:00Z`);
   return Math.round((end - start) / msPerDay);
+}
+
+function parseBreakfastAddons(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function normalizeBreakfastAddonEntries(value, { checkIn, checkOut } = {}) {
+  const rawEntries = parseBreakfastAddons(value);
+  if (!rawEntries) {
+    return {
+      ok: false,
+      reason: "invalid_breakfast_addons",
+      entries: [],
+      quantity: 0,
+      total: 0,
+    };
+  }
+
+  const quantitiesByDate = new Map();
+  for (const rawEntry of rawEntries) {
+    if (!rawEntry || typeof rawEntry !== "object" || Array.isArray(rawEntry)) {
+      return {
+        ok: false,
+        reason: "invalid_breakfast_addon_entry",
+        entries: [],
+        quantity: 0,
+        total: 0,
+      };
+    }
+
+    const date = normalizeIsoDate(rawEntry.date);
+    if (!date || date <= checkIn || date > checkOut) {
+      return {
+        ok: false,
+        reason: "invalid_breakfast_addon_date",
+        entries: [],
+        quantity: 0,
+        total: 0,
+      };
+    }
+
+    const quantity = Number(rawEntry.quantity);
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      return {
+        ok: false,
+        reason: "invalid_breakfast_addon_quantity",
+        entries: [],
+        quantity: 0,
+        total: 0,
+      };
+    }
+
+    if (quantity > 0) {
+      quantitiesByDate.set(date, (quantitiesByDate.get(date) || 0) + quantity);
+    }
+  }
+
+  const entries = Array.from(quantitiesByDate.entries())
+    .sort(([leftDate], [rightDate]) => leftDate.localeCompare(rightDate))
+    .map(([date, quantity]) => ({
+      date,
+      quantity,
+      unitPrice: breakfastAddonUnitPrice,
+      subtotal: quantity * breakfastAddonUnitPrice,
+    }));
+  const quantity = entries.reduce((total, entry) => total + entry.quantity, 0);
+  const total = entries.reduce((sum, entry) => sum + entry.subtotal, 0);
+
+  return {
+    ok: true,
+    reason: null,
+    entries,
+    quantity,
+    total,
+  };
 }
 
 export function classifyFallbackDayType(dateText) {
@@ -328,6 +420,26 @@ export async function calculateBookingQuote(input, options = {}) {
     dogOver20kgCount,
     nights,
   });
+  const breakfastPlan = normalizeBreakfastAddonEntries(input?.breakfastAddons ?? input?.breakfast_addons, {
+    checkIn,
+    checkOut,
+  });
+  if (!breakfastPlan.ok) {
+    return unavailableQuote({
+      reason: breakfastPlan.reason,
+      checkIn,
+      checkOut,
+      stayType,
+      adults,
+      children,
+      infants,
+      guestCount,
+      packageType,
+      nights,
+      guestPlan,
+      petPlan,
+    });
+  }
   if (stayType !== "villa") {
     return unavailableQuote({
       reason: "unsupported_stay_type",
@@ -596,7 +708,8 @@ export async function calculateBookingQuote(input, options = {}) {
     });
   }
 
-  const subtotal = breakdown.reduce((total, night) => total + night.price, 0);
+  const lodgingSubtotal = breakdown.reduce((total, night) => total + night.price, 0);
+  const subtotal = lodgingSubtotal + breakfastPlan.total;
   const regularExtraAdultFeeTotal = breakdown.reduce((total, night) => total + (night.regularExtraAdultFeeAmount || 0), 0);
   const extraBedAdultFeeTotal = breakdown.reduce((total, night) => total + (night.extraBedAdultFeeAmount || 0), 0);
   const childFeeTotal = breakdown.reduce((total, night) => total + (night.childFeeAmount || 0), 0);
@@ -633,6 +746,7 @@ export async function calculateBookingQuote(input, options = {}) {
       depositRate,
       depositAmount,
       balanceAmount,
+      lodgingSubtotal,
       ...guestPlanPricingDetails(pricingGuest.plan),
       nightlyChildFeeOriginalAmount,
       discountedNightlyChildFeeAmount,
@@ -641,6 +755,10 @@ export async function calculateBookingQuote(input, options = {}) {
       childFeeDiscountTotal,
       childFeeTotal,
       ...petPlanPricingDetails(petPlan),
+      breakfastUnitPrice: breakfastAddonUnitPrice,
+      breakfastAddonEntries: breakfastPlan.entries,
+      breakfastAddonQuantity: breakfastPlan.quantity,
+      breakfastAddonTotal: breakfastPlan.total,
       ...selectedRoomOptionPricingDetails(roomOptionSelection.selectedRoomOption),
       regularExtraAdultFeeTotal,
       extraAdultFeeTotal: extraBedAdultFeeTotal,

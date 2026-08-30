@@ -167,6 +167,66 @@ function selectedRoomOptionPayload(roomOption) {
   };
 }
 
+function breakfastSelectionPayload(entries) {
+  return Array.isArray(entries)
+    ? entries.map((entry) => ({
+        date: entry.date,
+        quantity: entry.quantity,
+      }))
+    : [];
+}
+
+function maskBookingEmail(email) {
+  const [name, domain] = String(email || "").trim().split("@");
+  if (!name || !domain) return email ? "******" : "-";
+  return `${name.slice(0, Math.min(2, name.length))}***@${domain}`;
+}
+
+function maskBookingPhone(phone) {
+  const compact = String(phone || "").replace(/\s+/g, "");
+  if (!compact) return "-";
+  if (compact.length <= 4) return `${compact.slice(0, 1)}***`;
+  return `${compact.slice(0, 2)}${"*".repeat(Math.max(compact.length - 4, 3))}${compact.slice(-2)}`;
+}
+
+function buildSubmittedBookingSnapshot({ pricingSnapshot, stayDetails, quote, guestEmail, guestPhone }) {
+  return {
+    pricing: {
+      quotedTotal: pricingSnapshot.quoted_total,
+      depositRate: pricingSnapshot.deposit_rate,
+      depositAmount: pricingSnapshot.deposit_amount,
+      balanceAmount: pricingSnapshot.balance_amount,
+      pricingBreakdown: pricingSnapshot.pricing_breakdown,
+    },
+    summary: {
+      adultCount: stayDetails.adults,
+      childCount: stayDetails.children,
+      infantCount: stayDetails.infants,
+      dogUnder10kgCount: quote.pricing.dogUnder10kgCount || 0,
+      dog10To20kgCount: quote.pricing.dog10To20kgCount || 0,
+      dogOver20kgCount: quote.pricing.dogOver20kgCount || 0,
+      dogCount: quote.pricing.dogCount || 0,
+      nightCount: quote.nights,
+      selectedRoomOption: quote.pricing.selectedRoomOption || null,
+      breakfastAddonEntries: breakfastSelectionPayload(quote.pricing.breakfastAddonEntries),
+    },
+    contact: {
+      maskedEmail: maskBookingEmail(guestEmail),
+      maskedPhone: maskBookingPhone(guestPhone),
+    },
+  };
+}
+
+function isBreakfastAddonError(reason) {
+  return typeof reason === "string" && reason.startsWith("invalid_breakfast_addon");
+}
+
+function breakfastAddonErrorMessage(reason) {
+  if (reason === "invalid_breakfast_addon_date") return "早餐日期不在本次住宿可加購範圍內。";
+  if (reason === "invalid_breakfast_addon_quantity") return "早餐份數不正確。";
+  return "早餐加購資料不正確。";
+}
+
 async function loadBookingSettings() {
   try {
     const rows = await supabaseRequest(
@@ -219,7 +279,7 @@ async function findUnavailableRanges(checkIn, checkOut) {
       `/booking_availability_blocks?status=eq.confirmed&check_in=lt.${encodeURIComponent(checkOut)}&check_out=gt.${encodeURIComponent(checkIn)}&select=id,check_in,check_out`
     ),
     supabaseRequest(
-      `/booking_requests?status=in.(pending_review,confirmed)&check_in=lt.${encodeURIComponent(checkOut)}&check_out=gt.${encodeURIComponent(checkIn)}&select=id,check_in,check_out`
+      `/booking_requests?status=eq.confirmed&check_in=lt.${encodeURIComponent(checkOut)}&check_out=gt.${encodeURIComponent(checkIn)}&select=id,check_in,check_out`
     ),
   ]);
 
@@ -405,6 +465,7 @@ async function handleQuote(req, res, requestId) {
       dogOver20kgCount: firstQueryValue(req.query?.dogOver20kgCount || req.query?.dog_over_20kg_count),
       selected_room_option_id: firstQueryValue(req.query?.selectedRoomOptionId || req.query?.selected_room_option_id),
       room_count: firstQueryValue(req.query?.roomCount || req.query?.room_count),
+      breakfast_addons: firstQueryValue(req.query?.breakfastAddons || req.query?.breakfast_addons),
       has_pets: false,
     },
     settings
@@ -426,9 +487,21 @@ async function handleQuote(req, res, requestId) {
         req.query?.packageType || req.query?.package_type || req.query?.selectedPackageType || req.query?.selected_package_type
       ),
       selectedRoomOptionId: firstQueryValue(req.query?.selectedRoomOptionId || req.query?.selected_room_option_id),
+      breakfastAddons: firstQueryValue(req.query?.breakfastAddons || req.query?.breakfast_addons),
     },
     { supabaseRequest }
   );
+
+  if (quote.pricing?.status === "unavailable" && isBreakfastAddonError(quote.pricing.reason)) {
+    return sendJson(res, 400, {
+      ok: false,
+      requestId,
+      error: quote.pricing.reason,
+      code: quote.pricing.reason,
+      message: breakfastAddonErrorMessage(quote.pricing.reason),
+      pricing: quote.pricing,
+    });
+  }
 
   sendJson(res, 200, {
     ok: true,
@@ -459,15 +532,6 @@ async function handleRequest(req, res, requestId) {
     throw httpError(400, "Email 格式不正確。", "invalid_email");
   }
 
-  const unavailableRanges = await findUnavailableRanges(checkIn, checkOut);
-  if (unavailableRanges.length > 0) {
-    return sendJson(res, 409, {
-      ok: false,
-      requestId,
-      error: "date_unavailable",
-      message: "這段日期目前無法預約，請重新選擇日期。",
-    });
-  }
   const quote = await calculateBookingQuote(
     {
       checkIn,
@@ -482,11 +546,22 @@ async function handleRequest(req, res, requestId) {
       dogOver20kgCount: stayDetails.dogOver20kgCount,
       packageType: body.selected_package_type || body.packageType || body.package_type || body.selectedPackageType,
       selectedRoomOptionId: body.selected_room_option_id || body.selectedRoomOptionId,
+      breakfastAddons: body.breakfast_addons ?? body.breakfastAddons,
     },
     { supabaseRequest }
   );
   const pricingSnapshot = buildBookingPricingSnapshot(quote);
   if (!pricingSnapshot) {
+    if (isBreakfastAddonError(quote.pricing?.reason)) {
+      return sendJson(res, 400, {
+        ok: false,
+        requestId,
+        error: quote.pricing.reason,
+        code: quote.pricing.reason,
+        message: breakfastAddonErrorMessage(quote.pricing.reason),
+        pricing: quote.pricing,
+      });
+    }
     return sendJson(res, 409, {
       ok: false,
       requestId,
@@ -498,82 +573,91 @@ async function handleRequest(req, res, requestId) {
   }
 
   const customerProfile = await getOptionalCustomerProfile(req);
-
-  const rows = await supabaseRequest("/booking_requests", {
-    method: "POST",
-    body: JSON.stringify({
-      customer_profile_id: customerProfile?.id || null,
-      guest_name: guestName,
-      guest_email: guestEmail || null,
-      guest_phone: guestPhone || null,
-      check_in: checkIn,
-      check_out: checkOut,
-      guest_count: stayDetails.guestCount,
+  const submittedSnapshot = buildSubmittedBookingSnapshot({
+    pricingSnapshot,
+    stayDetails,
+    quote,
+    guestEmail,
+    guestPhone,
+  });
+  const bookingRequestPayload = {
+    customer_profile_id: customerProfile?.id || null,
+    guest_name: guestName,
+    guest_email: guestEmail || null,
+    guest_phone: guestPhone || null,
+    check_in: checkIn,
+    check_out: checkOut,
+    guest_count: stayDetails.guestCount,
+    stay_type: stayDetails.stayType,
+    adults: stayDetails.adults,
+    children: stayDetails.children,
+    room_count: stayDetails.roomCount,
+    has_pets: stayDetails.hasPets,
+    pet_count: stayDetails.petCount,
+    pet_type: stayDetails.petType,
+    pet_notes: stayDetails.petNotes || null,
+    notes: notes || null,
+    selected_package_type: pricingSnapshot.selected_package_type,
+    pricing_rule_set_id: pricingSnapshot.pricing_rule_set_id,
+    quoted_total: pricingSnapshot.quoted_total,
+    deposit_rate: pricingSnapshot.deposit_rate,
+    deposit_amount: pricingSnapshot.deposit_amount,
+    balance_amount: pricingSnapshot.balance_amount,
+    pricing_breakdown: pricingSnapshot.pricing_breakdown,
+    quoted_at: pricingSnapshot.quoted_at,
+    status: "pending_review",
+    source: "official_site",
+    raw_payload: {
       stay_type: stayDetails.stayType,
       adults: stayDetails.adults,
       children: stayDetails.children,
+      infants: stayDetails.infants,
       room_count: stayDetails.roomCount,
-      has_pets: stayDetails.hasPets,
-      pet_count: stayDetails.petCount,
-      pet_type: stayDetails.petType,
-      pet_notes: stayDetails.petNotes || null,
-      notes: notes || null,
       selected_package_type: pricingSnapshot.selected_package_type,
-      pricing_rule_set_id: pricingSnapshot.pricing_rule_set_id,
-      quoted_total: pricingSnapshot.quoted_total,
-      deposit_rate: pricingSnapshot.deposit_rate,
-      deposit_amount: pricingSnapshot.deposit_amount,
-      balance_amount: pricingSnapshot.balance_amount,
-      pricing_breakdown: pricingSnapshot.pricing_breakdown,
-      quoted_at: pricingSnapshot.quoted_at,
-      status: "pending_review",
-      source: "official_site",
-      raw_payload: {
-        stay_type: stayDetails.stayType,
-        adults: stayDetails.adults,
-        children: stayDetails.children,
-        infants: stayDetails.infants,
-        room_count: stayDetails.roomCount,
-        selected_package_type: pricingSnapshot.selected_package_type,
-        selected_room_option_id: quote.pricing.selectedRoomOptionId || null,
-        selected_room_option: selectedRoomOptionPayload(quote.pricing.selectedRoomOption),
-        actual_guest_count: quote.guestCount,
-        pricing_guest_count: quote.pricingGuestCount,
-        regular_extra_adult_count: quote.pricing.regularExtraAdultCount,
-        regular_extra_adult_fee_total: quote.pricing.regularExtraAdultFeeTotal,
-        extra_adult_count: quote.pricing.extraAdultCount,
-        extra_adult_unit_price: quote.pricing.extraAdultUnitPrice,
-        extra_adult_fee_total: quote.pricing.extraAdultFeeTotal,
-        extra_bed_adult_count: quote.pricing.extraBedAdultCount,
-        extra_bed_adult_unit_price: quote.pricing.extraBedAdultUnitPrice,
-        extra_bed_adult_fee_total: quote.pricing.extraBedAdultFeeTotal,
-        chargeable_child_count: quote.pricing.chargeableChildCount,
-        child_fee_total: quote.pricing.childFeeTotal,
-        dog_under_10kg_count: quote.pricing.dogUnder10kgCount || 0,
-        dog_10_to_20kg_count: quote.pricing.dog10To20kgCount || 0,
-        dog_over_20kg_count: quote.pricing.dogOver20kgCount || 0,
-        dog_count: quote.pricing.dogCount || 0,
-        pet_fee_breakdown: quote.pricing.petFeeBreakdown || [],
-        nightly_pet_fee_amount: quote.pricing.nightlyPetFeeAmount || 0,
-        nightly_pet_fee_original_amount: quote.pricing.nightlyPetFeeOriginalAmount || 0,
-        discounted_nightly_pet_fee_amount: quote.pricing.discountedNightlyPetFeeAmount || 0,
-        discounted_pet_night_count: quote.pricing.discountedPetNightCount || 0,
-        pet_fee_discount_rate: quote.pricing.petFeeDiscountRate || 0,
-        pet_fee_original_total: quote.pricing.petFeeOriginalTotal || 0,
-        pet_fee_discount_total: quote.pricing.petFeeDiscountTotal || 0,
-        pet_fee_total: quote.pricing.petFeeTotal || 0,
-        pet_deposit_amount: quote.pricing.petDepositAmount || 0,
-        gift_quantity: quote.nights,
-        room_plan_headcount: quote.pricing.roomPlanHeadcount,
-        double_bed_count: quote.pricing.doubleBedCount,
-        single_bed_count: quote.pricing.singleBedCount,
-        room_count_min: quote.pricing.roomCountMin,
-        room_count_max: quote.pricing.roomCountMax,
-        has_pets: stayDetails.hasPets,
-        pet_count: stayDetails.petCount || 0,
-        pet_type: stayDetails.petType,
-      },
-    }),
+      selected_room_option_id: quote.pricing.selectedRoomOptionId || null,
+      selected_room_option: selectedRoomOptionPayload(quote.pricing.selectedRoomOption),
+      actual_guest_count: quote.guestCount,
+      pricing_guest_count: quote.pricingGuestCount,
+      regular_extra_adult_count: quote.pricing.regularExtraAdultCount,
+      regular_extra_adult_fee_total: quote.pricing.regularExtraAdultFeeTotal,
+      extra_adult_count: quote.pricing.extraAdultCount,
+      extra_adult_unit_price: quote.pricing.extraAdultUnitPrice,
+      extra_adult_fee_total: quote.pricing.extraAdultFeeTotal,
+      extra_bed_adult_count: quote.pricing.extraBedAdultCount,
+      extra_bed_adult_unit_price: quote.pricing.extraBedAdultUnitPrice,
+      extra_bed_adult_fee_total: quote.pricing.extraBedAdultFeeTotal,
+      chargeable_child_count: quote.pricing.chargeableChildCount,
+      child_fee_total: quote.pricing.childFeeTotal,
+      dog_under_10kg_count: quote.pricing.dogUnder10kgCount || 0,
+      dog_10_to_20kg_count: quote.pricing.dog10To20kgCount || 0,
+      dog_over_20kg_count: quote.pricing.dogOver20kgCount || 0,
+      dog_count: quote.pricing.dogCount || 0,
+      pet_fee_breakdown: quote.pricing.petFeeBreakdown || [],
+      nightly_pet_fee_amount: quote.pricing.nightlyPetFeeAmount || 0,
+      nightly_pet_fee_original_amount: quote.pricing.nightlyPetFeeOriginalAmount || 0,
+      discounted_nightly_pet_fee_amount: quote.pricing.discountedNightlyPetFeeAmount || 0,
+      discounted_pet_night_count: quote.pricing.discountedPetNightCount || 0,
+      pet_fee_discount_rate: quote.pricing.petFeeDiscountRate || 0,
+      pet_fee_original_total: quote.pricing.petFeeOriginalTotal || 0,
+      pet_fee_discount_total: quote.pricing.petFeeDiscountTotal || 0,
+      pet_fee_total: quote.pricing.petFeeTotal || 0,
+      pet_deposit_amount: quote.pricing.petDepositAmount || 0,
+      breakfast_addons: breakfastSelectionPayload(quote.pricing.breakfastAddonEntries),
+      gift_quantity: quote.nights,
+      room_plan_headcount: quote.pricing.roomPlanHeadcount,
+      double_bed_count: quote.pricing.doubleBedCount,
+      single_bed_count: quote.pricing.singleBedCount,
+      room_count_min: quote.pricing.roomCountMin,
+      room_count_max: quote.pricing.roomCountMax,
+      has_pets: stayDetails.hasPets,
+      pet_count: stayDetails.petCount || 0,
+      pet_type: stayDetails.petType,
+    },
+  };
+
+  const rows = await supabaseRequest("/booking_requests", {
+    method: "POST",
+    body: JSON.stringify(bookingRequestPayload),
   });
   const request = Array.isArray(rows) ? rows[0] : rows;
 
@@ -599,7 +683,9 @@ async function handleRequest(req, res, requestId) {
       status: request?.status || "pending_review",
       check_in: checkIn,
       check_out: checkOut,
+      created_at: request?.created_at || null,
     },
+    ...submittedSnapshot,
   });
 }
 

@@ -111,6 +111,16 @@ export type BookingRoomOption = {
   sleepCapacity: number;
 };
 
+export type BookingBreakfastAddonInput = {
+  date: string;
+  quantity: number;
+};
+
+export type BookingBreakfastAddonEntry = BookingBreakfastAddonInput & {
+  unitPrice: number;
+  subtotal: number;
+};
+
 export type BookingPetFeeBreakdownItem = {
   key: "under10kg" | "mid10to20kg" | "over20kg" | string;
   label: string;
@@ -144,6 +154,7 @@ export type BookingPricingResult = {
   depositRate: number | null;
   depositAmount: number | null;
   balanceAmount: number | null;
+  lodgingSubtotal?: number | null;
   adultCount?: number;
   childCount?: number;
   infantCount?: number;
@@ -170,6 +181,10 @@ export type BookingPricingResult = {
   petFeeDiscountTotal?: number;
   petFeeTotal?: number;
   petDepositAmount?: number;
+  breakfastUnitPrice?: number;
+  breakfastAddonEntries?: BookingBreakfastAddonEntry[];
+  breakfastAddonQuantity?: number;
+  breakfastAddonTotal?: number;
   regularExtraAdultCount?: number;
   regularExtraAdultFeeTotal?: number;
   extraAdultCount?: number;
@@ -231,7 +246,43 @@ export type BookingRequestPayload = {
   dog_under_10kg_count: number;
   dog_10_to_20kg_count: number;
   dog_over_20kg_count: number;
+  breakfast_addons?: BookingBreakfastAddonInput[];
   notes: string;
+};
+
+export type BookingSubmitResult = {
+  ok: boolean;
+  requestId: string;
+  request: {
+    id: string;
+    status: string;
+    check_in: string;
+    check_out: string;
+    created_at: string | null;
+  };
+  pricing?: {
+    quotedTotal: number | null;
+    depositRate: number | null;
+    depositAmount: number | null;
+    balanceAmount: number | null;
+    pricingBreakdown: BookingPricingResult;
+  };
+  summary?: {
+    adultCount: number;
+    childCount: number;
+    infantCount: number;
+    dogUnder10kgCount: number;
+    dog10To20kgCount: number;
+    dogOver20kgCount: number;
+    dogCount: number;
+    nightCount: number;
+    selectedRoomOption: BookingRoomOption | null;
+    breakfastAddonEntries: BookingBreakfastAddonInput[];
+  };
+  contact?: {
+    maskedEmail: string;
+    maskedPhone: string;
+  };
 };
 
 async function bookingRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -272,6 +323,7 @@ export function fetchBookingQuote({
   dogUnder10kgCount,
   dog10To20kgCount,
   dogOver20kgCount,
+  breakfastAddons = [],
   selectedRoomOptionId,
   roomCount,
 }: {
@@ -285,6 +337,7 @@ export function fetchBookingQuote({
   dogUnder10kgCount: number;
   dog10To20kgCount: number;
   dogOver20kgCount: number;
+  breakfastAddons?: BookingBreakfastAddonInput[];
   selectedRoomOptionId: string;
   roomCount: number;
 }) {
@@ -300,6 +353,7 @@ export function fetchBookingQuote({
     dogUnder10kgCount: String(dogUnder10kgCount),
     dog10To20kgCount: String(dog10To20kgCount),
     dogOver20kgCount: String(dogOver20kgCount),
+    breakfastAddons: JSON.stringify(breakfastAddons),
     selectedRoomOptionId,
     roomCount: String(roomCount),
   });
@@ -307,7 +361,7 @@ export function fetchBookingQuote({
 }
 
 export function submitBookingRequest(payload: BookingRequestPayload, customerAccessToken?: string | null) {
-  return bookingRequest<{ ok: boolean; request: { id: string; status: string; check_in: string; check_out: string } }>(
+  return bookingRequest<BookingSubmitResult>(
     "?action=request",
     {
       method: "POST",

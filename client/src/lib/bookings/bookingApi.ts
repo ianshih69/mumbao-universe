@@ -253,12 +253,14 @@ export type BookingRequestPayload = {
 export type BookingSubmitResult = {
   ok: boolean;
   requestId: string;
+  recoveryToken?: string;
   request: {
     id: string;
     status: string;
     check_in: string;
     check_out: string;
     created_at: string | null;
+    hold_expires_at: string | null;
   };
   pricing?: {
     quotedTotal: number | null;
@@ -285,6 +287,34 @@ export type BookingSubmitResult = {
   };
 };
 
+export class BookingApiError extends Error {
+  status: number;
+  code: string;
+  holdExpiresAt: string | null;
+  retryAfterSeconds: number | null;
+
+  constructor({
+    message,
+    status,
+    code,
+    holdExpiresAt,
+    retryAfterSeconds,
+  }: {
+    message: string;
+    status: number;
+    code?: string;
+    holdExpiresAt?: string | null;
+    retryAfterSeconds?: number | null;
+  }) {
+    super(message);
+    this.name = "BookingApiError";
+    this.status = status;
+    this.code = code || "request_failed";
+    this.holdExpiresAt = holdExpiresAt || null;
+    this.retryAfterSeconds = Number.isInteger(retryAfterSeconds) ? retryAfterSeconds ?? null : null;
+  }
+}
+
 async function bookingRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`/api/booking${path}`, {
     ...options,
@@ -296,7 +326,13 @@ async function bookingRequest<T>(path: string, options: RequestInit = {}): Promi
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new Error(data?.message || data?.error || `Booking request failed: ${response.status}`);
+    throw new BookingApiError({
+      message: data?.message || data?.error || `Booking request failed: ${response.status}`,
+      status: response.status,
+      code: data?.code || data?.error,
+      holdExpiresAt: data?.hold_expires_at,
+      retryAfterSeconds: data?.retry_after_seconds,
+    });
   }
 
   return data as T;
@@ -367,6 +403,16 @@ export function submitBookingRequest(payload: BookingRequestPayload, customerAcc
       method: "POST",
       headers: customerAccessToken ? { Authorization: `Bearer ${customerAccessToken}` } : undefined,
       body: JSON.stringify(payload),
+    }
+  );
+}
+
+export function recoverBookingRequest(recoveryToken: string) {
+  return bookingRequest<BookingSubmitResult>(
+    "?action=recover",
+    {
+      method: "POST",
+      body: JSON.stringify({ recoveryToken }),
     }
   );
 }

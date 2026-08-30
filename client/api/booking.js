@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import {
   firstQueryValue,
   getServerEnv,
@@ -5,6 +6,7 @@ import {
   readBody,
   sendJson,
   supabaseRequest,
+  supabaseRpc,
 } from "../server/shopShared.js";
 import {
   buildBookingPricingSnapshot,
@@ -28,6 +30,18 @@ const VALID_PET_TYPES = new Set(["dog"]);
 
 function makeRequestId() {
   return `booking-public-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createBookingRecoveryToken() {
+  return randomBytes(32).toString("base64url");
+}
+
+function hashBookingRecoveryToken(token) {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+function isBookingRecoveryToken(token) {
+  return typeof token === "string" && /^[A-Za-z0-9_-]{43}$/.test(token);
 }
 
 function httpError(status, message, code = "request_failed") {
@@ -274,19 +288,11 @@ function validateDateRange(checkIn, checkOut, settings) {
 }
 
 async function findUnavailableRanges(checkIn, checkOut) {
-  const [blocks, requests] = await Promise.all([
-    supabaseRequest(
-      `/booking_availability_blocks?status=eq.confirmed&check_in=lt.${encodeURIComponent(checkOut)}&check_out=gt.${encodeURIComponent(checkIn)}&select=id,check_in,check_out`
-    ),
-    supabaseRequest(
-      `/booking_requests?status=eq.confirmed&check_in=lt.${encodeURIComponent(checkOut)}&check_out=gt.${encodeURIComponent(checkIn)}&select=id,check_in,check_out`
-    ),
-  ]);
-
-  return [
-    ...(Array.isArray(blocks) ? blocks : []),
-    ...(Array.isArray(requests) ? requests : []),
-  ];
+  const ranges = await supabaseRpc("get_public_booking_unavailable_ranges", {
+    p_check_in: checkIn,
+    p_check_out: checkOut,
+  });
+  return Array.isArray(ranges) ? ranges : [];
 }
 
 function buildUnavailableDates(ranges, from, to) {
@@ -573,6 +579,7 @@ async function handleRequest(req, res, requestId) {
   }
 
   const customerProfile = await getOptionalCustomerProfile(req);
+  const recoveryToken = createBookingRecoveryToken();
   const submittedSnapshot = buildSubmittedBookingSnapshot({
     pricingSnapshot,
     stayDetails,
@@ -605,7 +612,8 @@ async function handleRequest(req, res, requestId) {
     balance_amount: pricingSnapshot.balance_amount,
     pricing_breakdown: pricingSnapshot.pricing_breakdown,
     quoted_at: pricingSnapshot.quoted_at,
-    status: "pending_review",
+    recovery_token_hash: hashBookingRecoveryToken(recoveryToken),
+    submitted_snapshot: submittedSnapshot,
     source: "official_site",
     raw_payload: {
       stay_type: stayDetails.stayType,
@@ -655,37 +663,94 @@ async function handleRequest(req, res, requestId) {
     },
   };
 
-  const rows = await supabaseRequest("/booking_requests", {
-    method: "POST",
-    body: JSON.stringify(bookingRequestPayload),
+  const holdResult = await supabaseRpc("acquire_villa_booking_hold", {
+    p_request: bookingRequestPayload,
   });
-  const request = Array.isArray(rows) ? rows[0] : rows;
+  if (!holdResult?.ok) {
+    if (holdResult?.code === "booking_temporarily_held") {
+      return sendJson(res, 409, {
+        ok: false,
+        requestId,
+        error: "booking_temporarily_held",
+        code: "booking_temporarily_held",
+        message: "此日期目前正由其他旅客暫時保留中。對方有 15 分鐘完成付款。若未在期限內完成，系統將自動重新開放此日期。請稍後再確認房況。",
+        hold_expires_at: holdResult.hold_expires_at || null,
+        retry_after_seconds: Number.isInteger(holdResult.retry_after_seconds)
+          ? holdResult.retry_after_seconds
+          : null,
+      });
+    }
+    return sendJson(res, 409, {
+      ok: false,
+      requestId,
+      error: "date_unavailable",
+      code: "date_unavailable",
+      message: "這段日期目前無法預約，請重新選擇日期。",
+    });
+  }
+  const request = holdResult.request;
 
-  await supabaseRequest("/booking_availability_alerts", {
-    method: "POST",
-    body: JSON.stringify({
-      severity: "review",
-      alert_type: "website_booking_request",
-      title: "官網預約申請待確認",
-      description: `${guestName} 申請 ${checkIn} 至 ${checkOut}，${stayDetails.stayType === "villa" ? "包棟 villa" : `${stayDetails.roomCount} 間客房`}`,
-      check_in: checkIn,
-      check_out: checkOut,
-      source: "website",
-      notes: request?.id ? `booking_request_id=${request.id}` : null,
-    }),
-  });
+  try {
+    await supabaseRequest("/booking_availability_alerts", {
+      method: "POST",
+      body: JSON.stringify({
+        severity: "review",
+        alert_type: "website_booking_request",
+        title: "官網預約申請待確認",
+        description: `${guestName} 申請 ${checkIn} 至 ${checkOut}，${stayDetails.stayType === "villa" ? "包棟 villa" : `${stayDetails.roomCount} 間客房`}`,
+        check_in: checkIn,
+        check_out: checkOut,
+        source: "website",
+        notes: request?.id ? `booking_request_id=${request.id}` : null,
+      }),
+    });
+  } catch (alertError) {
+    console.warn("[booking] hold created but alert insert failed", {
+      requestId,
+      bookingRequestId: request?.id || null,
+      message: alertError instanceof Error ? alertError.message : String(alertError),
+    });
+  }
 
   sendJson(res, 200, {
     ok: true,
     requestId,
+    recoveryToken,
     request: {
       id: request?.id,
-      status: request?.status || "pending_review",
+      status: request?.status || "payment_hold",
       check_in: checkIn,
       check_out: checkOut,
       created_at: request?.created_at || null,
+      hold_expires_at: request?.hold_expires_at || null,
     },
     ...submittedSnapshot,
+  });
+}
+
+async function handleRecovery(req, res, requestId) {
+  const body = await readBody(req);
+  const recoveryToken = body?.recoveryToken;
+  if (!isBookingRecoveryToken(recoveryToken)) {
+    throw httpError(400, "訂房恢復憑證格式不正確。", "invalid_booking_recovery_token");
+  }
+
+  const recovered = await supabaseRpc("recover_booking_hold", {
+    p_recovery_token_hash: hashBookingRecoveryToken(recoveryToken),
+  });
+  if (!recovered?.ok) {
+    return sendJson(res, 410, {
+      ok: false,
+      requestId,
+      error: "booking_recovery_unavailable",
+      code: "booking_recovery_unavailable",
+      message: "此訂房保留已失效，請重新確認房況。",
+    });
+  }
+
+  sendJson(res, 200, {
+    requestId,
+    ...recovered,
   });
 }
 
@@ -695,6 +760,7 @@ async function dispatch(req, res, requestId) {
   if (req.method === "GET" && action === "availability") return handleAvailability(req, res, requestId);
   if (req.method === "GET" && action === "quote") return handleQuote(req, res, requestId);
   if (req.method === "POST" && action === "request") return handleRequest(req, res, requestId);
+  if (req.method === "POST" && action === "recover") return handleRecovery(req, res, requestId);
   throw httpError(404, "Unknown booking action.", "unknown_action");
 }
 

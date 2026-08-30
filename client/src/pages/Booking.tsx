@@ -26,9 +26,11 @@ import {
   resolveBookingPetPlan,
 } from "@/lib/bookings/bookingGuestRules.js";
 import {
+  BookingApiError,
   checkBookingAvailability,
   fetchBookingCalendar,
   fetchBookingQuote,
+  recoverBookingRequest,
   submitBookingRequest,
   type BookingCalendarResult,
   type BookingPackageType,
@@ -119,6 +121,7 @@ function createDefaultBookingForm(today = todayText()): BookingForm {
 
 const bookingTestPassword = "123";
 const bookingTestStorageKey = "mumbao_booking_test_unlocked_v1";
+const bookingRecoveryStorageKey = "mumbao_booking_hold_recovery_v1";
 const calendarFilters: Array<{ value: BookingCalendarFilter; label: string }> = [
   { value: "all", label: "全部" },
   { value: "whole_house", label: "只看包棟" },
@@ -184,6 +187,54 @@ function maskPhone(phone: string) {
   if (!compact) return "-";
   if (compact.length <= 4) return `${compact.slice(0, 1)}***`;
   return `${compact.slice(0, 2)}${"*".repeat(Math.max(compact.length - 4, 3))}${compact.slice(-2)}`;
+}
+
+type BookingRecoverySession = {
+  recoveryToken: string;
+  result: BookingSubmitResult;
+};
+
+function readBookingRecoverySession(): BookingRecoverySession | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(bookingRecoveryStorageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<BookingRecoverySession>;
+    if (
+      typeof parsed.recoveryToken !== "string" ||
+      !/^[A-Za-z0-9_-]{43}$/.test(parsed.recoveryToken) ||
+      !parsed.result?.request?.id ||
+      !parsed.result?.pricing
+    ) {
+      return null;
+    }
+    return parsed as BookingRecoverySession;
+  } catch {
+    return null;
+  }
+}
+
+function writeBookingRecoverySession(recoveryToken: string, result: BookingSubmitResult) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(
+    bookingRecoveryStorageKey,
+    JSON.stringify({
+      recoveryToken,
+      result: { ...result, recoveryToken: undefined },
+    } satisfies BookingRecoverySession)
+  );
+}
+
+function clearBookingRecoverySession() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(bookingRecoveryStorageKey);
+}
+
+function bookingHoldConflictMessage(retryAfterSeconds: number | null) {
+  const approximateMinutes = Number.isInteger(retryAfterSeconds)
+    ? Math.max(1, Math.ceil((retryAfterSeconds || 0) / 60))
+    : 15;
+  return `此日期目前正由其他旅客暫時保留中。對方約有 ${approximateMinutes} 分鐘完成付款。若未在期限內完成，系統將自動重新開放此日期。請稍後再確認房況。`;
 }
 
 function buildBookingRequestNotes(notes: string, infants: number) {
@@ -544,6 +595,7 @@ function calendarDayAriaLabel(day: BookingCalendarDayView, minDate: string, maxD
 
 export default function Booking() {
   const { session } = useCustomerAuth();
+  const initialBookingRecovery = useMemo(() => readBookingRecoverySession(), []);
   const [form, setForm] = useState<BookingForm>(() => getInitialBookingForm());
   const [guestNameParts, setGuestNameParts] = useState(() => splitGuestName(form.guest_name));
   const [nationality, setNationality] = useState("台灣");
@@ -556,7 +608,7 @@ export default function Booking() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [otherNeedsOpen, setOtherNeedsOpen] = useState(false);
-  const [bookingStep, setBookingStep] = useState<BookingStep>(1);
+  const [bookingStep, setBookingStep] = useState<BookingStep>(() => initialBookingRecovery ? 4 : 1);
   const [breakfastAddonsByDate, setBreakfastAddonsByDate] = useState<Record<string, number>>({});
   const [hasAgreedBookingTerms, setHasAgreedBookingTerms] = useState(false);
   const [dailyPriceDetailsOpen, setDailyPriceDetailsOpen] = useState(false);
@@ -572,8 +624,10 @@ export default function Booking() {
   const [priceQuote, setPriceQuote] = useState<BookingPriceQuoteResult | null>(null);
   const [priceQuoteError, setPriceQuoteError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submittedRequestId, setSubmittedRequestId] = useState("");
-  const [submittedBookingSummary, setSubmittedBookingSummary] = useState<BookingSubmitResult | null>(null);
+  const [submittedRequestId, setSubmittedRequestId] = useState(() => initialBookingRecovery?.result.request.id || "");
+  const [submittedBookingSummary, setSubmittedBookingSummary] = useState<BookingSubmitResult | null>(
+    () => initialBookingRecovery?.result || null
+  );
   const [isBookingTestUnlocked, setIsBookingTestUnlocked] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.sessionStorage.getItem(bookingTestStorageKey) === "true";
@@ -750,6 +804,37 @@ export default function Booking() {
   const submittedDepositAmount = submittedPricing?.depositAmount ?? submittedPricingBreakdown?.depositAmount ?? null;
   const submittedBalanceAmount = submittedPricing?.balanceAmount ?? submittedPricingBreakdown?.balanceAmount ?? null;
   const activeGalleryImage = bookingGalleryImages[selectedGalleryIndex] || bookingGalleryImages[0];
+
+  useEffect(() => {
+    if (!initialBookingRecovery) return;
+
+    let isCurrent = true;
+    recoverBookingRequest(initialBookingRecovery.recoveryToken)
+      .then((result) => {
+        if (!isCurrent) return;
+        setSubmittedRequestId(result.request.id);
+        setSubmittedBookingSummary(result);
+        setBookingStep(4);
+        writeBookingRecoverySession(initialBookingRecovery.recoveryToken, result);
+      })
+      .catch((recoveryError) => {
+        if (!isCurrent) return;
+        if (
+          recoveryError instanceof BookingApiError &&
+          (recoveryError.code === "booking_recovery_unavailable" || recoveryError.code === "invalid_booking_recovery_token")
+        ) {
+          clearBookingRecoverySession();
+          setSubmittedRequestId("");
+          setSubmittedBookingSummary(null);
+          setBookingStep(1);
+          setError(recoveryError.message);
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [initialBookingRecovery]);
 
   useEffect(() => {
     if (!isBookingTestUnlocked) return;
@@ -1286,6 +1371,9 @@ export default function Booking() {
       const result = await submitBookingRequest(payload, session?.access_token || null);
       setSubmittedRequestId(result.request.id);
       setSubmittedBookingSummary(result);
+      if (result.recoveryToken) {
+        writeBookingRecoverySession(result.recoveryToken, result);
+      }
       setMessage(bookingCopy.successMessage);
       setBookingStep(4);
       scrollToBookingFlow();
@@ -1299,7 +1387,11 @@ export default function Booking() {
         return next;
       });
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "預約申請送出失敗，請稍後再試。");
+      if (submitError instanceof BookingApiError && submitError.code === "booking_temporarily_held") {
+        setError(bookingHoldConflictMessage(submitError.retryAfterSeconds));
+      } else {
+        setError(submitError instanceof Error ? submitError.message : "預約申請送出失敗，請稍後再試。");
+      }
     } finally {
       setIsSubmitting(false);
     }

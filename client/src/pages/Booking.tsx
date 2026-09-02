@@ -3,6 +3,8 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Clock3,
+  Copy,
   Gift,
   Minus,
   Plus,
@@ -31,6 +33,7 @@ import {
   fetchBookingCalendar,
   fetchBookingQuote,
   recoverBookingRequest,
+  reportBookingBankTransfer,
   submitBookingRequest,
   type BookingCalendarResult,
   type BookingPackageType,
@@ -41,6 +44,12 @@ import {
   type BookingSubmitResult,
   type StayType,
 } from "@/lib/bookings/bookingApi";
+import {
+  bookingPaymentRemainingSeconds,
+  createBookingPaymentClockSync,
+  formatBookingPaymentCountdown,
+  type BookingPaymentClockSync,
+} from "@/lib/bookings/bookingPaymentView";
 import {
   getBookingRangeIssue,
   isBookableStayNight,
@@ -192,6 +201,7 @@ function maskPhone(phone: string) {
 type BookingRecoverySession = {
   recoveryToken: string;
   result: BookingSubmitResult;
+  paymentServerReceivedAtMs?: number;
 };
 
 function readBookingRecoverySession(): BookingRecoverySession | null {
@@ -221,6 +231,7 @@ function writeBookingRecoverySession(recoveryToken: string, result: BookingSubmi
     JSON.stringify({
       recoveryToken,
       result: { ...result, recoveryToken: undefined },
+      paymentServerReceivedAtMs: Date.now(),
     } satisfies BookingRecoverySession)
   );
 }
@@ -320,6 +331,21 @@ function formatCompactDate(dateText: string) {
 function formatTwd(amount: number | null | undefined) {
   if (!Number.isFinite(Number(amount))) return "—";
   return `TWD ${Number(amount).toLocaleString("zh-TW")}`;
+}
+
+function formatTaipeiDateTime(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
 }
 
 function formatDiscountRateLabel(rate: number | null | undefined) {
@@ -628,6 +654,21 @@ export default function Booking() {
   const [submittedBookingSummary, setSubmittedBookingSummary] = useState<BookingSubmitResult | null>(
     () => initialBookingRecovery?.result || null
   );
+  const [bookingRecoveryToken, setBookingRecoveryToken] = useState(() => initialBookingRecovery?.recoveryToken || "");
+  const [paymentClockTick, setPaymentClockTick] = useState(() => Date.now());
+  const [paymentClockSync, setPaymentClockSync] = useState<BookingPaymentClockSync | null>(() => {
+    const receivedAtMs = initialBookingRecovery?.paymentServerReceivedAtMs;
+    return Number.isFinite(receivedAtMs)
+      ? createBookingPaymentClockSync(initialBookingRecovery?.result.payment?.serverNow, receivedAtMs)
+      : null;
+  });
+  const [paymentReportOpen, setPaymentReportOpen] = useState(false);
+  const [paymentBankLast5, setPaymentBankLast5] = useState("");
+  const [paymentPayerName, setPaymentPayerName] = useState("");
+  const [paymentReportNotes, setPaymentReportNotes] = useState("");
+  const [paymentReportError, setPaymentReportError] = useState("");
+  const [paymentCopyMessage, setPaymentCopyMessage] = useState("");
+  const [isReportingPayment, setIsReportingPayment] = useState(false);
   const [isBookingTestUnlocked, setIsBookingTestUnlocked] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.sessionStorage.getItem(bookingTestStorageKey) === "true";
@@ -799,10 +840,39 @@ export default function Booking() {
   const submittedTotal = submittedPricing?.quotedTotal ?? submittedPricingBreakdown?.total ?? null;
   const submittedLodgingSubtotal =
     submittedPricingBreakdown?.lodgingSubtotal ?? (submittedTotal == null ? null : Math.max(submittedTotal - submittedBreakfastAddonTotal, 0));
+  const submittedChildFeeTotal = submittedPricingBreakdown?.childFeeTotal || 0;
+  const submittedPetFeeTotal = submittedPricingBreakdown?.petFeeTotal || 0;
+  const submittedAdultLodgingTotal = submittedLodgingSubtotal == null
+    ? null
+    : Math.max(submittedLodgingSubtotal - submittedChildFeeTotal - submittedPetFeeTotal, 0);
   const submittedDepositRatePercent =
     submittedPricing?.depositRate != null ? Math.round(Number(submittedPricing.depositRate) * 100) : quoteDepositRatePercent;
   const submittedDepositAmount = submittedPricing?.depositAmount ?? submittedPricingBreakdown?.depositAmount ?? null;
   const submittedBalanceAmount = submittedPricing?.balanceAmount ?? submittedPricingBreakdown?.balanceAmount ?? null;
+  const submittedPetDepositAmount = submittedPricingBreakdown?.petDepositAmount || 0;
+  const submittedPayment = submittedBookingSummary?.payment || null;
+  const submittedPaymentStatus = submittedRequest?.status || submittedPayment?.status || "";
+  const paymentDeadline = submittedPaymentStatus === "payment_review"
+    ? submittedRequest?.review_expires_at || submittedPayment?.reviewExpiresAt || null
+    : submittedRequest?.hold_expires_at || submittedPayment?.holdExpiresAt || null;
+  const paymentRemainingSeconds = bookingPaymentRemainingSeconds({
+    deadline: paymentDeadline,
+    clockSync: paymentClockSync,
+    currentTimeMs: paymentClockTick,
+  });
+  const paymentHoldExpired = submittedPaymentStatus === "payment_hold" && paymentRemainingSeconds <= 0;
+  const paymentReviewExpired = submittedPaymentStatus === "payment_review" && paymentRemainingSeconds <= 0;
+  const paymentExpired = submittedPaymentStatus === "expired" || paymentHoldExpired || paymentReviewExpired;
+  const paymentInstructionsVisible = Boolean(
+    submittedPayment?.enabled && ["payment_hold", "payment_review"].includes(submittedPaymentStatus)
+  );
+  const paymentCanReport = Boolean(
+    submittedPayment?.enabled &&
+      submittedPayment.method === "bank_transfer" &&
+      submittedPaymentStatus === "payment_hold" &&
+      !paymentHoldExpired &&
+      bookingRecoveryToken
+  );
   const activeGalleryImage = bookingGalleryImages[selectedGalleryIndex] || bookingGalleryImages[0];
 
   useEffect(() => {
@@ -814,6 +884,7 @@ export default function Booking() {
         if (!isCurrent) return;
         setSubmittedRequestId(result.request.id);
         setSubmittedBookingSummary(result);
+        setBookingRecoveryToken(initialBookingRecovery.recoveryToken);
         setBookingStep(4);
         writeBookingRecoverySession(initialBookingRecovery.recoveryToken, result);
       })
@@ -826,6 +897,7 @@ export default function Booking() {
           clearBookingRecoverySession();
           setSubmittedRequestId("");
           setSubmittedBookingSummary(null);
+          setBookingRecoveryToken("");
           setBookingStep(1);
           setError(recoveryError.message);
         }
@@ -835,6 +907,24 @@ export default function Booking() {
       isCurrent = false;
     };
   }, [initialBookingRecovery]);
+
+  useEffect(() => {
+    const receivedAtMs = Date.now();
+    setPaymentClockTick(receivedAtMs);
+    const nextClockSync = createBookingPaymentClockSync(submittedBookingSummary?.payment?.serverNow, receivedAtMs);
+    setPaymentClockSync((currentClockSync) =>
+      currentClockSync?.serverNowMs === nextClockSync?.serverNowMs ? currentClockSync : nextClockSync
+    );
+  }, [submittedBookingSummary?.payment?.serverNow]);
+
+  useEffect(() => {
+    if (!submittedBookingSummary?.payment?.enabled || !["payment_hold", "payment_review"].includes(submittedPaymentStatus)) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => setPaymentClockTick(Date.now()), 1000);
+    return () => window.clearInterval(intervalId);
+  }, [submittedBookingSummary?.payment?.enabled, submittedPaymentStatus]);
 
   useEffect(() => {
     if (!isBookingTestUnlocked) return;
@@ -1372,6 +1462,7 @@ export default function Booking() {
       setSubmittedRequestId(result.request.id);
       setSubmittedBookingSummary(result);
       if (result.recoveryToken) {
+        setBookingRecoveryToken(result.recoveryToken);
         writeBookingRecoverySession(result.recoveryToken, result);
       }
       setMessage(bookingCopy.successMessage);
@@ -1394,6 +1485,50 @@ export default function Booking() {
       }
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function copyPaymentText(value: string) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setPaymentCopyMessage("已複製");
+      window.setTimeout(() => setPaymentCopyMessage(""), 1800);
+    } catch {
+      setPaymentCopyMessage("無法複製，請手動選取");
+      window.setTimeout(() => setPaymentCopyMessage(""), 2200);
+    }
+  }
+
+  async function handlePaymentReportSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!paymentCanReport || !bookingRecoveryToken) {
+      setPaymentReportError("本次付款保留時間已結束，請重新確認房況。");
+      return;
+    }
+    if (!/^\d{5}$/.test(paymentBankLast5)) {
+      setPaymentReportError("請填寫匯款帳號末五碼。");
+      return;
+    }
+
+    setIsReportingPayment(true);
+    setPaymentReportError("");
+    try {
+      const result = await reportBookingBankTransfer({
+        recoveryToken: bookingRecoveryToken,
+        bankLast5: paymentBankLast5,
+        payerName: paymentPayerName,
+        notes: paymentReportNotes,
+      });
+      setSubmittedRequestId(result.request.id);
+      setSubmittedBookingSummary(result);
+      writeBookingRecoverySession(bookingRecoveryToken, result);
+      setPaymentReportOpen(false);
+    } catch (reportError) {
+      setPaymentReportError(reportError instanceof Error ? reportError.message : "匯款資料送出失敗，請稍後再試。");
+      setPaymentClockTick(Date.now());
+    } finally {
+      setIsReportingPayment(false);
     }
   }
 
@@ -2758,13 +2893,198 @@ export default function Booking() {
                   </span>
                   <div className="min-w-0">
                     <h2 className="text-2xl font-semibold text-stone-900">訂房申請已送出</h2>
-                    <p className="mt-2 text-sm leading-6 text-stone-600">{bookingCopy.successMessage}</p>
+                    <p className="mt-2 text-sm leading-6 text-stone-600">
+                      {submittedPayment?.enabled
+                        ? paymentExpired
+                          ? "本次付款保留時間已結束，請重新確認最新房況。"
+                          : submittedPaymentStatus === "payment_review"
+                            ? "我們已收到您的匯款資料，館主確認收到訂金後，訂房才正式成立。"
+                            : submittedPaymentStatus === "confirmed"
+                              ? "館主已確認收到訂金，您的訂房已正式成立。"
+                              : submittedPaymentStatus === "cancelled"
+                                ? "這筆訂房目前已取消，如有疑問請透過官方 LINE 與我們確認。"
+                                : "此日期目前已為您暫時保留，請於付款期限內完成訂金。訂房於確認收到訂金後正式成立。"
+                        : bookingCopy.successMessage}
+                    </p>
                     <p className="mt-3 text-sm leading-6 text-stone-500">
-                      訂單編號：<span className="font-mono font-semibold text-stone-900">{submittedRequest?.id || submittedRequestId}</span>
+                      訂房編號：<span className="font-mono font-semibold text-stone-900">{submittedRequest?.booking_reference || "—"}</span>
                     </p>
                   </div>
                 </div>
+
+                {submittedPayment?.enabled && submittedPaymentStatus === "payment_hold" && !paymentHoldExpired && (
+                  <div className="mt-5 grid gap-3 border-t border-[#f1e8dc] pt-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-[#8b6f5b]" />
+                      <div>
+                        <p className="text-xs font-medium text-stone-500">付款剩餘時間</p>
+                        <p className="mt-1 font-mono text-3xl font-semibold text-[#765d4a]">
+                          {formatBookingPaymentCountdown(paymentRemainingSeconds)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-sm leading-6 text-stone-500 sm:text-right">
+                      <p className="text-xs font-medium">保留至</p>
+                      <p className="font-semibold text-stone-800">{formatTaipeiDateTime(paymentDeadline)}</p>
+                    </div>
+                  </div>
+                )}
+
+                {submittedPayment?.enabled && submittedPaymentStatus === "payment_review" && !paymentReviewExpired && (
+                  <div className="mt-5 border-t border-[#f1e8dc] pt-5 text-sm leading-6">
+                    <p className="font-semibold text-[#765d4a]">匯款資料已送出，等待館主確認入帳</p>
+                    <p className="mt-1 text-stone-500">付款確認保留至 {formatTaipeiDateTime(paymentDeadline)}</p>
+                  </div>
+                )}
+
+                {submittedPayment?.enabled && paymentExpired && (
+                  <div className="mt-5 border-t border-[#f1e8dc] pt-5 text-sm leading-6">
+                    <p className="font-semibold text-stone-900">付款保留時間已結束</p>
+                    <p className="mt-1 text-stone-600">此日期目前已重新開放，若仍希望入住，請重新確認最新房況。</p>
+                    <a
+                      href="/booking"
+                      className="mt-3 inline-flex h-10 items-center justify-center rounded-[8px] border border-[#d7c5b2] bg-white px-4 font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
+                      onClick={clearBookingRecoverySession}
+                    >
+                      重新確認房況
+                    </a>
+                  </div>
+                )}
               </div>
+
+              {paymentInstructionsVisible && (
+                <section className="min-w-0 rounded-[18px] border border-[#d9c6b5] bg-[#fffaf3] p-4 sm:p-6">
+                  <p className="text-xs font-medium text-stone-500">本次應付訂金</p>
+                  <p className="mt-2 text-3xl font-semibold text-[#765d4a]">{formatTwd(submittedDepositAmount)}</p>
+                  <div className="mt-5 grid gap-2 border-t border-[#eadfce] pt-4 text-sm">
+                    {renderStep3AmountRow("訂房總額", submittedTotal)}
+                    {renderStep3AmountRow(`訂金 ${submittedDepositRatePercent ?? 30}%`, submittedDepositAmount)}
+                    {renderStep3AmountRow(`尾款 ${submittedDepositRatePercent == null ? 70 : 100 - submittedDepositRatePercent}%`, submittedBalanceAmount)}
+                    {submittedPetDepositAmount > 0 && renderStep3AmountRow("寵物押金（入住時另收）", submittedPetDepositAmount)}
+                  </div>
+                </section>
+              )}
+
+              {paymentInstructionsVisible && submittedPayment?.method === "bank_transfer" && submittedPayment.bank && (
+                <section className="min-w-0 rounded-[18px] border border-[#eadfce] bg-white/95 p-4 sm:p-6">
+                  <div className="flex min-w-0 items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-medium text-stone-500">付款方式</p>
+                      <h2 className="mt-1 text-xl font-semibold text-stone-900">ATM／銀行轉帳</h2>
+                    </div>
+                    {paymentCopyMessage && <p className="text-xs font-medium text-[#765d4a]">{paymentCopyMessage}</p>}
+                  </div>
+
+                  <div className="mt-5 grid gap-4 text-sm leading-6 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-medium text-stone-500">銀行</p>
+                      <p className="mt-1 font-semibold text-stone-900">{submittedPayment.bank.name}（{submittedPayment.bank.code}）</p>
+                      <p className="text-stone-500">{submittedPayment.bank.branch}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-stone-500">戶名</p>
+                      <p className="mt-1 font-semibold text-stone-900">{submittedPayment.bank.accountName}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-stone-500">帳號</p>
+                      <p className="mt-1 font-mono font-semibold text-stone-900">{submittedPayment.bank.accountNumber}</p>
+                      <button
+                        type="button"
+                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#765d4a] disabled:cursor-not-allowed disabled:text-stone-400"
+                        onClick={() => copyPaymentText(submittedPayment.bank?.accountNumber || "")}
+                        disabled={!paymentCanReport}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        複製帳號
+                      </button>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-stone-500">本次應付</p>
+                      <p className="mt-1 font-semibold text-stone-900">{formatTwd(submittedDepositAmount)}</p>
+                      <button
+                        type="button"
+                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#765d4a] disabled:cursor-not-allowed disabled:text-stone-400"
+                        onClick={() => copyPaymentText(String(submittedDepositAmount || ""))}
+                        disabled={!paymentCanReport}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        複製付款金額
+                      </button>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <p className="text-xs font-medium text-stone-500">付款期限</p>
+                      <p className="mt-1 font-semibold text-stone-900">{formatTaipeiDateTime(paymentDeadline)}</p>
+                    </div>
+                  </div>
+
+                  {paymentCanReport && !paymentReportOpen && (
+                    <Button
+                      type="button"
+                      className="mt-5 h-11 bg-[#8b6f5b] hover:bg-[#765d4a]"
+                      onClick={() => {
+                        setPaymentReportOpen(true);
+                        setPaymentReportError("");
+                      }}
+                    >
+                      我已完成匯款
+                    </Button>
+                  )}
+
+                  {paymentCanReport && paymentReportOpen && (
+                    <form className="mt-5 grid gap-4 border-t border-[#f1e8dc] pt-5" onSubmit={handlePaymentReportSubmit}>
+                      <h3 className="font-semibold text-stone-900">匯款確認</h3>
+                      <label className="grid gap-1.5 text-sm text-stone-700">
+                        <span className="font-medium">匯款帳號末五碼 <span className="text-[#9a5f52]">*</span></span>
+                        <input
+                          className={fieldClassName()}
+                          inputMode="numeric"
+                          maxLength={5}
+                          autoComplete="off"
+                          value={paymentBankLast5}
+                          onChange={(event) => setPaymentBankLast5(event.target.value.replace(/\D/g, "").slice(0, 5))}
+                        />
+                      </label>
+                      <label className="grid gap-1.5 text-sm text-stone-700">
+                        <span className="font-medium">匯款人姓名（選填）</span>
+                        <input
+                          className={fieldClassName()}
+                          maxLength={80}
+                          value={paymentPayerName}
+                          onChange={(event) => setPaymentPayerName(event.target.value)}
+                        />
+                      </label>
+                      <label className="grid gap-1.5 text-sm text-stone-700">
+                        <span className="font-medium">備註（選填）</span>
+                        <textarea
+                          className={textareaClassName()}
+                          maxLength={500}
+                          value={paymentReportNotes}
+                          onChange={(event) => setPaymentReportNotes(event.target.value)}
+                        />
+                      </label>
+                      <p className="text-xs leading-5 text-stone-500">付款金額以本次訂房訂金為準，送出後由館主確認入帳。</p>
+                      {paymentReportError && <p className="text-sm text-[#9a5f52]">{paymentReportError}</p>}
+                      <div className="flex flex-wrap gap-3">
+                        <Button type="submit" className="h-11 bg-[#8b6f5b] hover:bg-[#765d4a]" disabled={isReportingPayment}>
+                          {isReportingPayment ? "送出中..." : "送出匯款資料"}
+                        </Button>
+                        <Button type="button" variant="outline" className="h-11 border-[#d7c5b2]" onClick={() => setPaymentReportOpen(false)}>
+                          取消
+                        </Button>
+                      </div>
+                    </form>
+                  )}
+
+                  {submittedPaymentStatus === "payment_review" && submittedPayment.report && (
+                    <div className="mt-5 border-t border-[#f1e8dc] pt-5 text-sm leading-6 text-stone-600">
+                      <p className="font-semibold text-stone-900">匯款資料已送出</p>
+                      <p className="mt-1">帳號末五碼：{submittedPayment.report.bankLast5 || "—"}</p>
+                      {submittedPayment.report.payerName && <p>匯款人：{submittedPayment.report.payerName}</p>}
+                      <p>回報時間：{formatTaipeiDateTime(submittedPayment.report.reportedAt)}</p>
+                    </div>
+                  )}
+                </section>
+              )}
 
               <section className="min-w-0 rounded-[18px] border border-[#eadfce] bg-white/95 p-4 sm:p-6">
                 <h2 className="text-xl font-semibold text-stone-900">訂房資訊</h2>
@@ -2796,10 +3116,13 @@ export default function Booking() {
                     </div>
                   )}
                   <div className="grid gap-3 border-t border-[#f1e8dc] pt-4">
-                    {renderStep3AmountRow("住宿相關費用", submittedLodgingSubtotal)}
+                    {renderStep3AmountRow("包棟住宿", submittedAdultLodgingTotal)}
+                    {submittedChildFeeTotal > 0 && renderStep3AmountRow("孩童費", submittedChildFeeTotal)}
+                    {submittedPetFeeTotal > 0 && renderStep3AmountRow("寵物住宿費", submittedPetFeeTotal)}
                     {renderStep3AmountRow("總價", submittedTotal, undefined, true)}
                     {renderStep3AmountRow(`應付訂金 ${submittedDepositRatePercent ?? 30}%`, submittedDepositAmount)}
                     {renderStep3AmountRow(`尾款 ${submittedDepositRatePercent == null ? 70 : 100 - submittedDepositRatePercent}%`, submittedBalanceAmount)}
+                    {submittedPetDepositAmount > 0 && renderStep3AmountRow("寵物押金（入住時另收）", submittedPetDepositAmount)}
                   </div>
                 </div>
               </section>

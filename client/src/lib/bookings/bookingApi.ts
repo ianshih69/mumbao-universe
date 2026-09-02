@@ -256,11 +256,14 @@ export type BookingSubmitResult = {
   recoveryToken?: string;
   request: {
     id: string;
+    booking_reference: string | null;
     status: string;
     check_in: string;
     check_out: string;
     created_at: string | null;
     hold_expires_at: string | null;
+    payment_reported_at: string | null;
+    review_expires_at: string | null;
   };
   pricing?: {
     quotedTotal: number | null;
@@ -285,6 +288,39 @@ export type BookingSubmitResult = {
     maskedEmail: string;
     maskedPhone: string;
   };
+  payment?: BookingPaymentSettings;
+};
+
+export type BookingPaymentSettings = {
+  enabled: boolean;
+  method?: "bank_transfer";
+  currency?: "TWD" | string;
+  status?: string | null;
+  serverNow?: string | null;
+  holdExpiresAt?: string | null;
+  paymentReportedAt?: string | null;
+  reviewExpiresAt?: string | null;
+  bank?: {
+    name: string;
+    code: string;
+    branch: string;
+    accountName: string;
+    accountNumber: string;
+  };
+  report?: {
+    status: string | null;
+    bankLast5: string | null;
+    payerName: string | null;
+    reportedAt: string | null;
+    verifiedAt: string | null;
+  } | null;
+};
+
+export type BookingPaymentReportPayload = {
+  recoveryToken: string;
+  bankLast5: string;
+  payerName?: string;
+  notes?: string;
 };
 
 export class BookingApiError extends Error {
@@ -413,6 +449,16 @@ export function recoverBookingRequest(recoveryToken: string) {
     {
       method: "POST",
       body: JSON.stringify({ recoveryToken }),
+    }
+  );
+}
+
+export function reportBookingBankTransfer(payload: BookingPaymentReportPayload) {
+  return bookingRequest<BookingSubmitResult & { idempotent?: boolean }>(
+    "?action=report-payment",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
     }
   );
 }

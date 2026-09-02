@@ -22,6 +22,7 @@ import {
   fetchBookingSettings,
   handleBookingAlert,
   parseBookingEmail,
+  reviewBookingBankTransfer,
   saveBookingSettings,
   syncBookingIcal,
   type BookingAlert,
@@ -190,9 +191,17 @@ function sourceLabel(source?: string | null) {
 
 function statusLabel(status?: string | null) {
   if (status === "confirmed") return "confirmed";
+  if (status === "payment_hold") return "付款保留中";
+  if (status === "payment_review") return "待確認入帳";
   if (status === "pending_review") return "pending_review";
   if (status === "cancelled") return "cancelled";
   return status || "-";
+}
+
+function isPaymentReviewExpired(request: BookingRequest) {
+  if (request.status !== "payment_review" || !request.review_expires_at) return false;
+  const deadline = Date.parse(request.review_expires_at);
+  return Number.isFinite(deadline) && deadline <= Date.now();
 }
 
 function stayTypeLabel(request: BookingRequest) {
@@ -386,6 +395,7 @@ export default function AdminBookings() {
   const [icalEnabled, setIcalEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [reviewingRequestId, setReviewingRequestId] = useState("");
   const [monthIndex, setMonthIndex] = useState(0);
   const [reservationFilters, setReservationFilters] = useState<ReservationFilters>({
     source: "all",
@@ -438,10 +448,7 @@ export default function AdminBookings() {
       return true;
     });
   }, [reservationFilters, reservations]);
-  const pendingWebsiteRequests = useMemo(
-    () => bookingRequests.filter((request) => request.status === "pending_review"),
-    [bookingRequests]
-  );
+  const pendingWebsiteRequests = useMemo(() => bookingRequests, [bookingRequests]);
   const websiteRequestAlerts = useMemo(
     () => alerts.filter((alert) => alert.status === "open" && alert.alert_type === "website_booking_request"),
     [alerts]
@@ -515,6 +522,25 @@ export default function AdminBookings() {
 
   function updateManualForm(field: keyof ManualReservationForm, value: string) {
     setManualForm((form) => ({ ...form, [field]: value }));
+  }
+
+  async function handleBankTransferReview(request: BookingRequest, decision: "confirmed" | "cancelled") {
+    if (!token) return;
+    const actionLabel = decision === "confirmed" ? "確認入帳並成立訂房" : "取消此筆匯款回報";
+    if (!window.confirm(`${actionLabel}？`)) return;
+
+    setReviewingRequestId(request.id);
+    setMessage("");
+    setError("");
+    try {
+      await reviewBookingBankTransfer(token, { id: request.id, decision });
+      setMessage(decision === "confirmed" ? "已確認入帳，訂房狀態已更新為 confirmed。" : "已取消此筆匯款回報與訂房申請。");
+      await loadAll();
+    } catch (reviewError) {
+      setError(reviewError instanceof Error ? reviewError.message : "更新匯款確認失敗。");
+    } finally {
+      setReviewingRequestId("");
+    }
   }
 
   function handleCalendarDayClick(date: string) {
@@ -861,19 +887,19 @@ export default function AdminBookings() {
         <section className="rounded-[16px] border border-amber-100 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-stone-900">官網預約申請待確認</h2>
+              <h2 className="text-xl font-semibold text-stone-900">官網訂房與付款確認</h2>
               <p className="mt-1 text-sm text-stone-500">
-                這裡只列出前台 /booking 送出的 pending_review 申請，尚未代表訂房成立。
+                顯示付款保留、待確認入帳與舊版 pending_review 申請；只有確認入帳後才正式成立。
               </p>
             </div>
             <span className="w-fit rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
-              {pendingWebsiteRequests.length} 筆待確認
+              {pendingWebsiteRequests.length} 筆處理中
             </span>
           </div>
 
           {pendingWebsiteRequests.length === 0 ? (
             <div className="mt-4 rounded-[8px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              目前沒有待確認的官網預約申請。
+              目前沒有處理中的官網訂房申請。
             </div>
           ) : (
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -884,10 +910,11 @@ export default function AdminBookings() {
                       <p className="text-sm font-semibold text-stone-900">
                         {request.check_in} → {request.check_out}
                       </p>
+                      <p className="mt-1 text-xs font-medium text-[#765d4a]">訂房編號：{request.booking_reference || "-"}</p>
                       <p className="mt-1 text-xs text-stone-500">建立時間：{formatDateTime(request.created_at)}</p>
                     </div>
                     <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-amber-700">
-                      待確認
+                      {isPaymentReviewExpired(request) ? "確認期限已過" : statusLabel(request.status)}
                     </span>
                   </div>
 
@@ -898,6 +925,11 @@ export default function AdminBookings() {
                     <p>姓名：{request.guest_name || "-"}</p>
                     <p>電話：{request.guest_phone || "-"}</p>
                     <p>Email：{request.guest_email || "-"}</p>
+                    {request.payment_record && <p>應付訂金：{formatAmount(request.payment_record.expected_amount)}</p>}
+                    {request.payment_record?.bank_last5 && <p>匯款末五碼：{request.payment_record.bank_last5}</p>}
+                    {request.payment_record?.payer_name && <p>匯款人：{request.payment_record.payer_name}</p>}
+                    {request.payment_record?.reported_at && <p>回報時間：{formatDateTime(request.payment_record.reported_at)}</p>}
+                    {request.review_expires_at && <p>確認期限：{formatDateTime(request.review_expires_at)}</p>}
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -927,12 +959,38 @@ export default function AdminBookings() {
                         {request.quoted_total != null && <p>報價總額：{formatAmount(request.quoted_total)}</p>}
                       </div>
                     </details>
-                    <Button type="button" size="sm" variant="outline" disabled title="需要新增確認成訂 API 後才能啟用">
-                      確認成訂
-                    </Button>
-                    <Button type="button" size="sm" variant="outline" disabled title="需要新增婉拒 API 後才能啟用">
-                      婉拒
-                    </Button>
+                    {request.status === "payment_review" ? (
+                      <>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="bg-[#8b6f5b] hover:bg-[#765d4a]"
+                          disabled={reviewingRequestId === request.id || isPaymentReviewExpired(request)}
+                          title={isPaymentReviewExpired(request) ? "付款確認期限已過，無法確認入帳" : undefined}
+                          onClick={() => void handleBankTransferReview(request, "confirmed")}
+                        >
+                          確認入帳
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={reviewingRequestId === request.id}
+                          onClick={() => void handleBankTransferReview(request, "cancelled")}
+                        >
+                          取消
+                        </Button>
+                      </>
+                    ) : request.status === "pending_review" ? (
+                      <>
+                        <Button type="button" size="sm" variant="outline" disabled>
+                          確認成訂
+                        </Button>
+                        <Button type="button" size="sm" variant="outline" disabled>
+                          婉拒
+                        </Button>
+                      </>
+                    ) : null}
                   </div>
                 </article>
               ))}

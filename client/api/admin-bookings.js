@@ -20,6 +20,7 @@ const defaultBookingSettings = {
 };
 const bookingRequestCompletionSelect = [
   "id",
+  "booking_reference",
   "guest_name",
   "guest_email",
   "guest_phone",
@@ -343,7 +344,7 @@ function formatAmountForDescription(amount) {
 }
 
 function getBookingDisplayNumber(booking) {
-  return booking?.reference_number || booking?.booking_number || booking?.id || "booking";
+  return booking?.booking_reference || booking?.reference_number || booking?.booking_number || booking?.id || "booking";
 }
 
 async function fetchBookingRequestById(id) {
@@ -1141,9 +1142,96 @@ async function handleReservations(req, res, requestId) {
 async function handleRequests(req, res, requestId) {
   await requireAdmin(req);
   const requests = await supabaseRequest(
-    "/booking_requests?status=eq.pending_review&select=*&order=created_at.desc&limit=100"
+    "/booking_requests?status=in.(payment_review,payment_hold,pending_review)&select=*&order=created_at.desc&limit=100"
   );
-  sendJson(res, 200, { ok: true, requestId, requests: requests || [] });
+  const normalizedRequests = Array.isArray(requests) ? requests : [];
+  const requestIds = normalizedRequests.map((request) => request.id).filter(Boolean);
+  const paymentRows = requestIds.length
+    ? await supabaseRequest(
+        `/booking_payment_records?booking_request_id=in.(${requestIds.map(encodeURIComponent).join(",")})&payment_method=eq.bank_transfer&select=*&order=created_at.desc`
+      )
+    : [];
+  const paymentByBookingId = new Map(
+    (Array.isArray(paymentRows) ? paymentRows : []).map((payment) => [payment.booking_request_id, payment])
+  );
+
+  sendJson(res, 200, {
+    ok: true,
+    requestId,
+    requests: normalizedRequests.map((request) => ({
+      ...request,
+      payment_record: paymentByBookingId.get(request.id) || null,
+    })),
+  });
+}
+
+async function handlePaymentReview(req, res, requestId) {
+  const context = await requirePermission(req, "users.update");
+  const admin = {
+    authUserId: context.actorAuthUserId,
+    email: context.actorEmail,
+    name: context.actorName || context.actorEmail || "Admin",
+  };
+  const body = sanitizePayload(await readBody(req));
+  const bookingId = cleanText(body.id || body.booking_id, 80);
+  const decision = cleanText(body.decision, 20);
+
+  if (!bookingId) throw httpError(400, "Missing booking id.", "missing_booking_id");
+  if (!["confirmed", "cancelled"].includes(decision)) {
+    throw httpError(400, "付款確認狀態不正確。", "invalid_payment_review_decision");
+  }
+
+  const beforeRows = await supabaseRequest(
+    `/booking_requests?id=eq.${encodeURIComponent(bookingId)}&select=*&limit=1`
+  );
+  const before = Array.isArray(beforeRows) ? beforeRows[0] || null : null;
+  if (!before) throw httpError(404, "找不到此訂房申請。", "booking_not_found");
+
+  let reviewResult;
+  try {
+    reviewResult = await supabaseRpc("review_booking_bank_transfer", {
+      p_booking_request_id: bookingId,
+      p_admin_profile_id: context.profile?.id || null,
+      p_decision: decision,
+    });
+  } catch (error) {
+    if (String(error?.message || error).includes("villa_inventory_conflict")) {
+      throw httpError(409, "此日期已被其他有效訂單保留，無法直接確認入帳。", "villa_inventory_conflict");
+    }
+    throw error;
+  }
+
+  if (!reviewResult?.ok) {
+    const code = reviewResult?.code || "payment_review_failed";
+    const status = code === "booking_not_found" || code === "payment_record_not_found" ? 404 : 409;
+    return sendJson(res, status, {
+      ok: false,
+      requestId,
+      error: code,
+      code,
+      message: "目前無法更新這筆匯款確認，請重新整理後再試。",
+    });
+  }
+
+  await writeBookingAuditLog({
+    req,
+    requestId,
+    admin,
+    action: decision === "confirmed" ? "confirm_booking_bank_transfer" : "cancel_booking_bank_transfer",
+    targetType: "booking_request",
+    targetId: bookingId,
+    description: `${decision === "confirmed" ? "確認入帳" : "取消匯款回報"}：${getBookingDisplayNumber(before)}`,
+    beforeData: before,
+    afterData: reviewResult,
+  });
+
+  sendJson(res, 200, {
+    ok: true,
+    requestId,
+    booking: reviewResult.request,
+    payment_record: reviewResult.payment_record,
+    idempotent: Boolean(reviewResult.idempotent),
+  });
 }
 
 async function handleCompleteStay(req, res, requestId) {
@@ -1479,6 +1567,7 @@ async function dispatch(req, res, requestId) {
   if (req.method === "POST" && action === "sync-ical") return handleSyncIcal(req, res, requestId);
   if (req.method === "PATCH" && action === "alert") return handleAlertPatch(req, res, requestId);
   if (req.method === "POST" && action === "complete-stay") return handleCompleteStay(req, res, requestId);
+  if (req.method === "POST" && action === "payment-review") return handlePaymentReview(req, res, requestId);
   throw httpError(404, "Unknown booking action.", "unknown_action");
 }
 

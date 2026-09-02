@@ -45,7 +45,8 @@ export type BookingReservation = {
 
 export type BookingRequest = {
   id: string;
-  status: "pending_review" | "confirmed" | "cancelled";
+  booking_reference?: string | null;
+  status: "payment_hold" | "payment_review" | "pending_review" | "confirmed" | "expired" | "cancelled";
   check_in: string;
   check_out: string;
   stay_type: "villa" | "room";
@@ -124,6 +125,21 @@ export type BookingRequest = {
   final_lodging_amount?: number | null;
   completed_at?: string | null;
   partner_points_ledger_id?: string | null;
+  hold_expires_at?: string | null;
+  payment_reported_at?: string | null;
+  review_expires_at?: string | null;
+  payment_record?: {
+    id: string;
+    payment_method: "bank_transfer" | "credit_card" | "paypal";
+    expected_amount: number;
+    currency: string;
+    status: "reported" | "verified" | "rejected" | "cancelled" | "expired";
+    bank_last5?: string | null;
+    payer_name?: string | null;
+    report_notes?: string | null;
+    reported_at?: string | null;
+    verified_at?: string | null;
+  } | null;
   created_at: string;
   updated_at?: string | null;
 };
@@ -318,6 +334,21 @@ export function completeBookingStay(
       id: payload.id,
       finalLodgingAmount: payload.finalLodgingAmount,
     }),
+  });
+}
+
+export function reviewBookingBankTransfer(
+  token: string,
+  payload: { id: string; decision: "confirmed" | "cancelled" }
+) {
+  return adminBookingRequest<{
+    ok: true;
+    booking: BookingRequest;
+    payment_record: BookingRequest["payment_record"];
+    idempotent: boolean;
+  }>(token, "?action=payment-review", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 

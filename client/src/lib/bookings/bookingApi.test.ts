@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BookingApiError,
   recoverBookingRequest,
+  reportBookingBankTransfer,
   submitBookingRequest,
   type BookingRequestPayload,
 } from "./bookingApi";
@@ -126,6 +127,72 @@ describe("booking hold API contract", () => {
         method: "POST",
         body: JSON.stringify({ recoveryToken }),
       })
+    );
+  });
+
+  it("preserves the server payment-review snapshot and sends no client amount or status", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      requestId: "booking-payment-report",
+      request: {
+        id: "10000000-0000-4000-8000-000000000001",
+        booking_reference: "5827319406",
+        status: "payment_review",
+        check_in: "2026-11-01",
+        check_out: "2026-11-05",
+        created_at: "2026-11-01T08:00:00.000Z",
+        hold_expires_at: "2026-11-01T08:15:00.000Z",
+        payment_reported_at: "2026-11-01T08:05:00.000Z",
+        review_expires_at: "2026-11-01T10:05:00.000Z",
+      },
+      pricing: {
+        quotedTotal: 121564,
+        depositRate: 0.3,
+        depositAmount: 36469,
+        balanceAmount: 85095,
+        pricingBreakdown: { status: "resolved", total: 121564 },
+      },
+      payment: {
+        enabled: true,
+        method: "bank_transfer",
+        status: "payment_review",
+        serverNow: "2026-11-01T08:05:00.000Z",
+        reviewExpiresAt: "2026-11-01T10:05:00.000Z",
+      },
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await reportBookingBankTransfer({
+      recoveryToken: "A".repeat(43),
+      bankLast5: "12345",
+      payerName: "Payment Tester",
+      notes: "test note",
+    });
+
+    expect(result.request).toMatchObject({
+      booking_reference: "5827319406",
+      status: "payment_review",
+      review_expires_at: "2026-11-01T10:05:00.000Z",
+    });
+    expect(result.pricing).toMatchObject({
+      quotedTotal: 121564,
+      depositAmount: 36469,
+      balanceAmount: 85095,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/booking?action=report-payment",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          recoveryToken: "A".repeat(43),
+          bankLast5: "12345",
+          payerName: "Payment Tester",
+          notes: "test note",
+        }),
+      }),
     );
   });
 });

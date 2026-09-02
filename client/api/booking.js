@@ -17,6 +17,10 @@ import {
   resolveBookingGuestPlan,
   resolveBookingPetPlan,
 } from "../src/lib/bookings/bookingGuestRules.js";
+import {
+  getBookingBankTransferSettings,
+  publicBankTransferSettings,
+} from "../server/bookingPayments/config.js";
 
 const DEFAULT_BOOKING_SETTINGS = {
   bookingWindowMonths: 6,
@@ -42,6 +46,17 @@ function hashBookingRecoveryToken(token) {
 
 function isBookingRecoveryToken(token) {
   return typeof token === "string" && /^[A-Za-z0-9_-]{43}$/.test(token);
+}
+
+function getRequestIp(req) {
+  const forwardedFor = String(req.headers?.["x-forwarded-for"] || "").split(",")[0].trim();
+  return forwardedFor || String(req.socket?.remoteAddress || "").trim() || "unknown";
+}
+
+function paymentRateLimitKey(req) {
+  return createHash("sha256")
+    .update(`booking-payment-report:${getRequestIp(req)}`, "utf8")
+    .digest("hex");
 }
 
 function httpError(status, message, code = "request_failed") {
@@ -228,6 +243,29 @@ function buildSubmittedBookingSnapshot({ pricingSnapshot, stayDetails, quote, gu
       maskedEmail: maskBookingEmail(guestEmail),
       maskedPhone: maskBookingPhone(guestPhone),
     },
+  };
+}
+
+function buildPaymentResponse({ request, databaseNow, paymentRecord = null, settings }) {
+  const publicSettings = publicBankTransferSettings(settings);
+  if (!publicSettings.enabled) return publicSettings;
+
+  return {
+    ...publicSettings,
+    status: request?.status || null,
+    serverNow: databaseNow || null,
+    holdExpiresAt: request?.hold_expires_at || null,
+    paymentReportedAt: request?.payment_reported_at || null,
+    reviewExpiresAt: request?.review_expires_at || null,
+    report: paymentRecord
+      ? {
+          status: paymentRecord.status || null,
+          bankLast5: paymentRecord.bank_last5 || null,
+          payerName: paymentRecord.payer_name || null,
+          reportedAt: paymentRecord.reported_at || null,
+          verifiedAt: paymentRecord.verified_at || null,
+        }
+      : null,
   };
 }
 
@@ -718,12 +756,20 @@ async function handleRequest(req, res, requestId) {
     recoveryToken,
     request: {
       id: request?.id,
+      booking_reference: request?.booking_reference || null,
       status: request?.status || "payment_hold",
       check_in: checkIn,
       check_out: checkOut,
       created_at: request?.created_at || null,
       hold_expires_at: request?.hold_expires_at || null,
+      payment_reported_at: request?.payment_reported_at || null,
+      review_expires_at: request?.review_expires_at || null,
     },
+    payment: buildPaymentResponse({
+      request,
+      databaseNow: holdResult.database_now || null,
+      settings: getBookingBankTransferSettings(),
+    }),
     ...submittedSnapshot,
   });
 }
@@ -751,6 +797,100 @@ async function handleRecovery(req, res, requestId) {
   sendJson(res, 200, {
     requestId,
     ...recovered,
+    payment: buildPaymentResponse({
+      request: recovered.request,
+      databaseNow: recovered.database_now || null,
+      paymentRecord: recovered.payment_record || null,
+      settings: getBookingBankTransferSettings(),
+    }),
+  });
+}
+
+async function handlePaymentReport(req, res, requestId) {
+  const settings = getBookingBankTransferSettings();
+  if (!settings.enabled) {
+    throw httpError(404, "目前尚未開放銀行轉帳付款回報。", "bank_transfer_disabled");
+  }
+
+  const body = await readBody(req);
+  const recoveryToken = body?.recoveryToken;
+  if (!isBookingRecoveryToken(recoveryToken)) {
+    throw httpError(400, "訂房恢復憑證格式不正確。", "invalid_booking_recovery_token");
+  }
+
+  const bankLast5 = cleanText(body?.bankLast5, 5);
+  if (!/^\d{5}$/.test(bankLast5)) {
+    throw httpError(400, "請填寫匯款帳號末五碼。", "invalid_bank_last5");
+  }
+
+  const recoveryTokenHash = hashBookingRecoveryToken(recoveryToken);
+  const rateLimitResult = await supabaseRpc("consume_booking_payment_report_rate_limit", {
+    p_key_hash: paymentRateLimitKey(req),
+    p_limit: settings.reportRateLimit.attempts,
+    p_window_seconds: settings.reportRateLimit.windowSeconds,
+  });
+  if (!rateLimitResult?.allowed) {
+    const retryAfterSeconds = Number(rateLimitResult?.retry_after_seconds) || settings.reportRateLimit.windowSeconds;
+    res.setHeader("Retry-After", String(Math.max(1, retryAfterSeconds)));
+    return sendJson(res, 429, {
+      ok: false,
+      requestId,
+      error: "payment_report_rate_limited",
+      code: "payment_report_rate_limited",
+      message: "操作較頻繁，請稍後再試。",
+      retry_after_seconds: retryAfterSeconds,
+    });
+  }
+
+  const reported = await supabaseRpc("report_booking_bank_transfer", {
+    p_recovery_token_hash: recoveryTokenHash,
+    p_bank_last5: bankLast5,
+    p_payer_name: cleanText(body?.payerName, 80) || null,
+    p_notes: cleanText(body?.notes, 500) || null,
+    p_review_minutes: settings.reviewMinutes,
+  });
+
+  if (!reported?.ok) {
+    const code = reported?.code || "payment_report_failed";
+    if (["booking_hold_expired", "payment_review_expired"].includes(code)) {
+      return sendJson(res, 410, {
+        ok: false,
+        requestId,
+        error: code,
+        code,
+        message: "本次付款保留時間已結束，請重新確認房況。",
+      });
+    }
+    if (code === "booking_recovery_unavailable") {
+      return sendJson(res, 410, {
+        ok: false,
+        requestId,
+        error: code,
+        code,
+        message: "此訂房恢復憑證已失效，請重新確認房況。",
+      });
+    }
+    if (code === "invalid_bank_last5") {
+      throw httpError(400, "請填寫匯款帳號末五碼。", code);
+    }
+    return sendJson(res, 409, {
+      ok: false,
+      requestId,
+      error: code,
+      code,
+      message: "目前無法回報這筆付款，請確認訂房狀態後再試。",
+    });
+  }
+
+  sendJson(res, 200, {
+    requestId,
+    ...reported,
+    payment: buildPaymentResponse({
+      request: reported.request,
+      databaseNow: reported.database_now || null,
+      paymentRecord: reported.payment_record || null,
+      settings,
+    }),
   });
 }
 
@@ -761,6 +901,7 @@ async function dispatch(req, res, requestId) {
   if (req.method === "GET" && action === "quote") return handleQuote(req, res, requestId);
   if (req.method === "POST" && action === "request") return handleRequest(req, res, requestId);
   if (req.method === "POST" && action === "recover") return handleRecovery(req, res, requestId);
+  if (req.method === "POST" && action === "report-payment") return handlePaymentReport(req, res, requestId);
   throw httpError(404, "Unknown booking action.", "unknown_action");
 }
 

@@ -7,6 +7,12 @@ import {
   supabaseRequest,
 } from "../server/shopShared.js";
 import { requirePermission } from "../server/adminShop/core.js";
+import {
+  adminCancelBooking,
+  adminReviewCancellation,
+  fetchAdminBookingOrderDetail,
+  fetchAdminBookingOrders,
+} from "../server/bookingManagement.js";
 
 const requestIdHeader = "x-request-id";
 const villaAliases = ["慢慢蒔光", "stime villa", "mumbao"];
@@ -1215,6 +1221,52 @@ async function handlePaymentReview(req, res, requestId) {
   });
 }
 
+async function handleOrders(req, res, requestId) {
+  await requireAdmin(req);
+  sendJson(res, 200, {
+    requestId,
+    ...(await fetchAdminBookingOrders({ query: req.query || {} })),
+  });
+}
+
+async function handleOrderDetail(req, res, requestId) {
+  await requireAdmin(req);
+  sendJson(res, 200, {
+    requestId,
+    ...(await fetchAdminBookingOrderDetail({
+      id: firstQueryValue(req.query?.id || req.query?.booking_id),
+    })),
+  });
+}
+
+async function handleAdminDirectCancel(req, res, requestId) {
+  const context = await requirePermission(req, "users.update");
+  const body = sanitizePayload(await readBody(req));
+  sendJson(res, 200, {
+    requestId,
+    ...(await adminCancelBooking({
+      bookingId: cleanText(body.id || body.booking_id, 80),
+      adminProfileId: context.profile?.id || null,
+      reason: body.reason,
+    })),
+  });
+}
+
+async function handleCancellationReview(req, res, requestId) {
+  const context = await requirePermission(req, "users.update");
+  const body = sanitizePayload(await readBody(req));
+  sendJson(res, 200, {
+    requestId,
+    ...(await adminReviewCancellation({
+      cancellationRequestId: cleanText(body.id || body.cancellation_request_id, 80),
+      adminProfileId: context.profile?.id || null,
+      decision: body.decision,
+      adminNote: body.admin_note || body.adminNote,
+      publicNote: body.public_note || body.publicNote,
+    })),
+  });
+}
+
 async function handleCompleteStay(req, res, requestId) {
   const context = await requirePermission(req, "users.update");
   const admin = {
@@ -1538,6 +1590,8 @@ async function dispatch(req, res, requestId) {
   if (req.method === "GET" && action === "alerts") return handleAlerts(req, res, requestId);
   if (req.method === "GET" && action === "reservations") return handleReservations(req, res, requestId);
   if (req.method === "GET" && action === "requests") return handleRequests(req, res, requestId);
+  if (req.method === "GET" && action === "orders") return handleOrders(req, res, requestId);
+  if (req.method === "GET" && action === "order-detail") return handleOrderDetail(req, res, requestId);
   if (req.method === "GET" && action === "pricing") return handlePricingGet(req, res, requestId);
   if (req.method === "POST" && action === "external-reservation") return handleExternalReservation(req, res, requestId);
   if (req.method === "POST" && action === "email-detection") return handleEmailDetection(req, res, requestId);
@@ -1549,6 +1603,8 @@ async function dispatch(req, res, requestId) {
   if (req.method === "PATCH" && action === "alert") return handleAlertPatch(req, res, requestId);
   if (req.method === "POST" && action === "complete-stay") return handleCompleteStay(req, res, requestId);
   if (req.method === "POST" && action === "payment-review") return handlePaymentReview(req, res, requestId);
+  if (req.method === "POST" && action === "direct-cancel") return handleAdminDirectCancel(req, res, requestId);
+  if (req.method === "POST" && action === "cancellation-review") return handleCancellationReview(req, res, requestId);
   throw httpError(404, "Unknown booking action.", "unknown_action");
 }
 

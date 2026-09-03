@@ -3152,7 +3152,13 @@ export default function Booking() {
                 <p className="mt-3 text-xs leading-5 text-stone-500">正式取消與退款規定將於上線前更新。</p>
               </details>
 
-              <div>
+              <div className="flex flex-wrap gap-3">
+                <a
+                  href="/booking/manage"
+                  className="inline-flex h-11 items-center justify-center rounded-[8px] bg-[#8b6f5b] px-5 text-sm font-semibold text-white transition hover:bg-[#765d4a]"
+                >
+                  查看我的訂單
+                </a>
                 <a
                   href="/"
                   className="inline-flex h-11 items-center justify-center rounded-[8px] border border-[#d7c5b2] bg-white px-5 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"

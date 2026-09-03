@@ -39,11 +39,14 @@ import AdminShopUsers from "./pages/AdminShopUsers";
 import AdminShopAuditLogs from "./pages/AdminShopAuditLogs";
 import AdminShopAccount from "./pages/AdminShopAccount";
 import AdminBookings from "./pages/AdminBookings";
+import AdminBookingOrders from "./pages/AdminBookingOrders";
 import AdminBookingPricing from "./pages/AdminBookingPricing";
 import AdminSite from "./pages/AdminSite";
 import AiChat from "./pages/AiChat";
 import Chat from "./pages/Chat";
 import Booking from "./pages/Booking";
+import BookingLookup from "./pages/BookingLookup";
+import BookingManage from "./pages/BookingManage";
 import Shop from "./pages/Shop";
 import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/Cart";
@@ -160,6 +163,11 @@ function Router() {
           <AdminBookingPricing />
         </AdminPage>
       </Route>
+      <Route path={"/admin/bookings/orders"}>
+        <AdminPage title="官網訂單管理">
+          <AdminBookingOrders />
+        </AdminPage>
+      </Route>
       <Route path={"/admin/bookings"}>
         <AdminPage title="房況與訂房管理">
           <AdminBookings />
@@ -186,6 +194,8 @@ function Router() {
       <Route path={"/ai-chat"} component={AiChat} />
       <Route path={"/chat"} component={Chat} />
       <Route path={"/booking"} component={Booking} />
+      <Route path={"/booking/lookup"} component={BookingLookup} />
+      <Route path={"/booking/manage"} component={BookingManage} />
       <Route path={"/shop"}>
         <ShopTestGate>
           <Shop />

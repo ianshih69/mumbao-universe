@@ -213,6 +213,37 @@ export type BookingEmailResult = {
   needs_manual_review: boolean;
 };
 
+export type BookingCancellationRequest = {
+  id: string;
+  booking_request_id: string;
+  requested_by: "customer" | "admin";
+  status: "pending" | "approved" | "rejected" | "withdrawn";
+  reason_code: string;
+  reason_text?: string | null;
+  requested_at: string;
+  reviewed_at?: string | null;
+  reviewed_by_admin_id?: string | null;
+  admin_note?: string | null;
+  public_note?: string | null;
+};
+
+export type BookingCancellationAudit = {
+  id: string;
+  action: string;
+  previous_booking_status?: string | null;
+  new_booking_status?: string | null;
+  previous_payment_status?: string | null;
+  new_payment_status?: string | null;
+  reason?: string | null;
+  action_at: string;
+};
+
+export type AdminBookingOrder = BookingRequest & {
+  payment_status: string;
+  cancellation_status: string;
+  cancellation_request?: BookingCancellationRequest | null;
+};
+
 async function adminBookingRequest<T>(
   token: string,
   path: string,
@@ -228,7 +259,7 @@ async function adminBookingRequest<T>(
   });
   const data = await response.json().catch(() => null);
 
-  if (!response.ok) {
+  if (!response.ok || data == null) {
     throw new Error(data?.message || data?.error || `Admin bookings request failed: ${response.status}`);
   }
 
@@ -274,6 +305,72 @@ export function fetchBookingReservations(token: string) {
 
 export function fetchBookingRequests(token: string) {
   return adminBookingRequest<{ requests: BookingRequest[] }>(token, "?action=requests");
+}
+
+export function fetchAdminBookingOrders(
+  token: string,
+  filters: {
+    query?: string;
+    status?: string;
+    cancellationStatus?: string;
+    checkIn?: string;
+    checkOut?: string;
+  } = {},
+) {
+  const params = new URLSearchParams({ action: "orders" });
+  if (filters.query) params.set("query", filters.query);
+  if (filters.status && filters.status !== "all") params.set("status", filters.status);
+  if (filters.cancellationStatus && filters.cancellationStatus !== "all") {
+    params.set("cancellationStatus", filters.cancellationStatus);
+  }
+  if (filters.checkIn) params.set("checkIn", filters.checkIn);
+  if (filters.checkOut) params.set("checkOut", filters.checkOut);
+  return adminBookingRequest<{ ok: true; orders: AdminBookingOrder[] }>(token, `?${params.toString()}`);
+}
+
+export function fetchAdminBookingOrderDetail(token: string, id: string) {
+  const params = new URLSearchParams({ action: "order-detail", id });
+  return adminBookingRequest<{
+    ok: true;
+    order: AdminBookingOrder;
+    cancellation_audits: BookingCancellationAudit[];
+    payment_audits: BookingCancellationAudit[];
+  }>(token, `?${params.toString()}`);
+}
+
+export function cancelAdminBooking(token: string, payload: { id: string; reason: string }) {
+  return adminBookingRequest<{
+    ok: true;
+    booking: BookingRequest;
+    payment_record: BookingRequest["payment_record"];
+    audit?: BookingCancellationAudit | null;
+    idempotent?: boolean;
+  }>(token, "?action=direct-cancel", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function reviewBookingCancellation(
+  token: string,
+  payload: {
+    id: string;
+    decision: "approved" | "rejected";
+    adminNote?: string;
+    publicNote?: string;
+  },
+) {
+  return adminBookingRequest<{
+    ok: true;
+    booking: BookingRequest;
+    payment_record: BookingRequest["payment_record"];
+    cancellation_request: BookingCancellationRequest;
+    audit?: BookingCancellationAudit | null;
+    idempotent?: boolean;
+  }>(token, "?action=cancellation-review", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function createExternalReservation(token: string, payload: Record<string, unknown>) {

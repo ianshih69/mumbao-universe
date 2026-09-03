@@ -110,10 +110,13 @@ export function Header() {
   const languages = ["繁體中文", "日本語", "韓語", "English"];
   const isShopPage = location === "/shop" || location.startsWith("/shop/");
   const isAccountPage = location.startsWith("/account");
+  const isBookingManagementPage =
+    location === "/booking/lookup" || location === "/booking/manage";
   const isLegalPage = ["/privacy", "/terms", "/data-deletion"].includes(
     location
   );
-  const useDarkControls = isScrolled || isShopPage || isLegalPage || isAccountPage;
+  const useDarkControls =
+    isScrolled || isShopPage || isLegalPage || isAccountPage || isBookingManagementPage;
   const authLinkClass = cn(
     "inline-flex h-9 items-center justify-center rounded-full px-3 text-sm font-medium transition-colors",
     useDarkControls
@@ -228,6 +231,18 @@ export function Header() {
                       </SheetClose>
                     );
                   })}
+                  <SheetClose asChild>
+                    <Link
+                      href="/booking/lookup"
+                      className={cn(
+                        menuLinkClass,
+                        location.startsWith("/booking/lookup") && "!text-[#B77C4B]"
+                      )}
+                      style={{ animationDelay: `${80 + menuItems.length * 30}ms` }}
+                    >
+                      訂單查詢
+                    </Link>
+                  </SheetClose>
                 </div>
                 <div className="mt-10 border-t border-[rgba(120,95,70,0.16)] pt-7">
                   {isLoading ? (
@@ -295,6 +310,9 @@ export function Header() {
         {/* Right: Actions */}
         <div className="flex items-center gap-4 md:gap-6">
           <div className="hidden items-center gap-2 md:flex">
+            <Link href="/booking/lookup" className={authLinkClass}>
+              訂單查詢
+            </Link>
             {!isLoading &&
               (isAuthenticated ? (
                 <>

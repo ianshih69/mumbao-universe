@@ -1,4 +1,5 @@
 const policyLinks = [
+  { href: "/booking/lookup", label: "訂單查詢" },
   { href: "/privacy", label: "隱私權政策" },
   { href: "/terms", label: "服務條款" },
   { href: "/data-deletion", label: "資料刪除說明" },

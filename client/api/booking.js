@@ -21,6 +21,13 @@ import {
   getBookingBankTransferSettings,
   publicBankTransferSettings,
 } from "../server/bookingPayments/config.js";
+import {
+  createManagementSessionForBooking,
+  handleBookingLookup,
+  handleBookingManage,
+  handleCustomerCancellation,
+  handleManagementPaymentReport,
+} from "../server/bookingManagement.js";
 
 const DEFAULT_BOOKING_SETTINGS = {
   bookingWindowMonths: 6,
@@ -727,6 +734,15 @@ async function handleRequest(req, res, requestId) {
     });
   }
   const request = holdResult.request;
+  try {
+    await createManagementSessionForBooking({ req, res, bookingId: request?.id });
+  } catch (sessionError) {
+    console.error("[booking-management-session]", {
+      requestId,
+      code: sessionError?.code || "session_create_failed",
+      message: sessionError instanceof Error ? sessionError.message : String(sessionError),
+    });
+  }
 
   try {
     await supabaseRequest("/booking_availability_alerts", {
@@ -902,6 +918,30 @@ async function dispatch(req, res, requestId) {
   if (req.method === "POST" && action === "request") return handleRequest(req, res, requestId);
   if (req.method === "POST" && action === "recover") return handleRecovery(req, res, requestId);
   if (req.method === "POST" && action === "report-payment") return handlePaymentReport(req, res, requestId);
+  if (req.method === "POST" && action === "lookup") {
+    return sendJson(res, 200, {
+      requestId,
+      ...(await handleBookingLookup({ req, res, body: await readBody(req) })),
+    });
+  }
+  if (req.method === "GET" && action === "manage") {
+    return sendJson(res, 200, {
+      requestId,
+      ...(await handleBookingManage({ req })),
+    });
+  }
+  if (req.method === "POST" && action === "cancel") {
+    return sendJson(res, 200, {
+      requestId,
+      ...(await handleCustomerCancellation({ req, body: await readBody(req) })),
+    });
+  }
+  if (req.method === "POST" && action === "manage-report-payment") {
+    return sendJson(res, 200, {
+      requestId,
+      ...(await handleManagementPaymentReport({ req, body: await readBody(req) })),
+    });
+  }
   throw httpError(404, "Unknown booking action.", "unknown_action");
 }
 
@@ -911,6 +951,10 @@ export default async function handler(req, res) {
     await dispatch(req, res, requestId);
   } catch (error) {
     const status = error?.status || 500;
+    const retryAfterSeconds = Number(error?.retryAfterSeconds) || 0;
+    if (status === 429 && retryAfterSeconds > 0) {
+      res.setHeader("Retry-After", String(Math.max(1, retryAfterSeconds)));
+    }
     console.error("[booking]", {
       requestId,
       status,
@@ -923,6 +967,9 @@ export default async function handler(req, res) {
       requestId,
       error: error?.code || "internal_error",
       message: status >= 500 ? "系統暫時無法送出預約申請，請稍後再試。" : error.message,
+      ...(status === 429 && retryAfterSeconds > 0
+        ? { retry_after_seconds: retryAfterSeconds }
+        : {}),
     });
   }
 }

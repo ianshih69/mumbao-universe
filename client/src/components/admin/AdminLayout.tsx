@@ -51,6 +51,8 @@ type AdminLayoutProps = {
 const iconByKey: Record<string, typeof Home> = {
   overview: Home,
   bookings: CalendarDays,
+  "booking-orders": ClipboardList,
+  "booking-pricing": CalendarDays,
   site: FileText,
   chats: MessageCircle,
   shop: ShoppingBag,

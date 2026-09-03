@@ -308,12 +308,61 @@ export type BookingPaymentSettings = {
     accountNumber: string;
   };
   report?: {
-    status: string | null;
+    status?: string | null;
     bankLast5: string | null;
     payerName: string | null;
     reportedAt: string | null;
     verifiedAt: string | null;
   } | null;
+};
+
+export type BookingCancellationReasonCode =
+  | "schedule_change"
+  | "guest_count_change"
+  | "weather"
+  | "other";
+
+export type BookingManageResult = {
+  ok: boolean;
+  requestId: string;
+  managePath?: string;
+  booking: {
+    bookingReference: string;
+    statusLabel: string;
+    checkIn: string;
+    checkOut: string;
+    nights: number;
+    stayType: StayType;
+    adults: number;
+    children: number;
+    infants: number;
+    roomCount: number | null;
+    selectedRoomOption?: BookingRoomOption | null;
+    breakfastEntries: BookingBreakfastAddonInput[];
+    dogCount: number;
+    hasPets: boolean;
+    quotedTotal: number | null;
+    depositAmount: number | null;
+    balanceAmount: number | null;
+    contact: {
+      email: string;
+      phone: string;
+    };
+  };
+  payment: BookingPaymentSettings & {
+    label?: string;
+  };
+  cancellation: {
+    statusLabel: string;
+    requestedAt?: string | null;
+    reviewedAt?: string | null;
+    publicNote?: string | null;
+  };
+  actions: {
+    canReportBankTransfer: boolean;
+    canDirectCancel: boolean;
+    canRequestCancellation: boolean;
+  };
 };
 
 export type BookingPaymentReportPayload = {
@@ -361,10 +410,10 @@ async function bookingRequest<T>(path: string, options: RequestInit = {}): Promi
   });
   const data = await response.json().catch(() => null);
 
-  if (!response.ok) {
+  if (!response.ok || data == null) {
     throw new BookingApiError({
-      message: data?.message || data?.error || `Booking request failed: ${response.status}`,
-      status: response.status,
+      message: data?.message || data?.error || "目前無法讀取訂房資料，請稍後再試。",
+      status: response.ok ? 502 : response.status,
       code: data?.code || data?.error,
       holdExpiresAt: data?.hold_expires_at,
       retryAfterSeconds: data?.retry_after_seconds,
@@ -458,7 +507,52 @@ export function reportBookingBankTransfer(payload: BookingPaymentReportPayload) 
     "?action=report-payment",
     {
       method: "POST",
+      credentials: "include",
       body: JSON.stringify(payload),
     }
+  );
+}
+
+export function lookupBookingOrder(payload: { bookingReference: string; contact: string }) {
+  return bookingRequest<BookingManageResult>(
+    "?action=lookup",
+    {
+      method: "POST",
+      credentials: "include",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function fetchBookingManageSession() {
+  return bookingRequest<BookingManageResult>("?action=manage", { credentials: "include" });
+}
+
+export function submitBookingCancellation(payload: {
+  reasonCode: BookingCancellationReasonCode;
+  reasonText?: string;
+}) {
+  return bookingRequest<BookingManageResult>(
+    "?action=cancel",
+    {
+      method: "POST",
+      credentials: "include",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function reportBookingManageBankTransfer(payload: {
+  bankLast5: string;
+  payerName?: string;
+  notes?: string;
+}) {
+  return bookingRequest<BookingManageResult>(
+    "?action=manage-report-payment",
+    {
+      method: "POST",
+      credentials: "include",
+      body: JSON.stringify(payload),
+    },
   );
 }

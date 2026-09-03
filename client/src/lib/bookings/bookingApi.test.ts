@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BookingApiError,
+  fetchBookingManageSession,
+  lookupBookingOrder,
   recoverBookingRequest,
+  reportBookingManageBankTransfer,
   reportBookingBankTransfer,
+  submitBookingCancellation,
   submitBookingRequest,
   type BookingRequestPayload,
 } from "./bookingApi";
@@ -194,5 +198,55 @@ describe("booking hold API contract", () => {
         }),
       }),
     );
+  });
+
+  it("uses credentialed lookup/manage requests without persisting lookup credentials", async () => {
+    const responseBody = {
+      ok: true,
+      requestId: "booking-management",
+      booking: { bookingReference: "5827319406", statusLabel: "訂房已成立" },
+      payment: { enabled: true, label: "訂金已確認" },
+      cancellation: { statusLabel: "無取消申請" },
+      actions: { canReportBankTransfer: false, canDirectCancel: false, canRequestCancellation: true },
+    };
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify(responseBody), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await lookupBookingOrder({ bookingReference: "5827319406", contact: "guest@example.invalid" });
+    await fetchBookingManageSession();
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/booking?action=lookup", expect.objectContaining({
+      method: "POST",
+      credentials: "include",
+      body: JSON.stringify({ bookingReference: "5827319406", contact: "guest@example.invalid" }),
+    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/booking?action=manage", expect.objectContaining({
+      credentials: "include",
+    }));
+  });
+
+  it("routes manage-page cancellation and payment reports through session-bound APIs", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await submitBookingCancellation({ reasonCode: "weather", reasonText: "天候因素" });
+    await reportBookingManageBankTransfer({ bankLast5: "12345", payerName: "Tester", notes: "same payment view" });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/booking?action=cancel", expect.objectContaining({
+      method: "POST",
+      credentials: "include",
+      body: JSON.stringify({ reasonCode: "weather", reasonText: "天候因素" }),
+    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/booking?action=manage-report-payment", expect.objectContaining({
+      method: "POST",
+      credentials: "include",
+      body: JSON.stringify({ bankLast5: "12345", payerName: "Tester", notes: "same payment view" }),
+    }));
   });
 });

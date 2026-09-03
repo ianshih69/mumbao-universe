@@ -1167,11 +1167,6 @@ async function handleRequests(req, res, requestId) {
 
 async function handlePaymentReview(req, res, requestId) {
   const context = await requirePermission(req, "users.update");
-  const admin = {
-    authUserId: context.actorAuthUserId,
-    email: context.actorEmail,
-    name: context.actorName || context.actorEmail || "Admin",
-  };
   const body = sanitizePayload(await readBody(req));
   const bookingId = cleanText(body.id || body.booking_id, 80);
   const decision = cleanText(body.decision, 20);
@@ -1180,12 +1175,6 @@ async function handlePaymentReview(req, res, requestId) {
   if (!["confirmed", "cancelled"].includes(decision)) {
     throw httpError(400, "付款確認狀態不正確。", "invalid_payment_review_decision");
   }
-
-  const beforeRows = await supabaseRequest(
-    `/booking_requests?id=eq.${encodeURIComponent(bookingId)}&select=*&limit=1`
-  );
-  const before = Array.isArray(beforeRows) ? beforeRows[0] || null : null;
-  if (!before) throw httpError(404, "找不到此訂房申請。", "booking_not_found");
 
   let reviewResult;
   try {
@@ -1203,7 +1192,11 @@ async function handlePaymentReview(req, res, requestId) {
 
   if (!reviewResult?.ok) {
     const code = reviewResult?.code || "payment_review_failed";
-    const status = code === "booking_not_found" || code === "payment_record_not_found" ? 404 : 409;
+    const status = code === "invalid_admin_context"
+      ? 403
+      : code === "booking_not_found" || code === "payment_record_not_found"
+        ? 404
+        : 409;
     return sendJson(res, status, {
       ok: false,
       requestId,
@@ -1212,18 +1205,6 @@ async function handlePaymentReview(req, res, requestId) {
       message: "目前無法更新這筆匯款確認，請重新整理後再試。",
     });
   }
-
-  await writeBookingAuditLog({
-    req,
-    requestId,
-    admin,
-    action: decision === "confirmed" ? "confirm_booking_bank_transfer" : "cancel_booking_bank_transfer",
-    targetType: "booking_request",
-    targetId: bookingId,
-    description: `${decision === "confirmed" ? "確認入帳" : "取消匯款回報"}：${getBookingDisplayNumber(before)}`,
-    beforeData: before,
-    afterData: reviewResult,
-  });
 
   sendJson(res, 200, {
     ok: true,

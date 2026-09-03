@@ -52,6 +52,12 @@ const phase2MigrationPath = fileURLToPath(
 const phase2RollbackPath = fileURLToPath(
   new URL("../../supabase/rollbacks/2026-09-01-booking-bank-transfer-payment-review.rollback.sql", import.meta.url),
 );
+const phase21MigrationPath = fileURLToPath(
+  new URL("../../supabase/migrations/2026-09-02-booking-payment-admin-audit.sql", import.meta.url),
+);
+const phase21RollbackPath = fileURLToPath(
+  new URL("../../supabase/rollbacks/2026-09-02-booking-payment-admin-audit.rollback.sql", import.meta.url),
+);
 
 async function runPsql(extraArgs) {
   const { stdout } = await execFile(
@@ -91,6 +97,7 @@ async function attemptSql(sql, variables = {}) {
 async function clearTestData() {
   await runSql(`
     truncate table
+      public.booking_payment_admin_audit_logs,
       public.booking_payment_report_rate_limits,
       public.booking_payment_records,
       public.booking_availability_blocks,
@@ -220,6 +227,7 @@ const report = {
   expiry: {},
   recovery: {},
   admin: {},
+  paymentAdminAudit: {},
   phase1Regression: {},
   inventoryRegression: {},
   rateLimit: {},
@@ -312,10 +320,44 @@ assert(
   JSON.stringify(legacyAfterSecondMigration) === JSON.stringify(legacyAfterFirstMigration),
   "Repeated migration changed existing booking rows or booking references.",
 );
+
+await runFile(phase21MigrationPath);
+const legacyAfterAuditMigration = await runJsonSql(`
+  select jsonb_agg(jsonb_build_object(
+    'id', id,
+    'status', status,
+    'booking_reference', booking_reference
+  ) order by id)::text
+  from public.booking_requests;
+`);
+assert(
+  JSON.stringify(legacyAfterAuditMigration) === JSON.stringify(legacyAfterSecondMigration),
+  "Audit migration changed existing booking rows or booking references.",
+);
+assert(
+  Number(await runSql("select count(*) from public.booking_payment_admin_audit_logs;")) === 0,
+  "Audit migration fabricated historical audit rows.",
+);
+
+await runFile(phase21MigrationPath);
+const legacyAfterRepeatedAuditMigration = await runJsonSql(`
+  select jsonb_agg(jsonb_build_object(
+    'id', id,
+    'status', status,
+    'booking_reference', booking_reference
+  ) order by id)::text
+  from public.booking_requests;
+`);
+assert(
+  JSON.stringify(legacyAfterRepeatedAuditMigration) === JSON.stringify(legacyAfterAuditMigration),
+  "Repeated audit migration changed existing booking rows.",
+);
 report.migration = {
   passed: true,
   existingRowsPreserved: 8,
   repeatedMigrationStable: true,
+  auditMigrationIncremental: true,
+  auditMigrationDidNotBackfill: true,
 };
 
 await clearTestData();
@@ -426,7 +468,16 @@ report.expiry = {
 };
 
 await clearTestData();
-const adminId = await runSql("insert into public.admin_profiles (display_name, email) values ('Test Admin', 'admin@example.invalid') returning id;");
+const adminFixture = await runJsonSql(`
+  with inserted as (
+    insert into public.admin_profiles (auth_user_id, display_name, email, is_active)
+    values (gen_random_uuid(), 'Test Admin', 'admin@example.invalid', true)
+    returning id, auth_user_id
+  )
+  select jsonb_build_object('id', id, 'auth_user_id', auth_user_id)::text
+  from inserted;
+`);
+const adminId = adminFixture.id;
 const confirmPayload = buildHoldPayload({ checkIn: "2027-04-01", checkOut: "2027-04-03", label: "confirm" });
 await acquireHold(confirmPayload);
 const confirmReported = await reportPayment(confirmPayload);
@@ -438,6 +489,83 @@ assert(confirmed?.ok === true && confirmed.request.status === "confirmed", "Admi
 assert(confirmed.payment_record.status === "verified", "Admin confirm did not verify the payment record.");
 assert(await unavailableRangeCount("2027-04-01", "2027-04-03") === 1, "Confirmed booking did not block inventory.");
 
+const confirmAudit = await runJsonSql(`
+  select jsonb_build_object(
+    'count', count(*),
+    'id', max(id::text),
+    'booking_reference', max(booking_reference),
+    'payment_id', max(payment_id::text),
+    'admin_profile_id', max(admin_profile_id::text),
+    'admin_auth_user_id', max(admin_auth_user_id::text),
+    'action', max(action),
+    'previous_booking_status', max(previous_booking_status),
+    'new_booking_status', max(new_booking_status),
+    'previous_payment_status', max(previous_payment_status),
+    'new_payment_status', max(new_payment_status),
+    'has_action_at', bool_and(action_at is not null),
+    'has_created_at', bool_and(created_at is not null)
+  )::text
+  from public.booking_payment_admin_audit_logs
+  where booking_request_id = :'booking_id'::uuid;
+`, { booking_id: confirmReported.request.id });
+assert(confirmAudit.count === 1, "Admin confirm did not create exactly one audit row.");
+assert(confirmAudit.booking_reference === confirmReported.request.booking_reference, "Audit lost the booking reference snapshot.");
+assert(confirmAudit.payment_id === confirmed.payment_record.id, "Audit references the wrong payment record.");
+assert(confirmAudit.admin_profile_id === adminFixture.id, "Audit references the wrong admin profile.");
+assert(confirmAudit.admin_auth_user_id === adminFixture.auth_user_id, "Audit references the wrong authenticated admin.");
+assert(confirmAudit.action === "bank_payment_confirmed", "Admin confirm audit action is incorrect.");
+assert(confirmAudit.previous_booking_status === "payment_review", "Admin confirm previous booking status is incorrect.");
+assert(confirmAudit.new_booking_status === "confirmed", "Admin confirm new booking status is incorrect.");
+assert(confirmAudit.previous_payment_status === "reported", "Admin confirm previous payment status is incorrect.");
+assert(confirmAudit.new_payment_status === "verified", "Admin confirm new payment status is incorrect.");
+assert(confirmAudit.has_action_at && confirmAudit.has_created_at, "Admin confirm audit timestamps are missing.");
+
+const duplicateConfirmation = await runJsonSql(
+  "select public.review_booking_bank_transfer(:'booking_id'::uuid, :'admin_id'::uuid, 'confirmed')::text;",
+  { booking_id: confirmReported.request.id, admin_id: adminId },
+);
+assert(duplicateConfirmation?.ok === true && duplicateConfirmation.idempotent === true, "Duplicate confirm was not idempotent.");
+assert(
+  Number(await runSql(
+    "select count(*) from public.booking_payment_admin_audit_logs where booking_request_id = :'booking_id'::uuid;",
+    { booking_id: confirmReported.request.id },
+  )) === 1,
+  "Duplicate confirm created a second audit row.",
+);
+
+const confirmedPaymentVerifiedAt = confirmed.payment_record.verified_at;
+const confirmedCancellation = await runJsonSql(
+  "select public.review_booking_bank_transfer(:'booking_id'::uuid, :'admin_id'::uuid, 'cancelled')::text;",
+  { booking_id: confirmReported.request.id, admin_id: adminId },
+);
+assert(confirmedCancellation?.ok === true, "Confirmed booking cancellation failed.");
+assert(confirmedCancellation.request.status === "cancelled", "Confirmed booking cancellation did not cancel the booking.");
+assert(confirmedCancellation.payment_record.status === "verified", "Confirmed booking cancellation changed verified payment history.");
+assert(
+  confirmedCancellation.payment_record.verified_at === confirmedPaymentVerifiedAt,
+  "Confirmed booking cancellation changed the original verification timestamp.",
+);
+assert(await unavailableRangeCount("2027-04-01", "2027-04-03") === 0, "Confirmed booking cancellation did not release inventory.");
+
+const confirmedCancellationAudit = await runJsonSql(`
+  select jsonb_build_object(
+    'count', count(*),
+    'action', max(action),
+    'previous_booking_status', max(previous_booking_status),
+    'new_booking_status', max(new_booking_status),
+    'previous_payment_status', max(previous_payment_status),
+    'new_payment_status', max(new_payment_status)
+  )::text
+  from public.booking_payment_admin_audit_logs
+  where booking_request_id = :'booking_id'::uuid
+    and action = 'bank_payment_booking_cancelled';
+`, { booking_id: confirmReported.request.id });
+assert(confirmedCancellationAudit.count === 1, "Confirmed booking cancellation audit is missing.");
+assert(confirmedCancellationAudit.previous_booking_status === "confirmed", "Confirmed cancellation previous booking status is incorrect.");
+assert(confirmedCancellationAudit.new_booking_status === "cancelled", "Confirmed cancellation new booking status is incorrect.");
+assert(confirmedCancellationAudit.previous_payment_status === "verified", "Confirmed cancellation previous payment status is incorrect.");
+assert(confirmedCancellationAudit.new_payment_status === "verified", "Confirmed cancellation should not imply a refund or rejection.");
+
 const cancelPayload = buildHoldPayload({ checkIn: "2027-04-10", checkOut: "2027-04-12", label: "cancel" });
 await acquireHold(cancelPayload);
 const cancelReported = await reportPayment(cancelPayload);
@@ -448,6 +576,126 @@ const cancelled = await runJsonSql(
 assert(cancelled?.ok === true && cancelled.request.status === "cancelled", "Admin cancel did not set cancelled.");
 assert(cancelled.payment_record.status === "rejected", "Admin cancel did not reject the payment record.");
 assert(await unavailableRangeCount("2027-04-10", "2027-04-12") === 0, "Cancelled payment review still blocked inventory.");
+
+const cancelAudit = await runJsonSql(`
+  select jsonb_build_object(
+    'count', count(*),
+    'action', max(action),
+    'previous_booking_status', max(previous_booking_status),
+    'new_booking_status', max(new_booking_status),
+    'previous_payment_status', max(previous_payment_status),
+    'new_payment_status', max(new_payment_status)
+  )::text
+  from public.booking_payment_admin_audit_logs
+  where booking_request_id = :'booking_id'::uuid;
+`, { booking_id: cancelReported.request.id });
+assert(cancelAudit.count === 1, "Admin cancellation did not create exactly one audit row.");
+assert(cancelAudit.action === "bank_payment_cancelled", "Admin cancellation audit action is incorrect.");
+assert(cancelAudit.previous_booking_status === "payment_review", "Admin cancellation previous booking status is incorrect.");
+assert(cancelAudit.new_booking_status === "cancelled", "Admin cancellation new booking status is incorrect.");
+assert(cancelAudit.previous_payment_status === "reported", "Admin cancellation previous payment status is incorrect.");
+assert(cancelAudit.new_payment_status === "rejected", "Admin cancellation new payment status is incorrect.");
+
+const invalidAdminPayload = buildHoldPayload({ checkIn: "2027-04-14", checkOut: "2027-04-16", label: "invalid-admin" });
+await acquireHold(invalidAdminPayload);
+const invalidAdminReported = await reportPayment(invalidAdminPayload);
+const invalidAdminResult = await runJsonSql(
+  "select public.review_booking_bank_transfer(:'booking_id'::uuid, gen_random_uuid(), 'confirmed')::text;",
+  { booking_id: invalidAdminReported.request.id },
+);
+assert(invalidAdminResult?.ok === false && invalidAdminResult.code === "invalid_admin_context", "Invalid admin context was accepted.");
+const invalidAdminState = await runJsonSql(`
+  select jsonb_build_object(
+    'booking_status', request.status,
+    'payment_status', payment.status,
+    'audit_count', (
+      select count(*)
+      from public.booking_payment_admin_audit_logs audit
+      where audit.booking_request_id = request.id
+    )
+  )::text
+  from public.booking_requests request
+  join public.booking_payment_records payment on payment.booking_request_id = request.id
+  where request.id = :'booking_id'::uuid;
+`, { booking_id: invalidAdminReported.request.id });
+assert(invalidAdminState.booking_status === "payment_review", "Invalid admin changed booking status.");
+assert(invalidAdminState.payment_status === "reported", "Invalid admin changed payment status.");
+assert(invalidAdminState.audit_count === 0, "Invalid admin created an audit row.");
+
+const auditFailurePayload = buildHoldPayload({ checkIn: "2027-04-17", checkOut: "2027-04-19", label: "audit-failure" });
+await acquireHold(auditFailurePayload);
+const auditFailureReported = await reportPayment(auditFailurePayload);
+await runSql(`
+  create or replace function public.fail_test_booking_payment_admin_audit_insert()
+  returns trigger
+  language plpgsql
+  as $$
+  begin
+    raise exception using errcode = 'P0001', message = 'forced_booking_payment_admin_audit_failure';
+  end;
+  $$;
+
+  create trigger fail_test_booking_payment_admin_audit_insert
+    before insert on public.booking_payment_admin_audit_logs
+    for each row
+    execute function public.fail_test_booking_payment_admin_audit_insert();
+`);
+const auditFailureResult = await attemptSql(
+  "select public.review_booking_bank_transfer(:'booking_id'::uuid, :'admin_id'::uuid, 'confirmed')::text;",
+  { booking_id: auditFailureReported.request.id, admin_id: adminId },
+);
+await runSql(`
+  drop trigger fail_test_booking_payment_admin_audit_insert on public.booking_payment_admin_audit_logs;
+  drop function public.fail_test_booking_payment_admin_audit_insert();
+`);
+assert(auditFailureResult.ok === false, "Forced audit insert failure unexpectedly succeeded.");
+assert(auditFailureResult.error.includes("forced_booking_payment_admin_audit_failure"), "Forced audit failure was not surfaced.");
+const auditFailureState = await runJsonSql(`
+  select jsonb_build_object(
+    'booking_status', request.status,
+    'payment_status', payment.status,
+    'audit_count', (
+      select count(*)
+      from public.booking_payment_admin_audit_logs audit
+      where audit.booking_request_id = request.id
+    )
+  )::text
+  from public.booking_requests request
+  join public.booking_payment_records payment on payment.booking_request_id = request.id
+  where request.id = :'booking_id'::uuid;
+`, { booking_id: auditFailureReported.request.id });
+assert(auditFailureState.booking_status === "payment_review", "Audit insert failure did not roll back booking status.");
+assert(auditFailureState.payment_status === "reported", "Audit insert failure did not roll back payment status.");
+assert(auditFailureState.audit_count === 0, "Audit insert failure left a partial audit row.");
+
+const immutableAuditId = confirmAudit.id;
+const auditUpdateAttempt = await attemptSql(
+  "update public.booking_payment_admin_audit_logs set reason = 'tampered' where id = :'audit_id'::uuid;",
+  { audit_id: immutableAuditId },
+);
+const auditDeleteAttempt = await attemptSql(
+  "delete from public.booking_payment_admin_audit_logs where id = :'audit_id'::uuid;",
+  { audit_id: immutableAuditId },
+);
+assert(auditUpdateAttempt.ok === false && auditUpdateAttempt.error.includes("booking_payment_admin_audit_is_append_only"), "Audit UPDATE was not blocked.");
+assert(auditDeleteAttempt.ok === false && auditDeleteAttempt.error.includes("booking_payment_admin_audit_is_append_only"), "Audit DELETE was not blocked.");
+
+const sensitiveAuditColumns = Number(await runSql(`
+  select count(*)
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name = 'booking_payment_admin_audit_logs'
+    and column_name in (
+      'recovery_token',
+      'recovery_token_hash',
+      'account_number',
+      'bank_last5',
+      'payer_name',
+      'before_data',
+      'after_data'
+    );
+`));
+assert(sensitiveAuditColumns === 0, "Payment admin audit schema contains sensitive or unnecessary payload columns.");
 
 const expiredReviewPayload = buildHoldPayload({ checkIn: "2027-04-20", checkOut: "2027-04-22", label: "expired-review" });
 await acquireHold(expiredReviewPayload);
@@ -469,6 +717,17 @@ report.admin = {
   confirmedBlocks: true,
   cancelledReleases: true,
   expiredReviewConfirmationRejected: true,
+};
+report.paymentAdminAudit = {
+  passed: true,
+  confirmAuditRows: confirmAudit.count,
+  duplicateConfirmAuditRows: 1,
+  paymentReviewCancellationAuditRows: cancelAudit.count,
+  confirmedCancellationAuditRows: confirmedCancellationAudit.count,
+  invalidAdminRejected: true,
+  auditFailureRolledBack: true,
+  appendOnly: true,
+  sensitiveColumns: sensitiveAuditColumns,
 };
 
 await clearTestData();
@@ -579,6 +838,41 @@ const privilegeAudit = await runJsonSql(`
       'service_role',
       'public.report_booking_bank_transfer(text,text,text,text,integer)',
       'EXECUTE'
+    ),
+    'anon_payment_review_rpc', has_function_privilege(
+      'anon',
+      'public.review_booking_bank_transfer(uuid,uuid,text)',
+      'EXECUTE'
+    ),
+    'authenticated_payment_review_rpc', has_function_privilege(
+      'authenticated',
+      'public.review_booking_bank_transfer(uuid,uuid,text)',
+      'EXECUTE'
+    ),
+    'service_payment_review_rpc', has_function_privilege(
+      'service_role',
+      'public.review_booking_bank_transfer(uuid,uuid,text)',
+      'EXECUTE'
+    ),
+    'service_audit_select', has_table_privilege(
+      'service_role',
+      'public.booking_payment_admin_audit_logs',
+      'SELECT'
+    ),
+    'service_audit_insert', has_table_privilege(
+      'service_role',
+      'public.booking_payment_admin_audit_logs',
+      'INSERT'
+    ),
+    'service_audit_update', has_table_privilege(
+      'service_role',
+      'public.booking_payment_admin_audit_logs',
+      'UPDATE'
+    ),
+    'service_audit_delete', has_table_privilege(
+      'service_role',
+      'public.booking_payment_admin_audit_logs',
+      'DELETE'
     )
   )::text;
 `);
@@ -587,9 +881,29 @@ assert(privilegeAudit.authenticated_booking_update === false, "authenticated can
 assert(privilegeAudit.anon_payment_report_rpc === false, "anon can execute the payment report RPC.");
 assert(privilegeAudit.authenticated_payment_report_rpc === false, "authenticated can execute the payment report RPC.");
 assert(privilegeAudit.service_payment_report_rpc === true, "service_role cannot execute the payment report RPC.");
+assert(privilegeAudit.anon_payment_review_rpc === false, "anon can execute the admin payment review RPC.");
+assert(privilegeAudit.authenticated_payment_review_rpc === false, "authenticated can execute the admin payment review RPC.");
+assert(privilegeAudit.service_payment_review_rpc === true, "service_role cannot execute the admin payment review RPC.");
+assert(privilegeAudit.service_audit_select === true, "service_role cannot read payment admin audit rows.");
+assert(privilegeAudit.service_audit_insert === false, "service_role can bypass the atomic RPC with a direct audit insert.");
+assert(privilegeAudit.service_audit_update === false, "service_role can update append-only payment audit rows.");
+assert(privilegeAudit.service_audit_delete === false, "service_role can delete append-only payment audit rows.");
 report.privileges = { passed: true, ...privilegeAudit };
 
 await clearTestData();
+const rollbackAuditPayload = buildHoldPayload({ checkIn: "2027-07-25", checkOut: "2027-07-27", label: "rollback-audit" });
+await acquireHold(rollbackAuditPayload);
+const rollbackAuditReport = await reportPayment(rollbackAuditPayload);
+const rollbackAuditConfirmation = await runJsonSql(
+  "select public.review_booking_bank_transfer(:'booking_id'::uuid, :'admin_id'::uuid, 'confirmed')::text;",
+  { booking_id: rollbackAuditReport.request.id, admin_id: adminId },
+);
+assert(rollbackAuditConfirmation?.ok === true, "Rollback audit fixture confirmation failed.");
+assert(
+  Number(await runSql("select count(*) from public.booking_payment_admin_audit_logs;")) === 1,
+  "Rollback audit fixture row is missing.",
+);
+
 const rollbackActivePayload = buildHoldPayload({ checkIn: "2027-07-01", checkOut: "2027-07-03", label: "rollback-active" });
 await acquireHold(rollbackActivePayload);
 const rollbackActiveReport = await reportPayment(rollbackActivePayload);
@@ -602,8 +916,9 @@ await runSql(
   "update public.booking_requests set review_expires_at = clock_timestamp() - interval '1 second' where id = :'id'::uuid;",
   { id: rollbackExpiredReport.request.id },
 );
-assert(Number(await runSql("select count(*) from public.booking_payment_records;")) === 2, "Rollback fixture payment rows missing.");
+assert(Number(await runSql("select count(*) from public.booking_payment_records;")) === 3, "Rollback fixture payment rows missing.");
 
+await runFile(phase21RollbackPath);
 await runFile(phase2RollbackPath);
 
 const rollbackAudit = await runJsonSql(`
@@ -622,6 +937,8 @@ const rollbackAudit = await runJsonSql(`
     ) is null,
     'rate_limit_table_removed', to_regclass('public.booking_payment_report_rate_limits') is null,
     'payment_table_preserved', to_regclass('public.booking_payment_records') is not null,
+    'payment_admin_audit_table_preserved', to_regclass('public.booking_payment_admin_audit_logs') is not null,
+    'payment_admin_audit_rows', (select count(*) from public.booking_payment_admin_audit_logs),
     'booking_reference_preserved', exists (
       select 1
       from information_schema.columns
@@ -640,7 +957,7 @@ const rollbackAudit = await runJsonSql(`
   active_id: rollbackActiveReport.request.id,
   expired_id: rollbackExpiredReport.request.id,
 });
-assert(rollbackAudit.payment_records === 2, "Rollback deleted payment audit rows.");
+assert(rollbackAudit.payment_records === 3, "Rollback deleted payment records.");
 assert(rollbackAudit.active_status === "payment_hold", "Rollback did not map an active review to payment_hold.");
 assert(rollbackAudit.active_deadline === rollbackActiveDeadline, "Rollback changed the active review deadline.");
 assert(rollbackAudit.expired_status === "expired", "Rollback did not map an elapsed review to expired.");
@@ -648,6 +965,8 @@ assert(rollbackAudit.expired_payment_status === "expired", "Rollback did not mar
 assert(rollbackAudit.payment_report_rpc_removed === true, "Rollback left the Phase 2 payment report RPC installed.");
 assert(rollbackAudit.rate_limit_table_removed === true, "Rollback left transient rate-limit state installed.");
 assert(rollbackAudit.payment_table_preserved === true, "Rollback removed payment audit data storage.");
+assert(rollbackAudit.payment_admin_audit_table_preserved === true, "Rollback removed immutable admin audit storage.");
+assert(rollbackAudit.payment_admin_audit_rows === 1, "Rollback deleted immutable admin audit history.");
 assert(rollbackAudit.booking_reference_preserved === true, "Rollback removed customer booking references.");
 assert(!rollbackAudit.status_constraint.includes("payment_review"), "Rollback status constraint still allows payment_review.");
 assert(await unavailableRangeCount("2027-07-01", "2027-07-03") === 1, "Phase 1 calendar did not block the mapped active hold.");
@@ -659,6 +978,7 @@ assert((await acquireHold(rollbackFreshPayload))?.ok === true, "Phase 1 acquire 
 report.rollback = {
   passed: true,
   paymentAuditRowsPreserved: rollbackAudit.payment_records,
+  paymentAdminAuditRowsPreserved: rollbackAudit.payment_admin_audit_rows,
   activeReviewMappedToHold: true,
   expiredReviewMappedToExpired: true,
   phase2RpcRemoved: true,

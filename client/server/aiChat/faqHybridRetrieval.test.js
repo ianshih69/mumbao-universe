@@ -278,6 +278,21 @@ describe("DeepSeek full approved FAQ selector", () => {
     expect(messages.at(-1).content).toContain("current_user_query");
   });
 
+  it("requires generic entity, action, and constraint alignment", () => {
+    const messages = buildFaqFullCatalogSelectorMessages({
+      message: "Can an item be sent before arrival?",
+      faqItems: [faq()],
+    });
+    const rules = messages[0].content;
+
+    expect(rules).toContain("core entity or topic");
+    expect(rules).toContain("core action");
+    expect(rules).toContain("time, location, or constraint");
+    expect(rules).toContain("A shared noun or similar wording alone is not enough");
+    expect(rules).toContain("booking cancellation is not refund completion");
+    expect(rules).not.toContain("行李可以先送到民宿嗎");
+  });
+
   it("validates selector output strictly against the approved catalog", () => {
     const items = [faq(), faq({ id: "faq-payment" })];
 

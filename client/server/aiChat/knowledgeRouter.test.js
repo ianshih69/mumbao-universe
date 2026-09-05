@@ -39,15 +39,25 @@ describe("strict knowledge router", () => {
     ["我可以先叫你們幫我留房，晚點再匯款嗎？", "faq-006"],
     ["可以先去現場看看房間再決定嗎？", "faq-007"],
     ["你們一般客人可以刷信用卡嗎？", "faq-035"],
-    ["退房後可以放行李到下午嗎？", "faq-092"],
-  ])("routes natural approved FAQ %s before scope guard", async (message, faqId) => {
+  ])("sends natural approved FAQ %s to the full catalog selector", async (message, faqId) => {
     const result = await routeKnowledge({ message });
 
+    expect(result).toMatchObject({
+      route: "faq_selector_required",
+      providerUsed: "faq_selector_required",
+      matchedFaqIds: [],
+      shouldCallDeepSeek: true,
+    });
+    expect(result.candidateFaqItems.map((item) => item.id)).toContain(faqId);
+  });
+
+  it("lexical-directs the exact checkout luggage alias", async () => {
+    const result = await routeKnowledge({ message: "退房後可以放行李到下午嗎？" });
     expect(result).toMatchObject({
       route: "faq_direct",
       providerUsed: "faq_direct",
       confidence: "high",
-      matchedFaqIds: [faqId],
+      matchedFaqIds: ["faq-092"],
       shouldCallDeepSeek: false,
     });
   });
@@ -164,7 +174,7 @@ describe("strict knowledge router", () => {
     },
   );
 
-  it.each(["可以晚點匯款嗎", "訂金多少"])(
+  it.each(["可以晚點匯款嗎"])(
     "does not lexical-direct adjacent payment intent %s without strong evidence",
     async (message) => {
       const result = await routeKnowledge({ message });
@@ -175,10 +185,20 @@ describe("strict knowledge router", () => {
     },
   );
 
+  it("lexical-directs the approved deposit percentage alias", async () => {
+    const result = await routeKnowledge({ message: "訂金多少" });
+    expect(result).toMatchObject({
+      route: "faq_direct",
+      matchedFaqIds: ["faq-004"],
+      lexicalSafeDirect: true,
+      shouldCallDeepSeek: false,
+    });
+  });
+
   it.each([
-    ["可以刷信用卡嗎", "faq-035"],
+    ["可以刷卡嗎", "faq-035"],
     ["尾款什麼時候付", "faq-034"],
-  ])("still lexical-directs clear payment intent %s", async (message, faqId) => {
+  ])("still lexical-directs exact payment intent %s", async (message, faqId) => {
     const result = await routeKnowledge({ message });
 
     expect(result).toMatchObject({
@@ -189,16 +209,16 @@ describe("strict knowledge router", () => {
     });
   });
 
-  it("does not let a lower high-confidence candidate direct a medium top candidate", async () => {
+  it("does not lexical-direct a high-confidence partial payment match", async () => {
     const result = await routeKnowledge({ message: "付款" });
 
     expect(result.route).toBe("faq_selector_required");
-    expect(result.topCandidateIds[0]).toBe("faq-041");
-    expect(result.confidence).toBe("medium");
+    expect(result.topCandidateIds[0]).toBe("faq-005");
+    expect(result.confidence).toBe("high");
     expect(result.matchedFaqIds).toEqual([]);
     expect(result.lexicalSafeDirect).toBe(false);
     expect(result.shouldCallDeepSeek).toBe(true);
-    expect(result.reason).toBe("question_partial_not_safe_direct");
+    expect(result.reason).toBe("alias_partial_not_safe_direct");
   });
 
   it("does not let a lower high alias candidate direct a medium top candidate", async () => {

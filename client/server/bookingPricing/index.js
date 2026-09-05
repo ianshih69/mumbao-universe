@@ -340,6 +340,15 @@ async function fetchActiveRuleSetForNight(nightDate, supabaseRequest) {
   return Array.isArray(rows) ? rows[0] || null : null;
 }
 
+async function fetchPublishedRuleSet(referenceDate, supabaseRequest) {
+  const rows = await supabaseRequest(
+    `/booking_price_rule_sets?is_active=eq.true&effective_to=gte.${encodeFilterValue(
+      referenceDate
+    )}&select=id,name,effective_from,effective_to,deposit_rate,is_active&order=effective_from.asc&limit=1`
+  );
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
 async function fetchSpecialDate(ruleSetId, nightDate, supabaseRequest) {
   const rows = await supabaseRequest(
     `/booking_special_dates?rule_set_id=eq.${encodeFilterValue(
@@ -508,7 +517,9 @@ export async function calculateBookingQuote(input, options = {}) {
 
   for (let index = 0; index < nights; index += 1) {
     const date = addDays(checkIn, index);
-    const ruleSet = await fetchActiveRuleSetForNight(date, supabaseRequest);
+    const ruleSet =
+      options.ruleSetOverride ||
+      (await fetchActiveRuleSetForNight(date, supabaseRequest));
     if (!ruleSet?.id) {
       return unavailableQuote({
         reason: "missing_rule_set",
@@ -536,8 +547,13 @@ export async function calculateBookingQuote(input, options = {}) {
       depositRate: Number(ruleSet.deposit_rate),
     });
 
-    const specialDate = await fetchSpecialDate(ruleSet.id, date, supabaseRequest);
-    const dayType = specialDate?.day_type || classifyFallbackDayType(date);
+    const requestedDayType = Array.isArray(options.dayTypeOverrides)
+      ? options.dayTypeOverrides[index]
+      : null;
+    const specialDate = requestedDayType
+      ? null
+      : await fetchSpecialDate(ruleSet.id, date, supabaseRequest);
+    const dayType = requestedDayType || specialDate?.day_type || classifyFallbackDayType(date);
     const rateGuestCount =
       pricingGuest.plan.extraAdultCount > 0 ? bookingGuestRules.fullVillaAdultCount : pricingGuest.pricingGuestCount;
     const rate = await fetchCachedNightlyRate(ruleSet.id, rateGuestCount, dayType);
@@ -765,6 +781,86 @@ export async function calculateBookingQuote(input, options = {}) {
       extraBedAdultFeeTotal,
     },
   };
+}
+
+export async function calculateBookingQuoteForDayTypes(input, options = {}) {
+  const supabaseRequest = options.supabaseRequest;
+  if (typeof supabaseRequest !== "function") {
+    throw new Error("calculateBookingQuoteForDayTypes requires a supabaseRequest function.");
+  }
+
+  const dayTypes = Array.isArray(input?.dayTypes)
+    ? input.dayTypes.map((value) => String(value || "").trim())
+    : [];
+  if (
+    dayTypes.length < 1 ||
+    dayTypes.length > 30 ||
+    dayTypes.some((dayType) => !bookingDayTypes.includes(dayType))
+  ) {
+    return unavailableQuote({
+      reason: "invalid_day_type_sequence",
+      stayType: input?.stayType || input?.stay_type || "villa",
+      adults: Math.max(0, Number.parseInt(String(input?.adults ?? "0"), 10) || 0),
+      children: Math.max(0, Number.parseInt(String(input?.children ?? "0"), 10) || 0),
+      infants: Math.max(0, Number.parseInt(String(input?.infants ?? "0"), 10) || 0),
+      nights: dayTypes.length,
+    });
+  }
+
+  const referenceDate =
+    normalizeIsoDate(options.referenceDate) || new Date().toISOString().slice(0, 10);
+  const ruleSet =
+    options.ruleSetOverride ||
+    (await fetchPublishedRuleSet(referenceDate, supabaseRequest));
+  if (!ruleSet?.id || !normalizeIsoDate(ruleSet.effective_from)) {
+    return unavailableQuote({
+      reason: "missing_rule_set",
+      stayType: input?.stayType || input?.stay_type || "villa",
+      adults: Math.max(0, Number.parseInt(String(input?.adults ?? "0"), 10) || 0),
+      children: Math.max(0, Number.parseInt(String(input?.children ?? "0"), 10) || 0),
+      infants: Math.max(0, Number.parseInt(String(input?.infants ?? "0"), 10) || 0),
+      nights: dayTypes.length,
+    });
+  }
+
+  const checkIn = normalizeIsoDate(ruleSet.effective_from);
+  const checkOut = addDays(checkIn, dayTypes.length);
+  if (normalizeIsoDate(ruleSet.effective_to) && checkOut > ruleSet.effective_to) {
+    return unavailableQuote({
+      reason: "day_type_sequence_outside_rule_set",
+      checkIn,
+      checkOut,
+      stayType: input?.stayType || input?.stay_type || "villa",
+      adults: Math.max(0, Number.parseInt(String(input?.adults ?? "0"), 10) || 0),
+      children: Math.max(0, Number.parseInt(String(input?.children ?? "0"), 10) || 0),
+      infants: Math.max(0, Number.parseInt(String(input?.infants ?? "0"), 10) || 0),
+      nights: dayTypes.length,
+    });
+  }
+
+  const breakfastQuantity = Math.max(
+    0,
+    Number.parseInt(String(input?.breakfastQuantity ?? input?.breakfast_quantity ?? "0"), 10) || 0
+  );
+  const breakfastAddons =
+    input?.breakfastAddons ??
+    input?.breakfast_addons ??
+    (breakfastQuantity > 0 ? [{ date: checkOut, quantity: breakfastQuantity }] : []);
+
+  return calculateBookingQuote(
+    {
+      ...input,
+      checkIn,
+      checkOut,
+      breakfastAddons,
+    },
+    {
+      ...options,
+      supabaseRequest,
+      ruleSetOverride: ruleSet,
+      dayTypeOverrides: dayTypes,
+    }
+  );
 }
 
 export function buildBookingPricingSnapshot(quote) {

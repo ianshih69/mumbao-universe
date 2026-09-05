@@ -493,7 +493,7 @@ describe("semantic orchestrator validation", () => {
     expect(merged.context.pet_type).toBeNull();
   });
 
-  it("blocks unsupported model-generated prices and routes to knowledge gap", () => {
+  it("blocks unsupported model-generated prices and asks only for missing dog weights", () => {
     const semantic = validateSemanticResult(
       {
         turn_action: "request_quote",
@@ -527,12 +527,13 @@ describe("semantic orchestrator validation", () => {
     });
 
     expect(route).toMatchObject({
-      route: "knowledge_gap",
-      shouldMarkNeedsHuman: true,
-      knowledgeGap: true,
+      route: "faq_collect_info",
+      shouldMarkNeedsHuman: false,
+      knowledgeGap: false,
       modelCallCount: 1,
     });
     expect(route.answer).not.toContain("NT$40,000");
+    expect(route.answer).toContain("每隻狗狗");
   });
 
   it("routes complete pricing context to knowledge gap when selected FAQ has no reliable price", () => {
@@ -566,6 +567,7 @@ describe("semantic orchestrator validation", () => {
         guest_count: 10,
         pet_count: 3,
         pet_type: "dog",
+        dog_under_10kg_count: 3,
       },
       faqItems: [
         faq({

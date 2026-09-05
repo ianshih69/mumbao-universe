@@ -9,7 +9,9 @@ import {
   classifyPricingReplyIntent,
   getPricingRelevantChangedFields,
 } from "./lodgingPricing.js";
-import { isStrongExplicitLodgingQuoteRequest } from "./pricingIntent.js";
+import {
+  isDeterministicPricingRequest,
+} from "./pricingIntent.js";
 import {
   normalizePendingResolutionAction,
   normalizeTurnAction,
@@ -35,9 +37,14 @@ const pricingFieldLabels = {
   guest_count: "共有幾位入住",
   adult_count: "大人人數",
   child_count: "小孩人數",
+  infant_count: "未滿4歲幼兒人數",
+  stay_nights: "住宿晚數",
+  pricing_day_type: "日期類型",
+  requires_exact_date: "確切入住日期",
   room_count: "需要幾間房",
   pet_count: "是否攜帶寵物",
   pet_type: "寵物種類",
+  dog_weights: "每隻狗狗體重",
 };
 
 const pricingGuardFields = new Set([
@@ -47,9 +54,17 @@ const pricingGuardFields = new Set([
   "guest_count",
   "adult_count",
   "child_count",
+  "infant_count",
+  "stay_nights",
+  "pricing_day_type",
+  "requires_exact_date",
   "room_count",
   "pet_count",
   "pet_type",
+  "dog_under_10kg_count",
+  "dog_10_to_20kg_count",
+  "dog_over_20kg_count",
+  "breakfast_count",
 ]);
 
 function toDateOnly(value) {
@@ -309,6 +324,12 @@ function expandMissingContextFields(missingFields) {
   for (const field of missingFields || []) {
     if (field === "dates") {
       fields.push("check_in", "check_out");
+    } else if (field === "stay_period") {
+      fields.push("check_in", "check_out", "stay_nights", "pricing_day_type");
+    } else if (field === "exact_date") {
+      fields.push("check_in");
+    } else if (field === "dog_weights") {
+      fields.push("dog_under_10kg_count", "dog_10_to_20kg_count", "dog_over_20kg_count");
     } else {
       fields.push(field);
     }
@@ -379,7 +400,7 @@ function shouldInterruptPendingQuote({
 
   return (
     routeResult?.route === "faq_selector_required" &&
-    !isStrongExplicitLodgingQuoteRequest(message, {
+    !isDeterministicPricingRequest(message, {
       context,
       previousContext,
       recentMessages,
@@ -398,7 +419,7 @@ function shouldDeferWeakPricingActionToFaqSelector({
   return (
     routeResult?.route === "faq_selector_required" &&
     ["request_quote", "update_quote"].includes(action) &&
-    !isStrongExplicitLodgingQuoteRequest(message, {
+    !isDeterministicPricingRequest(message, {
       context,
       previousContext,
       recentMessages,
@@ -715,6 +736,7 @@ async function executePendingAction({
   metadata,
   nowIso,
   sourceMessageId,
+  pricingOptions,
 }) {
   const pending = normalizePendingInteraction(pendingInteraction);
   if (!pending) {
@@ -810,6 +832,7 @@ async function executePendingAction({
     freshnessGuard: null,
     nowIso,
     sourceMessageId,
+    pricingOptions,
   });
 
   const conversationContextPatch = {
@@ -904,6 +927,7 @@ async function executePricingAction({
   freshnessGuard,
   nowIso,
   sourceMessageId,
+  pricingOptions,
 }) {
   const missingFields = getMissingBookingContextFields(context);
   const uncertainPricingFields = (freshnessGuard?.uncertain_fields || []).filter((field) =>
@@ -959,6 +983,22 @@ async function executePricingAction({
     }, { nowIso, sourceMessageId });
   }
 
+  const pricingRoute = await buildOfficialPricingRouteOverride(context, routeResult, {
+    message,
+    recentMessages,
+    previousContext,
+    turnAction: action,
+    ...(pricingOptions || {}),
+  });
+
+  if (pricingRoute) {
+    return addExecutorMetadata(pricingRoute, {
+      ...metadata,
+      action_executor_result: `${action}_pricing_resolved`,
+      pricing_called: pricingRoute.semanticMetadata?.pricing_called ?? true,
+    });
+  }
+
   if (missingFields.length) {
     return buildMissingFieldsRoute(routeResult, context, {
       ...metadata,
@@ -966,26 +1006,11 @@ async function executePricingAction({
     }, { nowIso, sourceMessageId });
   }
 
-  const pricingRoute = await buildOfficialPricingRouteOverride(context, routeResult, {
-    message,
-    recentMessages,
-    previousContext,
-    turnAction: action,
-  });
-
-  if (!pricingRoute) {
-    return buildMissingFieldsRoute(routeResult, context, {
-      ...metadata,
-      action_executor_result: `${action}_pricing_unresolved`,
-      pricing_called: true,
-    }, { nowIso, sourceMessageId });
-  }
-
-  return addExecutorMetadata(pricingRoute, {
+  return buildMissingFieldsRoute(routeResult, context, {
     ...metadata,
-    action_executor_result: `${action}_pricing_resolved`,
+    action_executor_result: `${action}_pricing_unresolved`,
     pricing_called: true,
-  });
+  }, { nowIso, sourceMessageId });
 }
 
 export async function executeTurnAction({
@@ -998,6 +1023,7 @@ export async function executeTurnAction({
   freshnessGuard = null,
   nowIso = new Date().toISOString(),
   sourceMessageId = "",
+  pricingOptions = {},
 } = {}) {
   const pendingInteraction = normalizePendingInteraction(context?.pending_interaction);
   const resolvedTurnState = resolveTurnState({
@@ -1140,6 +1166,7 @@ export async function executeTurnAction({
       metadata,
       nowIso,
       sourceMessageId,
+      pricingOptions,
     });
   }
 
@@ -1156,6 +1183,7 @@ export async function executeTurnAction({
       freshnessGuard,
       nowIso,
       sourceMessageId,
+      pricingOptions,
     });
   }
 

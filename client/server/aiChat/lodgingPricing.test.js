@@ -1,787 +1,221 @@
 import { describe, expect, it } from "vitest";
+import { buildConversationContextUpdate } from "./conversationContext.js";
 import {
-  buildContextualKnowledgeRouteOverride,
-  buildConversationContextUpdate,
-  normalizeConversationContext,
-} from "./conversationContext.js";
-import {
-  buildOfficialPricingReply,
-  buildOfficialPricingRouteOverride,
   buildOfficialPricingResolution,
-  calculateVillaLodgingPriceFromKnowledge,
+  buildOfficialPricingRouteOverride,
   classifyPricingReplyIntent,
-  classifyVillaDateType,
-  parseVillaPricingRules,
 } from "./lodgingPricing.js";
-import { loadGuesthouseKnowledge } from "./guesthouseKnowledge.js";
 
-const completeDogContext = {
-  active_intent: "pricing",
-  stay_type: "villa",
-  check_in: "2027-07-26",
-  check_out: "2027-07-27",
-  guest_count: 15,
-  pet_count: 3,
-  pet_type: "dog",
+const ruleSet = {
+  id: "00000000-0000-4000-8000-000000000110",
+  name: "試營運包棟房價",
+  effective_from: "2026-11-01",
+  effective_to: "2027-02-01",
+  deposit_rate: 0.3,
+  is_active: true,
+};
+const matrix = {
+  10: { weekday: 25000, friday: 32000, holiday: 39000 },
+  11: { weekday: 26250, friday: 33250, holiday: 40250 },
+  12: { weekday: 27500, friday: 34500, holiday: 41500 },
+  13: { weekday: 28750, friday: 35750, holiday: 42750 },
+  14: { weekday: 30000, friday: 37000, holiday: 44000 },
+  15: { weekday: 31250, friday: 38250, holiday: 45250 },
+  16: { weekday: 32500, friday: 39500, holiday: 46500 },
+  17: { weekday: 33750, friday: 40750, holiday: 47750 },
+  18: { weekday: 35000, friday: 42000, holiday: 49000 },
 };
 
-const completeNoPetContext = {
-  ...completeDogContext,
-  pet_count: 0,
-  pet_type: null,
+function createPricingReader() {
+  return async (pathname) => {
+    const url = new URL(`https://pricing.test${pathname}`);
+    const table = url.pathname.slice(1);
+    if (table === "booking_price_rule_sets") return [ruleSet];
+    if (table === "booking_special_dates") return [];
+    if (table === "booking_package_rates") {
+      const guestCount = Number(String(url.searchParams.get("guest_count") || "").replace(/^eq\./, ""));
+      const dayType = String(url.searchParams.get("day_type") || "").replace(/^eq\./, "");
+      const price = matrix[guestCount]?.[dayType];
+      return price == null
+        ? []
+        : [{
+            id: `${guestCount}-${dayType}`,
+            rule_set_id: ruleSet.id,
+            guest_count: guestCount,
+            day_type: dayType,
+            nightly_price: price,
+            is_active: true,
+          }];
+    }
+    throw new Error(`Unexpected pricing table: ${table}`);
+  };
+}
+
+const pricingOptions = {
+  supabaseRequest: createPricingReader(),
+  referenceDate: "2026-09-05",
 };
 
-const repricedNoPetContext = {
-  ...completeDogContext,
-  check_in: "2026-10-01",
-  check_out: "2026-10-02",
-  pet_count: 0,
-  pet_type: null,
-};
-
-const previousPricingAssistant = {
-  sender: "ai",
-  message:
-    "收到，目前是 2027 年 7 月 26 日入住、7 月 27 日退房，15 位包棟，住宿房價為 NT$48,000。另會攜帶 3 隻狗，目前房價尚未包含寵物相關費用，寵物費與安排需再由管家確認。",
-  provider_used: "official_pricing",
-  metadata: {
-    lodging_price_status: "resolved",
-    lodging_price_amount: 48000,
-    price_calculation_route: "existing_official_pricing",
-    pricing_reply_mode: "initial_quote",
-    pricing_override_applied: true,
-  },
-};
-
-function route(overrides = {}) {
+function baseContext(overrides = {}) {
   return {
-    route: "knowledge_gap",
-    providerUsed: "knowledge_gap",
-    matchedFaqItems: [],
-    matchedFaqIds: [],
-    shouldCallDeepSeek: false,
-    shouldMarkNeedsHuman: true,
-    knowledgeGap: true,
-    aiSkipped: true,
-    answer: "實際房價及寵物安排仍需由管家確認。",
+    active_intent: "pricing",
+    current_topic: "booking_price",
+    stay_type: "villa",
+    check_in: "2026-11-01",
+    check_out: "2026-11-02",
+    stay_nights: 1,
+    adult_count: 10,
+    child_count: 0,
+    infant_count: 0,
     ...overrides,
   };
 }
 
-function quoteOptions(message, recentMessages = []) {
+function route(overrides = {}) {
   return {
-    message,
-    recentMessages,
+    route: "faq_selector_required",
+    providerUsed: "faq_selector_required",
+    matchedFaqItems: [],
+    matchedFaqIds: [],
+    shouldCallDeepSeek: true,
+    shouldMarkNeedsHuman: false,
+    knowledgeGap: false,
+    aiSkipped: false,
+    answer: "",
+    ...overrides,
   };
 }
 
-function contextChangeOptions(message, previousContext, recentMessages = []) {
-  return {
+async function overrideFor(message, context) {
+  return buildOfficialPricingRouteOverride(context, route(), {
     message,
-    previousContext,
-    recentMessages,
-  };
+    recentMessages: [],
+    turnAction: "request_quote",
+    ...pricingOptions,
+  });
 }
 
-function buildContextUpdate(previousContext, message) {
+function parsedContext(message) {
   return buildConversationContextUpdate({
-    previousContext,
+    previousContext: null,
     recentMessages: [],
     message,
-    dateInfo: {
-      todayText: "2026-08-02",
-      currentYear: 2026,
-    },
-    nowIso: "2026-08-02T00:00:00.000Z",
-  });
+    dateInfo: { currentDate: "2026-09-05" },
+    nowIso: "2026-09-05T00:00:00.000Z",
+  }).context;
 }
 
-describe("official lodging pricing", () => {
-  it("parses the existing guesthouse rules price table", async () => {
-    const knowledge = await loadGuesthouseKnowledge();
-    const rules = parseVillaPricingRules(knowledge);
+describe("shared Booking pricing for AI answers", () => {
+  it("uses the Booking price matrix for every required adult price", async () => {
+    const cases = [
+      ["2026-11-01", "2026-11-02", "weekday", 10, 25000],
+      ["2026-11-01", "2026-11-02", "weekday", 12, 27500],
+      ["2026-11-01", "2026-11-02", "weekday", 15, 31250],
+      ["2026-11-01", "2026-11-02", "weekday", 18, 35000],
+      ["2026-11-01", "2026-11-02", "weekday", 20, 36600],
+      ["2026-11-06", "2026-11-07", "friday", 10, 32000],
+      ["2026-11-06", "2026-11-07", "friday", 12, 34500],
+      ["2026-11-06", "2026-11-07", "friday", 15, 38250],
+      ["2026-11-06", "2026-11-07", "friday", 18, 42000],
+      ["2026-11-06", "2026-11-07", "friday", 20, 43600],
+      ["2026-11-07", "2026-11-08", "holiday", 10, 39000],
+      ["2026-11-07", "2026-11-08", "holiday", 12, 41500],
+      ["2026-11-07", "2026-11-08", "holiday", 15, 45250],
+      ["2026-11-07", "2026-11-08", "holiday", 18, 49000],
+      ["2026-11-07", "2026-11-08", "holiday", 20, 50600],
+    ];
 
-    expect(rules["暑假平日（日～四）"]).toMatchObject({
-      tenPersonAmount: 32000,
-      tenPersonUnitAmount: 3200,
-      eighteenPersonAmount: 42000,
-    });
-  });
-
-  it("classifies 2027 summer weekdays from the existing pricing rules", () => {
-    expect(classifyVillaDateType("2027-07-26")).toMatchObject({
-      label: "暑假平日（日～四）",
-      basis: "summer_month_and_weekday",
-    });
-  });
-
-  it("calculates the specified 15-person villa lodging price without pet fees", async () => {
-    const knowledge = await loadGuesthouseKnowledge();
-    const price = calculateVillaLodgingPriceFromKnowledge(
-      completeDogContext,
-      knowledge
-    );
-
-    expect(price).toMatchObject({
-      status: "resolved",
-      amount: 48000,
-      source: "existing_official_pricing",
-      source_file: "client/api/knowledge/guesthouse-rules.md",
-      guest_count: 15,
-      nights: 1,
-    });
-    expect(price.nightly[0]).toMatchObject({
-      date: "2027-07-26",
-      date_type: "暑假平日（日～四）",
-      amount: 48000,
-      formula: "ten_person_base_plus_extra_guests",
-      base_amount: 32000,
-      extra_guest_count: 5,
-      extra_guest_unit_amount: 3200,
-    });
-  });
-
-  it("calculates 10-person multi-night lodging totals and nightly breakdowns", async () => {
-    const knowledge = await loadGuesthouseKnowledge();
-    const price = calculateVillaLodgingPriceFromKnowledge(
-      {
-        active_intent: "pricing",
-        stay_type: "villa",
-        check_in: "2026-09-07",
-        check_out: "2026-09-10",
-        guest_count: 10,
-        pet_count: 0,
-      },
-      knowledge
-    );
-
-    expect(price).toMatchObject({
-      status: "resolved",
-      amount: 75000,
-      nights: 3,
-      guest_count: 10,
-    });
-    expect(price.nightly).toHaveLength(3);
-    expect(price.nightly.every((night) => night.amount === 25000)).toBe(true);
-    expect(price.nightly.every((night) => night.date_type === "平日（日～四）")).toBe(true);
-  });
-
-  it("splits 10-person lodging price across different date types", async () => {
-    const knowledge = await loadGuesthouseKnowledge();
-    const price = calculateVillaLodgingPriceFromKnowledge(
-      {
-        active_intent: "pricing",
-        stay_type: "villa",
-        check_in: "2026-09-10",
-        check_out: "2026-09-13",
-        guest_count: 10,
-        pet_count: 0,
-      },
-      knowledge
-    );
-
-    expect(price).toMatchObject({
-      status: "resolved",
-      amount: 96000,
-      nights: 3,
-    });
-    expect(price.nightly.map((night) => [night.date, night.date_type, night.amount])).toEqual([
-      ["2026-09-10", "平日（日～四）", 25000],
-      ["2026-09-11", "週五", 32000],
-      ["2026-09-12", "假日／連續假日", 39000],
-    ]);
-  });
-
-  it("calculates 18-person villa lodging prices", async () => {
-    const knowledge = await loadGuesthouseKnowledge();
-    const oneNight = calculateVillaLodgingPriceFromKnowledge(
-      {
-        active_intent: "pricing",
-        stay_type: "villa",
-        check_in: "2026-09-09",
-        check_out: "2026-09-10",
-        guest_count: 18,
-        pet_count: 0,
-      },
-      knowledge
-    );
-    const multiNight = calculateVillaLodgingPriceFromKnowledge(
-      {
-        active_intent: "pricing",
-        stay_type: "villa",
-        check_in: "2026-09-10",
-        check_out: "2026-09-13",
-        guest_count: 18,
-        pet_count: 0,
-      },
-      knowledge
-    );
-
-    expect(oneNight).toMatchObject({
-      status: "resolved",
-      amount: 35000,
-      nights: 1,
-    });
-    expect(multiNight).toMatchObject({
-      status: "resolved",
-      amount: 126000,
-      nights: 3,
-    });
-    expect(multiNight.nightly.map((night) => night.amount)).toEqual([35000, 42000, 49000]);
-  });
-
-  it("splits known lodging price from unresolved pet fee", async () => {
-    const pricing = await buildOfficialPricingResolution(completeDogContext);
-
-    expect(pricing).toMatchObject({
-      lodging_price: {
-        status: "resolved",
-        amount: 48000,
-        source: "existing_official_pricing",
-      },
-      pet_fee: {
-        status: "unresolved",
-        amount: null,
-        reason: "no_approved_pet_fee_rule",
-      },
-      unresolved_price_items: ["pet_fee"],
-      price_calculation_route: "existing_official_pricing",
-    });
-  });
-
-  it("answers a partial quote only when the current turn asks for pricing", async () => {
-    const override = await buildOfficialPricingRouteOverride(
-      completeDogContext,
-      route(),
-      quoteOptions("總共多少錢")
-    );
-
-    expect(override).toMatchObject({
-      route: "partial_grounded_reply",
-      providerUsed: "official_pricing",
-      shouldCallDeepSeek: false,
-      shouldMarkNeedsHuman: true,
-      knowledgeGap: false,
-      reason: "official_lodging_price_resolved_with_unresolved_items",
-    });
-    expect(override.answer).toContain("2027 年 7 月 26 日入住");
-    expect(override.answer).toContain("15 位包棟");
-    expect(override.answer).toContain("住宿房價為 NT$48,000");
-    expect(override.answer).toContain("攜帶 3 隻狗");
-    expect(override.answer).toContain("尚未包含寵物相關費用");
-    expect(override.answer).not.toContain("實際房價及寵物安排仍需由管家確認");
-    expect(override.semanticMetadata).toMatchObject({
-      lodging_price_status: "resolved",
-      lodging_price_amount: 48000,
-      lodging_price_source: "existing_official_pricing",
-      pet_fee_status: "unresolved",
-      unresolved_price_items: ["pet_fee"],
-      price_calculation_route: "existing_official_pricing",
-      pricing_reply_mode: "initial_quote",
-      pricing_override_applied: true,
-      current_turn_intent: "initial_quote",
-      needs_human: true,
-    });
-  });
-
-  it("answers the lodging price directly when the guest explicitly has no pets", async () => {
-    const override = await buildOfficialPricingRouteOverride(
-      completeNoPetContext,
-      route(),
-      quoteOptions("總共多少錢")
-    );
-
-    expect(override).toMatchObject({
-      route: "grounded_reply",
-      providerUsed: "official_pricing",
-      shouldMarkNeedsHuman: false,
-      knowledgeGap: false,
-    });
-    expect(override.answer).toContain("住宿房價為 NT$48,000");
-    expect(override.answer).toContain("不攜帶寵物");
-    expect(override.answer).not.toContain("寵物費與安排需再由管家確認");
-  });
-
-  it("does not override knowledge gap when lodging price cannot be resolved", async () => {
-    const override = await buildOfficialPricingRouteOverride(
-      {
-        ...completeDogContext,
-        stay_type: "room",
-      },
-      route(),
-      quoteOptions("總共多少錢")
-    );
-
-    expect(override).toBeNull();
-  });
-
-  it("ignores conflicting model drafts and keeps the server-side price", async () => {
-    const override = await buildOfficialPricingRouteOverride(
-      completeDogContext,
-      route({
-        route: "semantic_grounded",
-        providerUsed: "deepseek_semantic",
-        answer: "房價總共是 NT$50,000。",
-        semanticMetadata: {
-          semantic_route: "grounded_reply",
-        },
-      }),
-      quoteOptions("總共多少錢")
-    );
-
-    expect(override.answer).toContain("住宿房價為 NT$48,000");
-    expect(override.answer).not.toContain("NT$50,000");
-    expect(override.semanticMetadata).toMatchObject({
-      semantic_route: "grounded_reply",
-      lodging_price_amount: 48000,
-    });
-  });
-
-  it("replaces a model draft that says all pricing must be confirmed", async () => {
-    const override = await buildOfficialPricingRouteOverride(
-      completeDogContext,
-      route({
-        route: "knowledge_gap",
-        providerUsed: "deepseek_semantic",
-        answer: "全部費用都需要由管家確認。",
-      }),
-      quoteOptions("總共多少錢")
-    );
-
-    expect(override.answer).toContain("住宿房價為 NT$48,000");
-    expect(override.answer).toContain("寵物費與安排需再由管家確認");
-    expect(override.answer).not.toContain("全部費用都需要由管家確認");
-  });
-
-  it("can answer a follow-up asking for the lodging subtotal without dog fees", async () => {
-    const override = await buildOfficialPricingRouteOverride(
-      completeDogContext,
-      route(),
-      quoteOptions("不含狗狗多少", [previousPricingAssistant])
-    );
-
-    expect(override).toMatchObject({
-      route: "lodging_only_quote",
-      providerUsed: "official_pricing",
-      shouldMarkNeedsHuman: false,
-      knowledgeGap: false,
-    });
-    expect(override.answer).toContain("住宿小計是 NT$48,000");
-    expect(override.answer).toContain("不含 3 隻狗寵物費");
-    expect(override.answer).not.toContain("請問");
-  });
-
-  it("does not repeat a quote when the guest wants to ask a new question", async () => {
-    const override = await buildOfficialPricingRouteOverride(
-      completeDogContext,
-      route(),
-      quoteOptions("重新問妳問題", [previousPricingAssistant])
-    );
-
-    expect(override).toMatchObject({
-      route: "new_question_acknowledgement",
-      providerUsed: "local_intent",
-      shouldMarkNeedsHuman: false,
-      knowledgeGap: false,
-      conversationContextPatch: {
-        active_intent: null,
-        current_topic: null,
-      },
-    });
-    expect(override.answer).toContain("重新了解哪個問題");
-    expect(override.answer).not.toContain("NT$48,000");
-    expect(override.semanticMetadata).toMatchObject({
-      pricing_reply_mode: "new_question_acknowledgement",
-      pricing_override_applied: false,
-      current_turn_intent: "new_question_acknowledgement",
-    });
-  });
-
-  it("answers quote confirmation without duplicating the initial quote", async () => {
-    const override = await buildOfficialPricingRouteOverride(
-      completeDogContext,
-      route(),
-      quoteOptions("確定嗎", [previousPricingAssistant])
-    );
-
-    expect(override).toMatchObject({
-      route: "quote_confirmation",
-      providerUsed: "official_pricing",
-    });
-    expect(override.answer).toContain("是的");
-    expect(override.answer).toContain("暑假平日（日～四）");
-    expect(override.answer).toContain("10 人包棟為 NT$32,000");
-    expect(override.answer).toContain("增加 5 人");
-    expect(override.answer).toContain("每人 NT$3,200");
-    expect(override.answer).toContain("15 人住宿費為 NT$48,000");
-    expect(override.answer).toContain("尚未包含 3 隻狗的寵物費用");
-    expect(override.answer).not.toBe(previousPricingAssistant.message);
-  });
-
-  it("answers quote breakdown with verified server-side details", async () => {
-    const override = await buildOfficialPricingRouteOverride(
-      completeDogContext,
-      route(),
-      quoteOptions("怎麼算的", [previousPricingAssistant])
-    );
-
-    expect(override).toMatchObject({
-      route: "quote_breakdown",
-      providerUsed: "official_pricing",
-    });
-    expect(override.answer).toContain("正式價目表");
-    expect(override.answer).toContain("10 人包棟 NT$32,000");
-    expect(override.answer).toContain("加 5 人 × NT$3,200");
-    expect(override.answer).toContain("小計 NT$48,000");
-    expect(override.answer).not.toContain("NT$50,000");
-  });
-
-  it("does not override another FAQ topic such as barbecue", async () => {
-    const override = await buildOfficialPricingRouteOverride(
-      completeDogContext,
-      route({
-        route: "faq_direct",
-        providerUsed: "faq_direct",
-        answer: "可以使用烤肉區，實際安排請依現場規範。",
-        matchedFaqItems: [
-          {
-            id: "faq-bbq",
-            question: "可以烤肉嗎？",
-            answer: "可以使用烤肉區，實際安排請依現場規範。",
-          },
-        ],
-      }),
-      quoteOptions("可以烤肉嗎", [previousPricingAssistant])
-    );
-
-    expect(override).toBeNull();
-  });
-
-  it("does not repeat pricing for a casual acknowledgement", async () => {
-    const override = await buildOfficialPricingRouteOverride(
-      completeDogContext,
-      route(),
-      quoteOptions("謝謝", [previousPricingAssistant])
-    );
-
-    expect(override).toMatchObject({
-      route: "casual_acknowledgement",
-      providerUsed: "local_intent",
-    });
-    expect(override.answer).toContain("可以再問我");
-    expect(override.answer).not.toContain("NT$48,000");
-    expect(override.semanticMetadata.pricing_override_applied).toBe(false);
-  });
-
-  it("does not use pricing facts from another session for confirmation", async () => {
-    const override = await buildOfficialPricingRouteOverride(
-      completeDogContext,
-      route(),
-      quoteOptions("確定嗎", [])
-    );
-
-    expect(override).toMatchObject({
-      route: "quote_confirmation_missing_context",
-      providerUsed: "local_intent",
-    });
-    expect(override.answer).toContain("想確認哪一項資訊");
-    expect(override.answer).not.toContain("NT$48,000");
-  });
-
-  it("only treats confirmation as pricing when the latest assistant reply was pricing", async () => {
-    const override = await buildOfficialPricingRouteOverride(
-      completeDogContext,
-      route(),
-      quoteOptions("確定嗎", [
-        previousPricingAssistant,
-        {
-          sender: "ai",
-          message: "可以使用烤肉區，實際安排請依現場規範。",
-          provider_used: "faq_direct",
-          metadata: {
-            final_route: "faq_direct",
-            matchedFaqIds: ["faq-bbq"],
-          },
-        },
-      ])
-    );
-
-    expect(override).toMatchObject({
-      route: "quote_confirmation_missing_context",
-      providerUsed: "local_intent",
-    });
-    expect(override.answer).not.toContain("NT$48,000");
-  });
-
-  it("does not unconditionally quote in legacy, shadow, or hybrid mode", async () => {
-    for (const semanticMode of ["legacy", "shadow", "hybrid"]) {
-      const override = await buildOfficialPricingRouteOverride(
-        completeDogContext,
-        route({
-          semanticMetadata: {
-            semantic_mode: semanticMode,
-          },
-        }),
-        quoteOptions("重新問妳問題", [previousPricingAssistant])
+    for (const [checkIn, checkOut, dayType, adults, expected] of cases) {
+      const result = await buildOfficialPricingResolution(
+        baseContext({ check_in: checkIn, check_out: checkOut, adult_count: adults }),
+        pricingOptions
       );
-
-      expect(override.answer).not.toContain("NT$48,000");
-      expect(override.semanticMetadata.semantic_mode).toBe(semanticMode);
-      expect(override.semanticMetadata.pricing_override_applied).toBe(false);
+      expect(result.lodging_price.amount, `${dayType}/${adults}`).toBe(expected);
+      expect(result.total_amount, `${dayType}/${adults}`).toBe(expected);
     }
   });
 
-  it("automatically reprices when pricing context dates are changed", async () => {
-    const update = buildContextUpdate(completeDogContext, "日期改到10月1號到2號");
-
-    const override = await buildOfficialPricingRouteOverride(
-      update.context,
-      route(),
-      contextChangeOptions("日期改到10月1號到2號", update.previousContext)
+  it.each([
+    [8, 2, 0, 25000],
+    [8, 3, 500, 25500],
+    [10, 3, 1500, 26500],
+    [11, 2, 1000, 27250],
+  ])("prices %i adults and %i children", async (adults, children, childFee, total) => {
+    const result = await buildOfficialPricingResolution(
+      baseContext({ adult_count: adults, child_count: children }),
+      pricingOptions
     );
-
-    expect(update.extracted).toMatchObject({
-      check_in: "2026-10-01",
-      check_out: "2026-10-02",
-    });
-    expect(override).toMatchObject({
-      route: "reprice_after_context_change",
-      providerUsed: "official_pricing",
-      shouldMarkNeedsHuman: true,
-      knowledgeGap: false,
-    });
-    expect(override.answer).toContain("已改為 2026 年 10 月 1 日入住");
-    expect(override.answer).toContain("15 位包棟");
-    expect(override.answer).toContain("住宿房價為 NT$37,500");
-    expect(override.answer).toContain("寵物費與安排需再由管家確認");
-    expect(override.semanticMetadata).toMatchObject({
-      pricing_reply_mode: "reprice_after_context_change",
-      lodging_price_amount: 37500,
-      pet_fee_status: "unresolved",
-      unresolved_price_items: ["pet_fee"],
-      needs_human: true,
-    });
+    expect(result.child_fee.amount).toBe(childFee);
+    expect(result.total_amount).toBe(total);
   });
 
-  it("reprices after changing dates and clearing pets without stale pet uncertainty", async () => {
-    const update = buildContextUpdate(
-      completeDogContext,
-      "日期改了，改到10月1號到2號，不帶狗"
+  it.each([1, 5])("keeps %i non-bed infants free without a free-count cap", async (infants) => {
+    const result = await buildOfficialPricingResolution(
+      baseContext({ infant_count: infants }),
+      pricingOptions
     );
-
-    const override = await buildOfficialPricingRouteOverride(
-      update.context,
-      route(),
-      contextChangeOptions(
-        "日期改了，改到10月1號到2號，不帶狗",
-        update.previousContext,
-        [previousPricingAssistant]
-      )
-    );
-
-    expect(update.context).toMatchObject({
-      check_in: "2026-10-01",
-      check_out: "2026-10-02",
-      guest_count: 15,
-      pet_count: 0,
-      pet_type: null,
-    });
-    expect(override).toMatchObject({
-      route: "reprice_after_context_change",
-      providerUsed: "official_pricing",
-      shouldMarkNeedsHuman: false,
-      knowledgeGap: false,
-    });
-    expect(override.answer).toContain("已改為 2026 年 10 月 1 日入住");
-    expect(override.answer).toContain("10 月 2 日退房");
-    expect(override.answer).toContain("15 位包棟");
-    expect(override.answer).toContain("不攜帶寵物");
-    expect(override.answer).toContain("住宿房價為 NT$37,500");
-    expect(override.answer).not.toContain("寵物費需確認");
-    expect(override.answer).not.toContain("寵物安排需確認");
-    expect(override.answer).not.toContain("尚未包含寵物費");
-    expect(override.answer).not.toContain("尚未包含寵物相關費用");
-    expect(override.semanticMetadata).toMatchObject({
-      lodging_price_status: "resolved",
-      lodging_price_amount: 37500,
-      pet_fee_status: "not_applicable",
-      unresolved_price_items: [],
-      pricing_reply_mode: "reprice_after_context_change",
-      current_turn_intent: "reprice_after_context_change",
-      needs_human: false,
-    });
+    expect(result.infant_fee).toMatchObject({ amount: 0, infant_count: infants, free_count_limit: null });
+    expect(result.total_amount).toBe(25000);
   });
 
-  it("clears pets when the guest says the pet will not come", () => {
-    const update = buildContextUpdate(completeDogContext, "毛孩不去了");
-
-    expect(update.context).toMatchObject({
-      pet_count: 0,
-      pet_type: null,
-    });
+  it.each([
+    ["2026-11-01", "2026-11-03", 10, 48750],
+    ["2026-11-05", "2026-11-07", 10, 55400],
+    ["2026-11-06", "2026-11-08", 12, 73925],
+  ])("applies the night-2 discount for %s to %s", async (checkIn, checkOut, adults, total) => {
+    const result = await buildOfficialPricingResolution(
+      baseContext({ check_in: checkIn, check_out: checkOut, stay_nights: 2, adult_count: adults }),
+      pricingOptions
+    );
+    expect(result.total_amount).toBe(total);
+    expect(result.booking_quote.pricing.breakdown[0].discountRate).toBe(1);
+    expect(result.booking_quote.pricing.breakdown[1].discountRate).toBe(0.95);
   });
 
-  it("automatically reprices after changing the guest count", async () => {
-    const update = buildContextUpdate(completeDogContext, "改成12人");
-
-    const override = await buildOfficialPricingRouteOverride(
-      update.context,
-      route(),
-      contextChangeOptions("改成12人", update.previousContext)
+  it("supports date-type-only quotes through the same Booking core", async () => {
+    const friday = await buildOfficialPricingResolution(
+      baseContext({ check_in: null, check_out: null, pricing_day_type: "friday", stay_nights: 1, adult_count: 15 }),
+      pricingOptions
     );
-
-    expect(update.context.guest_count).toBe(12);
-    expect(override).toMatchObject({
-      route: "reprice_after_context_change",
-      providerUsed: "official_pricing",
-      shouldMarkNeedsHuman: true,
-    });
-    expect(override.answer).toContain("12 位包棟");
-    expect(override.answer).toContain("住宿房價為 NT$38,400");
+    const fridayTwoNights = await buildOfficialPricingResolution(
+      baseContext({ check_in: null, check_out: null, pricing_day_type: "friday", stay_nights: 2 }),
+      pricingOptions
+    );
+    expect(friday.total_amount).toBe(38250);
+    expect(fridayTwoNights.total_amount).toBe(69050);
+    expect(fridayTwoNights.requested_day_types).toEqual(["friday", "holiday"]);
   });
 
-  it("asks for the missing new dates instead of using old dates when a date change is incomplete", async () => {
-    const update = buildContextUpdate(completeDogContext, "日期改了");
-    const override = await buildOfficialPricingRouteOverride(
-      update.context,
-      route(),
-      contextChangeOptions("日期改了", update.previousContext)
+  it("calculates dog tiers, consecutive discount, deposit, and breakfast from shared helpers", async () => {
+    const dogOneNight = await overrideFor("一隻22公斤狗狗住一晚多少？", parsedContext("一隻22公斤狗狗住一晚多少？"));
+    const dogTwoNights = await overrideFor("一隻22公斤狗狗住兩晚多少？", parsedContext("一隻22公斤狗狗住兩晚多少？"));
+    const mixedDogs = await overrideFor(
+      "一隻8公斤狗狗、一隻15公斤狗狗，住一晚多少？",
+      parsedContext("一隻8公斤狗狗、一隻15公斤狗狗，住一晚多少？")
     );
-    const contextualRoute = buildContextualKnowledgeRouteOverride(update.context, route());
+    const breakfast = await overrideFor("早餐4份多少？", parsedContext("早餐4份多少？"));
+    const deposit = await overrideFor("寵物押金多少？", parsedContext("寵物押金多少？"));
 
-    expect(update.context.check_in).toBeNull();
-    expect(update.context.check_out).toBeNull();
-    expect(override).toBeNull();
-    expect(contextualRoute).toMatchObject({
-      route: "faq_collect_info",
-      providerUsed: "faq_collect_info",
-    });
-    expect(contextualRoute.answer).toContain("入住日期");
-    expect(contextualRoute.answer).not.toContain("2027年7月26日");
-    expect(contextualRoute.answer).not.toContain("NT$48,000");
+    expect(dogOneNight.answer).toContain("TWD 1,200");
+    expect(dogTwoNights.answer).toContain("TWD 2,340");
+    expect(mixedDogs.answer).toContain("TWD 1,300");
+    expect(dogTwoNights.answer).toContain("押金 TWD 3,000");
+    expect(breakfast.answer).toContain("TWD 1,000");
+    expect(breakfast.answer).toContain("不套用住宿第 2 晚起 95 折");
+    expect(deposit.answer).toContain("不是狗狗住宿費");
   });
 
-  it("does not reprice a new session that only provides new dates", async () => {
-    const update = buildContextUpdate(
-      normalizeConversationContext({}),
-      "改到10月1號到2號"
-    );
-
-    const override = await buildOfficialPricingRouteOverride(
-      update.context,
-      route(),
-      contextChangeOptions("改到10月1號到2號", update.previousContext)
-    );
-
-    expect(update.context).toMatchObject({
-      check_in: "2026-10-01",
-      check_out: "2026-10-02",
-      guest_count: null,
-      stay_type: null,
-    });
-    expect(override).toBeNull();
+  it("keeps live availability separate from the static price", async () => {
+    const message = "2026年11月1日10位成人住一晚還有房嗎？多少錢？";
+    const result = await overrideFor(message, parsedContext(message));
+    expect(result.answer).toContain("TWD 25,000");
+    expect(result.answer).toContain("實際房況仍須以官網即時訂房系統為準");
+    expect(result.answer).not.toMatch(/保證有房|確定有房/);
   });
 
-  it("reprices consistently in legacy, shadow, and hybrid mode", async () => {
-    for (const semanticMode of ["legacy", "shadow", "hybrid"]) {
-      const override = await buildOfficialPricingRouteOverride(
-        repricedNoPetContext,
-        route({
-          semanticMetadata: {
-            semantic_mode: semanticMode,
-          },
-        }),
-        contextChangeOptions(
-          "日期改了，改到10月1號到2號，不帶狗",
-          completeDogContext,
-          [previousPricingAssistant]
-        )
-      );
-
-      expect(override).toMatchObject({
-        route: "reprice_after_context_change",
-        providerUsed: "official_pricing",
-      });
-      expect(override.answer).toContain("住宿房價為 NT$37,500");
-      expect(override.semanticMetadata.semantic_mode).toBe(semanticMode);
-      expect(override.semanticMetadata.needs_human).toBe(false);
-    }
-  });
-
-  it("overrides a DeepSeek draft that hides a verified repriced lodging amount", async () => {
-    const override = await buildOfficialPricingRouteOverride(
-      repricedNoPetContext,
-      route({
-        route: "knowledge_gap",
-        providerUsed: "deepseek_semantic",
-        answer: "實際房價仍需由管家確認。",
-        semanticMetadata: {
-          semantic_route: "knowledge_gap",
-        },
-      }),
-      contextChangeOptions(
-        "日期改了，改到10月1號到2號，不帶狗",
-        completeDogContext,
-        [previousPricingAssistant]
-      )
-    );
-
-    expect(override).toMatchObject({
-      route: "reprice_after_context_change",
-      providerUsed: "official_pricing",
-    });
-    expect(override.answer).toContain("住宿房價為 NT$37,500");
-    expect(override.answer).not.toContain("實際房價仍需由管家確認");
-    expect(override.semanticMetadata).toMatchObject({
-      semantic_route: "knowledge_gap",
-      lodging_price_amount: 37500,
-      pricing_override_applied: true,
-    });
-  });
-
-  it("classifies current-turn pricing reply intents", () => {
-    expect(classifyPricingReplyIntent({ message: "總共多少錢" })).toBe(
-      "initial_quote"
-    );
-    expect(
-      classifyPricingReplyIntent({
-        message: "確定嗎",
-        recentMessages: [previousPricingAssistant],
-      })
-    ).toBe("quote_confirmation");
-    expect(classifyPricingReplyIntent({ message: "確定嗎" })).toBe(
-      "quote_confirmation_missing_context"
-    );
-    expect(classifyPricingReplyIntent({ message: "怎麼算的" })).toBe(
-      "quote_breakdown"
-    );
-    expect(classifyPricingReplyIntent({ message: "不含狗狗多少" })).toBe(
-      "lodging_only_quote"
-    );
-    expect(classifyPricingReplyIntent({ message: "重新問妳問題" })).toBe(
-      "new_question_acknowledgement"
-    );
-    expect(classifyPricingReplyIntent({ message: "謝謝" })).toBe(
-      "casual_acknowledgement"
-    );
-    expect(classifyPricingReplyIntent({ message: "可以烤肉嗎" })).toBe(
-      "unrelated_or_new_topic"
-    );
-    expect(
-      classifyPricingReplyIntent({
-        message: "日期改了，改到10月1號到2號，不帶狗",
-        previousContext: completeDogContext,
-        context: repricedNoPetContext,
-        recentMessages: [previousPricingAssistant],
-      })
-    ).toBe("reprice_after_context_change");
-  });
-
-  it("keeps the base partial quote composer available for direct use", async () => {
-    const pricing = await buildOfficialPricingResolution(completeDogContext);
-    const reply = buildOfficialPricingReply(completeDogContext, pricing);
-
-    expect(reply).toContain("住宿房價為 NT$48,000");
-    expect(reply).toContain("尚未包含寵物相關費用");
+  it("keeps deterministic pricing intent independent from faq-026", () => {
+    expect(classifyPricingReplyIntent({ message: "12人多少？" })).toBe("initial_quote");
+    expect(classifyPricingReplyIntent({ message: "早餐4份多少？" })).toBe("initial_quote");
+    expect(classifyPricingReplyIntent({ message: "寵物押金是幾多" })).toBe("initial_quote");
   });
 });

@@ -1,7 +1,54 @@
 import { describe, expect, it } from "vitest";
 import { buildConversationContextUpdate } from "./conversationContext.js";
 import { applyContextFreshnessGuard } from "./contextFreshnessGuard.js";
-import { executeTurnAction } from "./turnActionExecutor.js";
+import { executeTurnAction as executeTurnActionCore } from "./turnActionExecutor.js";
+
+const bookingRuleSet = {
+  id: "00000000-0000-4000-8000-000000000110",
+  name: "試營運包棟房價",
+  effective_from: "2020-01-01",
+  effective_to: null,
+  deposit_rate: 0.3,
+  is_active: true,
+};
+const bookingRateMatrix = {
+  10: { weekday: 25000, friday: 32000, holiday: 39000 },
+  11: { weekday: 26250, friday: 33250, holiday: 40250 },
+  12: { weekday: 27500, friday: 34500, holiday: 41500 },
+  13: { weekday: 28750, friday: 35750, holiday: 42750 },
+  14: { weekday: 30000, friday: 37000, holiday: 44000 },
+  15: { weekday: 31250, friday: 38250, holiday: 45250 },
+  16: { weekday: 32500, friday: 39500, holiday: 46500 },
+  17: { weekday: 33750, friday: 40750, holiday: 47750 },
+  18: { weekday: 35000, friday: 42000, holiday: 49000 },
+};
+
+async function pricingReader(pathname) {
+  const url = new URL(`https://pricing.test${pathname}`);
+  const table = url.pathname.slice(1);
+  if (table === "booking_price_rule_sets") return [bookingRuleSet];
+  if (table === "booking_special_dates") return [];
+  if (table === "booking_package_rates") {
+    const count = Number(String(url.searchParams.get("guest_count") || "").replace(/^eq\./, ""));
+    const dayType = String(url.searchParams.get("day_type") || "").replace(/^eq\./, "");
+    const price = bookingRateMatrix[count]?.[dayType];
+    return price == null
+      ? []
+      : [{ rule_set_id: bookingRuleSet.id, guest_count: count, day_type: dayType, nightly_price: price, is_active: true }];
+  }
+  throw new Error(`Unexpected pricing table: ${table}`);
+}
+
+async function executeTurnAction(args) {
+  return executeTurnActionCore({
+    ...args,
+    pricingOptions: {
+      supabaseRequest: pricingReader,
+      referenceDate: "2026-09-05",
+      ...(args.pricingOptions || {}),
+    },
+  });
+}
 
 const dateInfo = {
   currentDate: "2026-08-02",
@@ -111,7 +158,7 @@ function route(overrides = {}) {
     matchedFaqItems: [],
     matchedFaqIds: [],
     shouldCallDeepSeek: false,
-    shouldMarkNeedsHuman: true,
+    shouldMarkNeedsHuman: false,
     knowledgeGap: true,
     aiSkipped: true,
     answer: "實際房價及寵物安排仍需由管家確認。",
@@ -209,10 +256,10 @@ function expectSeptemberPartialQuote(result, expectedRoute = "partial_grounded_r
   expect(result).toMatchObject({
     route: expectedRoute,
     providerUsed: "official_pricing",
-    shouldMarkNeedsHuman: true,
+    shouldMarkNeedsHuman: false,
     knowledgeGap: false,
   });
-  expect(result.answer).toContain("NT$25,000");
+  expect(result.answer).toContain("TWD 25,000");
   expect(result.answer).toContain("3 隻狗");
   expect(result.answer).not.toContain("實際房價及寵物安排仍需由管家確認");
   expect(result.answer).not.toContain("實際房價需由管家確認");
@@ -223,7 +270,7 @@ function expectSeptemberPartialQuote(result, expectedRoute = "partial_grounded_r
     pet_fee_status: "unresolved",
     unresolved_price_items: ["pet_fee"],
     final_route: expectedRoute,
-    needs_human: true,
+    needs_human: false,
   });
 }
 
@@ -244,7 +291,7 @@ describe("turn action executor", () => {
       shouldMarkNeedsHuman: false,
       knowledgeGap: false,
     });
-    expect(result.answer).toContain("住宿房價為 NT$37,500");
+    expect(result.answer).toContain("成人住宿費為 TWD 31,250");
     expect(result.semanticMetadata).toMatchObject({
       semantic_turn_action: "update_quote",
       validated_turn_action: "update_quote",
@@ -269,7 +316,7 @@ describe("turn action executor", () => {
       });
 
       expect(result.route).toBe("reprice_after_context_change");
-      expect(result.answer).toContain("NT$37,500");
+      expect(result.answer).toContain("TWD 31,250");
       expect(result.semanticMetadata.changed_fields).toEqual([
         "check_in",
         "check_out",
@@ -440,7 +487,7 @@ describe("turn action executor", () => {
     expect(confirm.route).toBe("faq_collect_info");
     expect(confirm.answer).toContain("已確認為2026年8月4日入住、2026年8月5日退房");
     expect(confirm.answer).toContain("共有幾位入住");
-    expect(confirm.answer).toContain("是否攜帶寵物");
+    expect(confirm.answer).not.toContain("是否攜帶寵物");
     expect(confirm.answer).not.toContain("NT$37,500");
     expect(afterConfirm.check_in).toBe("2026-08-04");
     expect(afterConfirm.check_out).toBe("2026-08-05");
@@ -473,8 +520,8 @@ describe("turn action executor", () => {
     });
 
     expect(answered.providerUsed).toBe("official_pricing");
-    expect(answered.answer).toContain("15 位包棟");
-    expect(answered.answer).toContain("住宿房價");
+    expect(answered.answer).toContain("15 位成人");
+    expect(answered.answer).toContain("成人住宿費");
     expect(answered.answer).not.toContain("寵物費");
     expect(answered.conversationContextPatch.pending_interaction).toBeNull();
     expect(answered.semanticMetadata).toMatchObject({
@@ -521,7 +568,7 @@ describe("turn action executor", () => {
     });
 
     expectSeptemberPartialQuote(result);
-    expect(result.answer).toContain("已確認為");
+    expect(result.answer).toContain("已確認，");
     expect(result.conversationContextPatch).toMatchObject({
       check_in: "2026-09-09",
       check_out: "2026-09-10",
@@ -550,19 +597,15 @@ describe("turn action executor", () => {
       sourceMessageId: "request-october-fallback",
     });
 
-    expect(result.route).toBe("faq_collect_info");
-    expect(result.answer).toContain("已確認為2026年10月10日入住、2026年10月11日退房");
-    expect(result.answer).toContain("是否攜帶寵物");
+    expect(result.route).toBe("grounded_reply");
+    expect(result.answer).toContain("2026 年 10 月 10 日入住、2026 年 10 月 11 日退房");
+    expect(result.answer).toContain("TWD 39,000");
     expect(result.answer).not.toContain("請問入住日期");
     expect(result.conversationContextPatch).toMatchObject({
       check_in: "2026-10-10",
       check_out: "2026-10-11",
     });
-    expect(result.conversationContextPatch.pending_interaction).toMatchObject({
-      action: "collect_quote_fields",
-      required_fields: ["pet_count"],
-      resume_action: "request_quote",
-    });
+    expect(result.conversationContextPatch.pending_interaction).toBeNull();
     expect(result.semanticMetadata).toMatchObject({
       validated_turn_action: "request_quote",
       pending_executor_action: "confirm_pending",
@@ -571,9 +614,9 @@ describe("turn action executor", () => {
       pending_action_before: "confirm_quote_dates",
       pending_resolution: "confirmed",
       resumed_turn_action: "request_quote",
-      action_executor_result: "request_quote_missing_fields",
-      pricing_called: false,
-      final_missing_fields: ["pet_count"],
+      action_executor_result: "request_quote_pricing_resolved",
+      pricing_called: true,
+      final_missing_fields: [],
     });
     expect(result.semanticMetadata.resolved_context_summary).toContain("check_out:2026-10-11");
     expect(result.semanticMetadata.resolved_context_summary).toContain("guest_count:10");
@@ -600,7 +643,7 @@ describe("turn action executor", () => {
       sourceMessageId: "request-october-validator-fallback",
     });
 
-    expect(result.answer).toContain("2026年10月10日入住、2026年10月11日退房");
+    expect(result.answer).toContain("2026 年 10 月 10 日入住、2026 年 10 月 11 日退房");
     expect(result.answer).not.toContain("請問入住日期");
     expect(result.semanticMetadata).toMatchObject({
       semantic_turn_action_raw: "invalid_action",
@@ -608,7 +651,7 @@ describe("turn action executor", () => {
       pending_executor_action: "confirm_pending",
       normalized_pending_resolution: "confirm",
       pending_protocol_fallback: "confirm",
-      final_missing_fields: ["pet_count"],
+      final_missing_fields: [],
     });
   });
 
@@ -646,7 +689,7 @@ describe("turn action executor", () => {
       pending_protocol_fallback: "answer_field",
       pending_resolution: "answered",
       action_executor_result: "pending_confirmation_field_answered",
-      final_missing_fields: ["dates", "pet_count"],
+      final_missing_fields: ["stay_nights"],
     });
   });
 
@@ -669,7 +712,7 @@ describe("turn action executor", () => {
       sourceMessageId: "request-october-new-schema",
     });
 
-    expect(result.answer).toContain("2026年10月10日入住、2026年10月11日退房");
+    expect(result.answer).toContain("2026 年 10 月 10 日入住、2026 年 10 月 11 日退房");
     expect(result.answer).not.toContain("請問入住日期");
     expect(result.conversationContextPatch).toMatchObject({
       check_in: "2026-10-10",
@@ -682,7 +725,7 @@ describe("turn action executor", () => {
       pending_executor_action: "confirm_pending",
       normalized_pending_resolution: "confirm",
       pending_resolution: "confirmed",
-      final_missing_fields: ["pet_count"],
+      final_missing_fields: [],
     });
   });
 
@@ -704,7 +747,7 @@ describe("turn action executor", () => {
       sourceMessageId: "request-october-legacy-answer-pending",
     });
 
-    expect(result.answer).toContain("2026年10月10日入住、2026年10月11日退房");
+    expect(result.answer).toContain("2026 年 10 月 10 日入住、2026 年 10 月 11 日退房");
     expect(result.answer).not.toContain("請問入住日期");
     expect(result.semanticMetadata).toMatchObject({
       semantic_turn_action_raw: "answer_pending",
@@ -715,7 +758,7 @@ describe("turn action executor", () => {
       pending_protocol_normalization_reason:
         "confirmation_pending_with_additional_field",
       pending_resolution: "confirmed",
-      final_missing_fields: ["pet_count"],
+      final_missing_fields: [],
     });
   });
 
@@ -774,19 +817,16 @@ describe("turn action executor", () => {
       sourceMessageId: "request-october-legacy-modify",
     });
 
-    expect(result.answer).toContain("2026年10月12日入住、2026年10月13日退房");
+    expect(result.answer).toContain("2026 年 10 月 12 日入住、2026 年 10 月 13 日退房");
     expect(result.answer).not.toContain("請問入住日期");
-    expect(result.conversationContextPatch.pending_interaction).toMatchObject({
-      action: "collect_quote_fields",
-      required_fields: ["pet_count"],
-    });
+    expect(result.conversationContextPatch.pending_interaction).toBeNull();
     expect(result.semanticMetadata).toMatchObject({
       semantic_turn_action_raw: "answer_pending",
       validated_turn_action: "request_quote",
       pending_executor_action: "modify_pending",
       normalized_pending_resolution: "modify",
       pending_resolution: "modified",
-      final_missing_fields: ["pet_count"],
+      final_missing_fields: [],
     });
   });
 
@@ -984,7 +1024,7 @@ describe("turn action executor", () => {
 
     expect(modified.route).toBe("faq_collect_info");
     expect(modified.answer).toContain("2026年8月6日");
-    expect(modified.answer).toContain("共有幾位入住");
+    expect(modified.answer).toContain("成人與4～12歲兒童各有幾位");
     expect(modified.conversationContextPatch.pending_interaction.action).toBe(
       "collect_quote_fields"
     );
@@ -1074,10 +1114,10 @@ describe("turn action executor", () => {
 
     expect(confirm.route).toBe("quote_confirmation");
     expect(confirm.answer).toContain("是的");
-    expect(confirm.answer).toContain("每人 NT$3,200");
+    expect(confirm.answer).toContain("成人住宿費為 TWD 31,250");
     expect(explain.route).toBe("quote_breakdown");
-    expect(explain.answer).toContain("正式價目表");
-    expect(explain.answer).toContain("小計 NT$48,000");
+    expect(explain.answer).toContain("Booking 正式價格核心");
+    expect(explain.answer).toContain("小計 TWD 31,250");
   });
 
   it("does not confirm a quote without same-session verified pricing metadata", async () => {
@@ -1106,8 +1146,8 @@ describe("turn action executor", () => {
     });
 
     expect(result.route).toBe("lodging_only_quote");
-    expect(result.answer).toContain("住宿小計是 NT$48,000");
-    expect(result.answer).toContain("不含 3 隻狗寵物費");
+    expect(result.answer).toContain("住宿小計為 TWD 31,250");
+    expect(result.answer).toContain("不含狗狗住宿費與早餐");
   });
 
   it("keeps ask_information from being covered by pricing", async () => {
@@ -1212,7 +1252,7 @@ describe("turn action executor", () => {
       });
 
       expect(result.route).toBe("reprice_after_context_change");
-      expect(result.answer).toContain("NT$37,500");
+      expect(result.answer).toContain("TWD 31,250");
       expect(result.semanticMetadata.semantic_mode).toBe(semanticMode);
       expect(result.semanticMetadata.validated_turn_action).toBe("update_quote");
     }
@@ -1233,7 +1273,7 @@ describe("turn action executor", () => {
       recentMessages: [previousPricingAssistant],
     });
 
-    expect(result.answer).toContain("NT$37,500");
+    expect(result.answer).toContain("TWD 31,250");
     expect(result.answer).not.toContain("NT$1,000");
   });
 
@@ -1362,14 +1402,13 @@ describe("turn action executor", () => {
       nowIso: "2026-08-02T08:10:00.000Z",
     });
 
-    expect(result.route).toBe("faq_collect_info");
+    expect(result.route).toBe("grounded_reply");
     expect(result.semanticMetadata.pending_resolution).toBe("answered");
     expect(result.semanticMetadata.resumed_turn_action).toBe("request_quote");
-    expect(result.semanticMetadata.action_executor_result).toBe("request_quote_missing_fields");
-    expect(result.conversationContextPatch.pending_interaction).toMatchObject({
-      action: "collect_quote_fields",
-      required_fields: ["pet_count"],
-    });
+    expect(result.semanticMetadata.action_executor_result).toBe("request_quote_pricing_resolved");
+    expect(result.semanticMetadata.pricing_called).toBe(true);
+    expect(result.answer).toContain("TWD 25,000");
+    expect(result.conversationContextPatch.pending_interaction).toBeNull();
   });
 
   it("interrupts pending quote when a new direct FAQ question arrives", async () => {

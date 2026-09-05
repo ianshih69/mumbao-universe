@@ -10,7 +10,7 @@
       "還有房間嗎",
       "想查房況"
     ],
-    "answer": "可至官網訂房系統查詢，如需管家協助可Line或電話連繫",
+    "answer": "可直接至官網訂房系統查詢即時房況；如需管家協助，也可透過官方 LINE 或電話聯繫。",
     "keywords": [
       "空房",
       "房況",
@@ -22,7 +22,8 @@
     "status": "approved",
     "answer_mode": "collect_info",
     "source": "faq-master.csv",
-    "source_no": 1
+    "source_no": 1,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-002",
@@ -35,7 +36,7 @@
       "訂房流程是什麼",
       "可以用LINE訂嗎"
     ],
-    "answer": "可透過官網訂房系統、官方 LINE 或電話直接預訂並完成入住，每筆訂單即贈「慢寶文創精美禮物」\n\n※ Booking.com 等第三方平台訂房不適用此活動。",
+    "answer": "可透過官網訂房系統、官方 LINE 或電話提出訂房需求；透過官網完成訂房並入住，每入住 1 晚可獲贈慢寶精美文創禮 1 份。Booking.com 等第三方平台訂房不適用此官網限定禮遇。",
     "keywords": [
       "訂房",
       "預約",
@@ -48,7 +49,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 2
+    "source_no": 2,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-003",
@@ -60,7 +62,7 @@
       "預約申請等於訂房嗎",
       "官網送出後有保留嗎"
     ],
-    "answer": "不需要，完成訂金支付即代表訂房成功，並會寄mail通知， 如有任何入住需求或問題，我們將主動與您聯繫。",
+    "answer": "官網送出訂房申請後，尚不代表訂房已成立；民宿會依訂單流程確認房況與付款資訊，完成訂金付款並由館主確認入帳後，訂房才正式成立。",
     "keywords": [
       "線上訂房",
       "預約申請",
@@ -72,7 +74,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 3
+    "source_no": 3,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-004",
@@ -85,7 +88,7 @@
       "訂金多少",
       "可以現場再付嗎"
     ],
-    "answer": "需要，訂房以完成訂金支付為準，未付訂金者恕不予以保留。",
+    "answer": "需要。官網訂房的應付訂金為訂房總額 30%，實際金額以訂房頁顯示為準；完成付款並由館主確認入帳後，訂房才正式成立。",
     "keywords": [
       "訂金",
       "預付款",
@@ -96,9 +99,10 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "collect_info",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 4
+    "source_no": 4,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-005",
@@ -111,7 +115,7 @@
       "超過期限怎麼辦",
       "可以晚點付款嗎"
     ],
-    "answer": "我們以「先付訂金」的客人優先保留喔！ 只要先完成匯款，訂房就正式成功了。並會以mail通知.",
+    "answer": "付款期限請以訂單頁面或民宿正式通知顯示的時間為準；逾時未完成付款，日期可能會自動釋出，之後需重新確認房況。",
     "keywords": [
       "匯款期限",
       "付款期限",
@@ -124,7 +128,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 5
+    "source_no": 5,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-006",
@@ -137,7 +142,7 @@
       "先幫我留日期",
       "能暫時保留房間嗎"
     ],
-    "answer": "不好意思，民宿無法口頭保留喔！誰先完成訂金匯款，預訂就是誰的～",
+    "answer": "不好意思，民宿不接受口頭保留。只有完成官網訂房流程或取得民宿正式確認的訂單，才會依系統或通知所示期限保留；完成訂金並確認入帳後才正式成立。",
     "keywords": [
       "口頭保留",
       "暫時保留",
@@ -150,7 +155,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 6
+    "source_no": 6,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-007",
@@ -187,7 +193,7 @@
       "想住某一間可以嗎",
       "可以指定房型嗎"
     ],
-    "answer": "可以的！不過我們平時主要以「包棟」為主～\n如果該日期有開放「單獨訂房」，線上系統就會顯示剩餘房型，您就可以直接預訂多間喔！",
+    "answer": "包棟時會依入住人數與可選房間組合安排開房；如有長輩、幼兒或特定房間偏好，可在訂房備註提出，我們會依實際房況協助，但無法保證指定房號。單間開放時則以訂房頁顯示的可訂房型為準。",
     "keywords": [
       "指定房間",
       "指定房號",
@@ -198,9 +204,10 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
-    "source_no": 8
+    "source_no": 8,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-009",
@@ -213,7 +220,7 @@
       "長輩可以住一樓嗎",
       "能指定二樓嗎"
     ],
-    "answer": "可以的！請依線上訂房系統為主，官網上都有各房間的樓層說明喔！",
+    "answer": "可提出樓層偏好；如有長輩或行動較不便者，可提前告知並優先安排一樓，但仍須依實際房況，無法保證指定樓層或房號。",
     "keywords": [
       "指定樓層",
       "一樓房",
@@ -303,7 +310,7 @@
       "能不能只訂部分房間不包棟？",
       "可不可以只訂部分房間不包棟？"
     ],
-    "answer": "民宿主要以包棟為主。\n僅淡季或特定日期才開放單間預訂",
+    "answer": "民宿主要以包棟為主；僅於淡季或特定日期開放單間預訂，實際請以訂房頁顯示為準。",
     "keywords": [
       "包棟",
       "訂房",
@@ -324,7 +331,7 @@
     "aliases": [
       "平日和假日如何分"
     ],
-    "answer": "週日至週四為平日，週五與週六採假日價；連續假日、暑假與春節則依當期公告為準。\n\n特定日期的實際價格，一律以線上訂房系統或官方確認為主。",
+    "answer": "週日至週四為平日；週五使用週五價格；週六與連續假日使用週六／連續假日價格。暑假、過年及其他特殊日期以官網訂房頁或當期公告為準。",
     "keywords": [
       "平日",
       "假日",
@@ -337,7 +344,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 14
+    "source_no": 14,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-015",
@@ -469,28 +477,7 @@
     "aliases": [
       "預約姓名可以更改嗎"
     ],
-    "answer": "可協助變更或代訂，但入住時需提供實際入住代表人的真實資料並完成住宿登記。",
-    "keywords": [
-      "訂房",
-      "空房",
-      "房況"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 21
-  },
-  {
-    "id": "faq-022",
-    "category": "訂房與空房",
-    "question": "可以幫朋友或家人代訂嗎？",
-    "aliases": [
-      "能不能幫朋友或家人代訂？",
-      "可不可以幫朋友或家人代訂？"
-    ],
-    "answer": "可協助變更或代訂，但入住時需提供實際入住代表人的真實資料並完成住宿登記。",
+    "answer": "可以協助更改訂房代表人資料；請透過官方 LINE 提供訂房編號、原訂房人資料及欲更正的姓名與聯絡方式。入住時仍需提供實際入住代表人的真實資料。",
     "keywords": [
       "訂房",
       "空房",
@@ -501,7 +488,30 @@
     "status": "approved",
     "answer_mode": "collect_info",
     "source": "faq-master.csv",
-    "source_no": 22
+    "source_no": 21,
+    "last_verified_at": "2026-09-03"
+  },
+  {
+    "id": "faq-022",
+    "category": "訂房與空房",
+    "question": "可以幫朋友或家人代訂嗎？",
+    "aliases": [
+      "能不能幫朋友或家人代訂？",
+      "可不可以幫朋友或家人代訂？"
+    ],
+    "answer": "可以由親友代訂，但訂房時請填寫可聯繫的訂房代表資料，並於入住前提供實際入住代表人的姓名與聯絡方式，以便完成住宿登記。",
+    "keywords": [
+      "訂房",
+      "空房",
+      "房況"
+    ],
+    "priority": 80,
+    "is_active": true,
+    "status": "approved",
+    "answer_mode": "direct",
+    "source": "faq-master.csv",
+    "source_no": 22,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-023",
@@ -569,52 +579,43 @@
   {
     "id": "faq-026",
     "category": "房價與付款",
-    "question": "房價是多少？",
+    "question": "包棟房價怎麼算？",
     "aliases": [
-      "房價是怎麼算？"
+      "房價是多少？",
+      "房價是怎麼算？",
+      "包棟價格怎麼算？",
+      "包棟價格如何算",
+      "包棟一晚多少錢",
+      "10人包棟多少錢",
+      "18人包棟多少錢"
     ],
-    "answer": "房價會依日期、平假日、連假、入住人數與方案不同而調整；請提供日期與人數，我們會回覆最準確報價。",
+    "answer": "包棟房價依日期與成人計價人數計算：10 人每晚平日 TWD 25,000、週五 TWD 32,000、週六／連續假日 TWD 39,000；11～18 人每增加 1 位每晚加 TWD 1,250，18 人為 TWD 35,000／42,000／49,000；19～20 人每增加 1 位每晚再加 TWD 800。第 2 晚起包棟住宿費享 95 折，實際以訂房頁為準。",
     "keywords": [
+      "包棟房價",
       "房價",
-      "付款",
-      "費用"
+      "10人",
+      "18人",
+      "平日",
+      "週五",
+      "週六",
+      "連假",
+      "加人",
+      "95折"
     ],
     "priority": 80,
     "is_active": true,
     "status": "approved",
     "answer_mode": "collect_info",
     "source": "faq-master.csv",
-    "source_no": 26
-  },
-  {
-    "id": "faq-027",
-    "category": "房價與付款",
-    "question": "包棟價格怎麼算？",
-    "aliases": [
-      "包棟價格如何算"
-    ],
-    "answer": "房價會依日期、平假日、連假、入住人數與方案不同而調整；請提供日期與人數，我們會回覆最準確報價。",
-    "keywords": [
-      "包棟價格",
-      "房價",
-      "付款",
-      "費用"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 27
+    "source_no": 26,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-028",
     "category": "房價與付款",
     "question": "價格包含哪些費用？",
-    "aliases": [
-      "價格包含哪些費用"
-    ],
-    "answer": "房價會依日期、平假日、連假、入住人數與方案不同而調整；請提供日期與人數，我們會回覆最準確報價。",
+    "aliases": [],
+    "answer": "訂房頁顯示的包棟住宿費包含依日期、人數與方案計算的住宿費及一般退房清潔；不包含額外不佔床孩童費、狗狗住宿費、早餐加購、寵物押金及其他特殊服務。最終明細請以訂房頁逐項顯示為準。",
     "keywords": [
       "房價",
       "付款",
@@ -623,9 +624,10 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "collect_info",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 28
+    "source_no": 28,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-029",
@@ -643,49 +645,50 @@
       "費用"
     ],
     "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
+    "is_active": true,
+    "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 29
+    "source_no": 29,
+    "last_verified_at": "2026-09-04"
   },
   {
     "id": "faq-030",
     "category": "房價與付款",
-    "question": "小孩也算人數嗎？",
-    "aliases": [],
-    "answer": "未滿 3 歲嬰幼兒不佔床免費，每次包棟最多 2 位；3 歲以上、未滿 6 歲兒童不佔床，每位酌收 500 元清潔與備品費；滿 6 歲以上則視同成人，列入包棟入住人數計費。",
-    "keywords": [
-      "房價",
-      "付款",
-      "費用"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 30
-  },
-  {
-    "id": "faq-031",
-    "category": "房價與付款",
-    "question": "嬰兒需要收費嗎？",
+    "question": "兒童與嬰幼兒怎麼計費？",
     "aliases": [
-      "嬰兒要收費嗎"
+      "小孩也算人數嗎",
+      "嬰兒需要收費嗎",
+      "小孩不佔床怎麼算",
+      "8個大人2個小孩怎麼算",
+      "3歲小孩收費嗎",
+      "4歲小孩收費嗎",
+      "12歲怎麼算",
+      "13歲算成人嗎",
+      "嬰幼兒免費有名額限制嗎"
     ],
-    "answer": "未滿 3 歲嬰幼兒不佔床免費，每次包棟最多 2 位；3 歲以上、未滿 6 歲兒童不佔床，每位酌收 500 元清潔與備品費；滿 6 歲以上則視同成人，列入包棟入住人數計費。",
+    "answer": "包棟最低以 10 位計價名額計算。成人與滿 4 歲至未滿 13 歲的不佔床兒童均會占用基本 10 位名額；若成人未滿 10 位，兒童可先計入基本名額，成人與該年齡兒童合計超過 10 位後，超出的不佔床兒童每位每晚加收 TWD 500。未滿 4 歲不佔床免費且免費名額不設上限，所有幼兒仍須如實填寫並受整體安全容量限制；滿 13 歲按成人計價。實際以訂房頁顯示為準。",
     "keywords": [
-      "房價",
-      "付款",
-      "費用"
+      "兒童",
+      "嬰兒",
+      "嬰幼兒",
+      "不佔床",
+      "3歲",
+      "4歲",
+      "12歲",
+      "13歲",
+      "基本10位名額",
+      "免費名額",
+      "清潔費",
+      "人數"
     ],
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "collect_info",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 31
+    "source_no": 30,
+    "last_verified_at": "2026-09-05"
   },
   {
     "id": "faq-032",
@@ -694,7 +697,7 @@
     "aliases": [
       "加人如何收費"
     ],
-    "answer": "包棟基本入住人數為 18 人，超過 18 人後，每增加 1 人每晚加收 800 元，最多可入住 23 人。",
+    "answer": "10 人以下依 10 人包棟價計算；11～18 人每增加 1 位成人，每晚加 TWD 1,250；19～20 人則以 18 人價格為基礎，每增加 1 位每晚加 TWD 800，最多入住 20 人。實際房價與床位組合以訂房頁為準。",
     "keywords": [
       "房價",
       "付款",
@@ -705,7 +708,8 @@
     "status": "approved",
     "answer_mode": "collect_info",
     "source": "faq-master.csv",
-    "source_no": 32
+    "source_no": 32,
+    "last_verified_at": "2026-09-04"
   },
   {
     "id": "faq-033",
@@ -714,7 +718,7 @@
     "aliases": [
       "加床如何收費"
     ],
-    "answer": "包棟基本入住人數為 18 人，超過 18 人後，每增加 1 人每晚加收 800 元，最多可入住 23 人。",
+    "answer": "加床會依入住人數與房間配置安排，無法單獨以床張數任意加設。19 人以上會依訂房方案安排單人加床，最多入住 20 人；實際可加床數、房間配置與費用請以訂房頁顯示為準。",
     "keywords": [
       "房價",
       "付款",
@@ -725,7 +729,8 @@
     "status": "approved",
     "answer_mode": "collect_info",
     "source": "faq-master.csv",
-    "source_no": 33
+    "source_no": 33,
+    "last_verified_at": "2026-09-04"
   },
   {
     "id": "faq-034",
@@ -754,7 +759,7 @@
       "能不能刷卡？",
       "可不可以刷卡？"
     ],
-    "answer": "目前一般付款不提供信用卡刷卡，付款方式以匯款或入住當日結清為主",
+    "answer": "目前一般付款不提供信用卡刷卡，付款方式以銀行轉帳或入住當日結清為主。",
     "keywords": [
       "刷卡",
       "房價",
@@ -764,7 +769,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "collect_info",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 35
   },
@@ -786,7 +791,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "collect_info",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 36
   },
@@ -808,7 +813,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "collect_info",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 37
   },
@@ -830,41 +835,40 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "collect_info",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 38
   },
   {
-    "id": "faq-039",
+    "id": "faq-041",
     "category": "房價與付款",
-    "question": "可以開發票嗎？",
+    "question": "可以分開付款嗎？",
     "aliases": [
-      "能不能開發票？",
-      "可不可以開發票？"
+      "能不能分開付款？",
+      "可不可以分開付款？",
+      "多人包棟可以各自轉帳嗎"
     ],
-    "answer": "目前為免用統一發票，可提供住宿收據。如需填寫公司抬頭或統一編號，請提前告知。",
+    "answer": "為方便訂單確認與對帳，訂金及尾款請由一位代表統一付款；同行旅客如需分攤費用，可自行私下結算。",
     "keywords": [
-      "發票",
       "房價",
       "付款",
-      "費用"
+      "費用",
+      "包棟",
+      "轉帳"
     ],
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "ask_human",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
-    "source_no": 39
+    "source_no": 41
   },
   {
-    "id": "faq-040",
+    "id": "faq-043",
     "category": "房價與付款",
-    "question": "可以報公司帳嗎？",
-    "aliases": [
-      "能不能報公司帳？",
-      "可不可以報公司帳？"
-    ],
-    "answer": "可以，我們可提供住宿收據。如需公司報帳，請提前提供公司抬頭及統一編號。",
+    "question": "付款後如何確認？",
+    "aliases": [],
+    "answer": "匯款資料送出後會顯示「等待館主確認入帳」；館主確認收到訂金後，訂單狀態會更新為「訂房已成立」。可由訂單查詢頁查看最新付款與訂房狀態。",
     "keywords": [
       "房價",
       "付款",
@@ -875,66 +879,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 40
-  },
-  {
-    "id": "faq-041",
-    "category": "房價與付款",
-    "question": "可以分開付款嗎？",
-    "aliases": [
-      "能不能分開付款？",
-      "可不可以分開付款？"
-    ],
-    "answer": "為方便訂單確認與對帳，訂金及尾款請由一位代表統一付款；同行旅客如需分攤費用，可自行私下結算。",
-    "keywords": [
-      "房價",
-      "付款",
-      "費用"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 41
-  },
-  {
-    "id": "faq-042",
-    "category": "房價與付款",
-    "question": "多人包棟可以各自轉帳嗎？",
-    "aliases": [],
-    "answer": "為方便訂單確認與對帳，訂金及尾款請由一位代表統一付款，不接受多人分開轉帳。同行旅客如需分攤費用，可自行私下結算。",
-    "keywords": [
-      "包棟",
-      "轉帳",
-      "房價",
-      "付款",
-      "費用"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 42
-  },
-  {
-    "id": "faq-043",
-    "category": "房價與付款",
-    "question": "付款後如何確認？",
-    "aliases": [],
-    "answer": "付款完成並確認入帳後，官方會寄送付款確認信至訂房時填寫的 Email，請留意信箱通知。",
-    "keywords": [
-      "房價",
-      "付款",
-      "費用"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 43
+    "source_no": 43,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-044",
@@ -962,7 +908,7 @@
     "category": "房價與付款",
     "question": "訂金可以折抵房費嗎？",
     "aliases": [],
-    "answer": "可以，訂金會直接從總房費中扣除，後續只需支付剩餘尾款。實際尾款金額會於官方寄送的訂房確認 Email 中註明。",
+    "answer": "可以，已支付的訂金會從訂房總額中扣除，後續只需支付訂單明細顯示的尾款；實際總額、訂金與尾款請以訂房頁或訂單查詢頁為準。",
     "keywords": [
       "訂金",
       "房價",
@@ -972,17 +918,16 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "collect_info",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 45
+    "source_no": 45,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-046",
     "category": "房價與付款",
     "question": "價格可以優惠嗎？",
-    "aliases": [
-      "價格可以優惠嗎"
-    ],
+    "aliases": [],
     "answer": "房價依入住日期、平假日及入住人數計算，官網已提供當期優惠價格，實際房價請以訂房頁面顯示為準。",
     "keywords": [
       "優惠",
@@ -1000,70 +945,38 @@
   {
     "id": "faq-047",
     "category": "房價與付款",
-    "question": "連住有優惠嗎？",
-    "aliases": [],
-    "answer": "若有官網優惠、早鳥、連住、生日或紀念日活動，會依當期公告適用；請先提供日期與需求。",
+    "question": "連住、生日或紀念日有優惠嗎？",
+    "aliases": [
+      "連住有優惠嗎？",
+      "生日或紀念日有優惠嗎？",
+      "生日有優惠嗎",
+      "紀念日有優惠嗎",
+      "住兩晚有折扣嗎"
+    ],
+    "answer": "包棟連續入住時，第 1 晚原價，第 2 晚起包棟住宿費享 95 折。其他生日、紀念日、早鳥或期間活動，請以官網當期公告及訂房頁顯示為準。",
     "keywords": [
       "連住",
+      "續住",
+      "95折",
+      "生日",
+      "紀念日",
       "優惠",
-      "房價",
-      "付款",
-      "費用"
+      "早鳥"
     ],
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "collect_info",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 47
-  },
-  {
-    "id": "faq-048",
-    "category": "房價與付款",
-    "question": "生日或紀念日有優惠嗎？",
-    "aliases": [],
-    "answer": "若有官網優惠、早鳥、連住、生日或紀念日活動，會依當期公告適用；請先提供日期與需求。",
-    "keywords": [
-      "優惠",
-      "房價",
-      "付款",
-      "費用"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 48
-  },
-  {
-    "id": "faq-049",
-    "category": "房價與付款",
-    "question": "寵物需要另外收費嗎？",
-    "aliases": [
-      "寵物要另外收費嗎",
-      "毛孩需要另外收費嗎"
-    ],
-    "answer": "需要，寵物清潔費依體重計算：10 公斤以下每隻每晚 500 元；超過 10 公斤至 20 公斤每隻每晚 800 元；超過 20 公斤每隻每晚 1,000 元。",
-    "keywords": [
-      "寵物",
-      "房價",
-      "付款",
-      "費用"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 49
+    "source_no": 47,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-050",
     "category": "房價與付款",
     "question": "押金什麼時候退？",
     "aliases": [],
-    "answer": "入住時收取押金 10000 元。退房後待房務與設備檢查完成，確認無損壞、污損或違反住宿規定後，押金將依原約定方式全額退還；如有損壞、污損或額外清潔費用，將依實際情況扣除後退還餘額。",
+    "answer": "入住時收取一般住宿押金 TWD 10,000。退房後待房務與設備檢查完成，確認無損壞、污損或違反住宿規定後，依原約定方式全額退還；如有損壞、污損或額外清潔費用，將依實際情況扣除後退還餘額。攜帶狗狗入住時，寵物押金每棟 TWD 3,000，另行計算。",
     "keywords": [
       "押金",
       "房價",
@@ -1075,7 +988,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 50
+    "source_no": 50,
+    "last_verified_at": "2026-09-04"
   },
   {
     "id": "faq-051",
@@ -1112,7 +1026,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "ask_human",
     "source": "faq-master.csv",
     "source_no": 52
   },
@@ -1132,7 +1046,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "ask_human",
     "source": "faq-master.csv",
     "source_no": 53
   },
@@ -1152,7 +1066,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "ask_human",
     "source": "faq-master.csv",
     "source_no": 54
   },
@@ -1172,7 +1086,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "ask_human",
     "source": "faq-master.csv",
     "source_no": 55
   },
@@ -1192,7 +1106,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "ask_human",
     "source": "faq-master.csv",
     "source_no": 56
   },
@@ -1212,7 +1126,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "ask_human",
     "source": "faq-master.csv",
     "source_no": 57
   },
@@ -1231,7 +1145,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "ask_human",
     "source": "faq-master.csv",
     "source_no": 58
   },
@@ -1362,9 +1276,9 @@
       "退款"
     ],
     "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "direct",
+    "is_active": true,
+    "status": "approved",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 65
   },
@@ -1410,20 +1324,28 @@
     "id": "faq-068",
     "category": "取消改期與不可抗力",
     "question": "人數增加可以補費嗎？",
-    "aliases": [],
-    "answer": "可以。若入住人數增加，請於入住前提前告知；超過 18 人後，每增加 1 人每晚加收 800 元，最多可入住 23 人。",
+    "aliases": [
+      "可以臨時增加人入住嗎",
+      "能不能臨時增加人入住？",
+      "可不可以臨時增加人入住？"
+    ],
+    "answer": "可以，請在入住前更新人數。10 人以下按 10 人價；11～18 人每增加 1 位成人，每晚加 TWD 1,250；19～20 人每增加 1 位每晚加 TWD 800，最多入住 20 人。實際差額與房間配置以訂房頁或官方確認為準。",
     "keywords": [
       "人數增加",
       "取消",
       "改期",
-      "退款"
+      "退款",
+      "人數",
+      "房型",
+      "包棟"
     ],
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
-    "source_no": 68
+    "source_no": 68,
+    "last_verified_at": "2026-09-04"
   },
   {
     "id": "faq-069",
@@ -1577,9 +1499,12 @@
     "category": "入住退房與抵達",
     "question": "幾點可以入住？",
     "aliases": [
-      "什麼時間可以入住？"
+      "什麼時間可以入住？",
+      "最晚可以幾點入住？",
+      "最晚可以什麼時間入住？",
+      "晚上很晚到會影響入住嗎"
     ],
-    "answer": "入住時間為 15:00～18:00；若預計超過 18:00 抵達，請提前私訊官方 LINE 告知。",
+    "answer": "入住時間為 15:00～18:00；若預計超過 18:00 抵達，請提前透過官方 LINE 或電話告知，以便安排入住。",
     "keywords": [
       "入住",
       "退房",
@@ -1590,7 +1515,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 76
+    "source_no": 76,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-077",
@@ -1598,20 +1524,26 @@
     "question": "幾點要退房？",
     "aliases": [
       "什麼時間要退房",
-      "幾點要退宿？"
+      "幾點要退宿？",
+      "忘記退房時間怎麼辦",
+      "忘記退房時間該怎麼處理？",
+      "忘記退房時間要如何處理",
+      "忘記退宿時間怎麼辦？"
     ],
     "answer": "退房時間為翌日上午 11:00 前。離開前請確認個人物品是否攜帶齊全，並依現場指示完成退房。",
     "keywords": [
       "入住",
       "退房",
-      "抵達"
+      "抵達",
+      "退房時間"
     ],
     "priority": 80,
     "is_active": true,
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 77
+    "source_no": 77,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-078",
@@ -1657,45 +1589,6 @@
     "source_no": 79
   },
   {
-    "id": "faq-080",
-    "category": "入住退房與抵達",
-    "question": "最晚可以幾點入住？",
-    "aliases": [
-      "最晚可以什麼時間入住？"
-    ],
-    "answer": "入住時間為 15:00～18:00；若預計超過 18:00 抵達，請提前私訊官方 LINE 告知，以便安排入住。",
-    "keywords": [
-      "入住",
-      "退房",
-      "抵達"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 80
-  },
-  {
-    "id": "faq-081",
-    "category": "入住退房與抵達",
-    "question": "晚上很晚到會影響入住嗎？",
-    "aliases": [],
-    "answer": "若預計超過 18:00 抵達，請提前私訊官方 LINE 告知，我們會依實際抵達時間協助安排入住。",
-    "keywords": [
-      "晚到",
-      "入住",
-      "退房",
-      "抵達"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 81
-  },
-  {
     "id": "faq-082",
     "category": "入住退房與抵達",
     "question": "入住當天需要帶什麼？",
@@ -1714,45 +1607,6 @@
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 82
-  },
-  {
-    "id": "faq-083",
-    "category": "入住退房與抵達",
-    "question": "入住需要出示身分證嗎？",
-    "aliases": [
-      "入住要出示身分證嗎"
-    ],
-    "answer": "需要。入住時請出示身分證、護照或居留證等有效身分證明文件，以辦理住宿登記；相關資料將依個人資料保護規定妥善處理。",
-    "keywords": [
-      "身分證",
-      "入住",
-      "退房",
-      "抵達"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "ask_human",
-    "source": "faq-master.csv",
-    "source_no": 83
-  },
-  {
-    "id": "faq-084",
-    "category": "入住退房與抵達",
-    "question": "每個人都要登記資料嗎？",
-    "aliases": [],
-    "answer": "民宿依法需登記住宿旅客資料；請出示身分證、護照或居留證等有效證件，資料會依個資規定妥善處理。",
-    "keywords": [
-      "入住",
-      "退房",
-      "抵達"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 84
   },
   {
     "id": "faq-085",
@@ -1854,16 +1708,26 @@
   {
     "id": "faq-091",
     "category": "入住退房與抵達",
-    "question": "可以先放行李嗎？",
+    "question": "本人提早抵達時，可以先在民宿現場寄放行李嗎？",
     "aliases": [
+      "可以先放行李嗎",
       "能不能先放行李？",
-      "可不可以先放行李？"
+      "可不可以先放行李？",
+      "提早到可以寄放行李嗎",
+      "入住前可以寄放行李嗎",
+      "到民宿後可以先暫放行李嗎",
+      "本人提早抵達可以放行李嗎",
+      "可以先到現場寄放行李嗎",
+      "我提早到，可以先寄放行李嗎",
+      "本人先到民宿，可以暫放行李嗎"
     ],
     "answer": "可以，入住前可先將行李寄放於指定公共區域，但 15:00 前仍為房務清潔與整理時間，恕無法提前入住。",
     "keywords": [
-      "入住",
-      "退房",
-      "抵達"
+      "現場寄放",
+      "暫放行李",
+      "提早抵達",
+      "本人到場",
+      "入住前寄放"
     ],
     "priority": 80,
     "is_active": true,
@@ -1877,7 +1741,9 @@
     "category": "入住退房與抵達",
     "question": "退房後可以寄放行李嗎？",
     "aliases": [
-      "退宿後可以寄放行李嗎"
+      "退宿後可以寄放行李嗎",
+      "退房後可以放行李到下午嗎",
+      "退宿後可以放行李到下午嗎"
     ],
     "answer": "退房後恕不提供行李寄放服務，請於退房時一併帶走所有行李及個人物品。",
     "keywords": [
@@ -1888,7 +1754,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "collect_info",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 92
   },
@@ -1932,28 +1798,6 @@
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 94
-  },
-  {
-    "id": "faq-095",
-    "category": "入住退房與抵達",
-    "question": "忘記退房時間怎麼辦？",
-    "aliases": [
-      "忘記退房時間該怎麼處理？",
-      "忘記退房時間要如何處理",
-      "忘記退宿時間怎麼辦？"
-    ],
-    "answer": "退房時間為翌日上午 11:00 前。若需延遲退房，請提前私訊官方 LINE 確認；延遲退房額外收費每小時 TWD 1,000，最多延後 1 小時。",
-    "keywords": [
-      "退房時間",
-      "入住",
-      "抵達"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 95
   },
   {
     "id": "faq-096",
@@ -2059,61 +1903,29 @@
     "category": "交通停車與周邊",
     "question": "民宿地址在哪裡？",
     "aliases": [
-      "慢慢蒔光地址在哪裡？"
+      "慢慢蒔光地址在哪裡？",
+      "導航要輸入什麼？",
+      "開車怎麼到？",
+      "開車如何到",
+      "地址是什麼",
+      "Google地圖怎麼搜"
     ],
-    "answer": "慢慢蒔光 STime Villa 位於宜蘭縣員山鄉深州二路 158 號，導航可直接搜尋「慢慢蒔光 STime Villa」前往。",
+    "answer": "慢慢蒔光 STime Villa 位於宜蘭縣員山鄉深洲二路 158 號。Google 地圖可直接搜尋「慢慢蒔光 STime Villa」，或輸入完整地址導航前往。",
     "keywords": [
       "地址",
-      "交通",
-      "停車",
-      "周邊"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 101
-  },
-  {
-    "id": "faq-102",
-    "category": "交通停車與周邊",
-    "question": "導航要輸入什麼？",
-    "aliases": [],
-    "answer": "Google 地圖可直接搜尋「慢慢蒔光 STime Villa」，或輸入地址「宜蘭縣員山鄉深州二路 158 號」即可導航前往。",
-    "keywords": [
       "導航",
-      "交通",
-      "停車",
-      "周邊"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 102
-  },
-  {
-    "id": "faq-103",
-    "category": "交通停車與周邊",
-    "question": "開車怎麼到？",
-    "aliases": [
-      "開車如何到"
-    ],
-    "answer": "開車可使用 Google 地圖搜尋「慢慢蒔光 STime Villa」，或直接導航至「宜蘭縣員山鄉深州二路 158 號」即可抵達。",
-    "keywords": [
+      "Google地圖",
       "開車",
-      "交通",
-      "停車",
-      "周邊"
+      "員山",
+      "深洲二路158號"
     ],
     "priority": 80,
     "is_active": true,
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 103
+    "source_no": 101,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-104",
@@ -2121,20 +1933,27 @@
     "question": "有停車位嗎？",
     "aliases": [
       "請問有停車位嗎",
-      "停車位有提供嗎"
+      "停車位有提供嗎",
+      "庭院可以停車嗎"
     ],
-    "answer": "有，民宿旁設有戶外停車空間，可供住客停車，抵達後請依現場指示停放。",
+    "answer": "有，院內戶外停車空間約可停放 8 台一般轎車，住宿期間不另收停車費；抵達後請依現場指示停放。",
     "keywords": [
       "停車位",
       "交通",
-      "周邊"
+      "周邊",
+      "庭院",
+      "停車",
+      "戶外",
+      "烤肉",
+      "戲水"
     ],
     "priority": 80,
     "is_active": true,
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 104
+    "source_no": 104,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-105",
@@ -2171,7 +1990,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "collect_info",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 106
   },
@@ -2180,7 +1999,7 @@
     "category": "交通停車與周邊",
     "question": "休旅車或九人座可以停嗎？",
     "aliases": [],
-    "answer": "可以，一般休旅車及九人座車皆可停放",
+    "answer": "可以，一般休旅車及九人座車皆可停放。",
     "keywords": [
       "交通",
       "停車",
@@ -2242,7 +2061,7 @@
     "aliases": [
       "搭火車如何到"
     ],
-    "answer": "可搭乘火車至宜蘭火車站，下車後再轉乘計程車前往民宿。",
+    "answer": "可搭乘火車至宜蘭火車站，下車後再轉乘計程車或自行租車前往民宿；實際租車店家、車型與營業時間請依當日資訊為準。",
     "keywords": [
       "火車",
       "交通",
@@ -2252,37 +2071,16 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 110
-  },
-  {
-    "id": "faq-111",
-    "category": "交通停車與周邊",
-    "question": "搭高鐵怎麼到？",
-    "aliases": [
-      "搭高鐵如何到"
-    ],
-    "answer": "可搭乘火車至宜蘭火車站，下車後再轉乘計程車前往民宿。",
-    "keywords": [
-      "高鐵",
-      "交通",
-      "停車",
-      "周邊"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 111
   },
   {
     "id": "faq-112",
     "category": "交通停車與周邊",
     "question": "附近有公車嗎？",
     "aliases": [],
-    "answer": "目前沒有公車可直接抵達民宿，建議搭乘火車至宜蘭火車站後，再轉乘計程車前往民宿。",
+    "answer": "目前沒有公車可直接抵達民宿，建議搭乘火車至宜蘭火車站後，再轉乘計程車或自行租車前往。",
     "keywords": [
       "公車",
       "交通",
@@ -2292,7 +2090,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 112
   },
@@ -2324,14 +2122,19 @@
     "question": "可以幫忙叫計程車嗎？",
     "aliases": [
       "能不能幫忙叫計程車？",
-      "可不可以幫忙叫計程車？"
+      "可不可以幫忙叫計程車？",
+      "可以幫忙叫車嗎",
+      "能不能幫忙叫車？",
+      "可不可以幫忙叫車？"
     ],
     "answer": "可以協助提供叫車資訊或聯繫車行，但是否能叫到車、等待時間及車資仍以車行實際安排為準。",
     "keywords": [
       "計程車",
       "交通",
       "停車",
-      "周邊"
+      "周邊",
+      "行李",
+      "入住服務"
     ],
     "priority": 80,
     "is_active": true,
@@ -2345,7 +2148,7 @@
     "category": "交通停車與周邊",
     "question": "附近租車方便嗎？",
     "aliases": [],
-    "answer": "如有租車需求，請自行洽詢租車行確認車型、費用及取還車方式。",
+    "answer": "宜蘭火車站周邊有租車選擇；實際店家、車型、費用、營業時間與取還車方式，請直接向租車業者確認。",
     "keywords": [
       "租車",
       "交通",
@@ -2355,7 +2158,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 115
   },
@@ -2411,7 +2214,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 118
   },
@@ -2419,18 +2222,23 @@
     "id": "faq-119",
     "category": "交通停車與周邊",
     "question": "附近有餐廳嗎？",
-    "aliases": [],
+    "aliases": [
+      "附近有推薦餐廳嗎"
+    ],
     "answer": "有，民宿附近有餐廳、小吃及咖啡廳，用餐選擇方便，建議出發前先確認店家營業時間。",
     "keywords": [
       "餐廳",
       "交通",
       "停車",
-      "周邊"
+      "周邊",
+      "早餐",
+      "餐飲",
+      "廚房"
     ],
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 119
   },
@@ -2449,7 +2257,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 120
   },
@@ -2492,25 +2300,6 @@
     "source_no": 122
   },
   {
-    "id": "faq-123",
-    "category": "交通停車與周邊",
-    "question": "叫外送方便嗎？",
-    "aliases": [],
-    "answer": "可以，民宿可使用外送平台訂餐，實際可配送的店家及時間請以外送平台顯示為準。",
-    "keywords": [
-      "外送",
-      "交通",
-      "停車",
-      "周邊"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 123
-  },
-  {
     "id": "faq-124",
     "category": "交通停車與周邊",
     "question": "附近有加油站嗎？",
@@ -2525,7 +2314,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 124
   },
@@ -2555,7 +2344,7 @@
     "category": "人數房型與包棟",
     "question": "最多可以住幾人？",
     "aliases": [],
-    "answer": "包棟標準入住人數為 18 人，如有加人需求可加床，最多可入住 23 人。超過 18 人後，每增加 1 人每晚加收 TWD 800。",
+    "answer": "包棟標準入住人數為 18 人；如有加人需求，可依訂房方案安排加床，最多入住 20 人。19～20 人每增加 1 人，每晚加收 TWD 800。",
     "keywords": [
       "人數",
       "房型",
@@ -2564,16 +2353,17 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "collect_info",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 126
+    "source_no": 126,
+    "last_verified_at": "2026-09-04"
   },
   {
     "id": "faq-127",
     "category": "人數房型與包棟",
     "question": "基本人數是幾人？",
     "aliases": [],
-    "answer": "包棟標準入住人數為 18 人；超過 18 人後，每增加 1 人每晚加收 TWD 800，最多可入住 23 人。",
+    "answer": "包棟標準入住人數為 18 人；19～20 人每增加 1 人，每晚加收 TWD 800，最多入住 20 人。",
     "keywords": [
       "基本人數",
       "房型",
@@ -2582,9 +2372,10 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "collect_info",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 127
+    "source_no": 127,
+    "last_verified_at": "2026-09-04"
   },
   {
     "id": "faq-128",
@@ -2594,7 +2385,7 @@
       "能不能超過最大人數入住？",
       "可不可以超過最大人數入住？"
     ],
-    "answer": "不可以，包棟最多可入住 23 人，恕無法再增加入住人數。",
+    "answer": "不可以，包棟最多入住 20 人，恕無法再增加入住人數。",
     "keywords": [
       "最大人數",
       "房型",
@@ -2605,25 +2396,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 128
-  },
-  {
-    "id": "faq-129",
-    "category": "人數房型與包棟",
-    "question": "小孩不佔床可以不算嗎？",
-    "aliases": [],
-    "answer": "未滿 3 歲嬰幼兒不佔床免費，每次包棟最多 2 位；3 歲以上、未滿 6 歲兒童不佔床，每位每晚酌收 TWD 500 清潔與備品費；滿 6 歲以上則視同成人，列入包棟入住人數計費。",
-    "keywords": [
-      "人數",
-      "房型",
-      "包棟"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 129
+    "source_no": 128,
+    "last_verified_at": "2026-09-04"
   },
   {
     "id": "faq-130",
@@ -2664,7 +2438,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 131
+    "source_no": 131,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-132",
@@ -2705,7 +2480,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 133
+    "source_no": 133,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-134",
@@ -2727,7 +2503,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 134
+    "source_no": 134,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-135",
@@ -2745,18 +2522,24 @@
       "包棟"
     ],
     "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
+    "is_active": true,
+    "status": "approved",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 135
+    "source_no": 135,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-136",
     "category": "人數房型與包棟",
     "question": "床型可以選嗎？",
-    "aliases": [],
-    "answer": "各房床型皆為固定配置，無法更換床型；包棟入住可依同行成員需求自行分配房間。",
+    "aliases": [
+      "房間可以換床位嗎？",
+      "床位可以移動嗎",
+      "可以換床型嗎",
+      "可以把床搬到別間嗎"
+    ],
+    "answer": "各房床型與床位皆為固定配置，無法任意更換或移動；包棟時可依同行成員需求自行分配房間，19 人以上的加床配置則以訂房方案為準。",
     "keywords": [
       "床型",
       "人數",
@@ -2768,7 +2551,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 136
+    "source_no": 136,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-137",
@@ -2815,82 +2599,6 @@
     "source_no": 138
   },
   {
-    "id": "faq-139",
-    "category": "人數房型與包棟",
-    "question": "房間可以換床位嗎？",
-    "aliases": [],
-    "answer": "各房床位皆為固定配置，無法更換或移動；包棟入住可依同行成員需求自行分配房間。",
-    "keywords": [
-      "人數",
-      "房型",
-      "包棟"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 139
-  },
-  {
-    "id": "faq-140",
-    "category": "人數房型與包棟",
-    "question": "可以臨時增加人入住嗎？",
-    "aliases": [
-      "能不能臨時增加人入住？",
-      "可不可以臨時增加人入住？"
-    ],
-    "answer": "可以，如入住人數臨時增加，請提前告知；但總入住人數最多不得超過 23 人。超過 18 人後，每增加 1 人每晚加收 TWD 800。",
-    "keywords": [
-      "人數",
-      "房型",
-      "包棟"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 140
-  },
-  {
-    "id": "faq-141",
-    "category": "人數房型與包棟",
-    "question": "沒有過夜的訪客可以來嗎？",
-    "aliases": [],
-    "answer": "可以，訪客請提前告知，每位酌收 TWD 600，並須於 23:00 前離開；訪客不得留宿。",
-    "keywords": [
-      "訪客",
-      "人數",
-      "房型",
-      "包棟"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 141
-  },
-  {
-    "id": "faq-142",
-    "category": "人數房型與包棟",
-    "question": "朋友可以白天來玩嗎？",
-    "aliases": [],
-    "answer": "可以，訪客請提前告知，每位酌收 TWD 600，並須於 23:00 前離開；訪客不得留宿。",
-    "keywords": [
-      "人數",
-      "房型",
-      "包棟"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 142
-  },
-  {
     "id": "faq-143",
     "category": "人數房型與包棟",
     "question": "可以辦活動或聚會嗎？",
@@ -2904,7 +2612,9 @@
       "活動",
       "人數",
       "房型",
-      "包棟"
+      "包棟",
+      "生日派對",
+      "求婚"
     ],
     "priority": 80,
     "is_active": true,
@@ -2912,26 +2622,6 @@
     "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 143
-  },
-  {
-    "id": "faq-144",
-    "category": "人數房型與包棟",
-    "question": "求婚或生日派對可以嗎？",
-    "aliases": [],
-    "answer": "可以，相關費用會有所不同，如有需求請提前告知。",
-    "keywords": [
-      "生日派對",
-      "求婚",
-      "人數",
-      "房型",
-      "包棟"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 144
   },
   {
     "id": "faq-145",
@@ -3040,7 +2730,7 @@
     "category": "人數房型與包棟",
     "question": "管家會住在裡面嗎？",
     "aliases": [],
-    "answer": "不會，管家房設有獨立出入口，與住客住宿空間分開，不會影響住客隱私。",
+    "answer": "不會，管家不住在民宿館內；入住期間如有需要，可透過官方 LINE 或電話聯絡協助。",
     "keywords": [
       "管家",
       "人數",
@@ -3052,7 +2742,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 150
+    "source_no": 150,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-151",
@@ -3148,32 +2839,11 @@
     "source_no": 156
   },
   {
-    "id": "faq-158",
-    "category": "房間設備與備品",
-    "question": "有Netflix嗎？",
-    "aliases": [
-      "請問有Netflix嗎",
-      "Netflix有提供嗎"
-    ],
-    "answer": "有，電視可使用 Netflix，需登入住客自己的 Netflix 帳號觀看；退房前請記得登出帳號。",
-    "keywords": [
-      "Netflix",
-      "房間設備",
-      "備品"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 158
-  },
-  {
     "id": "faq-159",
     "category": "房間設備與備品",
     "question": "房間有冰箱嗎？",
     "aliases": [],
-    "answer": "房間內沒有冰箱，餐廳設有共用冰箱可供使用",
+    "answer": "房間內沒有冰箱，餐廳設有共用冰箱可供使用。",
     "keywords": [
       "冰箱",
       "房間設備",
@@ -3311,7 +2981,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 165
   },
@@ -3332,7 +3002,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 166
   },
@@ -3383,7 +3053,7 @@
       "能不能帶自己的電器？",
       "可不可以帶自己的電器？"
     ],
-    "answer": "不可以，為維護用電安全，請勿攜帶或使用自備電器。",
+    "answer": "可攜帶一般低功率個人物品與充電設備，但請勿在館內使用電磁爐、電鍋、卡式爐、暖爐或其他高功率烹煮、加熱電器；如有醫療器材等特殊用電需求，請提前告知。",
     "keywords": [
       "房間設備",
       "備品"
@@ -3393,7 +3063,8 @@
     "status": "approved",
     "answer_mode": "collect_info",
     "source": "faq-master.csv",
-    "source_no": 169
+    "source_no": 169,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-170",
@@ -3453,12 +3124,16 @@
     "id": "faq-173",
     "category": "房間設備與備品",
     "question": "房間有蚊子或昆蟲嗎？",
-    "aliases": [],
+    "aliases": [
+      "房間有小蟲正常嗎"
+    ],
     "answer": "民宿大門設有紗門，可減少蚊蟲飛入；因周邊為自然環境，仍可能偶有小昆蟲，進出時請隨手關閉紗門。",
     "keywords": [
       "昆蟲",
       "房間設備",
-      "備品"
+      "備品",
+      "清潔",
+      "衛生"
     ],
     "priority": 80,
     "is_active": true,
@@ -3472,7 +3147,7 @@
     "category": "房間設備與備品",
     "question": "房內可以吃東西嗎？",
     "aliases": [],
-    "answer": "可以，但為維持房間整潔，建議盡量至餐廳用餐。",
+    "answer": "房內請勿飲食；如需用餐，請至餐廳區使用，以維持寢具與房間整潔。",
     "keywords": [
       "房間設備",
       "備品"
@@ -3482,14 +3157,15 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 174
+    "source_no": 174,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-175",
     "category": "房間設備與備品",
     "question": "房內可以煮食嗎？",
     "aliases": [],
-    "answer": "不可以，房內禁止煮食",
+    "answer": "不可以，房內禁止煮食。",
     "keywords": [
       "房間設備",
       "備品"
@@ -3542,8 +3218,12 @@
     "id": "faq-178",
     "category": "公共空間與設施",
     "question": "廚房可以使用嗎？",
-    "aliases": [],
-    "answer": "可以，廚房可使用館內提供的設備，但禁止使用明火。",
+    "aliases": [
+      "可以用廚房嗎",
+      "可以煮東西嗎",
+      "能自己煮嗎"
+    ],
+    "answer": "廚房不開放住客自行料理或使用烹煮設備；餐廳區的飲水機、共用冰箱、餐具與杯盤可依現場規定使用，使用後請協助清潔並放回原位。",
     "keywords": [
       "廚房",
       "公共空間",
@@ -3554,7 +3234,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 178
+    "source_no": 178,
+    "last_verified_at": "2026-09-04"
   },
   {
     "id": "faq-179",
@@ -3611,7 +3292,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 181
+    "source_no": 181,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-182",
@@ -3657,27 +3339,6 @@
     "source_no": 183
   },
   {
-    "id": "faq-184",
-    "category": "公共空間與設施",
-    "question": "可以借桌遊嗎？",
-    "aliases": [
-      "能不能借桌遊？",
-      "可不可以借桌遊？"
-    ],
-    "answer": "餐廳設有桌子，可供住客玩桌遊；如有自備桌遊也可以使用。",
-    "keywords": [
-      "桌遊",
-      "公共空間",
-      "設施"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 184
-  },
-  {
     "id": "faq-185",
     "category": "公共空間與設施",
     "question": "有兒童玩具嗎？",
@@ -3685,7 +3346,7 @@
       "請問有兒童玩具嗎",
       "兒童玩具有提供嗎"
     ],
-    "answer": "有，公共空間備有兒童書籍及玩具，可供住客使用。",
+    "answer": "有，公共空間備有兒童書籍與玩具可供使用；孩童使用時請由家長陪同並協助收拾歸位。",
     "keywords": [
       "兒童玩具",
       "公共空間",
@@ -3696,7 +3357,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 185
+    "source_no": 185,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-186",
@@ -3717,7 +3379,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 186
+    "source_no": 186,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-187",
@@ -3819,26 +3482,6 @@
     "source_no": 194
   },
   {
-    "id": "faq-195",
-    "category": "公共空間與設施",
-    "question": "資源回收怎麼分類？",
-    "aliases": [
-      "資源回收如何分類"
-    ],
-    "answer": "房內與公共空間皆設有垃圾桶，公共區域可放置資源回收桶；住客只需將一般垃圾與瓶罐等回收物簡單分開放置，退房後由管家統一整理處理。",
-    "keywords": [
-      "資源回收",
-      "公共空間",
-      "設施"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 195
-  },
-  {
     "id": "faq-196",
     "category": "公共空間與設施",
     "question": "公共空間髒了怎麼辦？",
@@ -3857,26 +3500,6 @@
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 196
-  },
-  {
-    "id": "faq-197",
-    "category": "公共空間與設施",
-    "question": "設施壞掉怎麼辦？",
-    "aliases": [
-      "設施壞掉該怎麼處理？",
-      "設施壞掉要如何處理"
-    ],
-    "answer": "若發現館內設備故障或損壞，請立即通知管家，請勿自行拆修或繼續使用，以便我們協助處理。",
-    "keywords": [
-      "公共空間",
-      "設施"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 197
   },
   {
     "id": "faq-198",
@@ -3916,24 +3539,6 @@
     "source_no": 199
   },
   {
-    "id": "faq-200",
-    "category": "公共空間與設施",
-    "question": "公共空間有監視器嗎？",
-    "aliases": [],
-    "answer": "有，公共空間設有監視器，主要用於安全維護；房間、衛浴等私人空間不設置監視器。",
-    "keywords": [
-      "公共空間",
-      "監視器",
-      "設施"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 200
-  },
-  {
     "id": "faq-201",
     "category": "早餐餐飲與廚房",
     "question": "有附早餐嗎？",
@@ -3941,7 +3546,7 @@
       "請問有附早餐嗎",
       "附早餐有提供嗎"
     ],
-    "answer": "早餐為加購代訂服務，每份 TWD 250，並非房價內含；如需早餐，請於訂房時提前告知，早餐預定於 08:30 送至餐桌，實際品項依合作店家提供為準。",
+    "answer": "早餐為加購項目，並非房價內含；如需加購早餐，請於訂房時提前告知。早餐會於 08:30 送至餐桌。",
     "keywords": [
       "早餐",
       "餐飲",
@@ -3950,7 +3555,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "collect_info",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 201
   },
@@ -3961,7 +3566,7 @@
     "aliases": [
       "早餐什麼時間供應"
     ],
-    "answer": "早餐為加購代訂服務，每份 TWD 250，預定於 08:30 送至餐桌；如需早餐或有特殊時間需求，請於訂房時提前告知，實際品項依合作店家提供為準。",
+    "answer": "早餐預定於 08:30 送至餐桌；如有特殊時間需求，請於訂房時提前告知。",
     "keywords": [
       "早餐",
       "餐飲",
@@ -3970,7 +3575,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "collect_info",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 202
   },
@@ -3979,7 +3584,7 @@
     "category": "早餐餐飲與廚房",
     "question": "早餐可以素食嗎？",
     "aliases": [],
-    "answer": "目前不提供素食早餐選項，如有素食需求，建議自行準備或另行安排。",
+    "answer": "目前不提供素食早餐選項；如有素食需求，建議另行安排外食或外送。",
     "keywords": [
       "早餐",
       "素食",
@@ -4001,7 +3606,7 @@
       "能不能代訂早餐？",
       "可不可以代訂早餐？"
     ],
-    "answer": "可以，早餐為加購代訂服務，每份 TWD 250；如需早餐，請於訂房時提前告知，早餐預定於 08:30 送至餐桌，實際品項依合作店家提供為準。",
+    "answer": "可以，早餐為加購代訂服務，每份 TWD 250，預計於 08:30 送至餐桌；請在訂房時依入住日期與份數加購。",
     "keywords": [
       "代訂早餐",
       "餐飲",
@@ -4010,9 +3615,10 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
-    "source_no": 204
+    "source_no": 204,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-205",
@@ -4021,7 +3627,7 @@
     "aliases": [
       "早餐一份費用是多少？"
     ],
-    "answer": "早餐為加購代訂服務，每份 TWD 250；如需早餐，請於訂房時提前告知，早餐預定於 08:30 送至餐桌，實際品項依合作店家提供為準。",
+    "answer": "早餐為加購代訂服務，每份 TWD 250；如需早餐，請於訂房時提前告知。",
     "keywords": [
       "早餐",
       "餐飲",
@@ -4032,7 +3638,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 205
+    "source_no": 205,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-206",
@@ -4053,7 +3660,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 206
+    "source_no": 206,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-207",
@@ -4081,7 +3689,7 @@
       "請問有鍋具可以用嗎",
       "鍋具可以用有提供嗎"
     ],
-    "answer": "目前鍋具不開放住客自行使用；如有特殊需求，請提前告知。",
+    "answer": "不提供鍋具供住客自行料理；館內也不開放使用電鍋、卡式爐、火鍋或其他烹煮設備。",
     "keywords": [
       "鍋具",
       "早餐",
@@ -4093,7 +3701,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 208
+    "source_no": 208,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-209",
@@ -4115,7 +3724,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 209
+    "source_no": 209,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-210",
@@ -4135,28 +3745,10 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
-    "source_no": 210
-  },
-  {
-    "id": "faq-211",
-    "category": "早餐餐飲與廚房",
-    "question": "烤肉設備有提供嗎？",
-    "aliases": [],
-    "answer": "有，民宿提供烤肉爐；如需烤肉，請於訂房時提前告知，以便協助安排。",
-    "keywords": [
-      "烤肉設備",
-      "早餐",
-      "餐飲",
-      "廚房"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 211
+    "source_no": 210,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-212",
@@ -4166,7 +3758,7 @@
       "能不能叫外燴？",
       "可不可以叫外燴？"
     ],
-    "answer": "可以，民宿可協助安排私廚服務；如有需求，請於訂房時提前告知，實際菜單、費用及可安排時間依合作私廚提供為準。",
+    "answer": "民宿可協助安排私廚服務；如需由其他外燴業者進場，請先告知並確認場地與進場安排。實際菜單、費用及可安排時間，依合作店家或業者提供為準。",
     "keywords": [
       "外燴",
       "早餐",
@@ -4176,7 +3768,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 212
   },
@@ -4186,40 +3778,26 @@
     "question": "可以叫外送嗎？",
     "aliases": [
       "能不能叫外送？",
-      "可不可以叫外送？"
+      "可不可以叫外送？",
+      "叫外送方便嗎"
     ],
-    "answer": "可以，住客可自行使用 foodpanda 等外送平台訂餐.",
+    "answer": "可以，住客可自行使用外送平台訂餐；實際配送範圍、費用與時間以平台及店家為準。",
     "keywords": [
       "外送",
       "早餐",
       "餐飲",
-      "廚房"
+      "廚房",
+      "交通",
+      "停車",
+      "周邊"
     ],
     "priority": 80,
     "is_active": true,
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 213
-  },
-  {
-    "id": "faq-214",
-    "category": "早餐餐飲與廚房",
-    "question": "附近有推薦餐廳嗎？",
-    "aliases": [],
-    "answer": "有，民宿附近有餐廳、小吃及咖啡廳可選擇，建議出發前先確認店家營業時間。",
-    "keywords": [
-      "餐廳",
-      "早餐",
-      "餐飲",
-      "廚房"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 214
+    "source_no": 213,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-215",
@@ -4328,7 +3906,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 219
+    "source_no": 219,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-220",
@@ -4401,7 +3980,7 @@
       "能不能煮氣味重的食物？",
       "可不可以煮氣味重的食物？"
     ],
-    "answer": "不可以，館內不開放住客自行蒸煮食物",
+    "answer": "不可以，館內不開放住客自行蒸煮食物。",
     "keywords": [
       "早餐",
       "餐飲",
@@ -4442,9 +4021,13 @@
     "aliases": [
       "能不能帶寵物？",
       "可不可以帶寵物？",
-      "可以帶毛孩嗎"
+      "可以帶毛孩嗎",
+      "可以帶狗嗎",
+      "能不能帶狗？",
+      "可不可以帶狗？",
+      "可以帶狗狗嗎"
     ],
-    "answer": "可以，攜帶狗狗入住；請於訂房時提前告知狗狗數量與重量，並依寵物入住規定及清潔費標準辦理。",
+    "answer": "目前僅開放狗狗入住，貓咪暫不開放。攜帶狗狗時，請於訂房時填寫數量與重量，並依狗狗入住規定及費用標準辦理。",
     "keywords": [
       "寵物",
       "毛孩"
@@ -4455,28 +4038,6 @@
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 226
-  },
-  {
-    "id": "faq-227",
-    "category": "寵物友善",
-    "question": "可以帶狗嗎？",
-    "aliases": [
-      "能不能帶狗？",
-      "可不可以帶狗？",
-      "可以帶狗狗嗎",
-      "可以帶毛孩嗎"
-    ],
-    "answer": "可以，攜帶狗狗入住；請於訂房時提前告知狗狗數量與重量，並依寵物入住規定及清潔費標準辦理。",
-    "keywords": [
-      "寵物",
-      "毛孩"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 227
   },
   {
     "id": "faq-228",
@@ -4496,7 +4057,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 228
+    "source_no": 228,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-229",
@@ -4504,31 +4066,62 @@
     "question": "寵物需要收費嗎？",
     "aliases": [
       "寵物要收費嗎",
-      "毛孩需要收費嗎"
+      "毛孩需要收費嗎",
+      "寵物需要另外收費嗎",
+      "寵物要另外收費嗎",
+      "毛孩需要另外收費嗎",
+      "20公斤以上狗狗怎麼收費",
+      "超過20公斤狗狗怎麼收費",
+      "超過20公斤的狗狗多少錢",
+      "大型犬住宿費多少",
+      "狗狗超過20公斤費用",
+      "寵物押金多少",
+      "狗狗需要押金嗎",
+      "狗狗入住要押金嗎",
+      "狗狗押金怎麼收",
+      "寵物押金怎麼退"
     ],
-    "answer": "需要，狗狗入住會依體重收取清潔費：10 公斤以下每隻每晚 TWD 500；超過 10 公斤至 20 公斤每隻每晚 TWD 800；超過 20 公斤每隻每晚 TWD 1,000。",
+    "answer": "需要。狗狗住宿費依每隻體重計算：10 公斤以下每隻每晚 TWD 500；超過 10 公斤至 20 公斤每隻每晚 TWD 800；超過 20 公斤每隻每晚 TWD 1,200。第 2 晚起狗狗住宿費享 95 折，入住時另收每棟 TWD 3,000 寵物押金。",
     "keywords": [
       "寵物",
-      "毛孩"
+      "毛孩",
+      "房價",
+      "付款",
+      "費用",
+      "狗狗住宿費",
+      "寵物費",
+      "體重",
+      "公斤",
+      "20公斤以上",
+      "大型犬費用",
+      "寵物押金",
+      "狗狗押金",
+      "押金"
     ],
     "priority": 80,
     "is_active": true,
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 229
+    "source_no": 229,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-230",
     "category": "寵物友善",
     "question": "寵物可以上床嗎？",
     "aliases": [
-      "毛孩可以上床嗎"
+      "毛孩可以上床嗎",
+      "可以帶寵物坐床或沙發拍照嗎",
+      "能不能帶寵物坐床或沙發拍照？",
+      "可不可以帶寵物坐床或沙發拍照？",
+      "可以帶毛孩坐床或沙發拍照嗎"
     ],
     "answer": "不可以，狗狗請勿上床或沙發，並請避免接觸寢具與床鋪，以維護住宿清潔品質。",
     "keywords": [
       "寵物",
-      "毛孩"
+      "毛孩",
+      "拍照"
     ],
     "priority": 80,
     "is_active": true,
@@ -4563,7 +4156,7 @@
     "aliases": [
       "毛孩可以單獨留在房內嗎"
     ],
-    "answer": "不可讓狗狗單獨在房內自由活動；如需短暫留在房內，須安置於寵物圍籬內。若全體住客皆要外出，請勿將狗狗獨自留在館內。",
+    "answer": "不可讓狗狗單獨在房內自由活動；短暫留房時須安置於寵物圍籬內。若全體住客外出且狗狗留在館內，請先告知管家並確認安排。",
     "keywords": [
       "寵物",
       "毛孩"
@@ -4573,7 +4166,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 232
+    "source_no": 232,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-233",
@@ -4581,8 +4175,7 @@
     "question": "狗狗會叫可以入住嗎？",
     "aliases": [
       "狗會叫可以入住嗎",
-      "狗狗狗狗會叫可以入住嗎",
-      "毛孩毛孩會叫可以入住嗎"
+      "毛孩會叫可以入住嗎"
     ],
     "answer": "可以，但請飼主協助安撫並控制狗狗吠叫，避免影響同行住客及住宿安寧。",
     "keywords": [
@@ -4611,30 +4204,36 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 234
   },
   {
     "id": "faq-235",
     "category": "寵物友善",
-    "question": "可以帶幾隻寵物？",
+    "question": "可以帶幾隻狗狗？",
     "aliases": [
-      "能不能帶幾隻寵物？",
-      "可不可以帶幾隻寵物？",
-      "可以帶幾隻毛孩？"
+      "可以帶幾隻寵物？",
+      "可以帶幾隻毛孩？",
+      "可以帶三隻狗嗎",
+      "三隻狗可以嗎",
+      "超過三隻狗可以嗎"
     ],
-    "answer": "可以攜帶多隻狗狗入住，清潔費依每隻狗狗的體重分別計算。",
+    "answer": "可以攜帶多隻狗狗，目前不設固定隻數上限；請於訂房時如實填寫每隻狗狗的數量與體重。若有特殊品種、特殊照護或其他安全需求，請提前聯繫民宿確認。",
     "keywords": [
-      "寵物",
-      "毛孩"
+      "狗狗數量",
+      "寵物數量",
+      "三隻狗",
+      "多隻狗",
+      "超過三隻"
     ],
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
-    "source_no": 235
+    "source_no": 235,
+    "last_verified_at": "2026-09-04"
   },
   {
     "id": "faq-236",
@@ -4644,7 +4243,7 @@
       "寵物要籠子嗎",
       "毛孩需要籠子嗎"
     ],
-    "answer": "民宿可提供一組寵物圍籬；如有使用需求，請於訂房時提前告知。",
+    "answer": "一般不需要全程關籠；館內可提供 1 組寵物圍籬。若狗狗需短暫留在房內，須安置於圍籬內，並請於訂房時提前告知使用需求。",
     "keywords": [
       "寵物",
       "毛孩"
@@ -4652,7 +4251,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 236
   },
@@ -4665,7 +4264,7 @@
       "寵物用品有提供嗎",
       "有毛孩用品嗎"
     ],
-    "answer": "有，民宿可提供狗狗吃飯碗、喝水碗及睡墊；為了讓毛孩更適應環境，仍建議自備慣用睡墊與用品。",
+    "answer": "民宿可提供狗狗吃飯碗、喝水碗及 1 組寵物圍籬；建議飼主自備狗狗慣用的睡墊、尿布墊與清潔用品，讓毛孩更容易適應。",
     "keywords": [
       "寵物用品",
       "毛孩"
@@ -4675,7 +4274,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 237
+    "source_no": 237,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-238",
@@ -4702,7 +4302,7 @@
     "aliases": [
       "毛孩可以進公共空間嗎"
     ],
-    "answer": "可以，狗狗可進入公共空間",
+    "answer": "可以，狗狗可進入公共空間；請由飼主全程看顧並協助維持環境整潔。",
     "keywords": [
       "公共空間",
       "寵物",
@@ -4765,7 +4365,7 @@
     "aliases": [
       "毛孩掉毛會被收費嗎"
     ],
-    "answer": "一般正常掉毛不會另外收費；但請飼主協助維持環境整潔",
+    "answer": "一般正常掉毛不會另外收費；但請飼主協助維持環境整潔。若造成大量髒污或需特殊清潔，將依實際情況收取費用。",
     "keywords": [
       "寵物",
       "毛孩"
@@ -4803,7 +4403,7 @@
     "aliases": [
       "附近有毛孩友善餐廳嗎"
     ],
-    "answer": "有，民宿附近有寵物友善餐廳",
+    "answer": "附近有寵物友善餐廳，但店家、營業時間與寵物規定可能調整；如需當期建議，可在入住前詢問民宿。",
     "keywords": [
       "餐廳",
       "寵物",
@@ -4812,7 +4412,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 245
   },
@@ -4821,7 +4421,7 @@
     "category": "寵物友善",
     "question": "附近有動物醫院嗎？",
     "aliases": [],
-    "answer": "有，宜蘭市區有動物醫院",
+    "answer": "宜蘭市區有動物醫院；實際院所、營業時間與急診資訊可能調整，如有需要可在入住前詢問當期資訊，緊急狀況請直接聯絡合適的動物醫院。",
     "keywords": [
       "動物醫院",
       "寵物",
@@ -4830,31 +4430,9 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 246
-  },
-  {
-    "id": "faq-248",
-    "category": "寵物友善",
-    "question": "可以帶寵物坐床或沙發拍照嗎？",
-    "aliases": [
-      "能不能帶寵物坐床或沙發拍照？",
-      "可不可以帶寵物坐床或沙發拍照？",
-      "可以帶毛孩坐床或沙發拍照嗎"
-    ],
-    "answer": "不可以，狗狗請勿上床或沙發，也請避免接觸寢具與床鋪，以維護住宿清潔品質。",
-    "keywords": [
-      "拍照",
-      "寵物",
-      "毛孩"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 248
   },
   {
     "id": "faq-249",
@@ -4987,7 +4565,7 @@
       "請問有兒童遊戲區嗎",
       "兒童遊戲區有提供嗎"
     ],
-    "answer": "目前沒有固定兒童遊戲區，但民宿備有兒童書籍、玩具及推車，可在房間內陪同孩子遊戲。",
+    "answer": "目前沒有固定兒童遊戲區，但公共空間備有兒童書籍與玩具；孩童使用時請由家長陪同。嬰兒推車可自行攜帶入住。",
     "keywords": [
       "遊戲區",
       "親子",
@@ -4997,9 +4575,10 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
-    "source_no": 256
+    "source_no": 256,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-257",
@@ -5058,7 +4637,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 259
   },
@@ -5077,7 +4656,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 260
   },
@@ -5160,7 +4739,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 264
   },
@@ -5235,7 +4814,7 @@
     "category": "親子長輩與無障礙",
     "question": "附近有醫院或診所嗎？",
     "aliases": [],
-    "answer": "有，距離民宿較近的是員山醫院.",
+    "answer": "附近有醫療院所；實際院所與門診時間可能調整，如有需要可在入住前詢問當期資訊，緊急狀況請撥打 119。",
     "keywords": [
       "醫院",
       "診所",
@@ -5246,7 +4825,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 269
   },
@@ -5258,7 +4837,7 @@
       "能不能幫忙安排親子活動？",
       "可不可以幫忙安排親子活動？"
     ],
-    "answer": "可以協助提供附近親子景點或活動建議",
+    "answer": "可以依孩子年齡、天氣與同行需求提供附近親子景點或活動建議；實際預約、票價與開放時間請依各場館公告安排。",
     "keywords": [
       "活動",
       "親子",
@@ -5268,9 +4847,10 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
-    "source_no": 270
+    "source_no": 270,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-271",
@@ -5286,17 +4866,18 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "ask_human",
     "source": "faq-master.csv",
     "source_no": 271
   },
   {
     "id": "faq-272",
     "category": "親子長輩與無障礙",
-    "question": "有樓梯護欄嗎？",
+    "question": "樓梯有扶手嗎？",
     "aliases": [
-      "請問有樓梯護欄嗎",
-      "樓梯護欄有提供嗎"
+      "有樓梯扶手嗎",
+      "樓梯有護欄嗎",
+      "請問有樓梯護欄嗎"
     ],
     "answer": "有，樓梯設有扶手；如同行有長輩或行動較不便者，建議優先安排一樓房間入住。",
     "keywords": [
@@ -5339,7 +4920,7 @@
     "category": "親子長輩與無障礙",
     "question": "長輩怕吵，哪間房較安靜？",
     "aliases": [],
-    "answer": "如同行有長輩或需要較安靜的房間，建議可安排一樓 S521 房間入住。",
+    "answer": "如同行有長輩或需要較安靜的房間，可於訂房時提前告知；我們會依當日房況協助安排較合適的房間，但無法保證指定房號。",
     "keywords": [
       "長輩",
       "親子",
@@ -5348,7 +4929,7 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 274
   },
@@ -5445,12 +5026,18 @@
     "id": "faq-283",
     "category": "清潔消毒與衛生",
     "question": "垃圾要分類嗎？",
-    "aliases": [],
-    "answer": "請將垃圾簡單分類，一般垃圾、瓶罐等回收物請分開放入指定垃圾桶；退房時由管家統一整理處理",
+    "aliases": [
+      "資源回收怎麼分類",
+      "資源回收如何分類"
+    ],
+    "answer": "請將垃圾簡單分類，一般垃圾、瓶罐等回收物請分開放入指定垃圾桶；退房時由管家統一整理處理。",
     "keywords": [
       "垃圾",
       "清潔",
-      "衛生"
+      "衛生",
+      "資源回收",
+      "公共空間",
+      "設施"
     ],
     "priority": 80,
     "is_active": true,
@@ -5463,8 +5050,14 @@
     "id": "faq-284",
     "category": "清潔消毒與衛生",
     "question": "廚餘可以倒水槽嗎？",
-    "aliases": [],
-    "answer": "不可以，請勿將廚餘、湯汁或油脂倒入水槽、馬桶或排水孔；請將廚餘放入指定垃圾桶或廚餘桶，由管家統一處理。",
+    "aliases": [
+      "可以把油倒進水槽嗎？",
+      "能不能把油倒進水槽？",
+      "可不可以把油倒進水槽？",
+      "湯汁可以倒水槽嗎",
+      "廚餘可以沖馬桶嗎"
+    ],
+    "answer": "不可以，請勿將廚餘、湯汁或油脂倒入水槽、馬桶或排水孔；請瀝乾後放入指定廚餘桶或垃圾桶，由民宿統一處理。",
     "keywords": [
       "水槽",
       "廚餘",
@@ -5476,28 +5069,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 284
-  },
-  {
-    "id": "faq-285",
-    "category": "清潔消毒與衛生",
-    "question": "可以把油倒進水槽嗎？",
-    "aliases": [
-      "能不能把油倒進水槽？",
-      "可不可以把油倒進水槽？"
-    ],
-    "answer": "不可以，請勿將油脂、湯汁或廚餘倒入水槽、馬桶或排水孔；請放入指定垃圾桶或廚餘桶，由管家統一處理。",
-    "keywords": [
-      "水槽",
-      "清潔",
-      "衛生"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 285
+    "source_no": 284,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-288",
@@ -5639,33 +5212,16 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 294
-  },
-  {
-    "id": "faq-296",
-    "category": "清潔消毒與衛生",
-    "question": "房間有小蟲正常嗎？",
-    "aliases": [],
-    "answer": "民宿周邊為自然田園環境，偶有小蟲屬正常情況；請隨手關閉窗戶、大門、紗窗及紗門，避免蚊蟲飛入室內。",
-    "keywords": [
-      "清潔",
-      "衛生"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 296
   },
   {
     "id": "faq-299",
     "category": "清潔消毒與衛生",
     "question": "使用過的毛巾放哪裡？",
     "aliases": [],
-    "answer": "使用過的毛巾、浴巾請放置於指定位置，請勿丟在地上、床上，或當作腳踏墊使用；如需更換，請告知管家。",
+    "answer": "使用過的毛巾與浴巾，請依入住說明放置於指定位置；請勿丟在地上、床上或當作腳踏墊使用。如需更換，請告知管家。",
     "keywords": [
       "毛巾",
       "清潔",
@@ -5683,13 +5239,16 @@
     "category": "噪音禁菸安全與規範",
     "question": "晚上幾點後要安靜？",
     "aliases": [
-      "晚上什麼時間後要安靜"
+      "晚上什麼時間後要安靜",
+      "包棟也需要安靜嗎",
+      "包棟也要安靜嗎"
     ],
-    "answer": "晚上 22:00 後請降低音量；22:00–08:00 禁止喧嘩、烤肉及使用音響或擴音設備。",
+    "answer": "晚上 22:00 至翌日 08:00 為安靜時段，請降低音量，期間禁止喧嘩、烤肉及使用音響或擴音設備。",
     "keywords": [
       "噪音",
       "禁菸",
-      "安全"
+      "安全",
+      "包棟"
     ],
     "priority": 80,
     "is_active": true,
@@ -5699,50 +5258,6 @@
     "source_no": 301
   },
   {
-    "id": "faq-302",
-    "category": "噪音禁菸安全與規範",
-    "question": "包棟也需要安靜嗎？",
-    "aliases": [
-      "包棟也要安靜嗎"
-    ],
-    "answer": "需要。即使是包棟，晚上 22:00 後仍需降低音量；22:00–08:00 禁止喧嘩、烤肉及使用音響或擴音設備。",
-    "keywords": [
-      "包棟",
-      "噪音",
-      "禁菸",
-      "安全"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 302
-  },
-  {
-    "id": "faq-303",
-    "category": "噪音禁菸安全與規範",
-    "question": "可以唱歌唱到幾點？",
-    "aliases": [
-      "能不能唱歌唱到幾點？",
-      "可不可以唱歌唱到幾點？",
-      "可以唱歌唱到什麼時間？"
-    ],
-    "answer": "歡唱設備請於晚上 22:00 前結束高音量使用；22:00–08:00 禁止喧嘩及使用音響或擴音設備。",
-    "keywords": [
-      "唱歌",
-      "噪音",
-      "禁菸",
-      "安全"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 303
-  },
-  {
     "id": "faq-304",
     "category": "噪音禁菸安全與規範",
     "question": "可以在室內吸菸嗎？",
@@ -5750,7 +5265,7 @@
       "能不能在室內吸菸？",
       "可不可以在室內吸菸？"
     ],
-    "answer": "不可以。室內與房間全面禁菸，包含電子菸；若需吸菸，請至戶外指定區域。房內若留下煙味，可能酌收清潔費並影響押金退還。",
+    "answer": "不可以。全館禁菸，包含房間、室內公共空間及電子菸。如有吸菸需求，請至戶外指定區域；若於館內吸菸或留下煙味，將酌收清潔費，並可能影響押金退還。",
     "keywords": [
       "噪音",
       "禁菸",
@@ -5764,70 +5279,11 @@
     "source_no": 304
   },
   {
-    "id": "faq-305",
-    "category": "噪音禁菸安全與規範",
-    "question": "陽台可以抽菸嗎？",
-    "aliases": [],
-    "answer": "吸菸請至戶外指定區域，陽台是否屬指定吸菸區需依現場公告。室內、房間及非指定區域皆禁止吸菸與使用電子菸。",
-    "keywords": [
-      "噪音",
-      "禁菸",
-      "安全"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 305
-  },
-  {
-    "id": "faq-306",
-    "category": "噪音禁菸安全與規範",
-    "question": "電子菸可以嗎？",
-    "aliases": [],
-    "answer": "室內與房間不可以使用電子菸；若需吸菸，請至戶外指定區域。",
-    "keywords": [
-      "電子菸",
-      "噪音",
-      "禁菸",
-      "安全"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 306
-  },
-  {
-    "id": "faq-307",
-    "category": "噪音禁菸安全與規範",
-    "question": "有吸菸區嗎？",
-    "aliases": [
-      "請問有吸菸區嗎",
-      "吸菸區有提供嗎"
-    ],
-    "answer": "有吸菸需求時，請至戶外指定區域；實際位置依入住說明或現場標示。室內與房間全面禁菸。",
-    "keywords": [
-      "吸菸區",
-      "噪音",
-      "禁菸",
-      "安全"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 307
-  },
-  {
     "id": "faq-308",
     "category": "噪音禁菸安全與規範",
     "question": "房間有煙味會收費嗎？",
     "aliases": [],
-    "answer": "室內、房間與公告禁菸區不得吸菸或使用電子菸；若留下煙味或菸蒂，可能收除味清潔費並依法處理。",
+    "answer": "會。全館禁菸，若於館內吸菸或留下明顯煙味，將酌收清潔費，並可能影響押金退還。",
     "keywords": [
       "煙味",
       "噪音",
@@ -5849,7 +5305,7 @@
       "能不能點香或燒金紙？",
       "可不可以點香或燒金紙？"
     ],
-    "answer": "不可以。全館禁止明火，室內也禁止點香或燒金紙；如有宗教或特殊需求，請事前向管家確認可行方式。",
+    "answer": "不可以。全館禁止明火，室內外皆不可點香、燒金紙或使用其他明火。如有宗教或特殊需求，請事先私訊官方 LINE 詢問。",
     "keywords": [
       "燒金紙",
       "噪音",
@@ -5871,7 +5327,7 @@
       "能不能放煙火？",
       "可不可以放煙火？"
     ],
-    "answer": "不可以。慢慢蒔光禁止施放煙火，也禁止砸蛋糕與砸水球；違反規定可能扣除押金。",
+    "answer": "不可以。民宿全區禁止施放煙火、爆竹及其他類似物品，包含戶外區域。",
     "keywords": [
       "煙火",
       "噪音",
@@ -5893,7 +5349,7 @@
       "能不能烤肉用炭火？",
       "可不可以烤肉用炭火？"
     ],
-    "answer": "炭火、瓦斯爐與卡式爐只能在民宿允許的指定區域使用，房內與非指定處禁止使用。",
+    "answer": "可以，但僅限依民宿現場規定，於指定戶外烤肉區使用炭火或核准的烤肉設備；室內、房間及非指定區域禁止明火，並請於晚上 22:00 前結束烤肉。",
     "keywords": [
       "炭火",
       "噪音",
@@ -5905,7 +5361,8 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 311
+    "source_no": 311,
+    "last_verified_at": "2026-09-04"
   },
   {
     "id": "faq-312",
@@ -5915,7 +5372,7 @@
       "能不能使用瓦斯爐或卡式爐？",
       "可不可以使用瓦斯爐或卡式爐？"
     ],
-    "answer": "炭火、瓦斯爐與卡式爐只能在民宿允許的指定區域使用，房內與非指定處禁止使用。",
+    "answer": "不可以。民宿不開放自行使用瓦斯爐、卡式爐或其他加熱設備；如需烤肉，請使用民宿提供的烤肉設備，並於戶外指定區域使用。",
     "keywords": [
       "卡式爐",
       "瓦斯爐",
@@ -5931,241 +5388,39 @@
     "source_no": 312
   },
   {
-    "id": "faq-313",
-    "category": "噪音禁菸安全與規範",
-    "question": "可以帶高功率電器嗎？",
-    "aliases": [
-      "能不能帶高功率電器？",
-      "可不可以帶高功率電器？"
-    ],
-    "answer": "請勿使用高功率電器；若跳電或停電，請關閉高耗電設備並聯繫民宿，不要自行操作配電箱。",
-    "keywords": [
-      "高功率電器",
-      "噪音",
-      "禁菸",
-      "安全"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 313
-  },
-  {
-    "id": "faq-314",
-    "category": "噪音禁菸安全與規範",
-    "question": "跳電怎麼辦？",
-    "aliases": [
-      "跳電該怎麼處理？",
-      "跳電要如何處理"
-    ],
-    "answer": "請勿使用高功率電器；若跳電或停電，請關閉高耗電設備並聯繫民宿，不要自行操作配電箱。",
-    "keywords": [
-      "跳電",
-      "噪音",
-      "禁菸",
-      "安全"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 314
-  },
-  {
-    "id": "faq-315",
-    "category": "噪音禁菸安全與規範",
-    "question": "停電怎麼辦？",
-    "aliases": [
-      "停電該怎麼處理？",
-      "停電要如何處理"
-    ],
-    "answer": "請勿使用高功率電器；若跳電或停電，請關閉高耗電設備並聯繫民宿，不要自行操作配電箱。",
-    "keywords": [
-      "停電",
-      "噪音",
-      "禁菸",
-      "安全"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 315
-  },
-  {
-    "id": "faq-316",
-    "category": "噪音禁菸安全與規範",
-    "question": "火災警報響了怎麼辦？",
-    "aliases": [
-      "火災警報響了該怎麼處理？",
-      "火災警報響了要如何處理"
-    ],
-    "answer": "入住後請先確認逃生路線與滅火器位置；若火警響起，請立即疏散並通知民宿與119。",
-    "keywords": [
-      "火災警報",
-      "噪音",
-      "禁菸",
-      "安全"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 316
-  },
-  {
-    "id": "faq-317",
-    "category": "噪音禁菸安全與規範",
-    "question": "房內有逃生圖嗎？",
-    "aliases": [],
-    "answer": "房內或公共區域是否設有逃生圖需依現場消防配置確認。入住後請先留意逃生路線與出口，如未看到可向管家詢問。",
-    "keywords": [
-      "逃生圖",
-      "噪音",
-      "禁菸",
-      "安全"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 317
-  },
-  {
-    "id": "faq-318",
-    "category": "噪音禁菸安全與規範",
-    "question": "滅火器在哪裡？",
-    "aliases": [],
-    "answer": "滅火器位置需依現場消防配置確認。入住後請先留意公共區域與逃生路線，如未看到可立即向管家詢問。",
-    "keywords": [
-      "滅火器",
-      "噪音",
-      "禁菸",
-      "安全"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 318
-  },
-  {
-    "id": "faq-319",
-    "category": "噪音禁菸安全與規範",
-    "question": "可以鎖門外出嗎？",
-    "aliases": [
-      "能不能鎖門外出？",
-      "可不可以鎖門外出？"
-    ],
-    "answer": "外出請確認門窗上鎖、關閉電器與水龍頭；貴重物品請自行保管。",
-    "keywords": [
-      "噪音",
-      "禁菸",
-      "安全"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 319
-  },
-  {
     "id": "faq-320",
     "category": "噪音禁菸安全與規範",
-    "question": "可以帶陌生人進來嗎？",
+    "question": "朋友可以來找我們嗎？",
     "aliases": [
-      "能不能帶陌生人進來？",
-      "可不可以帶陌生人進來？"
+      "沒住宿的人可以進來嗎？",
+      "沒有過夜的訪客可以來嗎",
+      "朋友可以白天來玩嗎"
     ],
-    "answer": "不得帶未登記訪客或危險物品入住；若涉及公共安全，民宿可依規範拒絕或通報處理。",
+    "answer": "可以，訪客需提前告知；訪客費每位 TWD 600，並請於 23:00 前離開。若訪客後續需要住宿，請提前聯繫民宿確認並調整入住人數。",
     "keywords": [
       "陌生人",
       "噪音",
       "禁菸",
-      "安全"
+      "安全",
+      "訪客",
+      "人數",
+      "房型",
+      "包棟"
     ],
     "priority": 80,
     "is_active": true,
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 320
-  },
-  {
-    "id": "faq-321",
-    "category": "噪音禁菸安全與規範",
-    "question": "喝酒後可以開車出去嗎？",
-    "aliases": [],
-    "answer": "請理性飲酒並勿酒後駕車；可安排代駕、計程車或留宿休息，安全第一。",
-    "keywords": [
-      "開車",
-      "噪音",
-      "禁菸",
-      "安全"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 321
-  },
-  {
-    "id": "faq-322",
-    "category": "噪音禁菸安全與規範",
-    "question": "可以攜帶危險物品嗎？",
-    "aliases": [
-      "能不能攜帶危險物品？",
-      "可不可以攜帶危險物品？"
-    ],
-    "answer": "不得帶未登記訪客或危險物品入住；若涉及公共安全，民宿可依規範拒絕或通報處理。",
-    "keywords": [
-      "危險物品",
-      "噪音",
-      "禁菸",
-      "安全"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 322
-  },
-  {
-    "id": "faq-323",
-    "category": "噪音禁菸安全與規範",
-    "question": "深夜喧嘩會怎麼處理？",
-    "aliases": [
-      "深夜喧嘩會如何處理"
-    ],
-    "answer": "請依民宿公告遵守安靜時段，常見為晚上10點後降低音量；包棟也需顧及鄰居與公共安寧。",
-    "keywords": [
-      "噪音",
-      "禁菸",
-      "安全"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 323
+    "source_no": 320,
+    "last_verified_at": "2026-09-04"
   },
   {
     "id": "faq-324",
     "category": "噪音禁菸安全與規範",
-    "question": "違反住宿規定會退費嗎？",
+    "question": "違反住宿規定會怎麼處理？",
     "aliases": [],
-    "answer": "住宿規定會公布於官網、訂房確認、房內公告或入住須知；嚴重違規被要求退房時，費用通常不退。",
+    "answer": "若違反住宿規定，我們會先提醒並請您配合改善；如情節嚴重或經勸導仍未改善，民宿得視情況要求停止相關行為或提前退房。",
     "keywords": [
       "住宿規定",
       "退費",
@@ -6185,7 +5440,7 @@
     "category": "噪音禁菸安全與規範",
     "question": "住宿規定在哪裡看？",
     "aliases": [],
-    "answer": "住宿規定會公布於官網、訂房確認、房內公告或入住須知；嚴重違規被要求退房時，費用通常不退。",
+    "answer": "住宿規定可於官網查看，訂房確認後也會由官方 Email 提供相關入住須知。",
     "keywords": [
       "住宿規定",
       "噪音",
@@ -6205,47 +5460,38 @@
     "question": "有KTV嗎？",
     "aliases": [
       "請問有KTV嗎",
-      "KTV有提供嗎"
+      "KTV有提供嗎",
+      "KTV可以唱到幾點？",
+      "KTV可以唱到什麼時間？",
+      "可以唱歌唱到幾點",
+      "有歡唱設備嗎",
+      "能不能唱歌唱到幾點？",
+      "可不可以唱歌唱到幾點？",
+      "可以唱歌唱到什麼時間？"
     ],
-    "answer": "有提供歡唱設備。使用時請遵守操作說明與音量規範，晚上 22:00 後不得使用音響或擴音設備。",
+    "answer": "有，民宿提供 KTV 歡唱設備，可使用至晚上 22:00；22:00 後請停止使用音響與擴音設備。",
     "keywords": [
       "KTV",
-      "麻將",
-      "活動"
+      "歡唱",
+      "唱歌",
+      "歌曲",
+      "22點",
+      "音響"
     ],
     "priority": 80,
     "is_active": true,
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 326
-  },
-  {
-    "id": "faq-327",
-    "category": "KTV麻將娛樂與活動",
-    "question": "KTV可以唱到幾點？",
-    "aliases": [
-      "KTV可以唱到什麼時間？"
-    ],
-    "answer": "歡唱設備請於晚上 22:00 前結束高音量使用；22:00–08:00 禁止喧嘩及使用音響或擴音設備。",
-    "keywords": [
-      "KTV",
-      "麻將",
-      "活動"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 327
+    "source_no": 326,
+    "last_verified_at": "2026-09-03"
   },
   {
     "id": "faq-328",
     "category": "KTV麻將娛樂與活動",
     "question": "KTV歌曲多嗎？",
     "aliases": [],
-    "answer": "KTV與音響設備依民宿提供為準，請遵守使用時間與音量；外接設備需先詢問，避免造成故障。",
+    "answer": "KTV 曲庫會持續更新，提供多種熱門歌曲可選擇；實際歌曲內容以現場系統為準。",
     "keywords": [
       "KTV",
       "麻將",
@@ -6259,45 +5505,6 @@
     "source_no": 328
   },
   {
-    "id": "faq-329",
-    "category": "KTV麻將娛樂與活動",
-    "question": "可以接自己的麥克風嗎？",
-    "aliases": [
-      "能不能接自己的麥克風？",
-      "可不可以接自己的麥克風？"
-    ],
-    "answer": "KTV與音響設備依民宿提供為準，請遵守使用時間與音量；外接設備需先詢問，避免造成故障。",
-    "keywords": [
-      "KTV",
-      "麻將",
-      "活動"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 329
-  },
-  {
-    "id": "faq-330",
-    "category": "KTV麻將娛樂與活動",
-    "question": "音響可以開很大聲嗎？",
-    "aliases": [],
-    "answer": "KTV與音響設備依民宿提供為準，請遵守使用時間與音量；外接設備需先詢問，避免造成故障。",
-    "keywords": [
-      "KTV",
-      "麻將",
-      "活動"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 330
-  },
-  {
     "id": "faq-331",
     "category": "KTV麻將娛樂與活動",
     "question": "有麻將桌嗎？",
@@ -6305,7 +5512,7 @@
       "請問有麻將桌嗎",
       "麻將桌有提供嗎"
     ],
-    "answer": "有，慢慢蒔光設有獨立麻將房與電動麻將桌。請勿在麻將房飲食，使用後請整理牌具並愛惜設備。",
+    "answer": "有，民宿設有獨立麻將房，並提供電動麻將桌。",
     "keywords": [
       "麻將桌",
       "KTV",
@@ -6325,7 +5532,7 @@
     "aliases": [
       "麻將可以打到什麼時間？"
     ],
-    "answer": "麻將房可依入住規範使用；晚上 22:00 後請降低音量，避免影響鄰居與住宿安寧。",
+    "answer": "麻將房可於住宿期間使用；晚上 22:00 後請降低音量，避免喧嘩，以維持住宿安寧。",
     "keywords": [
       "麻將",
       "KTV",
@@ -6339,44 +5546,28 @@
     "source_no": 332
   },
   {
-    "id": "faq-333",
-    "category": "KTV麻將娛樂與活動",
-    "question": "麻將牌少了怎麼辦？",
-    "aliases": [
-      "麻將牌少了該怎麼處理？",
-      "麻將牌少了要如何處理"
-    ],
-    "answer": "若發現麻將牌短少或設備異常，請先停止使用並通知管家，不要自行拆修或移動機台，以便確認是否缺件或故障。",
-    "keywords": [
-      "麻將",
-      "KTV",
-      "活動"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 333
-  },
-  {
     "id": "faq-334",
     "category": "KTV麻將娛樂與活動",
     "question": "有桌遊嗎？",
     "aliases": [
       "請問有桌遊嗎",
-      "桌遊有提供嗎"
+      "桌遊有提供嗎",
+      "可以借桌遊嗎",
+      "能不能借桌遊？",
+      "可不可以借桌遊？"
     ],
-    "answer": "有提供部分桌遊與娛樂用品，實際清單以現場配置為準。使用後請確認配件完整並放回原位，避免影響下一組客人。",
+    "answer": "有，民宿提供一些桌遊供住客使用；使用後請協助收拾並放回原位。",
     "keywords": [
       "桌遊",
       "KTV",
       "麻將",
-      "活動"
+      "活動",
+      "公共空間",
+      "設施"
     ],
     "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
+    "is_active": true,
+    "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 334
@@ -6389,28 +5580,9 @@
       "請問有Switch或遊戲機嗎",
       "Switch或遊戲機有提供嗎"
     ],
-    "answer": "目前不以 Switch 或遊戲機作為固定設備。若有遊戲設備需求，建議入住前先詢問當期現場配置，或自行攜帶並注意設備安全。",
+    "answer": "目前沒有提供 Switch 或其他遊戲機，但民宿有提供一些桌遊遊戲。",
     "keywords": [
       "遊戲機",
-      "KTV",
-      "麻將",
-      "活動"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 335
-  },
-  {
-    "id": "faq-336",
-    "category": "KTV麻將娛樂與活動",
-    "question": "投影機可以用嗎？",
-    "aliases": [],
-    "answer": "目前不以投影機作為固定設備。若有投影、會議或活動需求，請入住前先提出，管家會確認現場是否可協助或建議自備。",
-    "keywords": [
-      "投影機",
       "KTV",
       "麻將",
       "活動"
@@ -6420,7 +5592,7 @@
     "status": "approved",
     "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 336
+    "source_no": 335
   },
   {
     "id": "faq-337",
@@ -6428,14 +5600,20 @@
     "question": "可以看電影嗎？",
     "aliases": [
       "能不能看電影？",
-      "可不可以看電影？"
+      "可不可以看電影？",
+      "有Netflix嗎",
+      "請問有Netflix嗎",
+      "Netflix有提供嗎"
     ],
-    "answer": "房內或公共區電視與影音設備依現場配置為準，可觀看一般電視或使用可開放的影音功能；若需使用個人帳號，退房前請記得登出。",
+    "answer": "可以。房內電視提供第四台頻道，也可使用 Netflix；Netflix 請登入自己的帳號觀看，退房前記得登出即可。",
     "keywords": [
       "電影",
       "KTV",
       "麻將",
-      "活動"
+      "活動",
+      "Netflix",
+      "房間設備",
+      "備品"
     ],
     "priority": 80,
     "is_active": true,
@@ -6452,7 +5630,7 @@
       "能不能辦生日派對？",
       "可不可以辦生日派對？"
     ],
-    "answer": "可先告知人數、時間、布置、餐飲與拍攝需求；民宿會確認場地、音量、停車與清潔規範。",
+    "answer": "可以。如需舉辦生日派對或相關活動，請提前告知，活動費用會依人數、場地使用及活動內容另外報價。",
     "keywords": [
       "生日派對",
       "KTV",
@@ -6474,7 +5652,7 @@
       "能不能辦求婚？",
       "可不可以辦求婚？"
     ],
-    "answer": "可先告知人數、時間、布置、餐飲與拍攝需求；民宿會確認場地、音量、停車與清潔規範。",
+    "answer": "可以。如需舉辦求婚或相關活動，請提前告知，活動費用會依人數、場地使用及活動內容另外報價。",
     "keywords": [
       "求婚",
       "KTV",
@@ -6496,7 +5674,7 @@
       "能不能辦抓周？",
       "可不可以辦抓周？"
     ],
-    "answer": "可先告知人數、時間、布置、餐飲與拍攝需求；民宿會確認場地、音量、停車與清潔規範。",
+    "answer": "可以。如需舉辦抓周活動，請提前告知，以便協助安排場地與相關使用方式。",
     "keywords": [
       "抓周",
       "KTV",
@@ -6518,7 +5696,7 @@
       "能不能辦結婚或訂婚儀式？",
       "可不可以辦結婚或訂婚儀式？"
     ],
-    "answer": "可先告知人數、時間、布置、餐飲與拍攝需求；民宿會確認場地、音量、停車與清潔規範。",
+    "answer": "可以。如需舉辦結婚或訂婚儀式，請提前告知，以便確認人數、場地使用及相關安排。",
     "keywords": [
       "結婚",
       "訂婚",
@@ -6541,7 +5719,7 @@
       "能不能請外部布置廠商進場？",
       "可不可以請外部布置廠商進場？"
     ],
-    "answer": "外部廠商、攝影師、直播或商業用途需事前申請，並確認進退場時間、器材與授權範圍。",
+    "answer": "可以。如需安排佈置廠商、攝影師或其他外部廠商進場，請提前告知。一般住宿相關的佈置或拍攝不另外收費；如為商業用途、長時間使用場地或有特殊設備需求，請事先與民宿確認。",
     "keywords": [
       "布置",
       "KTV",
@@ -6563,7 +5741,7 @@
       "能不能請攝影師來拍照？",
       "可不可以請攝影師來拍照？"
     ],
-    "answer": "外部廠商、攝影師、直播或商業用途需事前申請，並確認進退場時間、器材與授權範圍。",
+    "answer": "可以。如有安排攝影師進場拍攝，請提前告知；一般住宿紀念拍攝不另外收費，如為商業拍攝或需長時間使用場地，請事先與民宿確認。",
     "keywords": [
       "攝影師",
       "拍照",
@@ -6586,7 +5764,7 @@
       "能不能直播？",
       "可不可以直播？"
     ],
-    "answer": "外部廠商、攝影師、直播或商業用途需事前申請，並確認進退場時間、器材與授權範圍。",
+    "answer": "可以。一般個人直播可正常進行；如為商業直播、品牌合作、拍攝團隊進場或需使用較多設備，請提前告知並與民宿確認。",
     "keywords": [
       "直播",
       "KTV",
@@ -6601,51 +5779,6 @@
     "source_no": 344
   },
   {
-    "id": "faq-345",
-    "category": "KTV麻將娛樂與活動",
-    "question": "可以使用煙霧機嗎？",
-    "aliases": [
-      "能不能使用煙霧機？",
-      "可不可以使用煙霧機？"
-    ],
-    "answer": "不建議使用煙霧機、亮片、彩帶炮或會殘膠的布置；若造成清潔或損壞，可能另收費。",
-    "keywords": [
-      "煙霧機",
-      "KTV",
-      "麻將",
-      "活動"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 345
-  },
-  {
-    "id": "faq-346",
-    "category": "KTV麻將娛樂與活動",
-    "question": "可以撒亮片或彩帶嗎？",
-    "aliases": [
-      "能不能撒亮片或彩帶？",
-      "可不可以撒亮片或彩帶？"
-    ],
-    "answer": "不建議使用煙霧機、亮片、彩帶炮或會殘膠的布置；若造成清潔或損壞，可能另收費。",
-    "keywords": [
-      "彩帶",
-      "亮片",
-      "KTV",
-      "麻將",
-      "活動"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 346
-  },
-  {
     "id": "faq-347",
     "category": "KTV麻將娛樂與活動",
     "question": "可以貼氣球在牆上嗎？",
@@ -6653,7 +5786,7 @@
       "能不能貼氣球在牆上？",
       "可不可以貼氣球在牆上？"
     ],
-    "answer": "不建議使用煙霧機、亮片、彩帶炮或會殘膠的布置；若造成清潔或損壞，可能另收費。",
+    "answer": "不可以。為避免造成牆面污損或殘膠，禁止將氣球、膠帶、黏鉤或其他裝飾物直接黏貼於牆面。",
     "keywords": [
       "氣球",
       "KTV",
@@ -6668,34 +5801,13 @@
     "source_no": 347
   },
   {
-    "id": "faq-348",
-    "category": "KTV麻將娛樂與活動",
-    "question": "有提供音樂播放設備嗎？",
-    "aliases": [
-      "請問有提供音樂播放設備嗎",
-      "提供音樂播放設備有提供嗎"
-    ],
-    "answer": "有提供歡唱設備；其他音樂播放設備、連接方式與可使用時段請依現場說明。晚上 22:00 後不得使用音響或擴音設備。",
-    "keywords": [
-      "KTV",
-      "麻將",
-      "活動"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 348
-  },
-  {
     "id": "faq-349",
     "category": "KTV麻將娛樂與活動",
     "question": "活動結束需要清潔嗎？",
     "aliases": [
       "活動結束要清潔嗎"
     ],
-    "answer": "活動後請恢復基本整潔、垃圾分類並移除布置；戶外活動需遵守天候、安全與噪音規範。",
+    "answer": "活動結束後請協助恢復場地基本整潔，佈置物請自行移除，垃圾集中放置即可；如造成大量髒污、設備損壞或需特殊清潔，將酌收清潔或賠償費用。",
     "keywords": [
       "活動",
       "KTV",
@@ -6709,37 +5821,24 @@
     "source_no": 349
   },
   {
-    "id": "faq-350",
-    "category": "KTV麻將娛樂與活動",
-    "question": "活動可以到戶外嗎？",
-    "aliases": [],
-    "answer": "活動後請恢復基本整潔、垃圾分類並移除布置；戶外活動需遵守天候、安全與噪音規範。",
-    "keywords": [
-      "活動",
-      "KTV",
-      "麻將"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 350
-  },
-  {
     "id": "faq-351",
     "category": "戶外空間烤肉戲水",
-    "question": "有庭院嗎？",
+    "question": "有戶外空間嗎？",
     "aliases": [
+      "有庭院嗎",
       "請問有庭院嗎",
-      "庭院有提供嗎"
+      "庭院有提供嗎",
+      "有露台嗎",
+      "請問有露台嗎",
+      "露台有提供嗎"
     ],
-    "answer": "有戶外空間與庭院區域，使用時請注意安全、音量與清潔；孩童與寵物需由大人陪同。",
+    "answer": "有，民宿 2 樓設有大型露臺，可供住客休憩使用。",
     "keywords": [
       "庭院",
       "戶外",
       "烤肉",
-      "戲水"
+      "戲水",
+      "露台"
     ],
     "priority": 80,
     "is_active": true,
@@ -6747,28 +5846,6 @@
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 351
-  },
-  {
-    "id": "faq-352",
-    "category": "戶外空間烤肉戲水",
-    "question": "有露台嗎？",
-    "aliases": [
-      "請問有露台嗎",
-      "露台有提供嗎"
-    ],
-    "answer": "有戶外露台。使用時請注意安全、音量與清潔，晚間請依安靜時間與戶外燈規範使用。",
-    "keywords": [
-      "露台",
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 352
   },
   {
     "id": "faq-353",
@@ -6792,39 +5869,23 @@
     "source_no": 353
   },
   {
-    "id": "faq-354",
-    "category": "戶外空間烤肉戲水",
-    "question": "可以在戶外吃東西嗎？",
-    "aliases": [
-      "能不能在戶外吃東西？",
-      "可不可以在戶外吃東西？"
-    ],
-    "answer": "可以在指定戶外空間簡單用餐，但需遵守開放時間、音量、清潔與垃圾分類規範；是否可辦大型聚餐或使用設備需事前確認。",
-    "keywords": [
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 354
-  },
-  {
     "id": "faq-355",
     "category": "戶外空間烤肉戲水",
     "question": "可以烤肉嗎？",
     "aliases": [
       "能不能烤肉？",
-      "可不可以烤肉？"
+      "可不可以烤肉？",
+      "烤肉設備有提供嗎"
     ],
-    "answer": "烤肉需事前確認場地、設備、費用與安全規範；炭灰需完全熄滅冷卻，垃圾與廚餘依指定方式處理。",
+    "answer": "可以。民宿提供烤肉爐，請提前告知並於指定戶外烤肉區使用；烤肉活動請於晚上 22:00 前結束。如需烤肉食材，也可協助代訂。",
     "keywords": [
       "戶外",
       "烤肉",
-      "戲水"
+      "戲水",
+      "烤肉設備",
+      "早餐",
+      "餐飲",
+      "廚房"
     ],
     "priority": 80,
     "is_active": true,
@@ -6834,31 +5895,13 @@
     "source_no": 355
   },
   {
-    "id": "faq-356",
-    "category": "戶外空間烤肉戲水",
-    "question": "烤肉可以自備爐具嗎？",
-    "aliases": [],
-    "answer": "烤肉需事前確認場地、設備、費用與安全規範；炭灰需完全熄滅冷卻，垃圾與廚餘依指定方式處理。",
-    "keywords": [
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 356
-  },
-  {
     "id": "faq-357",
     "category": "戶外空間烤肉戲水",
     "question": "烤肉後垃圾怎麼處理？",
     "aliases": [
       "烤肉後垃圾如何處理"
     ],
-    "answer": "烤肉需事前確認場地、設備、費用與安全規範；炭灰需完全熄滅冷卻，垃圾與廚餘依指定方式處理。",
+    "answer": "烤肉後請將垃圾及廚餘集中放置即可，民宿會統一協助處理。",
     "keywords": [
       "垃圾",
       "戶外",
@@ -6873,131 +5916,38 @@
     "source_no": 357
   },
   {
-    "id": "faq-358",
-    "category": "戶外空間烤肉戲水",
-    "question": "下雨還可以烤肉嗎？",
-    "aliases": [],
-    "answer": "烤肉需事前確認場地、設備、費用與安全規範；炭灰需完全熄滅冷卻，垃圾與廚餘依指定方式處理。",
-    "keywords": [
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 358
-  },
-  {
-    "id": "faq-359",
-    "category": "戶外空間烤肉戲水",
-    "question": "可以玩水嗎？",
-    "aliases": [
-      "能不能玩水？",
-      "可不可以玩水？"
-    ],
-    "answer": "夏季會依天候與維護狀況開放戲水設施。實際開放日期、水況與使用規範，請在入住前由管家確認；孩童需由大人全程陪同。",
-    "keywords": [
-      "玩水",
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 359
-  },
-  {
-    "id": "faq-360",
-    "category": "戶外空間烤肉戲水",
-    "question": "泳池有開放嗎？",
-    "aliases": [],
-    "answer": "戲水設施為季節性開放，需依天候、維護與當期公告確認。請提供入住日期，管家會協助確認是否開放。",
-    "keywords": [
-      "泳池",
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 360
-  },
-  {
-    "id": "faq-361",
-    "category": "戶外空間烤肉戲水",
-    "question": "戲水池水深多少？",
-    "aliases": [],
-    "answer": "戲水池水深與當期設置需由管家依實際設備確認。孩童使用時必須由大人全程陪同並注意防滑。",
-    "keywords": [
-      "戲水池",
-      "戶外",
-      "烤肉"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 361
-  },
-  {
-    "id": "faq-362",
-    "category": "戶外空間烤肉戲水",
-    "question": "可以帶游泳圈嗎？",
-    "aliases": [
-      "能不能帶游泳圈？",
-      "可不可以帶游泳圈？"
-    ],
-    "answer": "戲水池或泳池開放依季節、天候與維護狀況；孩童必須由大人全程陪同並注意防滑。",
-    "keywords": [
-      "游泳圈",
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 362
-  },
-  {
     "id": "faq-363",
     "category": "戶外空間烤肉戲水",
-    "question": "泳池可以使用到幾點？",
+    "question": "有泳池或戲水設施嗎？",
     "aliases": [
+      "泳池有開放嗎",
+      "可以玩水嗎",
+      "有戲水池嗎",
+      "泳池可以使用到幾點",
       "泳池可以使用到什麼時間？"
     ],
-    "answer": "戲水設施的使用時間會依季節、天候與現場規範調整。請在入住前由管家確認當期開放時段；晚間仍需遵守安靜規定。",
+    "answer": "目前沒有提供泳池或戲水設施。",
     "keywords": [
       "泳池",
+      "戲水",
+      "玩水",
       "戶外",
-      "烤肉",
-      "戲水"
+      "設施"
     ],
     "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
+    "is_active": true,
+    "status": "approved",
+    "answer_mode": "direct",
     "source": "faq-master.csv",
-    "source_no": 363
+    "source_no": 363,
+    "last_verified_at": "2026-09-04"
   },
   {
     "id": "faq-364",
     "category": "戶外空間烤肉戲水",
     "question": "戶外會有蚊子嗎？",
     "aliases": [],
-    "answer": "戶外自然環境難免有蚊蟲，建議自備防蚊液並隨手關門紗窗；民宿防蚊用品依備品為準。",
+    "answer": "戶外自然環境難免會有蚊蟲，建議自行攜帶防蚊用品，並隨手關閉門窗，避免蚊蟲進入室內。",
     "keywords": [
       "戶外",
       "烤肉",
@@ -7011,77 +5961,11 @@
     "source_no": 364
   },
   {
-    "id": "faq-365",
-    "category": "戶外空間烤肉戲水",
-    "question": "有提供防蚊用品嗎？",
-    "aliases": [
-      "請問有提供防蚊用品嗎",
-      "提供防蚊用品有提供嗎"
-    ],
-    "answer": "戶外自然環境難免有蚊蟲，建議自備防蚊液並隨手關門紗窗；民宿防蚊用品依備品為準。",
-    "keywords": [
-      "防蚊",
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 365
-  },
-  {
-    "id": "faq-366",
-    "category": "戶外空間烤肉戲水",
-    "question": "可以在戶外抽菸嗎？",
-    "aliases": [
-      "能不能在戶外抽菸？",
-      "可不可以在戶外抽菸？"
-    ],
-    "answer": "戶外吸菸需依指定吸菸區規定；若公告全館禁菸，戶外也請勿吸菸。",
-    "keywords": [
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 366
-  },
-  {
-    "id": "faq-367",
-    "category": "戶外空間烤肉戲水",
-    "question": "可以帶寵物到戶外區嗎？",
-    "aliases": [
-      "能不能帶寵物到戶外區？",
-      "可不可以帶寵物到戶外區？",
-      "可以帶毛孩到戶外區嗎"
-    ],
-    "answer": "寵物可依規範在指定戶外區活動，請牽繩、看顧並立即清理排泄物。",
-    "keywords": [
-      "寵物",
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 367
-  },
-  {
     "id": "faq-368",
     "category": "戶外空間烤肉戲水",
     "question": "戶外區可以放音樂嗎？",
     "aliases": [],
-    "answer": "戶外音樂、搭帳、空拍或戶外過夜需事前同意；需考量安全、隱私、噪音與法規。",
+    "answer": "可以，晚上 22:00 前可於戶外區適量播放音樂，請控制音量避免影響周邊安寧；22:00 後禁止使用音響、喇叭或其他擴音設備。",
     "keywords": [
       "戶外",
       "烤肉",
@@ -7095,218 +5979,23 @@
     "source_no": 368
   },
   {
-    "id": "faq-369",
-    "category": "戶外空間烤肉戲水",
-    "question": "可以在戶外搭帳篷嗎？",
-    "aliases": [
-      "能不能在戶外搭帳篷？",
-      "可不可以在戶外搭帳篷？"
-    ],
-    "answer": "戶外音樂、搭帳、空拍或戶外過夜需事前同意；需考量安全、隱私、噪音與法規。",
-    "keywords": [
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 369
-  },
-  {
-    "id": "faq-370",
-    "category": "戶外空間烤肉戲水",
-    "question": "可以在戶外睡覺嗎？",
-    "aliases": [
-      "能不能在戶外睡覺？",
-      "可不可以在戶外睡覺？"
-    ],
-    "answer": "戶外音樂、搭帳、空拍或戶外過夜需事前同意；需考量安全、隱私、噪音與法規。",
-    "keywords": [
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 370
-  },
-  {
-    "id": "faq-371",
-    "category": "戶外空間烤肉戲水",
-    "question": "可以使用空拍機嗎？",
-    "aliases": [
-      "能不能使用空拍機？",
-      "可不可以使用空拍機？"
-    ],
-    "answer": "戶外音樂、搭帳、空拍或戶外過夜需事前同意；需考量安全、隱私、噪音與法規。",
-    "keywords": [
-      "空拍機",
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 371
-  },
-  {
-    "id": "faq-372",
-    "category": "戶外空間烤肉戲水",
-    "question": "戶外燈幾點關？",
-    "aliases": [
-      "戶外燈什麼時間關"
-    ],
-    "answer": "戶外燈會於晚上 22:30 自動熄燈，請提早整理戶外與烤肉區域。",
-    "keywords": [
-      "戶外燈",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 372
-  },
-  {
-    "id": "faq-373",
-    "category": "戶外空間烤肉戲水",
-    "question": "庭院可以停車嗎？",
-    "aliases": [],
-    "answer": "庭院是否可停車需依現場指定停車位置與當期安排確認。請提供車輛數與車型，由管家說明可停區域。",
-    "keywords": [
-      "庭院",
-      "停車",
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 373
-  },
-  {
-    "id": "faq-374",
-    "category": "戶外空間烤肉戲水",
-    "question": "戶外地面濕滑怎麼辦？",
-    "aliases": [
-      "戶外地面濕滑該怎麼處理？",
-      "戶外地面濕滑要如何處理"
-    ],
-    "answer": "戶外燈光、停車與設備請依指定方式使用；地面濕滑請注意安全，設備故障請通知民宿不要自行修理。",
-    "keywords": [
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 374
-  },
-  {
-    "id": "faq-375",
-    "category": "戶外空間烤肉戲水",
-    "question": "戶外設施壞了可以自己修嗎？",
-    "aliases": [],
-    "answer": "戶外燈光、停車與設備請依指定方式使用；地面濕滑請注意安全，設備故障請通知民宿不要自行修理。",
-    "keywords": [
-      "戶外",
-      "烤肉",
-      "戲水"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 375
-  },
-  {
-    "id": "faq-376",
-    "category": "行李寄放與入住服務",
-    "question": "可以寄放行李嗎？",
-    "aliases": [
-      "能不能寄放行李？",
-      "可不可以寄放行李？"
-    ],
-    "answer": "行李寄放或宅配代收需事前確認時間、地點與責任範圍；貴重物品請自行保管。",
-    "keywords": [
-      "行李",
-      "入住服務"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 376
-  },
-  {
-    "id": "faq-377",
-    "category": "行李寄放與入住服務",
-    "question": "行李可以先送到民宿嗎？",
-    "aliases": [
-      "行李可以先送到慢慢蒔光嗎"
-    ],
-    "answer": "行李寄放或宅配代收需事前確認時間、地點與責任範圍；貴重物品請自行保管。",
-    "keywords": [
-      "行李",
-      "入住服務"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 377
-  },
-  {
-    "id": "faq-378",
-    "category": "行李寄放與入住服務",
-    "question": "退房後可以放行李到下午嗎？",
-    "aliases": [
-      "退宿後可以放行李到下午嗎"
-    ],
-    "answer": "行李寄放或宅配代收需事前確認時間、地點與責任範圍；貴重物品請自行保管。",
-    "keywords": [
-      "行李",
-      "入住服務"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 378
-  },
-  {
     "id": "faq-379",
     "category": "行李寄放與入住服務",
-    "question": "可以提早把行李放進房間嗎？",
+    "question": "本人提早抵達時，可以先把行李放進客房嗎？",
     "aliases": [
+      "可以提早把行李放進房間嗎",
       "能不能提早把行李放進房間？",
-      "可不可以提早把行李放進房間？"
+      "可不可以提早把行李放進房間？",
+      "提早到可以先把行李放進客房嗎",
+      "本人提早抵達可以先放行李進房嗎"
     ],
-    "answer": "行李寄放或宅配代收需事前確認時間、地點與責任範圍；貴重物品請自行保管。",
+    "answer": "不可以。入住前房間仍在進行清潔與整理，如需提前寄放行李，可放置於民宿指定的公共區域。",
     "keywords": [
-      "行李",
-      "入住服務"
+      "提早抵達",
+      "放進客房",
+      "入住前進房",
+      "本人到場",
+      "客房行李"
     ],
     "priority": 80,
     "is_active": true,
@@ -7323,7 +6012,7 @@
       "請問有管家服務嗎",
       "管家服務有提供嗎"
     ],
-    "answer": "有管家協助入住與住宿相關事項，但不是 24 小時飯店櫃台。一般問題請透過官方 LINE 聯繫；緊急狀況請使用入住通知中的聯絡方式。",
+    "answer": "有。入住期間如有住宿相關問題，可透過官方 LINE 或電話聯絡管家協助；民宿非 24 小時櫃台服務，如夜間遇到緊急狀況，也可撥打入住資訊中提供的聯絡電話。",
     "keywords": [
       "管家",
       "行李",
@@ -7337,76 +6026,23 @@
     "source_no": 380
   },
   {
-    "id": "faq-381",
-    "category": "行李寄放與入住服務",
-    "question": "有24小時櫃台嗎？",
-    "aliases": [
-      "請問有24小時櫃台嗎",
-      "24小時櫃台有提供嗎"
-    ],
-    "answer": "民宿通常不是24小時飯店櫃台；服務時間依公告，緊急狀況請使用入住通知中的聯絡方式。",
-    "keywords": [
-      "行李",
-      "入住服務"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 381
-  },
-  {
-    "id": "faq-382",
-    "category": "行李寄放與入住服務",
-    "question": "晚上有問題找誰？",
-    "aliases": [],
-    "answer": "民宿通常不是24小時飯店櫃台；服務時間依公告，緊急狀況請使用入住通知中的聯絡方式。",
-    "keywords": [
-      "行李",
-      "入住服務"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 382
-  },
-  {
-    "id": "faq-383",
-    "category": "行李寄放與入住服務",
-    "question": "可以代收包裹嗎？",
-    "aliases": [
-      "能不能代收包裹？",
-      "可不可以代收包裹？"
-    ],
-    "answer": "包裹、冷藏冷凍食材代收需先確認尺寸、到貨時間與保存空間；未確認寄送可能無法保存品質。",
-    "keywords": [
-      "包裹",
-      "行李",
-      "入住服務"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 383
-  },
-  {
     "id": "faq-384",
     "category": "行李寄放與入住服務",
     "question": "可以幫忙準備蛋糕嗎？",
     "aliases": [
       "能不能幫忙準備蛋糕？",
-      "可不可以幫忙準備蛋糕？"
+      "可不可以幫忙準備蛋糕？",
+      "可以準備生日蛋糕嗎",
+      "能不能準備生日蛋糕？",
+      "可不可以準備生日蛋糕？"
     ],
-    "answer": "蛋糕、房內布置或驚喜安排可提前詢問；需確認費用、進場時間與不得傷牆或造成清潔負擔。",
+    "answer": "可以協助代訂蛋糕，如有需要請提前告知，款式及費用依實際訂購內容為準。",
     "keywords": [
       "蛋糕",
       "行李",
-      "入住服務"
+      "入住服務",
+      "特殊需求",
+      "情境應對"
     ],
     "priority": 80,
     "is_active": true,
@@ -7421,13 +6057,18 @@
     "question": "可以幫忙布置房間嗎？",
     "aliases": [
       "能不能幫忙布置房間？",
-      "可不可以幫忙布置房間？"
+      "可不可以幫忙布置房間？",
+      "可以安排浪漫布置嗎",
+      "能不能安排浪漫布置？",
+      "可不可以安排浪漫布置？"
     ],
-    "answer": "蛋糕、房內布置或驚喜安排可提前詢問；需確認費用、進場時間與不得傷牆或造成清潔負擔。",
+    "answer": "民宿不提供佈置服務，如有生日、求婚或其他佈置需求，可協助推薦外部佈置廠商，相關費用由客人自行負擔。",
     "keywords": [
       "布置",
       "行李",
-      "入住服務"
+      "入住服務",
+      "特殊需求",
+      "情境應對"
     ],
     "priority": 80,
     "is_active": true,
@@ -7437,54 +6078,17 @@
     "source_no": 385
   },
   {
-    "id": "faq-386",
-    "category": "行李寄放與入住服務",
-    "question": "可以幫忙叫車嗎？",
-    "aliases": [
-      "能不能幫忙叫車？",
-      "可不可以幫忙叫車？"
-    ],
-    "answer": "可提供叫車資訊或協助聯繫車行；車資、等待與行程以車行回覆為準。",
-    "keywords": [
-      "行李",
-      "入住服務"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 386
-  },
-  {
-    "id": "faq-387",
-    "category": "行李寄放與入住服務",
-    "question": "可以代訂餐嗎？",
-    "aliases": [
-      "能不能代訂餐？",
-      "可不可以代訂餐？"
-    ],
-    "answer": "若有代訂餐或合作店家，可依截止時間協助；熱門時段或臨時需求不保證可訂。",
-    "keywords": [
-      "行李",
-      "入住服務"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 387
-  },
-  {
     "id": "faq-388",
     "category": "行李寄放與入住服務",
     "question": "可以提供旅遊建議嗎？",
     "aliases": [
       "能不能提供旅遊建議？",
-      "可不可以提供旅遊建議？"
+      "可不可以提供旅遊建議？",
+      "附近有什麼景點？",
+      "宜蘭有什麼推薦行程？",
+      "下雨天可以去哪裡？"
     ],
-    "answer": "可依親子、寵物、雨天、拍照或美食需求提供在地建議；行前可再確認導航與停車。",
+    "answer": "可以。可依親子、寵物、雨天、拍照、美食等需求，提供宜蘭周邊景點與行程建議。",
     "keywords": [
       "旅遊建議",
       "行李",
@@ -7493,30 +6097,9 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "collect_info",
     "source": "faq-master.csv",
     "source_no": 388
-  },
-  {
-    "id": "faq-389",
-    "category": "行李寄放與入住服務",
-    "question": "有迎賓小禮嗎？",
-    "aliases": [
-      "請問有迎賓小禮嗎",
-      "迎賓小禮有提供嗎"
-    ],
-    "answer": "迎賓小禮或活動贈品會依當期方案提供，不一定每個訂房都固定包含；下訂前可詢問目前是否有慢寶相關小禮或活動。",
-    "keywords": [
-      "迎賓小禮",
-      "行李",
-      "入住服務"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 389
   },
   {
     "id": "faq-390",
@@ -7526,7 +6109,7 @@
       "能不能幫忙收垃圾？",
       "可不可以幫忙收垃圾？"
     ],
-    "answer": "連住補備品、收垃圾與清潔服務依民宿公告；有需求請於服務時間聯繫。",
+    "answer": "可以。住宿期間如有垃圾，集中放置於指定位置即可，民宿會協助處理；如垃圾較多或垃圾桶已滿，可聯絡管家協助。",
     "keywords": [
       "垃圾",
       "行李",
@@ -7544,7 +6127,7 @@
     "category": "行李寄放與入住服務",
     "question": "連住會補備品嗎？",
     "aliases": [],
-    "answer": "連住補備品、收垃圾與清潔服務依民宿公告；有需求請於服務時間聯繫。",
+    "answer": "會。連住期間不主動進房打掃，如需更換毛巾、浴巾或補充住宿備品，可聯絡管家協助。",
     "keywords": [
       "連住",
       "行李",
@@ -7558,69 +6141,6 @@
     "source_no": 391
   },
   {
-    "id": "faq-392",
-    "category": "行李寄放與入住服務",
-    "question": "可以借針線包嗎？",
-    "aliases": [
-      "能不能借針線包？",
-      "可不可以借針線包？"
-    ],
-    "answer": "針線包、雨傘、充電器、嬰兒用品等是否可借依現場備品；數量有限，使用後請歸還。",
-    "keywords": [
-      "針線包",
-      "行李",
-      "入住服務"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 392
-  },
-  {
-    "id": "faq-393",
-    "category": "行李寄放與入住服務",
-    "question": "可以借雨傘嗎？",
-    "aliases": [
-      "能不能借雨傘？",
-      "可不可以借雨傘？"
-    ],
-    "answer": "針線包、雨傘、充電器、嬰兒用品等是否可借依現場備品；數量有限，使用後請歸還。",
-    "keywords": [
-      "雨傘",
-      "行李",
-      "入住服務"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 393
-  },
-  {
-    "id": "faq-394",
-    "category": "行李寄放與入住服務",
-    "question": "可以借充電器嗎？",
-    "aliases": [
-      "能不能借充電器？",
-      "可不可以借充電器？"
-    ],
-    "answer": "針線包、雨傘、充電器、嬰兒用品等是否可借依現場備品；數量有限，使用後請歸還。",
-    "keywords": [
-      "充電器",
-      "行李",
-      "入住服務"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 394
-  },
-  {
     "id": "faq-395",
     "category": "行李寄放與入住服務",
     "question": "可以借嬰兒用品嗎？",
@@ -7628,7 +6148,7 @@
       "能不能借嬰兒用品？",
       "可不可以借嬰兒用品？"
     ],
-    "answer": "針線包、雨傘、充電器、嬰兒用品等是否可借依現場備品；數量有限，使用後請歸還。",
+    "answer": "有，可提供摺疊嬰兒床及摺疊澡盆，數量有限，建議提前告知需求；目前不提供消毒鍋。",
     "keywords": [
       "行李",
       "入住服務"
@@ -7642,16 +6162,30 @@
   },
   {
     "id": "faq-396",
-    "category": "行李寄放與入住服務",
-    "question": "可以提前寄食材過去嗎？",
+    "category": "早餐餐飲與廚房",
+    "question": "入住前可以寄送冷藏或冷凍食材嗎？",
     "aliases": [
+      "可以提前寄食材過去嗎",
       "能不能提前寄食材過去？",
-      "可不可以提前寄食材過去？"
+      "可不可以提前寄食材過去？",
+      "可以入住前先送冷凍蛋糕嗎",
+      "能不能入住前先送冷凍蛋糕？",
+      "可不可以入住前先送冷凍蛋糕？",
+      "可以提前寄冷凍蛋糕嗎",
+      "冷凍蛋糕可以提前寄嗎",
+      "可以先寄烤肉食材嗎",
+      "烤肉食材可以先寄到民宿嗎",
+      "可以代收冷藏食材嗎",
+      "可以代收冷凍包裹嗎"
     ],
-    "answer": "包裹、冷藏冷凍食材代收需先確認尺寸、到貨時間與保存空間；未確認寄送可能無法保存品質。",
+    "answer": "恕不提供入住前冷藏、冷凍食材代收及保管服務。如有烤肉食材需求，可提前與民宿聯繫協助代訂。",
     "keywords": [
-      "行李",
-      "入住服務"
+      "冷藏",
+      "冷凍",
+      "食材",
+      "蛋糕",
+      "烤肉食材",
+      "食品代收"
     ],
     "priority": 80,
     "is_active": true,
@@ -7661,59 +6195,24 @@
     "source_no": 396
   },
   {
-    "id": "faq-397",
-    "category": "行李寄放與入住服務",
-    "question": "可以晚點回覆入住人數嗎？",
-    "aliases": [
-      "能不能晚點回覆入住人數？",
-      "可不可以晚點回覆入住人數？"
-    ],
-    "answer": "請於指定期限前確認最終人數，方便準備寢具、備品、早餐、停車與旅客登記。",
-    "keywords": [
-      "入住人數",
-      "行李",
-      "入住服務"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 397
-  },
-  {
-    "id": "faq-398",
-    "category": "行李寄放與入住服務",
-    "question": "可以入住前一天再確認路線嗎？",
-    "aliases": [
-      "能不能入住前一天再確認路線？",
-      "可不可以入住前一天再確認路線？"
-    ],
-    "answer": "可以。入住前一天可再透過官方 LINE 確認導航、停車與抵達方式；管家會依當期路況與入住安排提供最新資訊。",
-    "keywords": [
-      "行李",
-      "入住服務"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 398
-  },
-  {
     "id": "faq-399",
     "category": "行李寄放與入住服務",
     "question": "可以提供房內驚喜安排嗎？",
     "aliases": [
       "能不能提供房內驚喜安排？",
-      "可不可以提供房內驚喜安排？"
+      "可不可以提供房內驚喜安排？",
+      "可以準備求婚驚喜嗎",
+      "能不能準備求婚驚喜？",
+      "可不可以準備求婚驚喜？"
     ],
-    "answer": "蛋糕、房內布置或驚喜安排可提前詢問；需確認費用、進場時間與不得傷牆或造成清潔負擔。",
+    "answer": "可以。如有生日、求婚等驚喜安排，請提前告知；蛋糕可協助代訂，如需房間佈置，可協助推薦外部佈置廠商，相關費用由客人自行負擔。",
     "keywords": [
       "驚喜安排",
       "行李",
-      "入住服務"
+      "入住服務",
+      "求婚",
+      "特殊需求",
+      "情境應對"
     ],
     "priority": 80,
     "is_active": true,
@@ -7723,505 +6222,11 @@
     "source_no": 399
   },
   {
-    "id": "faq-400",
-    "category": "行李寄放與入住服務",
-    "question": "如果臨時需要協助搬行李呢？",
-    "aliases": [
-      "如果臨時要協助搬行李呢"
-    ],
-    "answer": "行李寄放或宅配代收需事前確認時間、地點與責任範圍；貴重物品請自行保管。",
-    "keywords": [
-      "行李",
-      "入住服務"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 400
-  },
-  {
-    "id": "faq-401",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近有什麼景點？",
-    "aliases": [],
-    "answer": "可以依停留天數、親子、寵物、拍照、美食或雨天需求提供順路行程；實際營業與路況請出發前確認。",
-    "keywords": [
-      "景點",
-      "旅遊",
-      "行程"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 401
-  },
-  {
-    "id": "faq-402",
-    "category": "旅遊行程與在地推薦",
-    "question": "宜蘭有什麼推薦行程？",
-    "aliases": [],
-    "answer": "可以依停留天數、親子、寵物、拍照、美食或雨天需求提供順路行程；實際營業與路況請出發前確認。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 402
-  },
-  {
-    "id": "faq-403",
-    "category": "旅遊行程與在地推薦",
-    "question": "下雨天可以去哪裡？",
-    "aliases": [],
-    "answer": "可以依停留天數、親子、寵物、拍照、美食或雨天需求提供順路行程；實際營業與路況請出發前確認。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 403
-  },
-  {
-    "id": "faq-404",
-    "category": "旅遊行程與在地推薦",
-    "question": "帶小孩附近可以去哪？",
-    "aliases": [],
-    "answer": "可以依停留天數、親子、寵物、拍照、美食或雨天需求提供順路行程；實際營業與路況請出發前確認。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 404
-  },
-  {
-    "id": "faq-405",
-    "category": "旅遊行程與在地推薦",
-    "question": "帶寵物附近可以去哪？",
-    "aliases": [
-      "帶毛孩附近可以去哪？"
-    ],
-    "answer": "可以依停留天數、親子、寵物、拍照、美食或雨天需求提供順路行程；實際營業與路況請出發前確認。",
-    "keywords": [
-      "寵物",
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 405
-  },
-  {
-    "id": "faq-406",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近有夜市嗎？",
-    "aliases": [],
-    "answer": "相關店家或景點的營業時間與狀況會變動，目前尚未建立固定清單。請告知日期、交通方式與需求，由管家提供當期建議。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 406
-  },
-  {
-    "id": "faq-407",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近有溫泉嗎？",
-    "aliases": [],
-    "answer": "相關店家或景點的營業時間與狀況會變動，目前尚未建立固定清單。請告知日期、交通方式與需求，由管家提供當期建議。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 407
-  },
-  {
-    "id": "faq-408",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近可以看海嗎？",
-    "aliases": [],
-    "answer": "可提供附近熱門點、營業日、車程與注意事項；季節活動與店家營業時間變動大，建議出發前再確認。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 408
-  },
-  {
-    "id": "faq-409",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近有步道嗎？",
-    "aliases": [],
-    "answer": "相關店家或景點的營業時間與狀況會變動，目前尚未建立固定清單。請告知日期、交通方式與需求，由管家提供當期建議。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 409
-  },
-  {
-    "id": "faq-410",
-    "category": "旅遊行程與在地推薦",
-    "question": "可以幫我們排行程嗎？",
-    "aliases": [
-      "能不能幫我們排行程？",
-      "可不可以幫我們排行程？"
-    ],
-    "answer": "可以依停留天數、親子、寵物、拍照、美食或雨天需求提供順路行程；實際營業與路況請出發前確認。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 410
-  },
-  {
-    "id": "faq-411",
-    "category": "旅遊行程與在地推薦",
-    "question": "兩天一夜怎麼排？",
-    "aliases": [
-      "兩天一夜如何排"
-    ],
-    "answer": "兩天一夜行程需依同行成員、交通方式、親子或寵物需求及想去的景點安排。請提供偏好，由管家協助提供順路建議；店家營業與路況仍需出發前確認。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 411
-  },
-  {
-    "id": "faq-412",
-    "category": "旅遊行程與在地推薦",
-    "question": "三天兩夜怎麼排？",
-    "aliases": [
-      "三天兩夜如何排"
-    ],
-    "answer": "三天兩夜行程需依同行成員、交通方式、親子或寵物需求及想去的景點安排。請提供偏好，由管家協助提供順路建議；店家營業與路況仍需出發前確認。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 412
-  },
-  {
-    "id": "faq-413",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近有伴手禮店嗎？",
-    "aliases": [],
-    "answer": "可提供附近店家與採買建議；熱門店家建議提早訂位，郊區夜間採買請提前安排。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 413
-  },
-  {
-    "id": "faq-414",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近有咖啡廳嗎？",
-    "aliases": [],
-    "answer": "可提供附近店家與採買建議；熱門店家建議提早訂位，郊區夜間採買請提前安排。",
-    "keywords": [
-      "咖啡",
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 414
-  },
-  {
-    "id": "faq-415",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近有早午餐嗎？",
-    "aliases": [],
-    "answer": "可提供附近店家與採買建議；熱門店家建議提早訂位，郊區夜間採買請提前安排。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 415
-  },
-  {
-    "id": "faq-416",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近有素食餐廳嗎？",
-    "aliases": [],
-    "answer": "可提供附近店家與採買建議；熱門店家建議提早訂位，郊區夜間採買請提前安排。",
-    "keywords": [
-      "餐廳",
-      "素食",
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 416
-  },
-  {
-    "id": "faq-417",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近有便利商店或藥局嗎？",
-    "aliases": [],
-    "answer": "可提供附近店家與採買建議；熱門店家建議提早訂位，郊區夜間採買請提前安排。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 417
-  },
-  {
-    "id": "faq-418",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近有醫院嗎？",
-    "aliases": [],
-    "answer": "可提供附近醫院、診所或動物醫院資訊；緊急狀況請先撥119或直接前往急診。",
-    "keywords": [
-      "醫院",
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 418
-  },
-  {
-    "id": "faq-419",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近有寵物醫院嗎？",
-    "aliases": [
-      "附近有毛孩醫院嗎"
-    ],
-    "answer": "若需要寵物醫院資訊，請告知目前所在位置與毛孩狀況，管家可協助提供附近查詢方向；緊急狀況請直接聯繫動物醫院或就近就醫。",
-    "keywords": [
-      "醫院",
-      "寵物",
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 419
-  },
-  {
-    "id": "faq-420",
-    "category": "旅遊行程與在地推薦",
-    "question": "可以幫忙訂票嗎？",
-    "aliases": [
-      "能不能幫忙訂票？",
-      "可不可以幫忙訂票？"
-    ],
-    "answer": "票券代訂是否提供依民宿服務；通常可提供購票連結或建議，實際票務請旅客自行確認。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 420
-  },
-  {
-    "id": "faq-421",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近有農場嗎？",
-    "aliases": [],
-    "answer": "相關店家或景點的營業時間與狀況會變動，目前尚未建立固定清單。請告知日期、交通方式與需求，由管家提供當期建議。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 421
-  },
-  {
-    "id": "faq-422",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近有手作體驗嗎？",
-    "aliases": [],
-    "answer": "相關店家或景點的營業時間與狀況會變動，目前尚未建立固定清單。請告知日期、交通方式與需求，由管家提供當期建議。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 422
-  },
-  {
-    "id": "faq-423",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近有拍照景點嗎？",
-    "aliases": [],
-    "answer": "可以依停留天數、親子、寵物、拍照、美食或雨天需求提供順路行程；實際營業與路況請出發前確認。",
-    "keywords": [
-      "拍照",
-      "景點",
-      "旅遊",
-      "行程"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 423
-  },
-  {
-    "id": "faq-424",
-    "category": "旅遊行程與在地推薦",
-    "question": "附近晚上有活動嗎？",
-    "aliases": [],
-    "answer": "可提供附近熱門點、營業日、車程與注意事項；季節活動與店家營業時間變動大，建議出發前再確認。",
-    "keywords": [
-      "活動",
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 424
-  },
-  {
-    "id": "faq-425",
-    "category": "旅遊行程與在地推薦",
-    "question": "退房後順遊哪裡比較好？",
-    "aliases": [
-      "退宿後順遊哪裡比較好？"
-    ],
-    "answer": "可以依停留天數、親子、寵物、拍照、美食或雨天需求提供順路行程；實際營業與路況請出發前確認。",
-    "keywords": [
-      "旅遊",
-      "行程",
-      "景點"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 425
-  },
-  {
     "id": "faq-426",
     "category": "發票收據資料與身分登記",
     "question": "入住為什麼要登記資料？",
     "aliases": [],
-    "answer": "民宿依法需登記住宿旅客資料並保存六個月；請出示身分證、護照或居留證等有效文件，資料會依個資規定處理。",
+    "answer": "依規定，民宿需登記每日住宿旅客資料並保存 6 個月；入住時會核對相關身分資料，所蒐集的資料皆依個人資料保護法相關規定處理。",
     "keywords": [
       "發票",
       "收據",
@@ -8240,14 +6245,19 @@
     "question": "可以不給身分證嗎？",
     "aliases": [
       "能不能不給身分證？",
-      "可不可以不給身分證？"
+      "可不可以不給身分證？",
+      "入住需要出示身分證嗎",
+      "入住要出示身分證嗎"
     ],
-    "answer": "民宿依法需登記住宿旅客資料並保存六個月；請出示身分證、護照或居留證等有效文件，資料會依個資規定處理。",
+    "answer": "不可以。依相關規定，入住時請出示身分證、護照或居留證供身分核對與住宿登記；相關資料將依個人資料保護法規定處理。",
     "keywords": [
       "身分證",
       "發票",
       "收據",
-      "身分登記"
+      "身分登記",
+      "入住",
+      "退房",
+      "抵達"
     ],
     "priority": 80,
     "is_active": true,
@@ -8261,97 +6271,24 @@
     "category": "發票收據資料與身分登記",
     "question": "只給訂房代表證件可以嗎？",
     "aliases": [
-      "只給預約代表證件可以嗎"
+      "只給預約代表證件可以嗎",
+      "每個人都要登記資料嗎"
     ],
-    "answer": "是否只需提供訂房代表證件，需依住宿登記規定與當期作業方式確認。入住前請向管家確認每位旅客需要提供的資料。",
+    "answer": "入住時由訂房代表人辦理入住手續，並請配合提供實際入住旅客所需的住宿登記資料；身分核對時請出示身分證、護照或居留證。",
     "keywords": [
       "發票",
       "收據",
-      "身分登記"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "ask_human",
-    "source": "faq-master.csv",
-    "source_no": 428
-  },
-  {
-    "id": "faq-429",
-    "category": "發票收據資料與身分登記",
-    "question": "資料會保存多久？",
-    "aliases": [],
-    "answer": "住宿登記資料應用於住宿管理、法規要求與必要聯絡；保存期滿後可依民宿個資管理流程處理。",
-    "keywords": [
-      "發票",
-      "收據",
-      "身分登記"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 429
-  },
-  {
-    "id": "faq-430",
-    "category": "發票收據資料與身分登記",
-    "question": "身分資料會拿去做行銷嗎？",
-    "aliases": [],
-    "answer": "住宿登記資料僅應用於住宿管理、法規要求與必要聯絡，不應未經同意用於其他行銷目的；實際個資告知事項以民宿正式文件為準。",
-    "keywords": [
-      "發票",
-      "收據",
-      "身分登記"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 430
-  },
-  {
-    "id": "faq-431",
-    "category": "發票收據資料與身分登記",
-    "question": "可以拍身分證嗎？",
-    "aliases": [
-      "能不能拍身分證？",
-      "可不可以拍身分證？"
-    ],
-    "answer": "是否需要拍攝或留存身分證影像，需依合法住宿登記流程與個資告知事項辦理。請先向管家確認正式作業方式，不要透過非官方管道傳送證件。",
-    "keywords": [
-      "身分證",
-      "發票",
-      "收據",
-      "身分登記"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "ask_human",
-    "source": "faq-master.csv",
-    "source_no": 431
-  },
-  {
-    "id": "faq-432",
-    "category": "發票收據資料與身分登記",
-    "question": "外國人要提供護照嗎？",
-    "aliases": [],
-    "answer": "民宿依法需登記住宿旅客資料並保存六個月；請出示身分證、護照或居留證等有效文件，資料會依個資規定處理。",
-    "keywords": [
-      "護照",
-      "發票",
-      "收據",
-      "身分登記"
+      "身分登記",
+      "入住",
+      "退房",
+      "抵達"
     ],
     "priority": 80,
     "is_active": true,
     "status": "approved",
     "answer_mode": "ask_human",
     "source": "faq-master.csv",
-    "source_no": 432
+    "source_no": 428
   },
   {
     "id": "faq-433",
@@ -8362,7 +6299,7 @@
       "訂房資料填錯要如何處理",
       "預約資料填錯怎麼辦？"
     ],
-    "answer": "請使用官方表單或官方LINE提供正確資料；姓名、電話、人數、車輛、寵物與發票資料有變更請入住前通知。",
+    "answer": "如訂房資料填寫錯誤或需要修改，請私訊官方 LINE，提供訂房姓名及欲更正的資料，我們會協助修改。",
     "keywords": [
       "發票",
       "收據",
@@ -8378,11 +6315,11 @@
   {
     "id": "faq-434",
     "category": "發票收據資料與身分登記",
-    "question": "需要填入住表單嗎？",
+    "question": "入住時需要辦理什麼手續？",
     "aliases": [
       "要填入住表單嗎"
     ],
-    "answer": "請使用官方表單或官方LINE提供正確資料；姓名、電話、人數、車輛、寵物與發票資料有變更請入住前通知。",
+    "answer": "入住時會核對訂房及住宿旅客資料，並請出示身分證、護照或居留證，完成入住登記及相關住宿文件簽署。",
     "keywords": [
       "發票",
       "收據",
@@ -8401,13 +6338,26 @@
     "question": "可以開收據嗎？",
     "aliases": [
       "能不能開收據？",
-      "可不可以開收據？"
+      "可不可以開收據？",
+      "可以開發票嗎",
+      "能不能開發票？",
+      "可不可以開發票？",
+      "可以報公司帳嗎",
+      "能不能報公司帳？",
+      "可不可以報公司帳？",
+      "可以開統編嗎",
+      "能不能開統編？",
+      "可不可以開統編？"
     ],
-    "answer": "如需收據、發票、公司抬頭或統編，請在付款前提供；可開立格式與項目依民宿稅籍與實際收費辦理。",
+    "answer": "可以。民宿為免用統一發票店家，可提供收據；如需填寫公司抬頭或統一編號，請提前告知。",
     "keywords": [
       "收據",
       "發票",
-      "身分登記"
+      "身分登記",
+      "房價",
+      "付款",
+      "費用",
+      "統編"
     ],
     "priority": 80,
     "is_active": true,
@@ -8417,33 +6367,11 @@
     "source_no": 435
   },
   {
-    "id": "faq-436",
-    "category": "發票收據資料與身分登記",
-    "question": "可以開統編嗎？",
-    "aliases": [
-      "能不能開統編？",
-      "可不可以開統編？"
-    ],
-    "answer": "如需收據、發票、公司抬頭或統編，請在付款前提供；可開立格式與項目依民宿稅籍與實際收費辦理。",
-    "keywords": [
-      "統編",
-      "發票",
-      "收據",
-      "身分登記"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "ask_human",
-    "source": "faq-master.csv",
-    "source_no": 436
-  },
-  {
     "id": "faq-437",
     "category": "發票收據資料與身分登記",
     "question": "發票可以事後補開嗎？",
     "aliases": [],
-    "answer": "如需收據、發票、公司抬頭或統編，請在付款前提供；可開立格式與項目依民宿稅籍與實際收費辦理。",
+    "answer": "可以。如需事後補開收據，請私訊官方 LINE，並提供訂房姓名及相關資料，我們會協助處理。",
     "keywords": [
       "發票",
       "收據",
@@ -8461,7 +6389,7 @@
     "category": "發票收據資料與身分登記",
     "question": "收據可以寫住宿費嗎？",
     "aliases": [],
-    "answer": "如需收據、發票、公司抬頭或統編，請在付款前提供；可開立格式與項目依民宿稅籍與實際收費辦理。",
+    "answer": "可以。收據品名可註明「住宿費」；如需填寫公司抬頭或統一編號，請提前告知。",
     "keywords": [
       "收據",
       "發票",
@@ -8482,7 +6410,7 @@
       "能不能分開開收據？",
       "可不可以分開開收據？"
     ],
-    "answer": "如需收據、發票、公司抬頭或統編，請在付款前提供；可開立格式與項目依民宿稅籍與實際收費辦理。",
+    "answer": "可以。如需分開開立收據，請提前告知開立份數、金額及公司抬頭或統一編號，我們會依需求協助處理。",
     "keywords": [
       "收據",
       "發票",
@@ -8502,29 +6430,10 @@
     "aliases": [
       "平台預約由誰開發票"
     ],
-    "answer": "平台訂房的發票或收據開立方，會依平台收款方式與訂單規則不同。請先查看平台訂單說明，仍不確定時再由管家協助確認。",
+    "answer": "如透過官網或官方 LINE 訂房，民宿可提供收據；如透過 Booking.com、Agoda 等訂房平台預訂，相關收據或付款憑證將依該平台訂單的付款方式及規定辦理，如有報帳需求可提前告知我們協助確認。",
     "keywords": [
       "發票",
       "收據",
-      "身分登記"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "ask_human",
-    "source": "faq-master.csv",
-    "source_no": 440
-  },
-  {
-    "id": "faq-441",
-    "category": "發票收據資料與身分登記",
-    "question": "押金會開收據嗎？",
-    "aliases": [],
-    "answer": "如需收據、發票、公司抬頭或統編，請在付款前提供；可開立格式與項目依民宿稅籍與實際收費辦理。",
-    "keywords": [
-      "收據",
-      "押金",
-      "發票",
       "身分登記"
     ],
     "priority": 80,
@@ -8532,194 +6441,24 @@
     "status": "approved",
     "answer_mode": "ask_human",
     "source": "faq-master.csv",
-    "source_no": 441
-  },
-  {
-    "id": "faq-442",
-    "category": "發票收據資料與身分登記",
-    "question": "加人費可以開收據嗎？",
-    "aliases": [],
-    "answer": "如需收據、發票、公司抬頭或統編，請在付款前提供；可開立格式與項目依民宿稅籍與實際收費辦理。",
-    "keywords": [
-      "收據",
-      "發票",
-      "身分登記"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "ask_human",
-    "source": "faq-master.csv",
-    "source_no": 442
-  },
-  {
-    "id": "faq-443",
-    "category": "發票收據資料與身分登記",
-    "question": "寵物清潔費可以開收據嗎？",
-    "aliases": [
-      "毛孩清潔費可以開收據嗎"
-    ],
-    "answer": "如需收據、發票、公司抬頭或統編，請在付款前提供；可開立格式與項目依民宿稅籍與實際收費辦理。",
-    "keywords": [
-      "清潔費",
-      "收據",
-      "寵物",
-      "發票",
-      "身分登記"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "ask_human",
-    "source": "faq-master.csv",
-    "source_no": 443
-  },
-  {
-    "id": "faq-444",
-    "category": "發票收據資料與身分登記",
-    "question": "公司旅遊可以開公司抬頭嗎？",
-    "aliases": [],
-    "answer": "如需收據、發票、公司抬頭或統編，請在付款前提供；可開立格式與項目依民宿稅籍與實際收費辦理。",
-    "keywords": [
-      "公司抬頭",
-      "發票",
-      "收據",
-      "身分登記"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 444
-  },
-  {
-    "id": "faq-445",
-    "category": "發票收據資料與身分登記",
-    "question": "入住名單要提前給嗎？",
-    "aliases": [],
-    "answer": "請使用官方表單或官方LINE提供正確資料；姓名、電話、人數、車輛、寵物與發票資料有變更請入住前通知。",
-    "keywords": [
-      "發票",
-      "收據",
-      "身分登記"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 445
-  },
-  {
-    "id": "faq-446",
-    "category": "發票收據資料與身分登記",
-    "question": "資料填表安全嗎？",
-    "aliases": [],
-    "answer": "住宿登記資料應用於住宿管理、法規要求與必要聯絡；保存期滿後可依民宿個資管理流程處理。",
-    "keywords": [
-      "發票",
-      "收據",
-      "身分登記"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 446
-  },
-  {
-    "id": "faq-447",
-    "category": "發票收據資料與身分登記",
-    "question": "可以刪除我的個資嗎？",
-    "aliases": [
-      "能不能刪除我的個資？",
-      "可不可以刪除我的個資？"
-    ],
-    "answer": "可以提出個資查詢、更正或刪除需求，但住宿登記資料若有法定保存義務，需依規定處理。請透過官方管道聯繫，由管家依正式個資流程確認。",
-    "keywords": [
-      "個資",
-      "發票",
-      "收據",
-      "身分登記"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "ask_human",
-    "source": "faq-master.csv",
-    "source_no": 447
-  },
-  {
-    "id": "faq-448",
-    "category": "發票收據資料與身分登記",
-    "question": "可以使用假名訂房嗎？",
-    "aliases": [
-      "能不能使用假名訂房？",
-      "可不可以使用假名訂房？",
-      "可以使用假名預約嗎"
-    ],
-    "answer": "訂房可用暱稱聯絡，但入住登記需提供真實身分資料，確保合法與安全。",
-    "keywords": [
-      "發票",
-      "收據",
-      "身分登記"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 448
-  },
-  {
-    "id": "faq-449",
-    "category": "發票收據資料與身分登記",
-    "question": "電話寫朋友的可以嗎？",
-    "aliases": [],
-    "answer": "請使用官方表單或官方LINE提供正確資料；姓名、電話、人數、車輛、寵物與發票資料有變更請入住前通知。",
-    "keywords": [
-      "發票",
-      "收據",
-      "身分登記"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 449
-  },
-  {
-    "id": "faq-450",
-    "category": "發票收據資料與身分登記",
-    "question": "資料變更要什麼時候通知？",
-    "aliases": [],
-    "answer": "請使用官方表單或官方LINE提供正確資料；姓名、電話、人數、車輛、寵物與發票資料有變更請入住前通知。",
-    "keywords": [
-      "發票",
-      "收據",
-      "身分登記"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 450
+    "source_no": 440
   },
   {
     "id": "faq-451",
     "category": "隱私保險遺失物與客訴",
     "question": "房間內有監視器嗎？",
-    "aliases": [],
-    "answer": "客房與浴室等私人空間不會設置監視器；公共空間與出入口可能設有監視設備，用於安全與出入口管理。",
+    "aliases": [
+      "公共空間有監視器嗎",
+      "公共區監視器會拍到我們嗎？"
+    ],
+    "answer": "沒有。客房、浴室等私人空間皆不設置監視器；公共區域及出入口設有監視設備，僅供安全及出入管理使用。",
     "keywords": [
       "監視器",
       "隱私",
       "遺失物",
-      "客訴"
+      "客訴",
+      "公共空間",
+      "設施"
     ],
     "priority": 80,
     "is_active": true,
@@ -8729,32 +6468,13 @@
     "source_no": 451
   },
   {
-    "id": "faq-452",
-    "category": "隱私保險遺失物與客訴",
-    "question": "公共區監視器會拍到我們嗎？",
-    "aliases": [],
-    "answer": "公共空間與出入口的監視設備可能拍攝到通行畫面，目的為安全與出入口管理；客房與浴室等私人空間不會設置監視器。",
-    "keywords": [
-      "監視器",
-      "隱私",
-      "遺失物",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 452
-  },
-  {
     "id": "faq-453",
     "category": "隱私保險遺失物與客訴",
     "question": "民宿有保險嗎？",
     "aliases": [
       "慢慢蒔光有保險嗎"
     ],
-    "answer": "民宿保險的實際保障範圍、保額與理賠條件需依正式保單與事故情況確認。若需要相關資料，請由管家提供正式說明。",
+    "answer": "有。民宿依相關法規投保責任保險，保障範圍及保額皆依主管機關規定辦理。",
     "keywords": [
       "保險",
       "隱私",
@@ -8762,8 +6482,8 @@
       "客訴"
     ],
     "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
+    "is_active": true,
+    "status": "approved",
     "answer_mode": "ask_human",
     "source": "faq-master.csv",
     "source_no": 453
@@ -8774,9 +6494,13 @@
     "question": "東西遺失怎麼辦？",
     "aliases": [
       "東西遺失該怎麼處理？",
-      "東西遺失要如何處理"
+      "東西遺失要如何處理",
+      "退房後發現忘東西怎麼辦",
+      "退房後發現忘東西該怎麼處理？",
+      "退房後發現忘東西要如何處理",
+      "退宿後發現忘東西怎麼辦？"
     ],
-    "answer": "請提供物品特徵、可能位置與入住日期；找到後可協助寄回或自取，貴重物品建議自行保管。",
+    "answer": "如發現物品遺失，請私訊官方 LINE，提供入住日期、遺失物品特徵及可能遺失的位置，我們會協助尋找；如有尋獲，可協助寄回，寄送費用由旅客負擔。",
     "keywords": [
       "隱私",
       "遺失物",
@@ -8790,64 +6514,6 @@
     "source_no": 454
   },
   {
-    "id": "faq-455",
-    "category": "隱私保險遺失物與客訴",
-    "question": "退房後發現忘東西怎麼辦？",
-    "aliases": [
-      "退房後發現忘東西該怎麼處理？",
-      "退房後發現忘東西要如何處理",
-      "退宿後發現忘東西怎麼辦？"
-    ],
-    "answer": "請提供物品特徵、可能位置與入住日期；找到後可協助寄回或自取，貴重物品建議自行保管。",
-    "keywords": [
-      "隱私",
-      "遺失物",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 455
-  },
-  {
-    "id": "faq-456",
-    "category": "隱私保險遺失物與客訴",
-    "question": "遺失物會保管多久？",
-    "aliases": [],
-    "answer": "遺失物保管期限與寄回方式需依民宿正式規定確認。請提供入住日期、物品特徵與可能位置，管家會協助查找並說明後續處理。",
-    "keywords": [
-      "遺失物",
-      "隱私",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 456
-  },
-  {
-    "id": "faq-457",
-    "category": "隱私保險遺失物與客訴",
-    "question": "貴重物品可以寄放嗎？",
-    "aliases": [],
-    "answer": "貴重物品請自行保管，民宿目前不承諾提供保管或保險責任。若有特殊需求，請事前向管家確認是否能協助。",
-    "keywords": [
-      "隱私",
-      "遺失物",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "ask_human",
-    "source": "faq-master.csv",
-    "source_no": 457
-  },
-  {
     "id": "faq-458",
     "category": "隱私保險遺失物與客訴",
     "question": "房內物品壞了怎麼辦？",
@@ -8855,7 +6521,7 @@
       "房內物品壞了該怎麼處理？",
       "房內物品壞了要如何處理"
     ],
-    "answer": "請主動拍照並通知民宿；民宿會判斷正常耗損或人為損壞，依證據與規範協調清潔、修復或賠償。",
+    "answer": "如不慎造成房內物品或設備損壞，請主動告知民宿；我們會依實際狀況判斷，如屬人為損壞，將依修復或更換費用酌收賠償。",
     "keywords": [
       "隱私",
       "遺失物",
@@ -8869,72 +6535,11 @@
     "source_no": 458
   },
   {
-    "id": "faq-459",
-    "category": "隱私保險遺失物與客訴",
-    "question": "不小心打破杯子要賠嗎？",
-    "aliases": [],
-    "answer": "請主動拍照並通知民宿；民宿會判斷正常耗損或人為損壞，依證據與規範協調清潔、修復或賠償。",
-    "keywords": [
-      "隱私",
-      "遺失物",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 459
-  },
-  {
-    "id": "faq-460",
-    "category": "隱私保險遺失物與客訴",
-    "question": "床單被染色怎麼辦？",
-    "aliases": [
-      "床單被染色該怎麼處理？",
-      "床單被染色要如何處理"
-    ],
-    "answer": "請主動拍照並通知民宿；民宿會判斷正常耗損或人為損壞，依證據與規範協調清潔、修復或賠償。",
-    "keywords": [
-      "床單",
-      "隱私",
-      "遺失物",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 460
-  },
-  {
-    "id": "faq-461",
-    "category": "隱私保險遺失物與客訴",
-    "question": "家具刮傷怎麼辦？",
-    "aliases": [
-      "家具刮傷該怎麼處理？",
-      "家具刮傷要如何處理"
-    ],
-    "answer": "請主動拍照並通知民宿；民宿會判斷正常耗損或人為損壞，依證據與規範協調清潔、修復或賠償。",
-    "keywords": [
-      "隱私",
-      "遺失物",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 461
-  },
-  {
     "id": "faq-462",
     "category": "隱私保險遺失物與客訴",
-    "question": "入住不滿意可以退費嗎？",
+    "question": "入住後發現住宿有問題怎麼辦？",
     "aliases": [],
-    "answer": "請第一時間向管家反映並提供照片或狀況說明，以便立即處理。是否退費或補償需依實際問題、處理結果與訂房政策個案確認。",
+    "answer": "如入住後發現房況、設備或清潔等問題，請第一時間聯絡管家，我們會立即確認並協助處理；如涉及退款或補償，將依實際狀況及相關規定辦理。",
     "keywords": [
       "退費",
       "隱私",
@@ -8956,7 +6561,7 @@
       "房間跟照片不一樣該怎麼處理？",
       "房間跟照片不一樣要如何處理"
     ],
-    "answer": "請第一時間反映並提供照片或狀況說明，讓民宿可即時改善；退費或補償需依問題性質與訂房政策判斷。",
+    "answer": "官網照片以實際房型為基準，部分擺設可能因維護或更新而有所調整。如入住時發現房型或主要設施與訂房內容明顯不符，請第一時間聯絡管家，我們會立即確認並協助處理。",
     "keywords": [
       "隱私",
       "遺失物",
@@ -8972,14 +6577,20 @@
   {
     "id": "faq-464",
     "category": "隱私保險遺失物與客訴",
-    "question": "設備故障會補償嗎？",
-    "aliases": [],
-    "answer": "請立即通知管家並提供設備故障狀況，以便先協助排除或安排替代方案。是否補償需依影響程度與實際處理結果個案確認。",
+    "question": "住宿期間設備故障怎麼辦？",
+    "aliases": [
+      "設施壞掉怎麼辦",
+      "設施壞掉該怎麼處理？",
+      "設施壞掉要如何處理"
+    ],
+    "answer": "如住宿期間發現設備故障，請第一時間聯絡管家，我們會協助排除問題或安排替代方案；如設備故障明顯影響住宿使用，將依實際情況協助處理。",
     "keywords": [
       "補償",
       "隱私",
       "遺失物",
-      "客訴"
+      "客訴",
+      "公共空間",
+      "設施"
     ],
     "priority": 80,
     "is_active": true,
@@ -8989,48 +6600,6 @@
     "source_no": 464
   },
   {
-    "id": "faq-465",
-    "category": "隱私保險遺失物與客訴",
-    "question": "隔壁太吵怎麼辦？",
-    "aliases": [
-      "隔壁太吵該怎麼處理？",
-      "隔壁太吵要如何處理"
-    ],
-    "answer": "請立即聯繫民宿，由工作人員協助提醒與處理；不要直接與對方發生衝突。",
-    "keywords": [
-      "隱私",
-      "遺失物",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 465
-  },
-  {
-    "id": "faq-466",
-    "category": "隱私保險遺失物與客訴",
-    "question": "附近鄰居抗議怎麼辦？",
-    "aliases": [
-      "附近鄰居抗議該怎麼處理？",
-      "附近鄰居抗議要如何處理"
-    ],
-    "answer": "請立即聯繫民宿，由工作人員協助提醒與處理；不要直接與對方發生衝突。",
-    "keywords": [
-      "隱私",
-      "遺失物",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 466
-  },
-  {
     "id": "faq-467",
     "category": "隱私保險遺失物與客訴",
     "question": "可以給評價嗎？",
@@ -9038,7 +6607,7 @@
       "能不能給評價？",
       "可不可以給評價？"
     ],
-    "answer": "非常歡迎留下真實評價，您的回饋能幫助我們改善服務；若入住中有任何問題，也請第一時間告訴管家，讓我們有機會即時協助。",
+    "answer": "可以。入住後留下五星好評，即可獲贈慢寶文創明信片一張。",
     "keywords": [
       "隱私",
       "遺失物",
@@ -9047,178 +6616,9 @@
     "priority": 80,
     "is_active": true,
     "status": "approved",
-    "answer_mode": "direct",
+    "answer_mode": "ask_human",
     "source": "faq-master.csv",
     "source_no": 467
-  },
-  {
-    "id": "faq-468",
-    "category": "隱私保險遺失物與客訴",
-    "question": "評論可以獲得優惠嗎？",
-    "aliases": [],
-    "answer": "若有評論活動或回饋優惠，會依當期公告為準；民宿歡迎真實心得，但不會要求不實好評或以優惠交換不實評價。",
-    "keywords": [
-      "優惠",
-      "隱私",
-      "遺失物",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 468
-  },
-  {
-    "id": "faq-469",
-    "category": "隱私保險遺失物與客訴",
-    "question": "可以客訴嗎？",
-    "aliases": [
-      "能不能客訴？",
-      "可不可以客訴？"
-    ],
-    "answer": "可以，請提供入住日期、房型、問題描述與照片，我們會認真處理並回覆改善方式。",
-    "keywords": [
-      "客訴",
-      "隱私",
-      "遺失物"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "ask_human",
-    "source": "faq-master.csv",
-    "source_no": 469
-  },
-  {
-    "id": "faq-470",
-    "category": "隱私保險遺失物與客訴",
-    "question": "遇到安全疑慮怎麼辦？",
-    "aliases": [
-      "遇到安全疑慮該怎麼處理？",
-      "遇到安全疑慮要如何處理"
-    ],
-    "answer": "若遇人身安全、火災、醫療急症或可疑狀況，請優先撥打 110 或 119，再立即通知管家；非急迫問題可透過官方 LINE 聯繫。",
-    "keywords": [
-      "安全疑慮",
-      "隱私",
-      "遺失物",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 470
-  },
-  {
-    "id": "faq-471",
-    "category": "隱私保險遺失物與客訴",
-    "question": "鄰近施工會事先通知嗎？",
-    "aliases": [],
-    "answer": "若住宿期間附近有已知施工或可能影響入住的狀況，民宿會盡量提前通知；臨時施工或外部因素則會依現場狀況協助說明與處理。",
-    "keywords": [
-      "施工",
-      "隱私",
-      "遺失物",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 471
-  },
-  {
-    "id": "faq-472",
-    "category": "隱私保險遺失物與客訴",
-    "question": "停水怎麼辦？",
-    "aliases": [
-      "停水該怎麼處理？",
-      "停水要如何處理"
-    ],
-    "answer": "若遇停水，請先停止大量用水並立即通知管家；民宿會協助確認是區域停水、設備異常或臨時狀況，並依情況提供處理方式。",
-    "keywords": [
-      "停水",
-      "隱私",
-      "遺失物",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 472
-  },
-  {
-    "id": "faq-473",
-    "category": "隱私保險遺失物與客訴",
-    "question": "網路斷線怎麼辦？",
-    "aliases": [
-      "網路斷線該怎麼處理？",
-      "網路斷線要如何處理"
-    ],
-    "answer": "若網路斷線，請先確認 Wi-Fi 名稱與設備電源，仍無法連線時請通知管家；民宿會協助重啟設備或確認是否為外部網路異常。",
-    "keywords": [
-      "網路斷線",
-      "隱私",
-      "遺失物",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 473
-  },
-  {
-    "id": "faq-474",
-    "category": "隱私保險遺失物與客訴",
-    "question": "房間被誤闖怎麼辦？",
-    "aliases": [
-      "房間被誤闖該怎麼處理？",
-      "房間被誤闖要如何處理"
-    ],
-    "answer": "若發生房間被誤闖或疑似安全問題，請立即通知管家；若涉及人身安全，請先撥打 110 或 119，並保留現場狀況。",
-    "keywords": [
-      "誤闖",
-      "隱私",
-      "遺失物",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 474
-  },
-  {
-    "id": "faq-475",
-    "category": "隱私保險遺失物與客訴",
-    "question": "退房後被通知損壞怎麼辦？",
-    "aliases": [
-      "退房後被通知損壞該怎麼處理？",
-      "退房後被通知損壞要如何處理",
-      "退宿後被通知損壞怎麼辦？"
-    ],
-    "answer": "若退房後收到損壞通知，可請管家提供照片、檢查紀錄與費用依據，再依實際情況溝通。慢寶無法直接判定責任或賠償金額。",
-    "keywords": [
-      "隱私",
-      "遺失物",
-      "客訴"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "ask_human",
-    "source": "faq-master.csv",
-    "source_no": 475
   },
   {
     "id": "faq-476",
@@ -9228,7 +6628,7 @@
       "能不能帶導盲犬或服務犬？",
       "可不可以帶導盲犬或服務犬？"
     ],
-    "answer": "服務性動物需求請事先告知，民宿會依相關規範與實際動線協助安排；請攜帶必要證明與用品。",
+    "answer": "可以。合格導盲犬、導聾犬及肢體輔助犬皆依相關法規開放入住，不受一般寵物入住規定限制，亦不另外收取寵物清潔費。",
     "keywords": [
       "特殊需求",
       "情境應對"
@@ -9241,210 +6641,6 @@
     "source_no": 476
   },
   {
-    "id": "faq-477",
-    "category": "特殊需求與情境應對",
-    "question": "我對羽絨過敏怎麼辦？",
-    "aliases": [
-      "我對羽絨過敏該怎麼處理？",
-      "我對羽絨過敏要如何處理"
-    ],
-    "answer": "請訂房時告知過敏項目，民宿會確認是否可調整寢具、減少香氛或建議自備用品。",
-    "keywords": [
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 477
-  },
-  {
-    "id": "faq-478",
-    "category": "特殊需求與情境應對",
-    "question": "我對香味過敏可以嗎？",
-    "aliases": [],
-    "answer": "請訂房時告知過敏項目，民宿會確認是否可調整寢具、減少香氛或建議自備用品。",
-    "keywords": [
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 478
-  },
-  {
-    "id": "faq-479",
-    "category": "特殊需求與情境應對",
-    "question": "可以安排安靜房嗎？",
-    "aliases": [
-      "能不能安排安靜房？",
-      "可不可以安排安靜房？"
-    ],
-    "answer": "可以提出房型、樓層或安靜需求，我們會依房況盡量安排，但無法保證一定指定成功。",
-    "keywords": [
-      "安靜房",
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 479
-  },
-  {
-    "id": "faq-480",
-    "category": "特殊需求與情境應對",
-    "question": "可以安排浪漫布置嗎？",
-    "aliases": [
-      "能不能安排浪漫布置？",
-      "可不可以安排浪漫布置？"
-    ],
-    "answer": "可提前提供預算、時間與驚喜流程，民宿會確認可協助項目、費用與不傷場地的布置方式。",
-    "keywords": [
-      "布置",
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 480
-  },
-  {
-    "id": "faq-481",
-    "category": "特殊需求與情境應對",
-    "question": "可以準備求婚驚喜嗎？",
-    "aliases": [
-      "能不能準備求婚驚喜？",
-      "可不可以準備求婚驚喜？"
-    ],
-    "answer": "可提前提供預算、時間與驚喜流程，民宿會確認可協助項目、費用與不傷場地的布置方式。",
-    "keywords": [
-      "求婚",
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 481
-  },
-  {
-    "id": "faq-482",
-    "category": "特殊需求與情境應對",
-    "question": "可以準備生日蛋糕嗎？",
-    "aliases": [
-      "能不能準備生日蛋糕？",
-      "可不可以準備生日蛋糕？"
-    ],
-    "answer": "可提前提供預算、時間與驚喜流程，民宿會確認可協助項目、費用與不傷場地的布置方式。",
-    "keywords": [
-      "蛋糕",
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 482
-  },
-  {
-    "id": "faq-483",
-    "category": "特殊需求與情境應對",
-    "question": "可以提早寄生日禮物到民宿嗎？",
-    "aliases": [
-      "能不能提早寄生日禮物到民宿？",
-      "可不可以提早寄生日禮物到民宿？",
-      "可以提早寄生日禮物到慢慢蒔光嗎"
-    ],
-    "answer": "可提前提供預算、時間與驚喜流程，民宿會確認可協助項目、費用與不傷場地的布置方式。",
-    "keywords": [
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 483
-  },
-  {
-    "id": "faq-484",
-    "category": "特殊需求與情境應對",
-    "question": "可以安排鮮花嗎？",
-    "aliases": [
-      "能不能安排鮮花？",
-      "可不可以安排鮮花？"
-    ],
-    "answer": "可提前提供預算、時間與驚喜流程，民宿會確認可協助項目、費用與不傷場地的布置方式。",
-    "keywords": [
-      "鮮花",
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 484
-  },
-  {
-    "id": "faq-485",
-    "category": "特殊需求與情境應對",
-    "question": "可以幫忙保密驚喜嗎？",
-    "aliases": [
-      "能不能幫忙保密驚喜？",
-      "可不可以幫忙保密驚喜？"
-    ],
-    "answer": "可提前提供預算、時間與驚喜流程，民宿會確認可協助項目、費用與不傷場地的布置方式。",
-    "keywords": [
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 485
-  },
-  {
-    "id": "faq-486",
-    "category": "特殊需求與情境應對",
-    "question": "可以入住前先送冷凍蛋糕嗎？",
-    "aliases": [
-      "能不能入住前先送冷凍蛋糕？",
-      "可不可以入住前先送冷凍蛋糕？"
-    ],
-    "answer": "冷藏冷凍物、快遞或大型道具代收需事前確認尺寸、到貨時間與保存空間，未確認不建議寄送。",
-    "keywords": [
-      "冷凍蛋糕",
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 486
-  },
-  {
     "id": "faq-487",
     "category": "特殊需求與情境應對",
     "question": "可以帶長輩醫療器材嗎？",
@@ -9452,7 +6648,7 @@
       "能不能帶長輩醫療器材？",
       "可不可以帶長輩醫療器材？"
     ],
-    "answer": "必要醫療器材或冷藏藥品可先告知；高功率設備與冷藏空間需確認，用藥請自行保管。",
+    "answer": "可以。如有需插電、冷藏或其他特殊保存方式的醫療器材或藥品，請提前告知，以便確認現場設備是否適用；個人藥品及醫療用品請自行妥善保管。",
     "keywords": [
       "醫療器材",
       "長輩",
@@ -9465,274 +6661,5 @@
     "answer_mode": "direct",
     "source": "faq-master.csv",
     "source_no": 487
-  },
-  {
-    "id": "faq-488",
-    "category": "特殊需求與情境應對",
-    "question": "需要冷藏藥品怎麼辦？",
-    "aliases": [
-      "需要冷藏藥品該怎麼處理？",
-      "需要冷藏藥品要如何處理",
-      "要冷藏藥品怎麼辦？"
-    ],
-    "answer": "冷藏冷凍物、快遞或大型道具代收需事前確認尺寸、到貨時間與保存空間，未確認不建議寄送。",
-    "keywords": [
-      "冷藏藥品",
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 488
-  },
-  {
-    "id": "faq-489",
-    "category": "特殊需求與情境應對",
-    "question": "可以入住時收快遞嗎？",
-    "aliases": [
-      "能不能入住時收快遞？",
-      "可不可以入住時收快遞？"
-    ],
-    "answer": "冷藏冷凍物、快遞或大型道具代收需事前確認尺寸、到貨時間與保存空間，未確認不建議寄送。",
-    "keywords": [
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 489
-  },
-  {
-    "id": "faq-490",
-    "category": "特殊需求與情境應對",
-    "question": "可以提早寄婚禮道具嗎？",
-    "aliases": [
-      "能不能提早寄婚禮道具？",
-      "可不可以提早寄婚禮道具？"
-    ],
-    "answer": "冷藏冷凍物、快遞或大型道具代收需事前確認尺寸、到貨時間與保存空間，未確認不建議寄送。",
-    "keywords": [
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 490
-  },
-  {
-    "id": "faq-491",
-    "category": "特殊需求與情境應對",
-    "question": "可以帶自己的枕頭被子嗎？",
-    "aliases": [
-      "能不能帶自己的枕頭被子？",
-      "可不可以帶自己的枕頭被子？"
-    ],
-    "answer": "可以自備慣用寢具，請自行保管並退房時帶走；若要調整房內配置請先告知。",
-    "keywords": [
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 491
-  },
-  {
-    "id": "faq-492",
-    "category": "特殊需求與情境應對",
-    "question": "可以要求不要打掃房間嗎？",
-    "aliases": [
-      "能不能要求不要打掃房間？",
-      "可不可以要求不要打掃房間？"
-    ],
-    "answer": "連住期間若不需打掃可提前告知；但垃圾、廚餘與衛生問題仍需依規定處理。",
-    "keywords": [
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 492
-  },
-  {
-    "id": "faq-493",
-    "category": "特殊需求與情境應對",
-    "question": "可以請民宿推薦攝影師嗎？",
-    "aliases": [
-      "能不能請民宿推薦攝影師？",
-      "可不可以請民宿推薦攝影師？",
-      "可以請慢慢蒔光推薦攝影師嗎"
-    ],
-    "answer": "是否能推薦攝影師需依當期合作資源確認。請提供拍攝日期、內容、預算與風格需求，由管家確認是否有合適的推薦方向。",
-    "keywords": [
-      "攝影師",
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": false,
-    "status": "needs_review",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 493
-  },
-  {
-    "id": "faq-494",
-    "category": "特殊需求與情境應對",
-    "question": "可以請外部按摩師到民宿嗎？",
-    "aliases": [
-      "能不能請外部按摩師到民宿？",
-      "可不可以請外部按摩師到民宿？",
-      "可以請外部按摩師到慢慢蒔光嗎"
-    ],
-    "answer": "外部服務、企業小聚、開會或遠端工作需事前確認人數、設備、網路、訪客與場地規範。",
-    "keywords": [
-      "按摩師",
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 494
-  },
-  {
-    "id": "faq-495",
-    "category": "特殊需求與情境應對",
-    "question": "可以辦企業小聚嗎？",
-    "aliases": [
-      "能不能辦企業小聚？",
-      "可不可以辦企業小聚？"
-    ],
-    "answer": "外部服務、企業小聚、開會或遠端工作需事前確認人數、設備、網路、訪客與場地規範。",
-    "keywords": [
-      "企業小聚",
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 495
-  },
-  {
-    "id": "faq-496",
-    "category": "特殊需求與情境應對",
-    "question": "可以開會或遠端工作嗎？",
-    "aliases": [
-      "能不能開會或遠端工作？",
-      "可不可以開會或遠端工作？"
-    ],
-    "answer": "外部服務、企業小聚、開會或遠端工作需事前確認人數、設備、網路、訪客與場地規範。",
-    "keywords": [
-      "遠端工作",
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 496
-  },
-  {
-    "id": "faq-497",
-    "category": "特殊需求與情境應對",
-    "question": "可以要求高樓層或景觀房嗎？",
-    "aliases": [
-      "能不能要求高樓層或景觀房？",
-      "可不可以要求高樓層或景觀房？"
-    ],
-    "answer": "可以提出房型、樓層或安靜需求，我們會依房況盡量安排，但無法保證一定指定成功。",
-    "keywords": [
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 497
-  },
-  {
-    "id": "faq-498",
-    "category": "特殊需求與情境應對",
-    "question": "可以要求避開某個房間嗎？",
-    "aliases": [
-      "能不能要求避開某個房間？",
-      "可不可以要求避開某個房間？"
-    ],
-    "answer": "可以提出房型、樓層或安靜需求，我們會依房況盡量安排，但無法保證一定指定成功。",
-    "keywords": [
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "collect_info",
-    "source": "faq-master.csv",
-    "source_no": 498
-  },
-  {
-    "id": "faq-499",
-    "category": "特殊需求與情境應對",
-    "question": "可以帶神明或祖先牌位入住嗎？",
-    "aliases": [
-      "能不能帶神明或祖先牌位入住？",
-      "可不可以帶神明或祖先牌位入住？"
-    ],
-    "answer": "一般不建議也不開放攜帶神明或祖先牌位入住。若有特殊宗教物品需求，請務必事前詢問；館內禁止點香、燒金紙或進行可能影響安全與他人的儀式。",
-    "keywords": [
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 499
-  },
-  {
-    "id": "faq-500",
-    "category": "特殊需求與情境應對",
-    "question": "遇到臨時緊急事件怎麼辦？",
-    "aliases": [
-      "遇到臨時緊急事件該怎麼處理？",
-      "遇到臨時緊急事件要如何處理"
-    ],
-    "answer": "遇到人身安全、火災或醫療急症時，請先撥打 110 或 119，再通知管家；非急迫問題請透過官方 LINE 或入住通知中的聯絡方式處理。",
-    "keywords": [
-      "緊急事件",
-      "特殊需求",
-      "情境應對"
-    ],
-    "priority": 80,
-    "is_active": true,
-    "status": "approved",
-    "answer_mode": "direct",
-    "source": "faq-master.csv",
-    "source_no": 500
   }
 ]

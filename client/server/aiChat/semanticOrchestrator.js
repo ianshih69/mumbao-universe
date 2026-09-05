@@ -36,8 +36,16 @@ const semanticContextFields = new Set([
   "guest_count",
   "adult_count",
   "child_count",
+  "infant_count",
+  "stay_nights",
+  "pricing_day_type",
+  "requires_exact_date",
   "pet_count",
   "pet_type",
+  "dog_under_10kg_count",
+  "dog_10_to_20kg_count",
+  "dog_over_20kg_count",
+  "breakfast_count",
   "room_count",
 ]);
 
@@ -45,7 +53,13 @@ const numericContextFields = new Set([
   "guest_count",
   "adult_count",
   "child_count",
+  "infant_count",
+  "stay_nights",
   "pet_count",
+  "dog_under_10kg_count",
+  "dog_10_to_20kg_count",
+  "dog_over_20kg_count",
+  "breakfast_count",
   "room_count",
 ]);
 
@@ -626,7 +640,7 @@ turn_action 定義：
 - knowledge_gap：無法安全歸類或需要人工確認。
 
 context_patch 只可使用這些欄位：
-active_intent,current_topic,stay_type,check_in,check_out,guest_count,adult_count,child_count,pet_count,pet_type,room_count
+active_intent,current_topic,stay_type,check_in,check_out,guest_count,adult_count,child_count,infant_count,stay_nights,pricing_day_type,requires_exact_date,pet_count,pet_type,dog_under_10kg_count,dog_10_to_20kg_count,dog_over_20kg_count,breakfast_count,room_count
 
 mentioned_fields 代表客人本輪明確提到或試圖修改的欄位，即使值不確定也要列出。
 uncertain_fields 代表客人提到該欄位但你無法安全解析成值；不要沿用舊值。
@@ -932,6 +946,14 @@ function validateContextPatch(value) {
     }
 
     if (field === "stay_type" && !["villa", "room"].includes(String(rawValue))) {
+      rejectedFields.push(field);
+      continue;
+    }
+
+    if (
+      field === "pricing_day_type" &&
+      !["weekday", "friday", "holiday"].includes(String(rawValue))
+    ) {
       rejectedFields.push(field);
       continue;
     }

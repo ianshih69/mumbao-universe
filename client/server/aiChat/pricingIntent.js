@@ -7,13 +7,13 @@ function normalizeCompactText(value) {
 }
 
 function hasPricingCue(text) {
-  return /房價|房費|住宿費|住宿價格|住宿報價|包棟價格|單間價格|總價|總共|多少錢|費用|報價|價位|多少/.test(
+  return /房價|房費|住宿費|住宿價格|住宿報價|包棟價格|單間價格|總價|總共|多少錢|費用|報價|價位|多少|幾多|怎麼算|怎算/.test(
     text
   );
 }
 
 function hasHardPolicyPricingCue(text) {
-  return /取消|退訂|退款|退費|退多少|訂金|押金|保留|留房|匯款|付款|刷卡|信用卡|加(?:一|1|[0-9]+)?個?人|多(?:一|1|[0-9]+)?個?人|延後退房|提早入住|提前入住|退房|入住時間|行李|清潔|垃圾|寄放|設備|損壞|賠|賠償/.test(
+  return /取消|退訂|退款|退費|退多少|訂金|押金|保留|留房|匯款|付款|刷卡|信用卡|加(?:一|1|[0-9]+)?個?人|多(?:一|1|[0-9]+)?個?人|延後退房|退房時間|幾點退房|提早入住|提前入住|入住時間|行李|清潔|垃圾|寄放|設備|損壞|賠|賠償/.test(
     text
   );
 }
@@ -125,7 +125,12 @@ export function isStrongExplicitLodgingQuoteRequest(
     return false;
   }
 
-  if (hasStandaloneWholeStayQuoteCue(text)) return true;
+  if (hasStandaloneWholeStayQuoteCue(text)) {
+    return (
+      hasPricingSessionContext({ context, previousContext, recentMessages }) ||
+      hasContextTripEvidence
+    );
+  }
   if (hasPricingFollowUpCue(text)) {
     return (
       hasPricingSessionContext({ context, previousContext, recentMessages }) ||
@@ -134,9 +139,17 @@ export function isStrongExplicitLodgingQuoteRequest(
   }
   if (hasLodgingCostCue(text)) return true;
 
+  return Boolean(hasStayType || hasDate || hasGuest || hasNight || hasLodgingAction);
+}
+
+export function isDeterministicPricingRequest(message, options = {}) {
+  const text = normalizeCompactText(message);
+  if (!text || !hasPricingCue(text)) return false;
+  if (isStrongExplicitLodgingQuoteRequest(message, options)) return true;
+
   return Boolean(
-    (hasStayType && (hasDate || hasGuest || hasNight || hasLodgingAction)) ||
-      (hasDate && (hasGuest || hasNight || hasStayType || hasLodgingAction)) ||
-      (hasGuest && (hasNight || hasLodgingAction))
+    /(?:狗|狗狗|犬|毛孩).*(?:公斤|押金|多少|費用|價格)|(?:寵物押金)|(?:早餐).*(?:份|多少|費用|價格)|(?:兩天一夜|三天兩夜|算幾晚)/.test(
+      text
+    )
   );
 }

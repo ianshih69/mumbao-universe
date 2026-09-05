@@ -1,4 +1,4 @@
-import { isStrongExplicitLodgingQuoteRequest } from "./pricingIntent.js";
+import { isDeterministicPricingRequest } from "./pricingIntent.js";
 
 const contextFields = [
   "active_intent",
@@ -8,8 +8,16 @@ const contextFields = [
   "guest_count",
   "adult_count",
   "child_count",
+  "infant_count",
+  "stay_nights",
+  "pricing_day_type",
+  "requires_exact_date",
   "pet_count",
   "pet_type",
+  "dog_under_10kg_count",
+  "dog_10_to_20kg_count",
+  "dog_over_20kg_count",
+  "breakfast_count",
   "room_count",
   "current_topic",
   "last_updated_at",
@@ -23,8 +31,16 @@ const nullContext = Object.freeze({
   guest_count: null,
   adult_count: null,
   child_count: null,
+  infant_count: null,
+  stay_nights: null,
+  pricing_day_type: null,
+  requires_exact_date: null,
   pet_count: null,
   pet_type: null,
+  dog_under_10kg_count: null,
+  dog_10_to_20kg_count: null,
+  dog_over_20kg_count: null,
+  breakfast_count: null,
   room_count: null,
   current_topic: null,
   last_updated_at: null,
@@ -137,6 +153,14 @@ function addDays(dateText, days) {
   return formatDate(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
 }
 
+function daysBetween(checkIn, checkOut) {
+  const start = parseDateOnly(checkIn);
+  const end = parseDateOnly(checkOut);
+  if (!start || !end) return null;
+  const nights = Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+  return nights > 0 ? nights : null;
+}
+
 function inferYear(month, day, baseDateText) {
   const baseDate = parseDateOnly(baseDateText) || new Date();
   let year = baseDate.getUTCFullYear();
@@ -201,6 +225,36 @@ function parseDateRange(message, baseDateText) {
   const text = normalizeText(message).replace(/[－—–]/g, "-");
 
   let match = text.match(
+    /(\d{4})年(\d{1,2})月(\d{1,2})(?:日|號)?(?:入住)?\s*[，,]?\s*(?:至|到|-)?\s*(\d{4})年(\d{1,2})月(\d{1,2})(?:日|號)?(?:退房)?/,
+  );
+  if (match) {
+    return resolveDateRange({
+      startYear: Number(match[1]),
+      startMonth: Number(match[2]),
+      startDay: Number(match[3]),
+      endYear: Number(match[4]),
+      endMonth: Number(match[5]),
+      endDay: Number(match[6]),
+      baseDateText,
+    });
+  }
+
+  match = text.match(
+    /(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})(?:入住)?\s*[，,]?\s*(?:至|到|-)?\s*(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})(?:退房)?/,
+  );
+  if (match) {
+    return resolveDateRange({
+      startYear: Number(match[1]),
+      startMonth: Number(match[2]),
+      startDay: Number(match[3]),
+      endYear: Number(match[4]),
+      endMonth: Number(match[5]),
+      endDay: Number(match[6]),
+      baseDateText,
+    });
+  }
+
+  match = text.match(
     new RegExp(
       String.raw`(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})\s*${dateRangeSeparators}\s*(\d{1,2})(?!\d)`,
     ),
@@ -273,6 +327,20 @@ function parseDateRange(message, baseDateText) {
   return null;
 }
 
+function parseSingleDate(message) {
+  const text = normalizeText(message).replace(/[－—–]/g, "-");
+  let match = text.match(/(\d{4})年(\d{1,2})月(\d{1,2})(?:日|號)?/);
+  if (!match) {
+    match = text.match(/(?:^|\D)(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})(?!\d)/);
+  }
+  if (!match) return null;
+
+  const date = makeUtcDate(Number(match[1]), Number(match[2]), Number(match[3]));
+  return date
+    ? formatDate(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate())
+    : null;
+}
+
 function parseChineseNumber(value) {
   const text = String(value || "").trim();
   if (!text) return null;
@@ -299,22 +367,101 @@ function firstNumber(pattern, text) {
   return parseChineseNumber(match[1]);
 }
 
+export function classifyGuestAgeForPricing({ years, months = 0 } = {}) {
+  const wholeYears = Number(years);
+  const extraMonths = Number(months);
+  if (!Number.isInteger(wholeYears) || wholeYears < 0) return null;
+  if (!Number.isInteger(extraMonths) || extraMonths < 0 || extraMonths > 11) return null;
+
+  const ageInMonths = wholeYears * 12 + extraMonths;
+  if (ageInMonths < 4 * 12) return "infant";
+  if (ageInMonths < 13 * 12) return "child";
+  return "adult";
+}
+
+function extractDogWeightCounts(message) {
+  const compact = normalizeCompactText(message);
+  const result = {
+    dog_under_10kg_count: 0,
+    dog_10_to_20kg_count: 0,
+    dog_over_20kg_count: 0,
+  };
+  const weightPattern = new RegExp(
+    `(?:(${numericTokenPattern})(?:隻|只))?(?:(?:狗狗|狗|犬|毛孩|寵物))?(?:剛好|約|大約)?(${numericTokenPattern}(?:\\.\\d+)?)公斤`,
+    "g"
+  );
+  let match;
+  let matched = false;
+  while ((match = weightPattern.exec(compact))) {
+    const count = match[1] ? parseChineseNumber(match[1]) : 1;
+    const weight = /^\d+(?:\.\d+)?$/.test(match[2])
+      ? Number(match[2])
+      : parseChineseNumber(match[2]);
+    if (!Number.isInteger(count) || count < 1 || !Number.isFinite(weight)) continue;
+    matched = true;
+    if (weight <= 10) result.dog_under_10kg_count += count;
+    else if (weight <= 20) result.dog_10_to_20kg_count += count;
+    else result.dog_over_20kg_count += count;
+  }
+
+  return matched ? result : null;
+}
+
+function extractPricingDayType(message) {
+  const compact = normalizeCompactText(message);
+  if (/連假|連續假日|週六|周六|星期六|禮拜六|假日/.test(compact)) return "holiday";
+  if (/週五|周五|星期五|禮拜五/.test(compact)) return "friday";
+  if (/平日/.test(compact)) return "weekday";
+  return null;
+}
+
 function extractCounts(message) {
   const text = normalizeText(message);
   const compact = normalizeCompactText(message);
   const extracted = {};
 
   const adultCount = firstNumber(new RegExp(`(${numericTokenPattern})(?:位|個)?(?:大人|成人)`), compact);
-  const childCount = firstNumber(new RegExp(`(${numericTokenPattern})(?:位|個)?(?:小孩|兒童|孩童)`), compact);
+  const childCount = firstNumber(
+    new RegExp(
+      `(${numericTokenPattern})(?:位|個)?(?:(?:滿?4(?:歲)?(?:到|至|~|～|-)12歲)|(?:4(?:到|至|~|～|-)12歲))?(?:不佔床)?(?:小孩|兒童|孩童)`
+    ),
+    compact
+  );
+  const infantCount = firstNumber(
+    new RegExp(`(${numericTokenPattern})(?:位|個)?(?:未滿4歲)?(?:嬰兒|嬰幼兒|幼兒)`),
+    compact
+  );
   const guestCount = firstNumber(new RegExp(`(${numericTokenPattern})(?:位|個)?(?:人|位|入住|住客)`), compact);
   const roomCount = firstNumber(new RegExp(`(${numericTokenPattern})(?:間房|間|房)`), compact);
   const nights = firstNumber(new RegExp(`(${numericTokenPattern})(?:晚|夜)`), compact);
+  const breakfastCount =
+    firstNumber(new RegExp(`早餐(${numericTokenPattern})(?:份)?`), compact) ??
+    firstNumber(new RegExp(`(${numericTokenPattern})份早餐`), compact);
 
   if (adultCount !== null) extracted.adult_count = adultCount;
   if (childCount !== null) extracted.child_count = childCount;
+  if (infantCount !== null) extracted.infant_count = infantCount;
   if (guestCount !== null) extracted.guest_count = guestCount;
   if (roomCount !== null) extracted.room_count = roomCount;
-  if (nights !== null) extracted.nights = nights;
+  if (nights !== null) extracted.stay_nights = nights;
+  if (breakfastCount !== null) extracted.breakfast_count = breakfastCount;
+
+  const pricingDayType = extractPricingDayType(message);
+  if (pricingDayType) extracted.pricing_day_type = pricingDayType;
+  if (/暑假|過年|春節|特殊日期/.test(compact)) {
+    extracted.requires_exact_date = /暑假/.test(compact) ? "summer" : "special_date";
+    extracted.pricing_day_type = null;
+  }
+
+  const dogWeightCounts = extractDogWeightCounts(message);
+  if (dogWeightCounts) {
+    Object.assign(extracted, dogWeightCounts);
+    extracted.pet_count =
+      dogWeightCounts.dog_under_10kg_count +
+      dogWeightCounts.dog_10_to_20kg_count +
+      dogWeightCounts.dog_over_20kg_count;
+    extracted.pet_type = "dog";
+  }
 
   if (
     /(不帶|沒有|無)(狗|狗狗|犬|貓|貓咪|寵物|毛孩)/.test(compact) ||
@@ -328,7 +475,7 @@ function extractCounts(message) {
   const petMatch = text
     .replace(/\s+/g, "")
     .match(new RegExp(`(${numericTokenPattern})(?:隻|只|個)?(狗狗|狗|犬|貓咪|貓|寵物|毛孩)`));
-  if (petMatch) {
+  if (petMatch && !dogWeightCounts) {
     const petCount = parseChineseNumber(petMatch[1]);
     if (petCount !== null) extracted.pet_count = petCount;
     if (/狗|犬/.test(petMatch[2])) extracted.pet_type = "dog";
@@ -342,7 +489,7 @@ function extractCounts(message) {
 function extractIntentAndTopic(message, previousContext) {
   const compact = normalizeCompactText(message);
   const extracted = {};
-  const hasPricingCue = isStrongExplicitLodgingQuoteRequest(message, {
+  const hasPricingCue = isDeterministicPricingRequest(message, {
     previousContext,
   });
   const hasFacilityCue = /(烤肉|bbq|設施|ktv|廚房|泳池|停車|早餐)/i.test(compact);
@@ -359,6 +506,10 @@ function extractIntentAndTopic(message, previousContext) {
     extracted.stay_type = "villa";
   } else if (/(單間|一間房|房間|改訂單間|改成單間)/.test(compact)) {
     extracted.stay_type = "room";
+  }
+
+  if (hasPricingCue && !extracted.stay_type) {
+    extracted.stay_type = "villa";
   }
 
   if (!extracted.active_intent && previousContext?.active_intent && hasFollowUpCue(compact)) {
@@ -514,13 +665,22 @@ function mergeSingleMessage(previousContext, message, { baseDateText, nowIso } =
   if (dateRange) {
     extracted.check_in = dateRange.check_in;
     extracted.check_out = dateRange.check_out;
+    extracted.stay_nights = daysBetween(dateRange.check_in, dateRange.check_out);
+    extracted.pricing_day_type = null;
+    extracted.requires_exact_date = null;
+  } else if (parseSingleDate(message)) {
+    extracted.check_in = parseSingleDate(message);
+    extracted.check_out = extracted.stay_nights
+      ? addDays(extracted.check_in, extracted.stay_nights)
+      : null;
+    extracted.pricing_day_type = null;
+    extracted.requires_exact_date = null;
   } else if (hasDateChangeCue(message)) {
     extracted.check_in = null;
     extracted.check_out = null;
-  } else if (extracted.nights && base.check_in) {
-    extracted.check_out = addDays(base.check_in, extracted.nights);
+  } else if (extracted.stay_nights && base.check_in) {
+    extracted.check_out = addDays(base.check_in, extracted.stay_nights);
   }
-  delete extracted.nights;
 
   const normalizedPatch = normalizeContextPatch(extracted);
   const context = {
@@ -577,8 +737,20 @@ export function normalizeConversationContext(value) {
   context.guest_count = normalizeInteger(source.guest_count);
   context.adult_count = normalizeInteger(source.adult_count);
   context.child_count = normalizeInteger(source.child_count);
+  context.infant_count = normalizeInteger(source.infant_count);
+  context.stay_nights = normalizeInteger(source.stay_nights);
+  context.pricing_day_type = ["weekday", "friday", "holiday"].includes(
+    String(source.pricing_day_type || "")
+  )
+    ? String(source.pricing_day_type)
+    : null;
+  context.requires_exact_date = normalizeNullableText(source.requires_exact_date);
   context.pet_count = normalizeInteger(source.pet_count);
   context.pet_type = normalizeNullableText(source.pet_type);
+  context.dog_under_10kg_count = normalizeInteger(source.dog_under_10kg_count);
+  context.dog_10_to_20kg_count = normalizeInteger(source.dog_10_to_20kg_count);
+  context.dog_over_20kg_count = normalizeInteger(source.dog_over_20kg_count);
+  context.breakfast_count = normalizeInteger(source.breakfast_count);
   context.room_count = normalizeInteger(source.room_count);
   context.current_topic = normalizeNullableText(source.current_topic);
   context.last_updated_at = normalizeNullableText(source.last_updated_at);
@@ -624,9 +796,15 @@ export function buildConversationRetrievalText(message, context) {
   if (state.stay_type === "room") segments.push("單間");
   if (state.check_in) segments.push(`${state.check_in}入住`);
   if (state.check_out) segments.push(`${state.check_out}退房`);
+  if (state.pricing_day_type === "weekday") segments.push("平日");
+  if (state.pricing_day_type === "friday") segments.push("週五");
+  if (state.pricing_day_type === "holiday") segments.push("週六或連續假日");
+  if (state.requires_exact_date === "summer") segments.push("暑假需確切日期");
+  if (state.stay_nights !== null) segments.push(`${state.stay_nights}晚`);
   if (state.guest_count !== null) segments.push(`${state.guest_count}人`);
   if (state.adult_count !== null) segments.push(`${state.adult_count}位大人`);
   if (state.child_count !== null) segments.push(`${state.child_count}位小孩`);
+  if (state.infant_count !== null) segments.push(`${state.infant_count}位未滿4歲幼兒`);
   if (state.room_count !== null) segments.push(`${state.room_count}間房`);
   if (state.pet_count !== null) {
     if (state.pet_count === 0) {
@@ -636,6 +814,10 @@ export function buildConversationRetrievalText(message, context) {
       segments.push(`${state.pet_count}隻${petLabel}`);
     }
   }
+  if (state.dog_under_10kg_count) segments.push(`10公斤以下狗狗${state.dog_under_10kg_count}隻`);
+  if (state.dog_10_to_20kg_count) segments.push(`超過10至20公斤狗狗${state.dog_10_to_20kg_count}隻`);
+  if (state.dog_over_20kg_count) segments.push(`超過20公斤狗狗${state.dog_over_20kg_count}隻`);
+  if (state.breakfast_count !== null) segments.push(`早餐${state.breakfast_count}份`);
   if (state.current_topic === "barbecue") segments.push("烤肉");
 
   const userMessage = normalizeText(message);
@@ -676,11 +858,21 @@ function buildStaySummary(context) {
     parts.push(`${formatDisplayDate(state.check_in)}入住、${formatDisplayDate(state.check_out)}退房`);
   } else if (state.check_in) {
     parts.push(`${formatDisplayDate(state.check_in)}入住`);
+  } else if (state.pricing_day_type) {
+    const label = {
+      weekday: "平日",
+      friday: "週五",
+      holiday: "週六／連續假日",
+    }[state.pricing_day_type];
+    parts.push(`${label}${state.stay_nights ? `住${state.stay_nights}晚` : ""}`);
   }
 
   if (state.stay_type === "villa") parts.push("包棟");
   if (state.stay_type === "room") parts.push("單間");
   if (state.guest_count !== null) parts.push(`${state.guest_count}位入住`);
+  if (state.adult_count !== null) parts.push(`${state.adult_count}位成人`);
+  if (state.child_count !== null) parts.push(`${state.child_count}位4～12歲不佔床兒童`);
+  if (state.infant_count !== null) parts.push(`${state.infant_count}位未滿4歲幼兒`);
   if (state.pet_count !== null) {
     if (state.pet_count === 0) {
       parts.push("不攜帶寵物");
@@ -700,11 +892,25 @@ export function buildContextualKnowledgeGapReply(context) {
   }
 
   const missing = [];
-  if (!state.check_in || !state.check_out) missing.push("入住日期");
-  if (state.guest_count === null && state.adult_count === null && state.child_count === null) {
-    missing.push("入住人數");
+  if (state.requires_exact_date && !state.check_in) {
+    missing.push("確切入住日期與年份");
+  } else if (!state.check_in && !state.pricing_day_type) {
+    missing.push("入住日期或日期類型");
   }
-  if (state.pet_count === null) missing.push("是否攜帶寵物");
+  if (
+    (!state.check_out && !state.stay_nights) ||
+    (state.pricing_day_type && !state.stay_nights)
+  ) {
+    missing.push("住宿晚數");
+  }
+  if (state.guest_count === null && state.adult_count === null) {
+    missing.push("成人與4～12歲兒童人數");
+  }
+  const dogWeightCount =
+    (state.dog_under_10kg_count || 0) +
+    (state.dog_10_to_20kg_count || 0) +
+    (state.dog_over_20kg_count || 0);
+  if (state.pet_count > dogWeightCount) missing.push("每隻狗狗體重");
 
   const summary = buildStaySummary(state);
   if (missing.length) {
@@ -714,7 +920,7 @@ export function buildContextualKnowledgeGapReply(context) {
       )}退房的${state.stay_type === "villa" ? "包棟" : "住宿"}需求確認。請問${missing.join("、")}？`;
     }
 
-    return "請提供入住日期、人數及寵物需求。";
+    return `請提供${missing.join("、")}。`;
   }
 
   return `收到，目前需求是 ${summary}。實際房價及寵物安排仍需由管家確認，我已將完整需求整理好。`;
@@ -730,11 +936,21 @@ export function getMissingBookingContextFields(context) {
   const missing = [];
 
   if (!state.stay_type) missing.push("stay_type");
-  if (!state.check_in || !state.check_out) missing.push("dates");
-  if (state.guest_count === null && state.adult_count === null && state.child_count === null) {
+  if (state.requires_exact_date && !state.check_in) {
+    missing.push("exact_date");
+  } else if (!state.check_in && !state.pricing_day_type) {
+    missing.push("stay_period");
+  } else if ((!state.check_out && !state.stay_nights) || (state.pricing_day_type && !state.stay_nights)) {
+    missing.push("stay_nights");
+  }
+  if (state.guest_count === null && state.adult_count === null) {
     missing.push("guest_count");
   }
-  if (state.pet_count === null) missing.push("pet_count");
+  const dogWeightCount =
+    (state.dog_under_10kg_count || 0) +
+    (state.dog_10_to_20kg_count || 0) +
+    (state.dog_over_20kg_count || 0);
+  if (state.pet_count > dogWeightCount) missing.push("dog_weights");
 
   return missing;
 }
@@ -742,9 +958,11 @@ export function getMissingBookingContextFields(context) {
 function missingFieldsToQuestion(missing) {
   const labels = [];
   if (missing.includes("stay_type")) labels.push("想包棟或訂單間");
-  if (missing.includes("dates")) labels.push("入住日期");
-  if (missing.includes("guest_count")) labels.push("共有幾位入住");
-  if (missing.includes("pet_count")) labels.push("是否攜帶寵物");
+  if (missing.includes("stay_period")) labels.push("入住日期或日期類型與晚數");
+  if (missing.includes("exact_date")) labels.push("確切入住日期與年份");
+  if (missing.includes("stay_nights")) labels.push("住宿晚數");
+  if (missing.includes("guest_count")) labels.push("成人與4～12歲兒童各有幾位");
+  if (missing.includes("dog_weights")) labels.push("每隻狗狗的體重");
   return labels;
 }
 

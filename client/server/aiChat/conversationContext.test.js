@@ -322,8 +322,8 @@ describe("AI chat conversation context", () => {
     expect(reply).toContain("2026年9月26日入住");
     expect(reply).toContain("2026年9月27日退房");
     expect(reply).toContain("包棟");
-    expect(reply).toContain("入住人數");
-    expect(reply).toContain("是否攜帶寵物");
+    expect(reply).toContain("成人與4～12歲兒童人數");
+    expect(reply).not.toContain("是否攜帶寵物");
     expect(reply).not.toContain("入住日期");
   });
 
@@ -336,6 +336,7 @@ describe("AI chat conversation context", () => {
       guest_count: 10,
       pet_count: 3,
       pet_type: "dog",
+      dog_under_10kg_count: 3,
     });
 
     expect(reply).toContain("10位入住");
@@ -388,7 +389,8 @@ describe("AI chat conversation context", () => {
     expect(override.answer).toContain("2027年7月27日退房");
     expect(override.answer).toContain("包棟");
     expect(override.answer).toContain("攜帶3隻狗");
-    expect(override.answer).toContain("共有幾位入住");
+    expect(override.answer).toContain("成人與4～12歲兒童各有幾位");
+    expect(override.answer).toContain("每隻狗狗的體重");
     expect(override.answer).not.toContain("入住日期");
     expect(override.answer).not.toContain("是否攜帶寵物");
   });
@@ -408,21 +410,21 @@ describe("AI chat conversation context", () => {
       pet_count: 3,
       pet_type: "dog",
     });
-    expect(
-      buildContextualKnowledgeRouteOverride(fourth.context, {
+    const override = buildContextualKnowledgeRouteOverride(fourth.context, {
         route: "faq_direct",
         providerUsed: "faq_direct",
         answer: "請提供日期與人數。",
         answerMode: "direct",
         knowledgeGap: false,
         aiSkipped: true,
-      }),
-    ).toMatchObject({
-      route: "knowledge_gap",
-      providerUsed: "knowledge_gap",
-      shouldMarkNeedsHuman: true,
-      knowledgeGap: true,
+      });
+    expect(override).toMatchObject({
+      route: "faq_collect_info",
+      providerUsed: "faq_collect_info",
+      shouldMarkNeedsHuman: false,
+      knowledgeGap: false,
     });
+    expect(override.answer).toContain("每隻狗狗");
   });
 
   it("summarizes complete needs instead of returning generic collect_info when no reliable price exists", () => {
@@ -435,6 +437,7 @@ describe("AI chat conversation context", () => {
         guest_count: 10,
         pet_count: 3,
         pet_type: "dog",
+        dog_under_10kg_count: 3,
       },
       {
         route: "faq_collect_info",
@@ -481,10 +484,6 @@ describe("AI chat conversation context", () => {
 
     expect(otherSessionState.check_in).toBe("2027-07-26");
     expect(freshSession.check_in).toBeNull();
-    expect(override.answer).toContain("入住日期");
-    expect(override.answer).toContain("共有幾位入住");
-    expect(override.answer).not.toContain("2027年7月26日");
-    expect(override.answer).not.toContain("10位入住");
-    expect(override.answer).not.toContain("3隻狗");
+    expect(override).toBeNull();
   });
 });

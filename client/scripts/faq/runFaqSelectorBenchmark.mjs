@@ -141,6 +141,7 @@ function readDataset(datasetPath) {
   const cases = [
     ...(dataset.positive || []),
     ...(dataset.negative || []),
+    ...(dataset.safety_controls || []),
     ...(dataset.multi_intent || []),
   ];
   return { dataset, cases };

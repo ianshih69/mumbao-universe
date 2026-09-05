@@ -1,6 +1,5 @@
 import type { AdminInventoryLookup } from "@/lib/shop/adminInventoryApi";
-
-const adminAuthExpiredMessage = "登入已過期，請重新登入";
+import { createAdminApiError } from "@/lib/shop/adminAuth";
 
 export type PosPaymentMethod = "cash" | "transfer" | "other";
 
@@ -53,11 +52,7 @@ async function fetchAdminJson<T>(
   };
 
   if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error(adminAuthExpiredMessage);
-    }
-
-    throw new Error(data.error || `Request failed: ${response.status}`);
+    throw createAdminApiError(response.status, data, `Request failed: ${response.status}`);
   }
 
   return data;

@@ -1,6 +1,6 @@
 import {
   adminAuthExpiredMessage,
-  clearAdminToken,
+  createAdminApiError,
   getAdminIdentity,
   getAdminRefreshToken,
   getAdminToken,
@@ -28,8 +28,7 @@ async function requestAdminIdentity<T>(
   });
   const data = (await parseJson(response)) as T & { error?: string };
   if (!response.ok) {
-    if (response.status === 401) throw new Error(adminAuthExpiredMessage);
-    throw new Error(data.error || `Request failed: ${response.status}`);
+    throw createAdminApiError(response.status, data, `Request failed: ${response.status}`);
   }
   return data;
 }
@@ -307,7 +306,13 @@ export async function loginAdminAccount(email: string, password: string) {
 
 export async function refreshAdminSession() {
   const refreshToken = getAdminRefreshToken();
-  if (!refreshToken) throw new Error(adminAuthExpiredMessage);
+  if (!refreshToken) {
+    throw createAdminApiError(
+      401,
+      { code: "admin_refresh_token_missing" },
+      adminAuthExpiredMessage,
+    );
+  }
 
   const response = await fetch("/api/admin-shop?action=admin-refresh", {
     method: "POST",
@@ -316,8 +321,7 @@ export async function refreshAdminSession() {
   });
   const data = await parseJson(response);
   if (!response.ok) {
-    clearAdminToken();
-    throw new Error(adminAuthExpiredMessage);
+    throw createAdminApiError(401, data, adminAuthExpiredMessage);
   }
 
   setAdminSession({

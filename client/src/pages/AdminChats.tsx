@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   clearAdminToken as clearStoredAdminToken,
+  createAdminApiError,
   getAdminIdentity,
   getAdminToken,
   isAdminAuthError,
@@ -324,7 +325,7 @@ async function fetchAdminJson<T>(
   };
 
   if (!response.ok) {
-    throw new Error(data.error || `Request failed: ${response.status}`);
+    throw createAdminApiError(response.status, data, `Request failed: ${response.status}`);
   }
 
   return data;

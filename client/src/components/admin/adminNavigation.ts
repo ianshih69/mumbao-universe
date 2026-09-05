@@ -103,21 +103,27 @@ export function isAdminNavItemActive(pathname: string, item: AdminNavItem) {
 }
 
 export function findAdminNavItemByPath(pathname: string) {
-  for (const section of adminNavigationSections) {
-    for (const item of section.items) {
-      if (isAdminNavItemActive(pathname, item)) return item;
-    }
-  }
-  return null;
+  const items = adminNavigationSections.flatMap((section) => section.items);
+  const exactMatch = items.find((item) =>
+    (item.match || [item.href]).some((candidate) => candidate === pathname)
+  );
+  if (exactMatch) return exactMatch;
+
+  return items
+    .filter((item) => isAdminNavItemActive(pathname, item))
+    .sort((first, second) => {
+      const firstLength = Math.max(...(first.match || [first.href]).map((value) => value.length));
+      const secondLength = Math.max(...(second.match || [second.href]).map((value) => value.length));
+      return secondLength - firstLength;
+    })[0] || null;
 }
 
 export function getAdminNavSectionLabelByPath(pathname: string) {
-  for (const section of adminNavigationSections) {
-    if (section.items.some((item) => isAdminNavItemActive(pathname, item))) {
-      return section.label;
-    }
-  }
-  return null;
+  const activeItem = findAdminNavItemByPath(pathname);
+  if (!activeItem) return null;
+  return adminNavigationSections.find((section) =>
+    section.items.some((item) => item.key === activeItem.key)
+  )?.label || null;
 }
 
 export function parseStoredAdminExpandedSections(raw: string | null | undefined) {

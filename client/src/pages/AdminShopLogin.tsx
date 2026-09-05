@@ -6,6 +6,10 @@ import {
   fetchAdminBootstrapStatus,
   loginAdminAccount,
 } from "@/lib/shop/adminIdentityApi";
+import {
+  getAdminLoginNotice,
+  getAdminLoginRedirectTarget,
+} from "@/lib/shop/adminAuth";
 
 const labels = {
   showPassword: "顯示密碼",
@@ -30,10 +34,12 @@ function passwordToggleLabel(isVisible: boolean) {
 
 export default function AdminShopLogin() {
   const [, setLocation] = useLocation();
+  const loginSearch = typeof window === "undefined" ? "" : window.location.search;
+  const redirectTo = getAdminLoginRedirectTarget(loginSearch);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showAccountPassword, setShowAccountPassword] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(() => getAdminLoginNotice(loginSearch));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBootstrapAvailable, setIsBootstrapAvailable] = useState(false);
   const [bootstrapForm, setBootstrapForm] = useState({
@@ -42,8 +48,6 @@ export default function AdminShopLogin() {
     adminPassword: "",
   });
   const [showBootstrapPassword, setShowBootstrapPassword] = useState(false);
-
-  const redirectTo = new URLSearchParams(window.location.search).get("redirect") || "/admin/shop";
 
   useEffect(() => {
     let isCurrent = true;

@@ -1,3 +1,5 @@
+import { createAdminApiError } from "@/lib/shop/adminAuth";
+
 export type AdminInventoryMovementType =
   | "stock_in"
   | "stock_out"
@@ -5,8 +7,6 @@ export type AdminInventoryMovementType =
   | "manual_sale"
   | "online_order"
   | "return_in";
-
-const adminAuthExpiredMessage = "登入已過期，請重新登入";
 
 export type AdminInventoryMovement = {
   id: string;
@@ -73,11 +73,7 @@ async function fetchAdminJson<T>(
   };
 
   if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error(adminAuthExpiredMessage);
-    }
-
-    throw new Error(data.error || `Request failed: ${response.status}`);
+    throw createAdminApiError(response.status, data, `Request failed: ${response.status}`);
   }
 
   return data;

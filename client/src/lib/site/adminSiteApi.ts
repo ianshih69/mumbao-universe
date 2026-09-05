@@ -1,4 +1,4 @@
-import { adminAuthExpiredMessage } from "@/lib/shop/adminAuth";
+import { AdminApiError, createAdminApiError } from "@/lib/shop/adminAuth";
 
 export type CmsPage = {
   id: string;
@@ -58,15 +58,10 @@ export type CmsRevision = {
   created_at: string;
 };
 
-export class AdminSiteApiError extends Error {
-  status: number;
-  code?: string;
-
+export class AdminSiteApiError extends AdminApiError {
   constructor(message: string, status: number, code?: string) {
-    super(message);
+    super(message, status, code);
     this.name = "AdminSiteApiError";
-    this.status = status;
-    this.code = code;
   }
 }
 
@@ -85,8 +80,8 @@ async function requestAdminSite<T>(token: string, url: string, options: RequestI
   });
   const data = (await parseJson(response)) as T & { error?: string; code?: string };
   if (!response.ok) {
-    if (response.status === 401) throw new AdminSiteApiError(adminAuthExpiredMessage, response.status, data.code);
-    throw new AdminSiteApiError(data.error || `Request failed: ${response.status}`, response.status, data.code);
+    const error = createAdminApiError(response.status, data, `Request failed: ${response.status}`);
+    throw new AdminSiteApiError(error.message, error.status, error.code);
   }
   return data;
 }

@@ -1,3 +1,5 @@
+import { createAdminApiError } from "@/lib/shop/adminAuth";
+
 export type BookingSeverity = "P0" | "P1" | "P2" | "review";
 
 export type BookingDashboard = {
@@ -260,7 +262,11 @@ async function adminBookingRequest<T>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok || data == null) {
-    throw new Error(data?.message || data?.error || `Admin bookings request failed: ${response.status}`);
+    throw createAdminApiError(
+      response.status,
+      data,
+      `Admin bookings request failed: ${response.status}`,
+    );
   }
 
   return data as T;

@@ -1,4 +1,4 @@
-import { adminAuthExpiredMessage } from "@/lib/shop/adminAuth";
+import { createAdminApiError } from "@/lib/shop/adminAuth";
 import type { AdminOrderStatus, AdminPaymentStatus } from "@/lib/shop/adminOrdersApi";
 import type { AdminInventoryMovementType } from "@/lib/shop/adminInventoryApi";
 
@@ -74,11 +74,7 @@ export async function fetchAdminShopDashboard(token: string) {
   };
 
   if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error(adminAuthExpiredMessage);
-    }
-
-    throw new Error(data.error || `Request failed: ${response.status}`);
+    throw createAdminApiError(response.status, data, `Request failed: ${response.status}`);
   }
 
   if (!data.dashboard) {

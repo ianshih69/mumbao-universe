@@ -79,6 +79,12 @@ describe("admin unified navigation", () => {
     expect(getAdminPageTitle("/admin/legacy-content")).toBe("舊版內容管理");
   });
 
+  it("resolves deep Admin routes before their parent overview route", () => {
+    expect(findAdminNavItemByPath("/admin/shop/users")?.key).toBe("users");
+    expect(getAdminNavSectionLabelByPath("/admin/shop/users")).toBe("系統管理");
+    expect(findAdminNavItemByPath("/admin/bookings/orders")?.key).toBe("booking-orders");
+  });
+
   it("forces the active page section open while preserving stored expanded sections", () => {
     const stored = parseStoredAdminExpandedSections('["官網內容"]');
     const expanded = resolveAdminExpandedSections({

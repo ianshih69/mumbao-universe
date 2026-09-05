@@ -15,6 +15,7 @@ import {
   Menu,
   MessageCircle,
   PackageCheck,
+  RefreshCw,
   ScanLine,
   ShieldCheck,
   ShoppingBag,
@@ -25,15 +26,17 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
+  buildAdminLoginPath,
   clearAdminToken,
-  getAdminIdentity,
-  getAdminToken,
+  subscribeAdminAuthExpired,
   type AdminIdentity,
 } from "@/lib/shop/adminAuth";
 import {
-  adminNavigationSections,
+  adminRouteCanRender,
+  validateAdminRouteAuth,
+} from "@/lib/shop/adminRouteAuth";
+import {
   adminSidebarExpandedSectionsStorageKey,
-  canViewAdminNavItem,
   getAdminPageTitle,
   getVisibleAdminNavigation,
   isAdminNavItemActive,
@@ -69,12 +72,12 @@ const iconByKey: Record<string, typeof Home> = {
   audit: ShieldCheck,
 };
 
-function buildLoginRedirect(pathname: string) {
+function currentAdminPath(pathname: string) {
   const currentPath =
     typeof window === "undefined"
       ? pathname
       : `${window.location.pathname}${window.location.search}`;
-  return `/admin/shop/login?redirect=${encodeURIComponent(currentPath || "/admin")}`;
+  return currentPath || "/admin";
 }
 
 function AdminNavLink({
@@ -229,41 +232,72 @@ function AdminSidebar({
   );
 }
 
-export function adminRouteCanRender(pathname: string, identity: AdminIdentity | null) {
-  if (!identity || identity.is_active === false) return false;
-  if (pathname === "/admin/legacy-content") return true;
-  const item = adminNavigationSections
-    .flatMap((section) => section.items)
-    .find((navItem) => isAdminNavItemActive(pathname, navItem));
-  if (!item) return true;
-  return canViewAdminNavItem(item, identity);
-}
-
 export default function AdminLayout({
   children,
   title,
   contentClassName,
 }: AdminLayoutProps) {
   const [pathname, setLocation] = useLocation();
-  const [identity, setIdentity] = useState<AdminIdentity | null>(() => getAdminIdentity());
-  const [token, setToken] = useState(() => getAdminToken());
+  const [identity, setIdentity] = useState<AdminIdentity | null>(null);
+  const [authStatus, setAuthStatus] = useState<
+    "checking" | "authenticated" | "forbidden" | "error"
+  >("checking");
+  const [validatedPathname, setValidatedPathname] = useState("");
+  const [authError, setAuthError] = useState("");
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const pageTitle = title || getAdminPageTitle(pathname);
-  const canRender = adminRouteCanRender(pathname, identity);
 
   useEffect(() => {
-    const nextToken = getAdminToken();
-    const nextIdentity = getAdminIdentity();
-    if (!nextToken || !nextIdentity) {
-      if (nextToken && !nextIdentity) clearAdminToken();
-      setToken("");
-      setIdentity(null);
-      setLocation(buildLoginRedirect(pathname));
-      return;
-    }
-    setToken(nextToken);
-    setIdentity(nextIdentity);
+    let isCurrent = true;
+    setAuthStatus("checking");
+    setValidatedPathname("");
+    setAuthError("");
+    setIdentity(null);
+
+    void validateAdminRouteAuth().then((result) => {
+      if (!isCurrent) return;
+      if (result.status === "authenticated") {
+        setIdentity(result.identity);
+        setValidatedPathname(pathname);
+        setAuthStatus(
+          adminRouteCanRender(pathname, result.identity) ? "authenticated" : "forbidden",
+        );
+        return;
+      }
+      if (result.status === "unauthenticated") {
+        clearAdminToken();
+        setLocation(
+          buildAdminLoginPath(
+            currentAdminPath(pathname),
+            result.reason === "expired",
+          ),
+        );
+        return;
+      }
+      setAuthError(
+        result.error instanceof Error
+          ? result.error.message
+          : "暫時無法確認後台登入狀態，請重新整理。",
+      );
+      setValidatedPathname(pathname);
+      setAuthStatus("error");
+    });
+
+    return () => {
+      isCurrent = false;
+    };
   }, [pathname, setLocation]);
+
+  useEffect(
+    () =>
+      subscribeAdminAuthExpired(() => {
+        setIdentity(null);
+        setAuthStatus("checking");
+        setValidatedPathname("");
+        setLocation(buildAdminLoginPath(currentAdminPath(pathname), true));
+      }),
+    [pathname, setLocation],
+  );
 
   useEffect(() => {
     if (!isMobileOpen) return;
@@ -293,25 +327,46 @@ export default function AdminLayout({
   const logout = () => {
     clearAdminToken();
     setIdentity(null);
-    setToken("");
+    setAuthStatus("checking");
+    setValidatedPathname("");
     setIsMobileOpen(false);
     setLocation("/admin/shop/login");
   };
 
-  if (!token) {
+  if (authStatus === "checking" || validatedPathname !== pathname) {
     return (
       <main className="flex min-h-[100svh] items-center justify-center bg-[#f7f1e9] px-5 text-stone-600">
-        <p className="text-sm">正在前往管理員登入...</p>
+        <p className="text-sm">正在確認後台登入狀態...</p>
       </main>
     );
   }
 
-  if (!canRender) {
+  if (authStatus === "error") {
     return (
       <main className="flex min-h-[100svh] items-center justify-center bg-[#f7f1e9] px-5 text-stone-900">
         <section className="w-full max-w-md rounded-[8px] border border-stone-200 bg-white p-7 text-center shadow-sm">
           <ShieldCheck className="mx-auto h-9 w-9 text-[#8b6f5b]" />
-          <h1 className="mt-4 text-xl font-semibold">沒有此管理頁面權限</h1>
+          <h1 className="mt-4 text-xl font-semibold">無法確認登入狀態</h1>
+          <p className="mt-2 text-sm leading-6 text-stone-500">{authError}</p>
+          <button
+            type="button"
+            className="mt-5 inline-flex h-10 items-center gap-2 rounded-full bg-[#8b6f5b] px-5 text-sm font-semibold text-white hover:bg-[#765d4a]"
+            onClick={() => window.location.reload()}
+          >
+            <RefreshCw className="h-4 w-4" />
+            重新整理
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  if (authStatus === "forbidden") {
+    return (
+      <main className="flex min-h-[100svh] items-center justify-center bg-[#f7f1e9] px-5 text-stone-900">
+        <section className="w-full max-w-md rounded-[8px] border border-stone-200 bg-white p-7 text-center shadow-sm">
+          <ShieldCheck className="mx-auto h-9 w-9 text-[#8b6f5b]" />
+          <h1 className="mt-4 text-xl font-semibold">您沒有此操作權限</h1>
           <p className="mt-2 text-sm leading-6 text-stone-500">
             請使用具備對應權限的管理員帳號，或返回管理總覽。
           </p>

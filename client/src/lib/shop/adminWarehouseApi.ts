@@ -1,4 +1,4 @@
-import { adminAuthExpiredMessage } from "./adminAuth";
+import { createAdminApiError } from "./adminAuth";
 import { ensureFreshAdminSession } from "./adminIdentityApi";
 
 async function fetchAdminJson<T>(
@@ -20,8 +20,7 @@ async function fetchAdminJson<T>(
   };
 
   if (!response.ok) {
-    if (response.status === 401) throw new Error(adminAuthExpiredMessage);
-    throw new Error(data.error || `Request failed: ${response.status}`);
+    throw createAdminApiError(response.status, data, `Request failed: ${response.status}`);
   }
 
   return data;

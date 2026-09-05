@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { __testing, createAdminMembersHandler } from "./members.js";
 
+function normalizeLineEndings(value) {
+  return value.replace(/\r\n?/g, "\n");
+}
+
 const authUserA = "11111111-1111-4111-8111-111111111111";
 const authUserB = "22222222-2222-4222-8222-222222222222";
 const authUserC = "33333333-3333-4333-8333-333333333333";
@@ -1515,39 +1519,47 @@ describe("admin members API", () => {
   });
 
   it("keeps booking stay reward migration minimal and prevents duplicate automatic point awards", () => {
-    const sql = readFileSync(new URL("../../supabase/migrations/2026-08-02-booking-stay-completion-partner-points.sql", import.meta.url), "utf8").toLowerCase();
+    const sql = normalizeLineEndings(
+      readFileSync(
+        new URL("../../supabase/migrations/2026-08-02-booking-stay-completion-partner-points.sql", import.meta.url),
+        "utf8"
+      )
+    ).toLowerCase();
+    const expectSqlToContain = (expected) => {
+      expect(sql).toContain(normalizeLineEndings(expected));
+    };
 
-    expect(sql).toContain("add column if not exists customer_profile_id uuid");
-    expect(sql).toContain("add column if not exists final_lodging_amount integer");
-    expect(sql).toContain("add column if not exists completed_at timestamptz");
-    expect(sql).toContain("add column if not exists completed_by_admin_id uuid");
-    expect(sql).toContain("constraint booking_requests_completed_by_admin_id_fkey");
-    expect(sql).toContain("drop constraint booking_requests_completed_by_admin_id_fkey");
-    expect(sql).toContain("confupdtype = 'c'");
-    expect(sql).toContain("confdeltype = 'n'");
-    expect(sql).toContain("references public.admin_profiles(id)");
-    expect(sql).toContain("on update cascade");
-    expect(sql).toContain("on delete set null");
-    expect(sql).toContain("add column if not exists partner_points_ledger_id uuid");
-    expect(sql).toContain("references public.member_points_ledger(id) on update cascade on delete restrict");
-    expect(sql).toContain("add column if not exists source_type text");
-    expect(sql).toContain("check (source_type is null or source_type in ('booking_stay_reward'))");
-    expect(sql).toContain("create unique index if not exists member_points_ledger_booking_reward_source_unique_idx");
-    expect(sql).toContain("where source_type = 'booking_stay_reward'");
-    expect(sql).toContain("create or replace function public.complete_booking_stay_with_partner_points");
-    expect(sql).toContain("returns jsonb");
-    expect(sql).toContain("security definer");
-    expect(sql).toContain("set search_path = public");
-    expect(sql).toContain("for update");
-    expect(sql).toContain("if v_source not in ('official_site', 'website', 'line', 'phone', 'manual', 'admin')");
-    expect(sql).toContain("raise exception '此訂單來源不符合合作回饋資格。'");
-    expect(sql).toContain("v_points := floor(p_final_lodging_amount * 5 / 100)");
-    expect(sql).toContain("insert into public.member_points_ledger");
-    expect(sql).toContain("update public.booking_requests");
-    expect(sql).toContain("revoke execute on function public.complete_booking_stay_with_partner_points(uuid, integer, uuid)\n  from public");
-    expect(sql).toContain("revoke execute on function public.complete_booking_stay_with_partner_points(uuid, integer, uuid)\n  from anon");
-    expect(sql).toContain("revoke execute on function public.complete_booking_stay_with_partner_points(uuid, integer, uuid)\n  from authenticated");
-    expect(sql).toContain("grant execute on function public.complete_booking_stay_with_partner_points(uuid, integer, uuid)");
-    expect(sql).toContain("to service_role");
+    expectSqlToContain("add column if not exists customer_profile_id uuid");
+    expectSqlToContain("add column if not exists final_lodging_amount integer");
+    expectSqlToContain("add column if not exists completed_at timestamptz");
+    expectSqlToContain("add column if not exists completed_by_admin_id uuid");
+    expectSqlToContain("constraint booking_requests_completed_by_admin_id_fkey");
+    expectSqlToContain("drop constraint booking_requests_completed_by_admin_id_fkey");
+    expectSqlToContain("confupdtype = 'c'");
+    expectSqlToContain("confdeltype = 'n'");
+    expectSqlToContain("references public.admin_profiles(id)");
+    expectSqlToContain("on update cascade");
+    expectSqlToContain("on delete set null");
+    expectSqlToContain("add column if not exists partner_points_ledger_id uuid");
+    expectSqlToContain("references public.member_points_ledger(id) on update cascade on delete restrict");
+    expectSqlToContain("add column if not exists source_type text");
+    expectSqlToContain("check (source_type is null or source_type in ('booking_stay_reward'))");
+    expectSqlToContain("create unique index if not exists member_points_ledger_booking_reward_source_unique_idx");
+    expectSqlToContain("where source_type = 'booking_stay_reward'");
+    expectSqlToContain("create or replace function public.complete_booking_stay_with_partner_points");
+    expectSqlToContain("returns jsonb");
+    expectSqlToContain("security definer");
+    expectSqlToContain("set search_path = public");
+    expectSqlToContain("for update");
+    expectSqlToContain("if v_source not in ('official_site', 'website', 'line', 'phone', 'manual', 'admin')");
+    expectSqlToContain("raise exception '此訂單來源不符合合作回饋資格。'");
+    expectSqlToContain("v_points := floor(p_final_lodging_amount * 5 / 100)");
+    expectSqlToContain("insert into public.member_points_ledger");
+    expectSqlToContain("update public.booking_requests");
+    expectSqlToContain("revoke execute on function public.complete_booking_stay_with_partner_points(uuid, integer, uuid)\n  from public");
+    expectSqlToContain("revoke execute on function public.complete_booking_stay_with_partner_points(uuid, integer, uuid)\n  from anon");
+    expectSqlToContain("revoke execute on function public.complete_booking_stay_with_partner_points(uuid, integer, uuid)\n  from authenticated");
+    expectSqlToContain("grant execute on function public.complete_booking_stay_with_partner_points(uuid, integer, uuid)");
+    expectSqlToContain("to service_role");
   });
 });

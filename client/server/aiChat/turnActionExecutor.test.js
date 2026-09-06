@@ -291,7 +291,7 @@ describe("turn action executor", () => {
       shouldMarkNeedsHuman: false,
       knowledgeGap: false,
     });
-    expect(result.answer).toContain("成人住宿費為 TWD 31,250");
+    expect(result.answer).toBe("15位成人包棟 TWD 31,250。");
     expect(result.semanticMetadata).toMatchObject({
       semantic_turn_action: "update_quote",
       validated_turn_action: "update_quote",
@@ -389,7 +389,7 @@ describe("turn action executor", () => {
     });
 
     expect(result.route).toBe("faq_collect_info");
-    expect(result.answer).toContain("已先記下目前資訊");
+    expect(result.answer).toBe("請問想包棟或訂單間、成人與4～12歲兒童各有幾位？");
     expect(result.answer).not.toContain("NT$37,500");
     expect(result.semanticMetadata.action_executor_result).toBe(
       "update_quote_without_pricing_session"
@@ -547,8 +547,7 @@ describe("turn action executor", () => {
     });
 
     expect(answered.providerUsed).toBe("official_pricing");
-    expect(answered.answer).toContain("15 位成人");
-    expect(answered.answer).toContain("成人住宿費");
+    expect(answered.answer).toBe("15位成人包棟 TWD 31,250。");
     expect(answered.answer).not.toContain("寵物費");
     expect(answered.conversationContextPatch.pending_interaction).toBeNull();
     expect(answered.semanticMetadata).toMatchObject({
@@ -595,7 +594,9 @@ describe("turn action executor", () => {
     });
 
     expectSeptemberPartialQuote(result);
-    expect(result.answer).toContain("已確認，");
+    expect(result.answer).toBe(
+      "10位成人包棟 TWD 25,000。另有 3 隻狗狗，請提供每隻體重後才能計算狗狗住宿費。"
+    );
     expect(result.conversationContextPatch).toMatchObject({
       check_in: "2026-09-09",
       check_out: "2026-09-10",
@@ -625,8 +626,7 @@ describe("turn action executor", () => {
     });
 
     expect(result.route).toBe("grounded_reply");
-    expect(result.answer).toContain("2026 年 10 月 10 日入住、2026 年 10 月 11 日退房");
-    expect(result.answer).toContain("TWD 39,000");
+    expect(result.answer).toBe("10位成人包棟 TWD 39,000。");
     expect(result.answer).not.toContain("請問入住日期");
     expect(result.conversationContextPatch).toMatchObject({
       check_in: "2026-10-10",
@@ -670,8 +670,12 @@ describe("turn action executor", () => {
       sourceMessageId: "request-october-validator-fallback",
     });
 
-    expect(result.answer).toContain("2026 年 10 月 10 日入住、2026 年 10 月 11 日退房");
+    expect(result.answer).toBe("10位成人包棟 TWD 39,000。");
     expect(result.answer).not.toContain("請問入住日期");
+    expect(result.conversationContextPatch).toMatchObject({
+      check_in: "2026-10-10",
+      check_out: "2026-10-11",
+    });
     expect(result.semanticMetadata).toMatchObject({
       semantic_turn_action_raw: "invalid_action",
       validated_turn_action: "request_quote",
@@ -739,7 +743,7 @@ describe("turn action executor", () => {
       sourceMessageId: "request-october-new-schema",
     });
 
-    expect(result.answer).toContain("2026 年 10 月 10 日入住、2026 年 10 月 11 日退房");
+    expect(result.answer).toBe("10位成人包棟 TWD 39,000。");
     expect(result.answer).not.toContain("請問入住日期");
     expect(result.conversationContextPatch).toMatchObject({
       check_in: "2026-10-10",
@@ -774,8 +778,13 @@ describe("turn action executor", () => {
       sourceMessageId: "request-october-legacy-answer-pending",
     });
 
-    expect(result.answer).toContain("2026 年 10 月 10 日入住、2026 年 10 月 11 日退房");
+    expect(result.answer).toBe("10位成人包棟 TWD 39,000。");
     expect(result.answer).not.toContain("請問入住日期");
+    expect(result.conversationContextPatch).toMatchObject({
+      check_in: "2026-10-10",
+      check_out: "2026-10-11",
+      pending_interaction: null,
+    });
     expect(result.semanticMetadata).toMatchObject({
       semantic_turn_action_raw: "answer_pending",
       semantic_turn_action: "request_quote",
@@ -844,8 +853,14 @@ describe("turn action executor", () => {
       sourceMessageId: "request-october-legacy-modify",
     });
 
-    expect(result.answer).toContain("2026 年 10 月 12 日入住、2026 年 10 月 13 日退房");
+    expect(result.answer).toBe("10位成人包棟 TWD 25,000。");
     expect(result.answer).not.toContain("請問入住日期");
+    expect(result.semanticMetadata.resolved_context_summary).toContain(
+      "check_in:2026-10-12"
+    );
+    expect(result.semanticMetadata.resolved_context_summary).toContain(
+      "check_out:2026-10-13"
+    );
     expect(result.conversationContextPatch.pending_interaction).toBeNull();
     expect(result.semanticMetadata).toMatchObject({
       semantic_turn_action_raw: "answer_pending",
@@ -1050,8 +1065,13 @@ describe("turn action executor", () => {
     });
 
     expect(modified.route).toBe("faq_collect_info");
-    expect(modified.answer).toContain("2026年8月6日");
-    expect(modified.answer).toContain("成人與4～12歲兒童各有幾位");
+    expect(modified.answer).toBe("請問成人與4～12歲兒童各有幾位？");
+    expect(modified.semanticMetadata.resolved_context_summary).toContain(
+      "check_in:2026-08-06"
+    );
+    expect(modified.semanticMetadata.resolved_context_summary).toContain(
+      "check_out:2026-08-07"
+    );
     expect(modified.conversationContextPatch.pending_interaction.action).toBe(
       "collect_quote_fields"
     );
@@ -1140,8 +1160,15 @@ describe("turn action executor", () => {
     });
 
     expect(confirm.route).toBe("quote_confirmation");
-    expect(confirm.answer).toContain("是的");
-    expect(confirm.answer).toContain("成人住宿費為 TWD 31,250");
+    expect(confirm.answer).toBe(
+      "15位成人包棟 TWD 31,250。另有 3 隻狗狗，請提供每隻體重後才能計算狗狗住宿費。"
+    );
+    expect(confirm.semanticMetadata).toMatchObject({
+      pricing_called: true,
+      lodging_price_status: "resolved",
+      lodging_price_amount: 31250,
+      pet_fee_status: "unresolved",
+    });
     expect(explain.route).toBe("quote_breakdown");
     expect(explain.answer).toContain("Booking 正式價格核心");
     expect(explain.answer).toContain("小計 TWD 31,250");

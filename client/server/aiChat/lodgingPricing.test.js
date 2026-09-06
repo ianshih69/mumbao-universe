@@ -3,6 +3,7 @@ import { buildConversationContextUpdate } from "./conversationContext.js";
 import {
   buildOfficialPricingResolution,
   buildOfficialPricingRouteOverride,
+  buildTransactionalPricingResponsePlan,
   classifyPricingReplyIntent,
 } from "./lodgingPricing.js";
 
@@ -106,6 +107,47 @@ function parsedContext(message) {
 }
 
 describe("shared Booking pricing for AI answers", () => {
+  it("builds concise transactional response plans without changing quote math", async () => {
+    const lodgingContext = baseContext();
+    const lodgingResolution = await buildOfficialPricingResolution(
+      lodgingContext,
+      pricingOptions
+    );
+    const lodgingPlan = buildTransactionalPricingResponsePlan(
+      lodgingContext,
+      lodgingResolution
+    );
+    expect(lodgingPlan).toEqual({
+      response_kind: "quote_only",
+      primary_answer: "10位成人包棟一晚 TWD 25,000",
+      essential_breakdown: [],
+      clarification_question: "",
+      disclaimer: "",
+      answer: "10位成人包棟一晚 TWD 25,000。",
+    });
+
+    const dogContext = parsedContext(
+      "2026年11月1日10位成人加1隻22公斤狗狗住一晚包棟多少？"
+    );
+    const dogResolution = await buildOfficialPricingResolution(
+      dogContext,
+      pricingOptions
+    );
+    const dogPlan = buildTransactionalPricingResponsePlan(
+      dogContext,
+      dogResolution
+    );
+    expect(dogPlan).toEqual({
+      response_kind: "quote_with_addons",
+      primary_answer: "包棟 TWD 25,000",
+      essential_breakdown: ["加狗狗 TWD 1,200"],
+      clarification_question: "",
+      disclaimer: "另收可退寵物押金 TWD 3,000",
+      answer:
+        "包棟 TWD 25,000，加狗狗 TWD 1,200，合計 TWD 26,200；另收可退寵物押金 TWD 3,000。",
+    });
+  });
+
   it("uses the Booking price matrix for every required adult price", async () => {
     const cases = [
       ["2026-11-01", "2026-11-02", "weekday", 10, 25000],
@@ -195,6 +237,10 @@ describe("shared Booking pricing for AI answers", () => {
     );
     const breakfast = await overrideFor("早餐4份多少？", parsedContext("早餐4份多少？"));
     const deposit = await overrideFor("寵物押金多少？", parsedContext("寵物押金多少？"));
+    const incompleteWholeStay = await overrideFor(
+      "10位成人加1隻22公斤狗狗包棟多少？",
+      parsedContext("10位成人加1隻22公斤狗狗包棟多少？")
+    );
 
     expect(dogOneNight.answer).toContain("TWD 1,200");
     expect(dogTwoNights.answer).toContain("TWD 2,340");
@@ -203,6 +249,7 @@ describe("shared Booking pricing for AI answers", () => {
     expect(breakfast.answer).toContain("TWD 1,000");
     expect(breakfast.answer).toContain("不套用住宿第 2 晚起 95 折");
     expect(deposit.answer).toContain("不是狗狗住宿費");
+    expect(incompleteWholeStay).toBeNull();
   });
 
   it("keeps live availability separate from the static price", async () => {

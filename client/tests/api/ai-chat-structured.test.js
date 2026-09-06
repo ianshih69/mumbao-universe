@@ -75,7 +75,17 @@ function createHandlerHarness(initialContext = {}) {
         url.searchParams.get("day_type") || "",
       ).replace(/^eq\./, "");
       const nightlyPrice = {
-        weekday: { 10: 25000, 18: 35000 },
+        weekday: {
+          10: 25000,
+          11: 26250,
+          12: 27500,
+          13: 28750,
+          14: 30000,
+          15: 31250,
+          16: 32500,
+          17: 33750,
+          18: 35000,
+        },
         friday: { 10: 32000, 18: 42000 },
         holiday: { 10: 39000, 18: 49000 },
       }[dayType]?.[guests];
@@ -179,9 +189,9 @@ describe("production AI chat structured authority", () => {
       structured_reducer_applied: true,
       legacy_context_mutation_invoked: false,
       legacy_guest_adjustment_formatter_call_count: 0,
-      action_type: "update_quote",
+      action_type: "request_quote",
       structured_provider_call_count: 0,
-      final_result_category: "reprice_after_context_change",
+      final_result_category: "grounded_reply",
     });
     expect(payload.metadata.structured_candidate_count).toBeGreaterThan(0);
     expect(harness.getSession().conversation_context).toMatchObject({
@@ -223,6 +233,348 @@ describe("production AI chat structured authority", () => {
       adult_count: 10,
       pet_count: 1,
       pet_weights_kg: [22],
+    });
+    expect(harness.getNonFixtureCalls()).toBe(0);
+  });
+
+  it("starts a new quote snapshot for the staged three-turn screenshot", async () => {
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    const harness = createHandlerHarness();
+    vi.stubGlobal("fetch", harness.fetchMock);
+
+    const first = await harness.send(completeRequest, "incoming-snapshot-first");
+    expect(first.payload.answer).toBe(
+      "包棟 TWD 25,000，加狗狗 TWD 1,200，合計 TWD 26,200；另收可退寵物押金 TWD 3,000。",
+    );
+
+    const second = await harness.send(
+      "2026年11月1日，10位成人，住一晚包棟多少？",
+      "incoming-snapshot-second",
+    );
+    expect(second.payload.answer).toBe("10位成人包棟一晚 TWD 25,000。");
+    expect(second.payload.answer).not.toContain("退房嗎");
+    expect(second.payload.answer).not.toContain("要調整哪項");
+    expect(second.payload.metadata).toMatchObject({
+      turn_type: "quote_snapshot",
+      quote_scope: "snapshot",
+      derived_checkout_used: true,
+      inherited_optional_addons_count: 0,
+      final_response_kind: "quote_only",
+    });
+    expect(harness.getSession().conversation_context).toMatchObject({
+      check_in: "2026-11-01",
+      check_out: "2026-11-02",
+      stay_nights: 1,
+      adult_count: 10,
+      child_count: 0,
+      infant_count: 0,
+      pet_count: 0,
+      pet_weights_kg: [],
+      breakfast_count: 0,
+      pending_interaction: null,
+    });
+
+    const beforeConfirmation = harness.getSession().conversation_context;
+    const third = await harness.send("對", "incoming-snapshot-third");
+    expect(third.payload.answer).toBe(
+      "目前沒有待確認的內容，請告訴我想確認哪一項。",
+    );
+    expect(third.payload.answer).not.toContain("要調整哪項訂房資料");
+    expect(harness.getSession().conversation_context).toEqual(beforeConfirmation);
+    expect(harness.getNonFixtureCalls()).toBe(0);
+  });
+
+  it.each(["對", "是", "沒錯", "正確", "可以", "好", "嗯", "就這樣"])(
+    "consumes a scenario-bound confirmation and resumes the quote for %s",
+    async (confirmation) => {
+      vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+      const harness = createHandlerHarness({
+        active_intent: "pricing",
+        current_topic: "booking_price",
+        stay_type: "villa",
+        adult_count: 10,
+        child_count: 0,
+        infant_count: 0,
+        pet_count: 0,
+        breakfast_count: 0,
+        quote_scenario: {
+          scenario_id: "scenario-confirm-date",
+          context_version: 3,
+        },
+        pending_interaction: {
+          action: "confirm_quote_dates",
+          proposed_values: {
+            check_in: "2026-11-01",
+            check_out: "2026-11-02",
+            stay_nights: 1,
+          },
+          required_response_type: "confirmation",
+          resume_action: "request_quote",
+          scenario_id: "scenario-confirm-date",
+          context_version: 3,
+          asked_turn_id: "assistant-confirm-date",
+          expires_after_turns: 1,
+          source_assistant_message_id: "assistant-confirm-date",
+          created_at: "2026-09-06T00:00:00.000Z",
+          expires_at: "2027-09-06T01:00:00.000Z",
+        },
+      });
+      vi.stubGlobal("fetch", harness.fetchMock);
+
+      const result = await harness.send(
+        confirmation,
+        `incoming-confirm-${confirmation}`,
+      );
+
+      expect(result.payload.answer).toBe("10位成人包棟一晚 TWD 25,000。");
+      expect(result.payload.metadata).toMatchObject({
+        turn_type: "confirmation",
+        pending_confirmation_existed: true,
+        pending_confirmation_consumed: true,
+        final_response_kind: "quote_only",
+      });
+      expect(harness.getSession().conversation_context).toMatchObject({
+        check_in: "2026-11-01",
+        check_out: "2026-11-02",
+        stay_nights: 1,
+        pending_interaction: null,
+      });
+      expect(harness.getNonFixtureCalls()).toBe(0);
+    },
+  );
+
+  it("enforces the complete snapshot and incremental patch matrix", async () => {
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    const harness = createHandlerHarness();
+    vi.stubGlobal("fetch", harness.fetchMock);
+
+    await harness.send(completeRequest, "matrix-snapshot-dog-1");
+    const firstScenario = structuredClone(
+      harness.getSession().conversation_context.quote_scenario,
+    );
+    expect(harness.getSession().conversation_context).toMatchObject({
+      adult_count: 10,
+      pet_count: 1,
+      pet_weights_kg: [22],
+    });
+
+    await harness.send(completeRequest, "matrix-snapshot-dog-repeat");
+    const repeatedScenario = structuredClone(
+      harness.getSession().conversation_context.quote_scenario,
+    );
+    expect(harness.getSession().conversation_context).toMatchObject({
+      pet_count: 1,
+      pet_weights_kg: [22],
+    });
+    expect(repeatedScenario.scenario_id).not.toBe(firstScenario.scenario_id);
+    expect(repeatedScenario.context_version).toBe(1);
+
+    const addPet = await harness.send(
+      "再加一隻22公斤狗狗呢？",
+      "matrix-patch-add-dog",
+    );
+    expect(addPet.payload.answer).toContain("TWD 27,400");
+    expect(addPet.payload.metadata).toMatchObject({
+      turn_type: "quote_patch",
+      quote_scope: "patch",
+      quote_scenario_version: 2,
+      inherited_optional_addons_count: 1,
+    });
+    expect(harness.getSession().conversation_context).toMatchObject({
+      pet_count: 2,
+      pet_weights_kg: [22, 22],
+    });
+    expect(
+      harness.getSession().conversation_context.quote_scenario.scenario_id,
+    ).toBe(repeatedScenario.scenario_id);
+
+    const clearPets = await harness.send(
+      "不要狗狗了",
+      "matrix-patch-clear-dogs",
+    );
+    expect(clearPets.payload.metadata.turn_type).toBe("correction");
+    expect(harness.getSession().conversation_context).toMatchObject({
+      pet_count: 0,
+      pet_type: null,
+      pet_weights_kg: [],
+    });
+
+    await harness.send(completeRequest, "matrix-new-dog-snapshot");
+    const addonScenarioId =
+      harness.getSession().conversation_context.quote_scenario.scenario_id;
+    const addBreakfast = await harness.send(
+      "同樣條件再加早餐2份",
+      "matrix-patch-breakfast",
+    );
+    expect(addBreakfast.payload.answer).toContain("TWD 26,700");
+    expect(addBreakfast.payload.metadata).toMatchObject({
+      turn_type: "quote_patch",
+      quote_scope: "patch",
+      inherited_optional_addons_count: 1,
+    });
+    expect(harness.getSession().conversation_context).toMatchObject({
+      pet_count: 1,
+      pet_weights_kg: [22],
+      breakfast_count: 2,
+    });
+    expect(
+      harness.getSession().conversation_context.quote_scenario.scenario_id,
+    ).toBe(addonScenarioId);
+
+    const freshSnapshot = await harness.send(
+      "2026/11/1，10成人，一晚包棟多少？",
+      "matrix-fresh-snapshot",
+    );
+    expect(freshSnapshot.payload.answer).toBe("10位成人包棟一晚 TWD 25,000。");
+    expect(freshSnapshot.payload.metadata).toMatchObject({
+      turn_type: "quote_snapshot",
+      quote_scope: "snapshot",
+      quote_scenario_version: 1,
+      inherited_optional_addons_count: 0,
+    });
+    expect(harness.getSession().conversation_context).toMatchObject({
+      adult_count: 10,
+      pet_count: 0,
+      breakfast_count: 0,
+    });
+
+    const replaceAdults = await harness.send(
+      "改成11位成人",
+      "matrix-patch-replace-adults",
+    );
+    expect(replaceAdults.payload.answer).toBe("11位成人包棟一晚 TWD 26,250。");
+    expect(replaceAdults.payload.metadata.turn_type).toBe("correction");
+    expect(harness.getSession().conversation_context.adult_count).toBe(11);
+
+    const addAdult = await harness.send(
+      "再加一位成人",
+      "matrix-patch-add-adult",
+    );
+    expect(addAdult.payload.answer).toBe("12位成人包棟一晚 TWD 27,500。");
+    expect(addAdult.payload.metadata.turn_type).toBe("quote_patch");
+    expect(harness.getSession().conversation_context.adult_count).toBe(12);
+    expect(harness.getNonFixtureCalls()).toBe(0);
+  });
+
+  it.each([
+    ["12人多少？", ["入住日期或日期類型", "住宿晚數"], ["成人與4～12歲兒童各有幾位"]],
+    ["11月1日，10人多少？", ["請問是幾年的11月1日"], ["住宿晚數"]],
+    [
+      "10人一隻狗包棟多少？",
+      ["入住日期或日期類型", "住宿晚數", "每隻狗狗體重"],
+      ["想包棟或訂單間", "成人與4～12歲兒童各有幾位"],
+    ],
+    ["再加一個", ["增加一位成人、一位兒童，還是一隻狗狗"], []],
+  ])(
+    "asks only necessary clarification fields for %s",
+    async (message, included, excluded) => {
+      vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+      const harness = createHandlerHarness();
+      vi.stubGlobal("fetch", harness.fetchMock);
+
+      const result = await harness.send(message, `clarification-${message}`);
+
+      for (const text of included) expect(result.payload.answer).toContain(text);
+      for (const text of excluded) expect(result.payload.answer).not.toContain(text);
+      expect(result.payload.metadata.structured_provider_call_count).toBe(0);
+      expect(harness.getNonFixtureCalls()).toBe(0);
+    },
+  );
+
+  it.each(["不對", "不是這天"])(
+    "rejects a current pending date proposal without applying it for %s",
+    async (rejection) => {
+      vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+      const harness = createHandlerHarness({
+        active_intent: "pricing",
+        current_topic: "booking_price",
+        stay_type: "villa",
+        adult_count: 10,
+        quote_scenario: {
+          scenario_id: "scenario-reject-date",
+          context_version: 2,
+        },
+        pending_interaction: {
+          action: "confirm_quote_dates",
+          proposed_values: {
+            check_in: "2026-11-01",
+            check_out: "2026-11-02",
+            stay_nights: 1,
+          },
+          required_response_type: "confirmation",
+          resume_action: "request_quote",
+          scenario_id: "scenario-reject-date",
+          context_version: 2,
+          asked_turn_id: "assistant-reject-date",
+          expires_after_turns: 1,
+          source_assistant_message_id: "assistant-reject-date",
+          created_at: "2026-09-06T00:00:00.000Z",
+          expires_at: "2027-09-06T01:00:00.000Z",
+        },
+      });
+      vi.stubGlobal("fetch", harness.fetchMock);
+
+      const result = await harness.send(rejection, `reject-${rejection}`);
+
+      expect(result.payload.answer).toContain("入住");
+      expect(result.payload.metadata.pending_confirmation_consumed).toBe(false);
+      expect(harness.getSession().conversation_context).toMatchObject({
+        check_in: null,
+        check_out: null,
+        pending_interaction: {
+          action: "collect_quote_fields",
+          proposed_values: {},
+          required_response_type: "fields",
+          scenario_id: "scenario-reject-date",
+          context_version: 2,
+        },
+      });
+      expect(harness.getNonFixtureCalls()).toBe(0);
+    },
+  );
+
+  it("clears a stale scenario-bound confirmation without applying its proposal", async () => {
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    const harness = createHandlerHarness({
+      active_intent: "pricing",
+      current_topic: "booking_price",
+      stay_type: "villa",
+      adult_count: 10,
+      quote_scenario: {
+        scenario_id: "scenario-current",
+        context_version: 4,
+      },
+      pending_interaction: {
+        action: "confirm_quote_dates",
+        proposed_values: {
+          check_in: "2026-11-01",
+          check_out: "2026-11-02",
+          stay_nights: 1,
+        },
+        required_response_type: "confirmation",
+        resume_action: "request_quote",
+        scenario_id: "scenario-current",
+        context_version: 3,
+        asked_turn_id: "assistant-stale-date",
+        expires_after_turns: 1,
+        source_assistant_message_id: "assistant-stale-date",
+        created_at: "2026-09-06T00:00:00.000Z",
+        expires_at: "2027-09-06T01:00:00.000Z",
+      },
+    });
+    vi.stubGlobal("fetch", harness.fetchMock);
+
+    const result = await harness.send("對", "confirm-stale-date");
+
+    expect(result.payload.answer).toBe("剛才的確認已失效，請重新提供要確認的資料。");
+    expect(result.payload.metadata).toMatchObject({
+      pending_confirmation_existed: true,
+      pending_confirmation_consumed: false,
+    });
+    expect(harness.getSession().conversation_context).toMatchObject({
+      check_in: null,
+      check_out: null,
+      pending_interaction: null,
     });
     expect(harness.getNonFixtureCalls()).toBe(0);
   });

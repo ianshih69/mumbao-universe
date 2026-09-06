@@ -50,6 +50,7 @@ const nullContext = Object.freeze({
   last_updated_at: null,
   slot_meta: {},
   pending_interaction: null,
+  quote_scenario: null,
 });
 
 const chineseNumberValues = new Map([
@@ -72,7 +73,12 @@ const dateRangeSeparators = String.raw`(?:-|~|～|到|至)`;
 const numericTokenPattern = String.raw`(?:\d+|[零〇一二兩两三四五六七八九十]+)`;
 
 function cloneNullContext() {
-  return { ...nullContext, slot_meta: {}, pending_interaction: null };
+  return {
+    ...nullContext,
+    slot_meta: {},
+    pending_interaction: null,
+    quote_scenario: null,
+  };
 }
 
 function normalizeText(value) {
@@ -632,6 +638,17 @@ function normalizePendingProposedValues(value) {
   return proposed;
 }
 
+function normalizeQuoteScenario(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const scenarioId = normalizeNullableText(value.scenario_id)?.slice(0, 120);
+  const contextVersion = normalizeInteger(value.context_version);
+  if (!scenarioId || !Number.isInteger(contextVersion)) return null;
+  return {
+    scenario_id: scenarioId,
+    context_version: contextVersion,
+  };
+}
+
 export function normalizePendingInteraction(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 
@@ -654,6 +671,10 @@ export function normalizePendingInteraction(value) {
     ...(requiredFields.length ? { required_fields: requiredFields } : {}),
     source_assistant_message_id:
       normalizeNullableText(value.source_assistant_message_id)?.slice(0, 80) || null,
+    scenario_id: normalizeNullableText(value.scenario_id)?.slice(0, 120) || null,
+    context_version: normalizeInteger(value.context_version),
+    asked_turn_id: normalizeNullableText(value.asked_turn_id)?.slice(0, 120) || null,
+    expires_after_turns: normalizeInteger(value.expires_after_turns),
     created_at: normalizeNullableText(value.created_at),
     expires_at: normalizeNullableText(value.expires_at),
   };
@@ -668,7 +689,8 @@ function hasMeaningfulContext(context) {
         ? value.length > 0
         : value !== null && value !== undefined;
     }) ||
-    Boolean(normalizePendingInteraction(context?.pending_interaction))
+    Boolean(normalizePendingInteraction(context?.pending_interaction)) ||
+    Boolean(normalizeQuoteScenario(context?.quote_scenario))
   );
 }
 
@@ -678,7 +700,9 @@ function contextsEqual(a, b) {
       (field) => JSON.stringify(a?.[field]) === JSON.stringify(b?.[field]),
     ) &&
     JSON.stringify(normalizePendingInteraction(a?.pending_interaction)) ===
-      JSON.stringify(normalizePendingInteraction(b?.pending_interaction))
+      JSON.stringify(normalizePendingInteraction(b?.pending_interaction)) &&
+    JSON.stringify(normalizeQuoteScenario(a?.quote_scenario)) ===
+      JSON.stringify(normalizeQuoteScenario(b?.quote_scenario))
   );
 }
 
@@ -818,6 +842,7 @@ export function normalizeConversationContext(value) {
   context.last_updated_at = normalizeNullableText(source.last_updated_at);
   context.slot_meta = normalizeSlotMeta(source.slot_meta);
   context.pending_interaction = normalizePendingInteraction(source.pending_interaction);
+  context.quote_scenario = normalizeQuoteScenario(source.quote_scenario);
 
   return context;
 }

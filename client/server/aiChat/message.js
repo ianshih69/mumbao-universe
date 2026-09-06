@@ -2054,7 +2054,9 @@ export function buildRuntimeAuthorityMetadata({
   structuredTurnResolution,
   semanticResult,
   routeResult,
+  finalConversationContext,
 } = {}) {
+  const routeSemanticMetadata = routeResult?.semanticMetadata || {};
   return {
     structured_mode: conversationAuthority?.mode || "legacy",
     authority_path: conversationAuthority?.authorityPath || "legacy",
@@ -2078,6 +2080,24 @@ export function buildRuntimeAuthorityMetadata({
     structured_provider_call_count: structuredTurnResolution?.provider?.called
       ? 1
       : 0,
+    turn_type: structuredTurnResolution?.plan?.turn_type || "unrelated",
+    quote_scope: structuredTurnResolution?.plan?.quote_scope || null,
+    quote_scenario_version:
+      finalConversationContext?.quote_scenario?.context_version || 0,
+    pending_confirmation_existed: Boolean(
+      structuredTurnResolution?.plan?.dialogue_state
+        ?.pending_confirmation_existed,
+    ),
+    pending_confirmation_consumed:
+      routeSemanticMetadata.pending_resolution === "confirmed",
+    derived_checkout_used: Boolean(
+      structuredTurnResolution?.plan?.derived_checkout_used,
+    ),
+    inherited_optional_addons_count:
+      structuredTurnResolution?.plan?.inherited_optional_addons_count || 0,
+    final_response_kind:
+      routeSemanticMetadata.transactional_response_kind ||
+      (routeResult?.answerMode === "collect_info" ? "clarification" : "other"),
   };
 }
 
@@ -2317,6 +2337,7 @@ export default async function handler(req, res) {
         ? toTurnActionSemanticResult(
             structuredTurnResolution.result,
             conversationContextUpdate.previousContext,
+            structuredTurnResolution.plan?.dialogue_state,
           )
         : null;
     const semanticFaqItems = (
@@ -2696,6 +2717,7 @@ export default async function handler(req, res) {
       structuredTurnResolution,
       semanticResult: semanticResultForAction,
       routeResult: knowledgeRoute,
+      finalConversationContext,
     });
     const routeMetadata = buildRouteMetadata(
       knowledgeRoute,

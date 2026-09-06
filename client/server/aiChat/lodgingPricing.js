@@ -322,23 +322,85 @@ function buildAvailabilityExplanation(message) {
     : "";
 }
 
-function buildPricingAnswer(context, pricingResolution, { message = "", prefix = "" } = {}) {
+function formatNightLabel(state) {
+  const nights = Number(state.stay_nights || 0);
+  if (nights === 1) return "一晚";
+  return nights > 1 ? `${nights}晚` : "";
+}
+
+export function buildTransactionalPricingResponsePlan(
+  context,
+  pricingResolution,
+  { message = "" } = {},
+) {
   const state = normalizeConversationContext(context);
   if (pricingResolution?.lodging_price?.status !== "resolved") {
-    return buildContextualKnowledgeGapReply(state);
+    const clarificationQuestion = buildContextualKnowledgeGapReply(state);
+    return {
+      response_kind: "clarification",
+      primary_answer: "",
+      essential_breakdown: [],
+      clarification_question: clarificationQuestion,
+      disclaimer: "",
+      answer: clarificationQuestion,
+    };
   }
-  return [
-    `${prefix}${formatPeriod(state, pricingResolution)}，${formatGuestSummary(state)}。`,
-    `成人住宿費為 ${formatMoney(pricingResolution.lodging_price.amount)}。`,
+
+  const adultCount = getAdultCount(state);
+  const stayLabel = state.stay_type === "villa" ? "包棟" : "住宿";
+  const nightLabel = formatNightLabel(state);
+  const lodgingAmount = Number(
+    pricingResolution.lodging_and_child_amount ??
+      pricingResolution.lodging_price.amount,
+  );
+  const pet = pricingResolution.pet_fee;
+  const breakfast = pricingResolution.breakfast_fee;
+  const hasPetFee = pet?.status === "resolved" && Number(pet.amount || 0) > 0;
+  const hasBreakfast = Number(breakfast?.quantity || 0) > 0;
+  const hasAddons = hasPetFee || hasBreakfast;
+  const essentialBreakdown = [];
+  if (hasPetFee) essentialBreakdown.push(`加狗狗 ${formatMoney(pet.amount)}`);
+  if (hasBreakfast) {
+    essentialBreakdown.push(
+      `加早餐 ${formatMoney(breakfast.amount)}`,
+    );
+  }
+
+  const primaryAnswer = hasAddons
+    ? `${stayLabel} ${formatMoney(lodgingAmount)}`
+    : `${adultCount}位成人${stayLabel}${nightLabel} ${formatMoney(lodgingAmount)}`;
+  const disclaimer = hasPetFee
+    ? `另收可退寵物押金 ${formatMoney(pet.deposit_amount)}`
+    : "";
+  const quoteSentence = hasAddons
+    ? `${[primaryAnswer, ...essentialBreakdown].join("，")}，合計 ${formatMoney(
+        pricingResolution.total_amount,
+      )}${disclaimer ? `；${disclaimer}` : ""}。`
+    : `${primaryAnswer}。`;
+  const policyDetails = [
     buildChildExplanation(pricingResolution),
     buildInfantExplanation(pricingResolution),
-    buildPetExplanation(pricingResolution),
-    buildBreakfastExplanation(pricingResolution),
-    `本次試算總額為 ${formatMoney(pricingResolution.total_amount)}。`,
+    pet?.status === "unresolved" ? buildPetExplanation(pricingResolution) : "",
     buildAvailabilityExplanation(message),
-  ]
-    .filter(Boolean)
-    .join("");
+  ].filter(Boolean);
+  const answer = [quoteSentence, ...policyDetails].join("");
+
+  return {
+    response_kind: hasAddons ? "quote_with_addons" : "quote_only",
+    primary_answer: primaryAnswer,
+    essential_breakdown: essentialBreakdown,
+    clarification_question: "",
+    disclaimer,
+    answer,
+  };
+}
+
+function buildPricingAnswer(context, pricingResolution, options = {}) {
+  return buildTransactionalPricingResponsePlan(
+    context,
+    pricingResolution,
+    options,
+  ).answer;
 }
 
 export function buildOfficialPricingReply(context, pricingResolution, options = {}) {
@@ -346,7 +408,7 @@ export function buildOfficialPricingReply(context, pricingResolution, options = 
 }
 
 export function buildOfficialPricingConfirmationReply(context, pricingResolution, options = {}) {
-  return buildPricingAnswer(context, pricingResolution, { ...options, prefix: "是的，" });
+  return buildPricingAnswer(context, pricingResolution, options);
 }
 
 export function buildOfficialPricingBreakdownReply(context, pricingResolution, options = {}) {
@@ -385,7 +447,7 @@ export function buildOfficialLodgingOnlyReply(context, pricingResolution) {
 }
 
 export function buildOfficialRepriceReply(context, pricingResolution, options = {}) {
-  return buildPricingAnswer(context, pricingResolution, { ...options, prefix: "好的，已改為 " });
+  return buildPricingAnswer(context, pricingResolution, options);
 }
 
 export function buildOfficialPricingMetadata(pricingResolution) {
@@ -513,6 +575,16 @@ function buildAddonPricingRoute(context, routeResult, message) {
     });
   }
   return null;
+}
+
+function isAddonOnlyPricingRequest(message) {
+  const text = normalizeCompactText(message);
+  const hasAddonSubject = /(狗|狗狗|犬|毛孩|寵物|早餐)/.test(text);
+  const hasWholeStayCore =
+    /(包棟|整棟|訂房|房價|房費|住宿費|住宿總(?:額|價)|成人|大人|兒童|小孩|幼兒|嬰兒|入住|退房|\d{4}年\d{1,2}月\d{1,2}日|\d{1,2}月\d{1,2}日|週[一二三四五六日天]|星期[一二三四五六日天])/.test(
+      text
+    );
+  return hasAddonSubject && !hasWholeStayCore;
 }
 
 function hasCompletePricingDetails(context) {
@@ -685,16 +757,9 @@ export async function buildOfficialPricingRouteOverride(context, routeResult, op
   }
   if (!pricingReplyModes.has(currentTurnIntent)) return null;
 
-  const isCompleteWholeStayQuote =
-    currentTurnIntent === "initial_quote" &&
-    hasCompletePricingDetails(context) &&
-    isStrongExplicitLodgingQuoteRequest(options.message, {
-      context,
-      previousContext: options.previousContext,
-      recentMessages: options.recentMessages,
-    });
   const addonRoute =
-    currentTurnIntent === "initial_quote" && !isCompleteWholeStayQuote
+    currentTurnIntent === "initial_quote" &&
+    isAddonOnlyPricingRequest(options.message)
       ? buildAddonPricingRoute(context, routeResult, options.message)
       : null;
   if (addonRoute) return addonRoute;
@@ -715,6 +780,16 @@ export async function buildOfficialPricingRouteOverride(context, routeResult, op
     pricingResolution,
     message: options.message,
   });
+  const transactionalResponseKind =
+    currentTurnIntent === "quote_breakdown"
+      ? "quote_breakdown"
+      : currentTurnIntent === "lodging_only_quote"
+        ? "lodging_only_quote"
+        : buildTransactionalPricingResponsePlan(
+            context,
+            pricingResolution,
+            { message: options.message },
+          ).response_kind;
   const metadata = {
     ...buildOfficialPricingMetadata(pricingResolution),
     pricing_reply_mode: currentTurnIntent,
@@ -723,6 +798,7 @@ export async function buildOfficialPricingRouteOverride(context, routeResult, op
     pricing_subject: "lodging_quote",
     current_turn_intent: currentTurnIntent,
     final_route: finalRoute,
+    transactional_response_kind: transactionalResponseKind,
     needs_human: false,
   };
   return {

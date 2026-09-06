@@ -18,6 +18,10 @@ import {
   pendingResolutionToLegacyTurnAction,
   validateAndNormalizeSemanticTurn,
 } from "./semanticOrchestrator.js";
+import {
+  classifyConfirmationProtocol,
+  isPendingInteractionCurrent,
+} from "./quoteDialogueState.js";
 
 const pricingIntentToTurnAction = new Map([
   ["initial_quote", "request_quote"],
@@ -113,7 +117,9 @@ function buildPendingInteraction({
   requiredFields = [],
   sourceMessageId = "",
   nowIso,
+  context = null,
 }) {
+  const scenario = normalizeConversationContext(context).quote_scenario;
   return {
     action,
     proposed_values: proposedValues,
@@ -121,6 +127,10 @@ function buildPendingInteraction({
     resume_action: resumeAction,
     ...(requiredFields.length ? { required_fields: requiredFields } : {}),
     source_assistant_message_id: sourceMessageId || null,
+    scenario_id: scenario?.scenario_id || null,
+    context_version: scenario?.context_version ?? null,
+    asked_turn_id: sourceMessageId || null,
+    expires_after_turns: 1,
     created_at: nowIso,
     expires_at: addMinutes(nowIso, 30),
   };
@@ -152,6 +162,26 @@ function buildMissingFieldsQuestion(
     .filter(Boolean);
   if (!labels.length) return "";
   return `${prefix}請問${labels.join("、")}呢？`;
+}
+
+function buildConciseMissingFieldsQuestion(missingFields) {
+  const missing = [...new Set(missingFields || [])];
+  const labels = [];
+  if (missing.includes("stay_period")) {
+    labels.push("入住日期或日期類型與住宿晚數");
+  } else {
+    if (missing.includes("exact_date")) labels.push("確切入住日期與年份");
+    if (missing.includes("check_in")) labels.push("入住日期");
+    if (missing.includes("check_out")) labels.push("退房日期");
+    if (missing.includes("stay_nights")) labels.push("住宿晚數");
+    if (missing.includes("pricing_day_type")) labels.push("日期類型");
+  }
+  if (missing.includes("stay_type")) labels.push("想包棟或訂單間");
+  if (missing.includes("guest_count")) {
+    labels.push("成人與4～12歲兒童各有幾位");
+  }
+  if (missing.includes("dog_weights")) labels.push("每隻狗狗體重");
+  return labels.length ? `請問${labels.join("、")}？` : "";
 }
 
 function getLatestAssistantMessage(recentMessages = []) {
@@ -267,7 +297,9 @@ function buildMissingFieldsRoute(routeResult, context, metadata, options = {}) {
     : Array.isArray(metadata?.final_missing_fields)
       ? metadata.final_missing_fields
       : getMissingBookingContextFields(context);
+  const conciseQuestion = buildConciseMissingFieldsQuestion(missingFields);
   const pendingInteraction = buildCollectQuoteFieldsPending({
+    context,
     missingFields,
     resumeAction: metadata?.resumed_turn_action || metadata?.validated_turn_action || "request_quote",
     nowIso: options.nowIso || new Date().toISOString(),
@@ -295,6 +327,15 @@ function buildMissingFieldsRoute(routeResult, context, metadata, options = {}) {
       {
         ...routeResult,
         ...contextual,
+        ...(conciseQuestion
+          ? {
+              answer: conciseQuestion,
+              notice: conciseQuestion,
+              answerMode: "collect_info",
+              shouldMarkNeedsHuman: false,
+              knowledgeGap: false,
+            }
+          : {}),
         reason: contextual.reason,
         conversationContextPatch: pendingPatch,
       },
@@ -303,7 +344,8 @@ function buildMissingFieldsRoute(routeResult, context, metadata, options = {}) {
   }
 
   return buildCollectInfoRoute(routeResult, {
-    answer: "收到，已先記下目前資訊。請問想了解房價、房況或其他住宿資訊呢？",
+    answer:
+      conciseQuestion || "請問想了解房價、房況或其他住宿資訊呢？",
     reason: "turn_action_collect_info_missing_quote_context",
     metadata,
     contextPatch: pendingPatch,
@@ -430,7 +472,13 @@ function shouldDeferWeakPricingActionToFaqSelector({
   );
 }
 
-function buildCollectQuoteFieldsPending({ missingFields, resumeAction, nowIso, sourceMessageId }) {
+function buildCollectQuoteFieldsPending({
+  context,
+  missingFields,
+  resumeAction,
+  nowIso,
+  sourceMessageId,
+}) {
   const requiredFields = expandMissingContextFields(missingFields);
   if (!requiredFields.length) return null;
 
@@ -442,6 +490,7 @@ function buildCollectQuoteFieldsPending({ missingFields, resumeAction, nowIso, s
     requiredFields,
     sourceMessageId,
     nowIso,
+    context,
   });
 }
 
@@ -473,6 +522,7 @@ function buildFreshnessGuardRoute(routeResult, context, freshnessGuard, metadata
         resumeAction: metadata?.validated_turn_action || "request_quote",
         sourceMessageId: options.sourceMessageId || "",
         nowIso: options.nowIso || new Date().toISOString(),
+        context: state,
       }),
     };
   } else if (
@@ -533,24 +583,12 @@ function inferFallbackTurnAction({
   return "ask_information";
 }
 
-function normalizeCompactProtocolText(value) {
-  return String(value || "")
-    .normalize("NFKC")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "");
-}
-
 function hasProtocolAffirmation(message) {
-  const text = normalizeCompactProtocolText(message);
-  if (!text) return false;
-  return /^(?:對|是|好|好的|可以|沒錯|正確|yes|y|ok|okay)(?:，|,|。|\.|！|!|、)?/.test(text);
+  return classifyConfirmationProtocol(message) === "confirm";
 }
 
 function hasProtocolRejection(message) {
-  const text = normalizeCompactProtocolText(message);
-  if (!text) return false;
-  return /^(?:不是|不對|否|no|n)(?:，|,|。|\.|！|!|、)?/.test(text);
+  return classifyConfirmationProtocol(message) === "reject";
 }
 
 function hasPendingProposalConflict({ pendingInteraction, context }) {
@@ -633,7 +671,12 @@ function resolveTurnState({
   pendingInteraction,
   nowIso,
 }) {
-  const pending = normalizePendingInteraction(pendingInteraction);
+  const normalizedPending = normalizePendingInteraction(pendingInteraction);
+  const stalePendingInteraction = Boolean(
+    normalizedPending &&
+      !isPendingInteractionCurrent(context, normalizedPending),
+  );
+  const pending = stalePendingInteraction ? null : normalizedPending;
   const hasSemanticSignal = Boolean(
     normalizeTurnAction(semanticResult?.turn_action) ||
       normalizePendingResolutionAction(semanticResult?.pending_resolution_action)
@@ -688,6 +731,7 @@ function resolveTurnState({
     resolvedPendingResolution === "answer_field";
   const resolvedContext = normalizeConversationContext({
     ...context,
+    ...(stalePendingInteraction ? { pending_interaction: null } : {}),
     ...(shouldApplyPendingProposal ? proposedValues : {}),
     ...(pending && isPendingAction(resolvedTurnAction) && !shouldKeepConfirmationPending
       ? { pending_interaction: null }
@@ -700,6 +744,7 @@ function resolveTurnState({
   return {
     resolvedContext,
     resolvedPendingInteraction: pending,
+    stalePendingInteraction,
     resolvedTurnAction,
     businessTurnAction,
     normalizedSemanticResult,
@@ -808,9 +853,18 @@ async function executePendingAction({
 
   const resumeAction = normalizeTurnAction(pending.resume_action) || "request_quote";
   const proposedValues = pending.proposed_values || {};
+  const currentScenario = normalizeConversationContext(context).quote_scenario;
+  const confirmedScenario =
+    action === "confirm_pending" && currentScenario
+      ? {
+          ...currentScenario,
+          context_version: currentScenario.context_version + 1,
+        }
+      : currentScenario;
   const nextContext = normalizeConversationContext({
     ...context,
     ...(action === "confirm_pending" ? proposedValues : {}),
+    ...(confirmedScenario ? { quote_scenario: confirmedScenario } : {}),
     pending_interaction: null,
   });
   const changedFields = getPricingRelevantChangedFields(context, nextContext);
@@ -842,6 +896,7 @@ async function executePendingAction({
 
   const conversationContextPatch = {
     ...(action === "confirm_pending" ? proposedValues : {}),
+    ...(confirmedScenario ? { quote_scenario: confirmedScenario } : {}),
     pending_interaction: null,
     ...(resumedRoute.conversationContextPatch || {}),
   };
@@ -862,27 +917,6 @@ async function executePendingAction({
       ...resumedRoute,
       answer: summary && question ? `好的，已確認為${summary}。${question}` : resumedRoute.answer,
       notice: summary && question ? `好的，已確認為${summary}。${question}` : resumedRoute.notice,
-      conversationContextPatch,
-      semanticMetadata: {
-        ...resumedMetadata,
-        ...(resumedRoute.semanticMetadata || {}),
-      },
-    };
-  }
-
-  if (
-    action === "confirm_pending" &&
-    pending.action === "confirm_quote_dates" &&
-    resumedRoute.providerUsed === "official_pricing"
-  ) {
-    const answer = String(resumedRoute.answer || "").startsWith("收到，目前是")
-      ? String(resumedRoute.answer).replace("收到，目前是", "已確認為")
-      : `已確認，${resumedRoute.answer || ""}`;
-
-    return {
-      ...resumedRoute,
-      answer,
-      notice: answer,
       conversationContextPatch,
       semanticMetadata: {
         ...resumedMetadata,
@@ -1095,6 +1129,19 @@ export async function executeTurnAction({
       freshnessGuard?.uses_relative_date || semanticResult?.uses_relative_date || false,
     pricing_called: false,
   };
+
+  if (resolvedTurnState.stalePendingInteraction) {
+    return buildCollectInfoRoute(routeResult, {
+      answer: "剛才的確認已失效，請重新提供要確認的資料。",
+      reason: "pending_interaction_scenario_stale",
+      metadata: {
+        ...metadata,
+        pending_resolution: "stale",
+        action_executor_result: "pending_stale_cleared",
+      },
+      contextPatch: clearPendingPatch(),
+    });
+  }
 
   if (!normalizeTurnAction(action)) {
     return addExecutorMetadata(routeResult, {

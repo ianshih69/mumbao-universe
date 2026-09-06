@@ -82,6 +82,7 @@ const ambiguitySchema = z
       "missing_entity",
       "missing_pet_context",
       "missing_party_count",
+      "missing_exact_year",
       "conflicting_operations",
       "unsupported_entity_value",
       "low_confidence",
@@ -518,7 +519,7 @@ function collectPetOperations(text) {
   }
 
   const clearMatch = text.match(
-    /(?:不帶|不要帶|沒有|無)(?:狗狗|狗|犬|毛孩|寵物)|(?:狗狗|狗|犬|毛孩|寵物)(?:不帶|不去|不來)/,
+    /(?:不帶|不要(?:帶)?|取消攜帶|沒有|無)(?:狗狗|狗|犬|毛孩|寵物)|(?:狗狗|狗|犬|毛孩|寵物)(?:不帶|不要|不去|不來)/,
   );
   if (clearMatch && !operations.length) {
     operations.push({
@@ -1513,11 +1514,17 @@ operation variants；每筆只能使用所屬 variant 列出的 keys：
   ];
 }
 
-export function toTurnActionSemanticResult(result, previousContext = null) {
+export function toTurnActionSemanticResult(
+  result,
+  previousContext = null,
+  dialogueState = null,
+) {
   const prior = normalizeConversationContext(previousContext);
   const hasUpdates = result.operations.length > 0;
   const turnAction = result.intents.includes("request_quote")
-    ? prior.active_intent === "pricing" && hasUpdates
+    ? dialogueState?.quote_scope === "snapshot"
+      ? "request_quote"
+      : prior.active_intent === "pricing" && hasUpdates
       ? "update_quote"
       : "request_quote"
     : result.intents.includes("availability_request")
@@ -1543,7 +1550,10 @@ export function toTurnActionSemanticResult(result, previousContext = null) {
     turn_action: turnAction,
     intent: result.intents.includes("request_quote") ? "pricing" : "booking",
     topic: result.intents.includes("request_quote") ? "booking_price" : "booking_update",
-    is_follow_up: prior.active_intent === "pricing",
+    is_follow_up:
+      dialogueState?.quote_scope === "snapshot"
+        ? false
+        : prior.active_intent === "pricing",
     pending_resolution_action: "none",
     context_patch: {},
     clear_fields: [],
@@ -1705,6 +1715,16 @@ export function buildStructuredTurnMetadata(resolution) {
     structured_turn_ambiguity_codes: resolution.result.ambiguities.map(
       (ambiguity) => ambiguity.code,
     ),
+    turn_type: resolution.plan?.turn_type || "unrelated",
+    quote_scope: resolution.plan?.quote_scope || null,
+    quote_scenario_version:
+      resolution.context?.quote_scenario?.context_version || 0,
+    pending_confirmation_existed: Boolean(
+      resolution.plan?.dialogue_state?.pending_confirmation_existed,
+    ),
+    derived_checkout_used: Boolean(resolution.plan?.derived_checkout_used),
+    inherited_optional_addons_count:
+      resolution.plan?.inherited_optional_addons_count || 0,
     ...(resolution.provider
       ? {
           structured_turn_provider_called: Boolean(resolution.provider.called),

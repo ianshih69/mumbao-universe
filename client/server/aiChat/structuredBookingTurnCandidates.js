@@ -16,6 +16,14 @@ import {
   toTypedBookingContext,
   validateStructuredTurnResult,
 } from "./structuredBookingTurn.js";
+import {
+  buildQuoteScopeBaseContext,
+  classifyQuoteDialogueTurn,
+  countInheritedOptionalAddons,
+  finalizeQuoteScenarioContext,
+  getYearlessDateClarification,
+  normalizeQuoteSnapshotOperations,
+} from "./quoteDialogueState.js";
 
 export const bookingSpanTypes = Object.freeze([
   "date",
@@ -266,6 +274,13 @@ export function extractBookingTurnSpans(message) {
   }));
 
   const entityLabels = "(?:成人|大人|成年(?:旅客)?|兒童|小孩|小朋友|嬰幼兒|幼兒|嬰兒|狗狗|狗|大型犬|犬|毛孩|寵物)";
+  scan(new RegExp(`(${numberToken})人(?!數)`, "gu"), (match) => ({
+    normalized_type: "adult_count",
+    normalized_value: parseNumber(match[1]),
+    classifier: "人",
+    unit: "person",
+    entity_hints: ["adult"],
+  }));
   scan(
     new RegExp(`(${numberToken})(個|位|人|隻|只)?\\s*(${entityLabels})`, "gu"),
     (match) => {
@@ -283,6 +298,7 @@ export function extractBookingTurnSpans(message) {
     new RegExp(`(成人|大人|兒童|小孩|小朋友|嬰幼兒|幼兒|嬰兒|人|狗狗|狗|大型犬|犬|毛孩|寵物)\\s*(${numberToken})(個|位|人|隻|只)?`, "gu"),
     (match) => {
       const entity = entityForLabel(match[1]);
+      if (entity !== "pet" && /隻|只/.test(match[3] || "")) return null;
       return {
         normalized_type: countTypeForEntity(entity),
         normalized_value: parseNumber(match[2]),
@@ -686,7 +702,7 @@ export function compileBookingTurnCandidates({
     spans,
     context,
   );
-  const deterministicResult = {
+  let preliminaryResult = {
     ...deterministic.result,
     operations: enrichedOperations,
     intents: enrichedOperations.some((operation) => operation.entity === "pet") &&
@@ -701,6 +717,35 @@ export function compileBookingTurnCandidates({
       ? deterministic.result.missing_fields.filter((field) => field !== "pet_weights_kg")
       : deterministic.result.missing_fields,
   };
+  const yearlessDate = getYearlessDateClarification(sanitizedMessage);
+  if (
+    yearlessDate &&
+    preliminaryResult.intents.includes("request_quote") &&
+    !preliminaryResult.ambiguities.length
+  ) {
+    preliminaryResult = {
+      ...preliminaryResult,
+      ambiguities: [
+        {
+          code: "missing_exact_year",
+          evidence: yearlessDate.evidence,
+          question: yearlessDate.question,
+        },
+      ],
+      confidence: 1,
+    };
+  }
+  const dialogueState = classifyQuoteDialogueTurn({
+    message: sanitizedMessage,
+    context,
+    result: preliminaryResult,
+  });
+  const deterministicResult = dialogueState.quote_scope === "snapshot"
+    ? {
+        ...preliminaryResult,
+        operations: normalizeQuoteSnapshotOperations(preliminaryResult.operations),
+      }
+    : preliminaryResult;
   const candidates = deterministicResult.operations
     .map((operation, index) =>
       compileOperationCandidate(operation, index, spans, currentState),
@@ -737,6 +782,12 @@ export function compileBookingTurnCandidates({
   }
 
   if (missingEntity) classification = "SAFE_CLARIFICATION";
+  if (
+    dialogueState.turn_type === "confirmation" &&
+    dialogueState.pending_confirmation_existed
+  ) {
+    classification = "CONTEXT_ACTION_ONLY";
+  }
 
   return {
     source_turn_id: String(sourceTurnId || "").slice(0, 120),
@@ -762,6 +813,18 @@ export function compileBookingTurnCandidates({
     allowed_intent_ids: requestedActions,
     classification,
     deterministic_result: deterministicResult,
+    dialogue_state: dialogueState,
+    turn_type: dialogueState.turn_type,
+    quote_scope: dialogueState.quote_scope,
+    derived_checkout_used: deterministicResult.operations.some(
+      (operation) =>
+        operation.entity === "stay" &&
+        Boolean(operation.check_in && operation.nights && !operation.check_out),
+    ),
+    inherited_optional_addons_count: countInheritedOptionalAddons(
+      context,
+      dialogueState,
+    ),
     compiler_failures: compilerFailures,
     requires_model: classification === "LLM_CANDIDATE_SELECTION",
   };
@@ -893,12 +956,23 @@ export function reduceBookingContextFromCandidates(
     ambiguities: [],
     confidence,
   }, { message: plan.sanitized_message });
-  const reduction = reduceBookingContext(currentContext, result, {
+  const scopeBaseContext = buildQuoteScopeBaseContext(
+    currentContext,
+    plan.dialogue_state,
+    sourceTurnId,
+  );
+  const reduction = reduceBookingContext(scopeBaseContext, result, {
     message: plan.sanitized_message,
     nowIso,
     sourceMessageId: sourceTurnId,
   });
-  const context = getConversationContextForStorage(reduction.context);
+  const context = finalizeQuoteScenarioContext({
+    previousContext: currentContext,
+    context: reduction.context,
+    dialogueState: plan.dialogue_state,
+    sourceTurnId,
+    changed: reduction.changed,
+  });
   context.slot_meta = { ...(context.slot_meta || {}) };
   for (const candidate of selectedCandidates) {
     for (const field of candidateTouchedFields(candidate)) {
@@ -919,9 +993,15 @@ export function reduceBookingContextFromCandidates(
     }
   }
   const stored = getConversationContextForStorage(context);
+  const changed =
+    JSON.stringify(getConversationContextForStorage(currentContext)) !==
+    JSON.stringify(stored);
   return {
     ...reduction,
     context: stored,
+    changed,
+    applied: true,
+    reason: changed ? "operations_applied" : "no_context_change",
     after: toTypedBookingContext(stored, {
       quote: intentIds.includes("request_quote"),
       availability: intentIds.includes("request_availability"),
@@ -942,14 +1022,20 @@ function clarificationForPlan(plan, code = "") {
     missing_entity: "請問是增加成人、兒童，還是狗狗呢？",
     missing_pet_context: "請問這個重量是狗狗的體重嗎？",
     missing_party_count: "請問調整後有幾位成人、兒童及幼兒呢？",
+    missing_exact_year: "請問入住日期是哪一年？",
     conflicting_operations: "這次的調整有衝突，請告訴我最後要保留的數量。",
     unsupported_entity_value: "這項資料無法安全套用，請換一種方式說明。",
     low_confidence: "我還不確定這次要調整哪項訂房資料，可以再說明一次嗎？",
   };
+  const question =
+    plan.turn_type === "confirmation" &&
+    !plan.dialogue_state?.pending_confirmation_existed
+      ? "目前沒有待確認的內容，請告訴我想確認哪一項。"
+      : existing?.question || questions[ambiguityCode] || questions.low_confidence;
   return {
     code: ambiguityCode,
     evidence: existing?.evidence || plan.sanitized_message.slice(0, 280) || "本輪訊息",
-    question: existing?.question || questions[ambiguityCode] || questions.low_confidence,
+    question,
   };
 }
 

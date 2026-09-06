@@ -255,6 +255,7 @@ export function applyContextFreshnessGuard({
   const metaTouchedFields = new Set();
 
   if (
+    !structuredAuthority &&
     semanticResult?.turn_action === "request_quote" &&
     semanticResult?.is_follow_up === false
   ) {
@@ -312,6 +313,7 @@ export function applyContextFreshnessGuard({
   }
 
   if (
+    !structuredAuthority &&
     (mentionedFields.includes("check_in") ||
       Object.prototype.hasOwnProperty.call(relativePatch.patch, "check_in")) &&
     !Object.prototype.hasOwnProperty.call(relativePatch.patch, "check_out") &&

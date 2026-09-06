@@ -326,6 +326,33 @@ describe("turn action executor", () => {
     }
   });
 
+  it("only bypasses weak pricing deferral for server-trusted deterministic semantics", async () => {
+    const args = {
+      message: "apply the validated structured change",
+      semanticResult: semantic("update_quote"),
+      routeResult: selectorRoute(),
+      context: repricedNoPetContext,
+      previousContext: completeDogContext,
+      recentMessages: [previousPricingAssistant],
+    };
+
+    const untrusted = await executeTurnAction(args);
+    expect(untrusted.route).toBe("faq_selector_required");
+    expect(untrusted.semanticMetadata.action_executor_result).toBe(
+      "faq_selector_deferred_weak_pricing_action"
+    );
+
+    const trusted = await executeTurnAction({
+      ...args,
+      trustedDeterministicSemantic: true,
+    });
+    expect(trusted.route).toBe("reprice_after_context_change");
+    expect(trusted.answer).toContain("TWD 31,250");
+    expect(trusted.semanticMetadata.action_executor_result).toBe(
+      "update_quote_pricing_resolved"
+    );
+  });
+
   it("asks only for missing fields when update_quote is incomplete", async () => {
     const update = contextUpdate(completeDogContext, "日期改了");
     const result = await executeTurnAction({

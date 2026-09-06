@@ -8,12 +8,14 @@ const contextFields = [
   "guest_count",
   "adult_count",
   "child_count",
+  "child_ages_years",
   "infant_count",
   "stay_nights",
   "pricing_day_type",
   "requires_exact_date",
   "pet_count",
   "pet_type",
+  "pet_weights_kg",
   "dog_under_10kg_count",
   "dog_10_to_20kg_count",
   "dog_over_20kg_count",
@@ -31,12 +33,14 @@ const nullContext = Object.freeze({
   guest_count: null,
   adult_count: null,
   child_count: null,
+  child_ages_years: [],
   infant_count: null,
   stay_nights: null,
   pricing_day_type: null,
   requires_exact_date: null,
   pet_count: null,
   pet_type: null,
+  pet_weights_kg: [],
   dog_under_10kg_count: null,
   dog_10_to_20kg_count: null,
   dog_over_20kg_count: null,
@@ -93,6 +97,14 @@ function normalizeInteger(value) {
   if (!Number.isFinite(number)) return null;
   const integer = Math.floor(number);
   return integer >= 0 ? integer : null;
+}
+
+function normalizeNumberArray(value, { min = 0, max = 200, limit = 30 } = {}) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(Number)
+    .filter((entry) => Number.isFinite(entry) && entry >= min && entry <= max)
+    .slice(0, limit);
 }
 
 function isIsoDate(value) {
@@ -556,14 +568,48 @@ function normalizeSlotMeta(value) {
     const meta = {};
     const source = normalizeNullableText(rawMeta.source);
     const sourceMessageId = normalizeNullableText(rawMeta.source_message_id);
+    const sourceTurnId = normalizeNullableText(rawMeta.source_turn_id);
     const updatedAt = normalizeNullableText(rawMeta.updated_at);
     const confidence = Number(rawMeta.confidence);
 
     if (source) meta.source = source.slice(0, 40);
     if (sourceMessageId) meta.source_message_id = sourceMessageId.slice(0, 80);
+    if (sourceTurnId) meta.source_turn_id = sourceTurnId.slice(0, 120);
     if (updatedAt) meta.updated_at = updatedAt;
     if (Number.isFinite(confidence)) {
       meta.confidence = Math.max(0, Math.min(confidence, 1));
+    }
+    if (
+      rawMeta.value === null ||
+      typeof rawMeta.value === "string" ||
+      typeof rawMeta.value === "number" ||
+      typeof rawMeta.value === "boolean"
+    ) {
+      meta.value = typeof rawMeta.value === "string"
+        ? rawMeta.value.slice(0, 120)
+        : rawMeta.value;
+    } else if (Array.isArray(rawMeta.value)) {
+      meta.value = rawMeta.value
+        .filter((entry) => typeof entry === "string" || typeof entry === "number")
+        .slice(0, 30)
+        .map((entry) => typeof entry === "string" ? entry.slice(0, 120) : entry);
+    }
+    if (Array.isArray(rawMeta.evidence_span_ids)) {
+      meta.evidence_span_ids = rawMeta.evidence_span_ids
+        .map((entry) => String(entry || "").trim())
+        .filter((entry, index, entries) =>
+          /^span-\d{3}$/.test(entry) && entries.indexOf(entry) === index,
+        )
+        .slice(0, 30);
+    }
+    if (Array.isArray(rawMeta.context_refs)) {
+      meta.context_refs = rawMeta.context_refs
+        .map((entry) => String(entry || "").trim())
+        .filter((entry, index, entries) =>
+          /^(?:stay|party|pets|addons)\.[a-z_]+$/.test(entry) &&
+          entries.indexOf(entry) === index,
+        )
+        .slice(0, 12);
     }
 
     if (Object.keys(meta).length) normalized[field] = meta;
@@ -615,14 +661,22 @@ export function normalizePendingInteraction(value) {
 
 function hasMeaningfulContext(context) {
   return (
-    contextFields.some((field) => field !== "last_updated_at" && context?.[field] !== null && context?.[field] !== undefined) ||
+    contextFields.some((field) => {
+      if (field === "last_updated_at") return false;
+      const value = context?.[field];
+      return Array.isArray(value)
+        ? value.length > 0
+        : value !== null && value !== undefined;
+    }) ||
     Boolean(normalizePendingInteraction(context?.pending_interaction))
   );
 }
 
 function contextsEqual(a, b) {
   return (
-    contextFields.every((field) => a?.[field] === b?.[field]) &&
+    contextFields.every(
+      (field) => JSON.stringify(a?.[field]) === JSON.stringify(b?.[field]),
+    ) &&
     JSON.stringify(normalizePendingInteraction(a?.pending_interaction)) ===
       JSON.stringify(normalizePendingInteraction(b?.pending_interaction))
   );
@@ -737,6 +791,9 @@ export function normalizeConversationContext(value) {
   context.guest_count = normalizeInteger(source.guest_count);
   context.adult_count = normalizeInteger(source.adult_count);
   context.child_count = normalizeInteger(source.child_count);
+  context.child_ages_years = normalizeNumberArray(source.child_ages_years, {
+    max: 120,
+  });
   context.infant_count = normalizeInteger(source.infant_count);
   context.stay_nights = normalizeInteger(source.stay_nights);
   context.pricing_day_type = ["weekday", "friday", "holiday"].includes(
@@ -747,6 +804,11 @@ export function normalizeConversationContext(value) {
   context.requires_exact_date = normalizeNullableText(source.requires_exact_date);
   context.pet_count = normalizeInteger(source.pet_count);
   context.pet_type = normalizeNullableText(source.pet_type);
+  context.pet_weights_kg = normalizeNumberArray(source.pet_weights_kg, {
+    min: Number.EPSILON,
+    max: 200,
+    limit: 20,
+  });
   context.dog_under_10kg_count = normalizeInteger(source.dog_under_10kg_count);
   context.dog_10_to_20kg_count = normalizeInteger(source.dog_10_to_20kg_count);
   context.dog_over_20kg_count = normalizeInteger(source.dog_over_20kg_count);

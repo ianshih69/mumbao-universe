@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { enforceAiChatRateLimit } from "./rateLimit.js";
 import { buildFaqPromptSection, normalizeAnswerMode } from "./faqRetrieval.js";
 import {
+  buildConversationPromptContext,
+  buildConversationRetrievalText,
   buildConversationContextUpdate,
   buildContextualKnowledgeRouteOverride,
   getConversationContextForStorage,
@@ -55,6 +57,13 @@ import {
   shouldUseSemanticOrchestrator,
 } from "./semanticOrchestrator.js";
 import { executeTurnAction } from "./turnActionExecutor.js";
+import {
+  buildStructuredClarificationRoute,
+  buildStructuredTurnMetadata,
+  getStructuredTurnInterpreterMode,
+  toTurnActionSemanticResult,
+} from "./structuredBookingTurn.js";
+import { resolveStructuredBookingTurnCandidatePipeline } from "./structuredBookingTurnCandidates.js";
 import {
   buildSessionErrorBody,
   createInvalidSessionIdError,
@@ -1912,6 +1921,32 @@ export function selectRetrievalMessageForRouting(conversationContextUpdate, mess
     : message;
 }
 
+export async function resolveStructuredMessageRuntime({
+  mode = getStructuredTurnInterpreterMode(),
+  message,
+  conversationContextUpdate,
+  dateInfo = {},
+  nowIso = new Date().toISOString(),
+  sourceMessageId = "",
+} = {}) {
+  const normalizedMode = getStructuredTurnInterpreterMode(mode);
+  if (normalizedMode === "legacy") return null;
+  return resolveStructuredBookingTurnCandidatePipeline({
+    mode: normalizedMode,
+    message,
+    previousContext: conversationContextUpdate.previousContext,
+    legacyContext: conversationContextUpdate.context,
+    nowIso,
+    sourceMessageId,
+    dateInfo: {
+      currentDate: dateInfo.currentDate,
+      timeZone: "Asia/Taipei",
+    },
+    previousTopic:
+      conversationContextUpdate.previousContext?.current_topic || "",
+  });
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -2051,17 +2086,41 @@ export default async function handler(req, res) {
       dateInfo,
       nowIso: new Date().toISOString(),
     });
+    const structuredTurnMode = getStructuredTurnInterpreterMode();
+    const structuredTurnResolution = await resolveStructuredMessageRuntime({
+      mode: structuredTurnMode,
+      message,
+      conversationContextUpdate,
+      dateInfo,
+      nowIso: new Date().toISOString(),
+      sourceMessageId: requestId,
+    });
+    const effectiveConversationContextUpdate = structuredTurnResolution
+      ? {
+          ...conversationContextUpdate,
+          context: structuredTurnResolution.context,
+          changed: structuredTurnResolution.changed,
+          retrievalText: buildConversationRetrievalText(
+            message,
+            structuredTurnResolution.context,
+          ),
+          promptContext: buildConversationPromptContext(
+            structuredTurnResolution.context,
+          ),
+          hasContext: structuredTurnResolution.hasContext,
+        }
+      : conversationContextUpdate;
     const contextText = [
-      conversationContextUpdate.promptContext,
+      effectiveConversationContextUpdate.promptContext,
       buildContextText(
         recentMessages,
-        conversationContextUpdate.retrievalText || message
+        effectiveConversationContextUpdate.retrievalText || message
       ),
     ]
       .filter(Boolean)
       .join("\n");
     const retrievalMessageForRouting = selectRetrievalMessageForRouting(
-      conversationContextUpdate,
+      effectiveConversationContextUpdate,
       message
     );
 
@@ -2080,10 +2139,10 @@ export default async function handler(req, res) {
         incrementUnread: true,
         supportStatus: "human_takeover",
       });
-      if (conversationContextUpdate.changed) {
+      if (effectiveConversationContextUpdate.changed) {
         session = await persistConversationContext(
           session,
-          conversationContextUpdate.context
+          effectiveConversationContextUpdate.context
         );
       }
 
@@ -2124,12 +2183,25 @@ export default async function handler(req, res) {
     });
     const legacyKnowledgeRoute = applyContextualRouteOverride(
       rawKnowledgeRoute,
-      conversationContextUpdate.context
+      effectiveConversationContextUpdate.context
     );
-    let knowledgeRoute = legacyKnowledgeRoute;
-    let finalConversationContext = conversationContextUpdate.context;
-    let finalConversationContextChanged = conversationContextUpdate.changed;
-    let semanticResultForAction = null;
+    let knowledgeRoute = structuredTurnResolution?.blockedByAmbiguity
+      ? buildStructuredClarificationRoute(
+          legacyKnowledgeRoute,
+          structuredTurnResolution.result,
+        )
+      : legacyKnowledgeRoute;
+    let finalConversationContext = effectiveConversationContextUpdate.context;
+    let finalConversationContextChanged =
+      effectiveConversationContextUpdate.changed;
+    let semanticResultForAction =
+      structuredTurnResolution?.authoritative &&
+      !structuredTurnResolution.blockedByAmbiguity
+        ? toTurnActionSemanticResult(
+            structuredTurnResolution.result,
+            conversationContextUpdate.previousContext,
+          )
+        : null;
     const semanticFaqItems = (
       rawKnowledgeRoute.candidateFaqItems?.length
         ? rawKnowledgeRoute.candidateFaqItems
@@ -2141,9 +2213,12 @@ export default async function handler(req, res) {
     ).items;
     const canAnswerLocally = isSafeLocalKnowledgeRoute({
       message,
-      routeResult: rawKnowledgeRoute,
-      context: conversationContextUpdate.context,
-    });
+      routeResult: knowledgeRoute,
+      context: effectiveConversationContextUpdate.context,
+    }) || Boolean(
+      structuredTurnResolution?.authoritative &&
+        structuredTurnResolution.transactional,
+    );
     const modelCallPlan = createModelCallPlan({
       semanticMode,
       canAnswerLocally,
@@ -2153,11 +2228,12 @@ export default async function handler(req, res) {
 
     if (
       modelCallPlan.strategy === "semantic_only" &&
+      !structuredTurnResolution?.authoritative &&
       shouldUseSemanticOrchestrator({
         mode: semanticMode,
         message,
         routeResult: rawKnowledgeRoute,
-        context: conversationContextUpdate.context,
+        context: effectiveConversationContextUpdate.context,
       })
     ) {
       const semanticRateLimit = await enforceAiChatRateLimit(req, {
@@ -2195,7 +2271,7 @@ export default async function handler(req, res) {
       try {
         const semanticAttempt = await callSemanticOrchestrator({
           message,
-          context: conversationContextUpdate.context,
+          context: effectiveConversationContextUpdate.context,
           recentMessages,
           faqItems: limitedSemanticFaqItems,
           dateInfo,
@@ -2204,7 +2280,7 @@ export default async function handler(req, res) {
           executionContext,
         });
         const semanticContext = mergeSemanticContext(
-          conversationContextUpdate.context,
+          effectiveConversationContextUpdate.context,
           semanticAttempt.semanticResult,
           {
             nowIso: new Date().toISOString(),
@@ -2216,7 +2292,7 @@ export default async function handler(req, res) {
           semanticResultForAction = semanticAttempt.semanticResult;
           finalConversationContext = semanticContext.context;
           finalConversationContextChanged =
-            conversationContextUpdate.changed || semanticContext.changed;
+            effectiveConversationContextUpdate.changed || semanticContext.changed;
           knowledgeRoute = buildSemanticKnowledgeRoute({
             semanticResult: semanticAttempt.semanticResult,
             context: finalConversationContext,
@@ -2263,6 +2339,16 @@ export default async function handler(req, res) {
       }
     }
 
+    if (structuredTurnResolution) {
+      knowledgeRoute = {
+        ...knowledgeRoute,
+        semanticMetadata: {
+          ...(knowledgeRoute.semanticMetadata || {}),
+          ...buildStructuredTurnMetadata(structuredTurnResolution),
+        },
+      };
+    }
+
     const freshnessGuard = applyContextFreshnessGuard({
       oldContext: conversationContextUpdate.previousContext,
       context: finalConversationContext,
@@ -2277,17 +2363,23 @@ export default async function handler(req, res) {
       finalConversationContextChanged = true;
     }
 
-    const actionRoute = await executeTurnAction({
-      message,
-      semanticResult: semanticResultForAction,
-      routeResult: knowledgeRoute,
-      context: finalConversationContext,
-      previousContext: conversationContextUpdate.previousContext,
-      recentMessages,
-      freshnessGuard,
-      nowIso: new Date().toISOString(),
-      sourceMessageId: requestId,
-    });
+    const actionRoute = structuredTurnResolution?.blockedByAmbiguity
+      ? null
+      : await executeTurnAction({
+          message,
+          semanticResult: semanticResultForAction,
+          trustedDeterministicSemantic: Boolean(
+            structuredTurnResolution?.authoritative &&
+              !structuredTurnResolution.blockedByAmbiguity,
+          ),
+          routeResult: knowledgeRoute,
+          context: finalConversationContext,
+          previousContext: conversationContextUpdate.previousContext,
+          recentMessages,
+          freshnessGuard,
+          nowIso: new Date().toISOString(),
+          sourceMessageId: requestId,
+        });
     if (actionRoute) {
       const { conversationContextPatch, ...routeOverride } =
         actionRoute;

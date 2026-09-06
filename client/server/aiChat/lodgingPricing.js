@@ -685,8 +685,16 @@ export async function buildOfficialPricingRouteOverride(context, routeResult, op
   }
   if (!pricingReplyModes.has(currentTurnIntent)) return null;
 
+  const isCompleteWholeStayQuote =
+    currentTurnIntent === "initial_quote" &&
+    hasCompletePricingDetails(context) &&
+    isStrongExplicitLodgingQuoteRequest(options.message, {
+      context,
+      previousContext: options.previousContext,
+      recentMessages: options.recentMessages,
+    });
   const addonRoute =
-    currentTurnIntent === "initial_quote"
+    currentTurnIntent === "initial_quote" && !isCompleteWholeStayQuote
       ? buildAddonPricingRoute(context, routeResult, options.message)
       : null;
   if (addonRoute) return addonRoute;

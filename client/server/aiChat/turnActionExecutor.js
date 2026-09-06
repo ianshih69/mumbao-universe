@@ -415,7 +415,10 @@ function shouldDeferWeakPricingActionToFaqSelector({
   context,
   previousContext,
   recentMessages,
+  trustedDeterministicSemantic,
 }) {
+  if (trustedDeterministicSemantic) return false;
+
   return (
     routeResult?.route === "faq_selector_required" &&
     ["request_quote", "update_quote"].includes(action) &&
@@ -1016,6 +1019,7 @@ async function executePricingAction({
 export async function executeTurnAction({
   message,
   semanticResult = null,
+  trustedDeterministicSemantic = false,
   routeResult,
   context,
   previousContext,
@@ -1131,6 +1135,7 @@ export async function executeTurnAction({
       context: executorContext,
       previousContext,
       recentMessages,
+      trustedDeterministicSemantic,
     })
   ) {
     return addExecutorMetadata(routeResult, {

@@ -498,6 +498,8 @@ function buildFreshnessGuardRoute(routeResult, context, freshnessGuard, metadata
       ...metadata,
       action_executor_result: "freshness_guard_blocked_pricing",
       pricing_called: false,
+      legacy_guest_adjustment_formatter_invoked:
+        uncertainFields.includes("guest_count"),
     },
     contextPatch,
   });

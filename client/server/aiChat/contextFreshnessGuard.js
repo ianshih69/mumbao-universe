@@ -204,7 +204,15 @@ function writeSlotMeta(context, fields, { source, sourceMessageId, updatedAt, co
   };
 }
 
-function fieldHasFreshValue({ field, oldContext, currentContext, semanticResult, serverPatch }) {
+function fieldHasFreshValue({
+  field,
+  oldContext,
+  currentContext,
+  semanticResult,
+  serverPatch,
+  structuredAuthority,
+}) {
+  if (structuredAuthority) return true;
   if (Object.prototype.hasOwnProperty.call(serverPatch, field)) return true;
   if (Object.prototype.hasOwnProperty.call(semanticResult?.context_patch || {}, field)) {
     return currentContext[field] !== null && currentContext[field] !== undefined;
@@ -220,10 +228,13 @@ export function applyContextFreshnessGuard({
   dateInfo = {},
   nowIso = new Date().toISOString(),
   sourceMessageId = "",
+  structuredAuthority = false,
 } = {}) {
   const previous = normalizeConversationContext(oldContext);
   let guarded = normalizeConversationContext(context);
-  const fallbackSignals = detectFallbackFieldSignals(currentMessage);
+  const fallbackSignals = structuredAuthority
+    ? { mentioned_fields: [], uncertain_fields: [], uses_relative_date: false }
+    : detectFallbackFieldSignals(currentMessage);
   const semanticMentioned = normalizeFieldList(semanticResult?.mentioned_fields);
   const semanticUncertain = normalizeFieldList(semanticResult?.uncertain_fields);
   const mentionedFields = [
@@ -287,6 +298,7 @@ export function applyContextFreshnessGuard({
       currentContext: guarded,
       semanticResult,
       serverPatch: relativePatch.patch,
+      structuredAuthority,
     });
 
     if (uncertainFields.has(field) || !hasFreshValue) {

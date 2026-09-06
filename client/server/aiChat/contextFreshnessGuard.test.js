@@ -98,6 +98,47 @@ describe("context freshness guard", () => {
     expect(result.stale_fields_blocked).toContain("guest_count");
   });
 
+  it("trusts validated structured evidence even when an explicit value is unchanged", () => {
+    const result = applyContextFreshnessGuard({
+      oldContext: {
+        ...oldPricingContext,
+        guest_count: 10,
+        adult_count: 10,
+      },
+      context: {
+        ...oldPricingContext,
+        guest_count: 10,
+        adult_count: 10,
+        pet_count: 1,
+        pet_type: "dog",
+        pet_weights_kg: [22],
+        dog_over_20kg_count: 1,
+      },
+      semanticResult: semantic({
+        turn_action: "update_quote",
+        is_follow_up: true,
+        mentioned_fields: [
+          "guest_count",
+          "adult_count",
+          "pet_count",
+          "pet_type",
+        ],
+      }),
+      currentMessage:
+        "2026年11月1日，10位成人，加1隻22公斤狗狗，住一晚包棟多少？",
+      dateInfo,
+      nowIso: "2026-08-02T08:00:00.000Z",
+      structuredAuthority: true,
+    });
+
+    expect(result.context.guest_count).toBe(10);
+    expect(result.context.adult_count).toBe(10);
+    expect(result.context.pet_count).toBe(1);
+    expect(result.context.pet_weights_kg).toEqual([22]);
+    expect(result.uncertain_fields).toEqual([]);
+    expect(result.stale_fields_blocked).toEqual([]);
+  });
+
   it("clears pet type when pet count is explicitly zero", () => {
     const result = applyContextFreshnessGuard({
       oldContext: {

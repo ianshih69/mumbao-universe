@@ -1700,7 +1700,8 @@ function buildRouteMetadata(
   requestId,
   semanticMode,
   executionContext = null,
-  promptBudgetMetadata = null
+  promptBudgetMetadata = null,
+  runtimeAuthorityMetadata = null
 ) {
   const routePromptBudgetMetadata =
     routeResult?.promptBudgetMetadata &&
@@ -1721,6 +1722,9 @@ function buildRouteMetadata(
       ? promptBudgetMetadata
       : routePromptBudgetMetadata || buildPromptBudgetMetadata()),
     ...buildModelExecutionMetadata(executionContext),
+    ...(runtimeAuthorityMetadata && typeof runtimeAuthorityMetadata === "object"
+      ? runtimeAuthorityMetadata
+      : {}),
   };
 }
 
@@ -1947,6 +1951,136 @@ export async function resolveStructuredMessageRuntime({
   });
 }
 
+function buildPassiveConversationContextUpdate({ previousContext, message }) {
+  const context = getConversationContextForStorage(previousContext);
+  const promptContext = buildConversationPromptContext(context);
+  return {
+    context,
+    previousContext: context,
+    extracted: {},
+    reset: false,
+    changed: false,
+    retrievalText: buildConversationRetrievalText(message, context),
+    promptContext,
+    hasContext: Boolean(promptContext),
+  };
+}
+
+function withStructuredConversationContext(conversationContextUpdate, resolution, message) {
+  if (!resolution) return conversationContextUpdate;
+  return {
+    ...conversationContextUpdate,
+    context: resolution.context,
+    changed: resolution.changed,
+    retrievalText: buildConversationRetrievalText(message, resolution.context),
+    promptContext: buildConversationPromptContext(resolution.context),
+    hasContext: resolution.hasContext,
+  };
+}
+
+export async function resolveMessageConversationAuthority({
+  mode = getStructuredTurnInterpreterMode(),
+  message,
+  previousContext,
+  recentMessages = [],
+  dateInfo = {},
+  nowIso = new Date().toISOString(),
+  sourceMessageId = "",
+  buildLegacyContextUpdate = buildConversationContextUpdate,
+} = {}) {
+  const normalizedMode = getStructuredTurnInterpreterMode(mode);
+
+  if (normalizedMode === "active") {
+    const conversationContextUpdate = buildPassiveConversationContextUpdate({
+      previousContext,
+      message,
+    });
+    const structuredTurnResolution = await resolveStructuredMessageRuntime({
+      mode: normalizedMode,
+      message,
+      conversationContextUpdate,
+      dateInfo,
+      nowIso,
+      sourceMessageId,
+    });
+    return {
+      mode: normalizedMode,
+      authorityPath: "active",
+      legacyMutationInvoked: false,
+      conversationContextUpdate,
+      structuredTurnResolution,
+      effectiveConversationContextUpdate: withStructuredConversationContext(
+        conversationContextUpdate,
+        structuredTurnResolution,
+        message,
+      ),
+    };
+  }
+
+  const conversationContextUpdate = buildLegacyContextUpdate({
+    previousContext,
+    recentMessages,
+    message,
+    dateInfo,
+    nowIso,
+  });
+  const structuredTurnResolution = normalizedMode === "shadow"
+    ? await resolveStructuredMessageRuntime({
+        mode: normalizedMode,
+        message,
+        conversationContextUpdate,
+        dateInfo,
+        nowIso,
+        sourceMessageId,
+      })
+    : null;
+
+  return {
+    mode: normalizedMode,
+    authorityPath: normalizedMode,
+    legacyMutationInvoked: true,
+    conversationContextUpdate,
+    structuredTurnResolution,
+    effectiveConversationContextUpdate: withStructuredConversationContext(
+      conversationContextUpdate,
+      structuredTurnResolution,
+      message,
+    ),
+  };
+}
+
+export function buildRuntimeAuthorityMetadata({
+  conversationAuthority,
+  structuredTurnResolution,
+  semanticResult,
+  routeResult,
+} = {}) {
+  return {
+    structured_mode: conversationAuthority?.mode || "legacy",
+    authority_path: conversationAuthority?.authorityPath || "legacy",
+    structured_candidate_count:
+      structuredTurnResolution?.plan?.candidates?.length || 0,
+    structured_reducer_applied: Boolean(
+      structuredTurnResolution?.reduction?.applied,
+    ),
+    legacy_context_mutation_invoked: Boolean(
+      conversationAuthority?.legacyMutationInvoked,
+    ),
+    legacy_guest_adjustment_formatter_call_count:
+      routeResult?.semanticMetadata?.legacy_guest_adjustment_formatter_invoked
+        ? 1
+        : 0,
+    action_type:
+      routeResult?.semanticMetadata?.validated_turn_action ||
+      semanticResult?.turn_action ||
+      "none",
+    final_result_category: routeResult?.route || "unknown",
+    structured_provider_call_count: structuredTurnResolution?.provider?.called
+      ? 1
+      : 0,
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -2079,37 +2213,20 @@ export default async function handler(req, res) {
       serverRecentMessages,
       clientRecentMessages
     );
-    const conversationContextUpdate = buildConversationContextUpdate({
-      previousContext: session.conversation_context,
+    const conversationAuthority = await resolveMessageConversationAuthority({
+      mode: getStructuredTurnInterpreterMode(),
       recentMessages,
       message,
-      dateInfo,
-      nowIso: new Date().toISOString(),
-    });
-    const structuredTurnMode = getStructuredTurnInterpreterMode();
-    const structuredTurnResolution = await resolveStructuredMessageRuntime({
-      mode: structuredTurnMode,
-      message,
-      conversationContextUpdate,
+      previousContext: session.conversation_context,
       dateInfo,
       nowIso: new Date().toISOString(),
       sourceMessageId: requestId,
     });
-    const effectiveConversationContextUpdate = structuredTurnResolution
-      ? {
-          ...conversationContextUpdate,
-          context: structuredTurnResolution.context,
-          changed: structuredTurnResolution.changed,
-          retrievalText: buildConversationRetrievalText(
-            message,
-            structuredTurnResolution.context,
-          ),
-          promptContext: buildConversationPromptContext(
-            structuredTurnResolution.context,
-          ),
-          hasContext: structuredTurnResolution.hasContext,
-        }
-      : conversationContextUpdate;
+    const {
+      conversationContextUpdate,
+      structuredTurnResolution,
+      effectiveConversationContextUpdate,
+    } = conversationAuthority;
     const contextText = [
       effectiveConversationContextUpdate.promptContext,
       buildContextText(
@@ -2357,6 +2474,10 @@ export default async function handler(req, res) {
       dateInfo,
       nowIso: new Date().toISOString(),
       sourceMessageId: requestId,
+      structuredAuthority: Boolean(
+        structuredTurnResolution?.authoritative &&
+          !structuredTurnResolution.blockedByAmbiguity,
+      ),
     });
     if (freshnessGuard.changed) {
       finalConversationContext = freshnessGuard.context;
@@ -2570,12 +2691,21 @@ export default async function handler(req, res) {
         },
       };
     }
+    const runtimeAuthorityMetadata = buildRuntimeAuthorityMetadata({
+      conversationAuthority,
+      structuredTurnResolution,
+      semanticResult: semanticResultForAction,
+      routeResult: knowledgeRoute,
+    });
     const routeMetadata = buildRouteMetadata(
       knowledgeRoute,
       requestId,
       semanticMode,
-      executionContext
+      executionContext,
+      null,
+      runtimeAuthorityMetadata,
     );
+    console.info("[ai-chat] runtime authority", runtimeAuthorityMetadata);
     logChatDebug("knowledge route", {
       route: knowledgeRoute.route,
       reason: knowledgeRoute.reason,
@@ -2685,7 +2815,7 @@ export default async function handler(req, res) {
         dateInfo,
         knowledgeRoute.matchedFaqItems,
         requestId,
-        conversationContextUpdate.promptContext,
+        effectiveConversationContextUpdate.promptContext,
         executionContext
       );
     } catch (error) {
@@ -2699,7 +2829,8 @@ export default async function handler(req, res) {
         requestId,
         semanticMode,
         executionContext,
-        error.promptBudgetMetadata
+        error.promptBudgetMetadata,
+        runtimeAuthorityMetadata,
       );
       const aiMessage = await insertAssistantMessage(
         session.id,

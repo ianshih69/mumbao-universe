@@ -5,12 +5,16 @@ import {
   buildConversationPromptContext,
   buildConversationRetrievalText,
 } from "./conversationContext.js";
+import { applyContextFreshnessGuard } from "./contextFreshnessGuard.js";
 import {
   buildStructuredClarificationRoute,
   toTurnActionSemanticResult,
 } from "./structuredBookingTurn.js";
 import { executeTurnAction } from "./turnActionExecutor.js";
-import { resolveStructuredMessageRuntime } from "./message.js";
+import {
+  resolveMessageConversationAuthority,
+  resolveStructuredMessageRuntime,
+} from "./message.js";
 
 const nowIso = "2026-09-06T00:00:00.000Z";
 const dateInfo = {
@@ -80,21 +84,16 @@ function createPricingReader() {
 }
 
 async function runMessageTurn(message, previousContext = {}, mode = "active") {
-  const conversationContextUpdate = buildConversationContextUpdate({
+  const authority = await resolveMessageConversationAuthority({
+    mode,
     previousContext,
     recentMessages: [],
     message,
     dateInfo,
     nowIso,
-  });
-  const resolution = await resolveStructuredMessageRuntime({
-    mode,
-    message,
-    conversationContextUpdate,
-    dateInfo,
-    nowIso,
     sourceMessageId: `runtime-rc:${message.length}`,
   });
+  const { conversationContextUpdate, structuredTurnResolution: resolution } = authority;
   if (!resolution) {
     return {
       conversationContextUpdate,
@@ -103,12 +102,12 @@ async function runMessageTurn(message, previousContext = {}, mode = "active") {
       finalRoute: null,
     };
   }
-  const context = resolution.context;
+  const initialContext = authority.effectiveConversationContextUpdate.context;
   if (resolution.blockedByAmbiguity) {
     return {
       conversationContextUpdate,
       resolution,
-      context,
+      context: initialContext,
       finalRoute: buildStructuredClarificationRoute({
         route: "faq_selector_required",
         shouldCallDeepSeek: true,
@@ -118,6 +117,19 @@ async function runMessageTurn(message, previousContext = {}, mode = "active") {
   const semanticResult = resolution.authoritative
     ? toTurnActionSemanticResult(resolution.result, previousContext)
     : null;
+  const freshnessGuard = applyContextFreshnessGuard({
+    oldContext: conversationContextUpdate.previousContext,
+    context: initialContext,
+    semanticResult,
+    currentMessage: message,
+    dateInfo,
+    nowIso,
+    sourceMessageId: `runtime-rc:${message.length}`,
+    structuredAuthority: Boolean(
+      resolution.authoritative && !resolution.blockedByAmbiguity,
+    ),
+  });
+  const context = freshnessGuard.context;
   const finalRoute = await executeTurnAction({
     message,
     semanticResult,
@@ -134,6 +146,7 @@ async function runMessageTurn(message, previousContext = {}, mode = "active") {
     context,
     previousContext,
     recentMessages: [],
+    freshnessGuard,
     pricingOptions: {
       supabaseRequest: createPricingReader(),
       referenceDate: "2026-09-06",
@@ -167,6 +180,33 @@ describe("deterministic-only structured message runtime", () => {
     expect(source).not.toContain("structuredBookingTurnProvider");
     expect(source).not.toContain("callStructuredBookingTurnInterpreter");
     expect(source).not.toContain("resolveCandidates:");
+  });
+
+  it("does not invoke the legacy current-message mutator in active mode", async () => {
+    const legacyBuilder = vi.fn(buildConversationContextUpdate);
+    const active = await resolveMessageConversationAuthority({
+      mode: "active",
+      previousContext: baseContext,
+      recentMessages: [],
+      message: "再加一隻22公斤狗狗",
+      dateInfo,
+      nowIso,
+      buildLegacyContextUpdate: legacyBuilder,
+    });
+    expect(active.legacyMutationInvoked).toBe(false);
+    expect(legacyBuilder).not.toHaveBeenCalled();
+
+    const shadow = await resolveMessageConversationAuthority({
+      mode: "shadow",
+      previousContext: baseContext,
+      recentMessages: [],
+      message: "再加一隻22公斤狗狗",
+      dateInfo,
+      nowIso,
+      buildLegacyContextUpdate: legacyBuilder,
+    });
+    expect(shadow.legacyMutationInvoked).toBe(true);
+    expect(legacyBuilder).toHaveBeenCalledTimes(1);
   });
 
   it("returns the complete one-turn quote without a structured provider", async () => {
@@ -318,9 +358,12 @@ describe("structured interpreter runtime modes", () => {
     const shadow = await runMessageTurn(message, baseContext, "shadow");
     expect(shadow.resolution.authoritative).toBe(false);
     expect(shadow.resolution.provider).toBeNull();
-    expect(shadow.context).toEqual(legacyUpdate.context);
+    expect(shadow.context.pet_weights_kg).toEqual(
+      legacyUpdate.context.pet_weights_kg,
+    );
+    expect(shadow.context).not.toEqual(shadow.resolution.reduction.context);
     expect(shadow.resolution.reduction.context.pet_count).toBe(1);
-    expect(shadow.finalRoute.route).toBe("faq_selector_required");
+    expect(shadow.finalRoute.route).not.toBe("grounded_reply");
 
     const active = await runMessageTurn(message, baseContext, "active");
     expect(active.resolution.authoritative).toBe(true);

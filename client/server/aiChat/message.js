@@ -65,6 +65,10 @@ import {
 } from "./structuredBookingTurn.js";
 import { resolveStructuredBookingTurnCandidatePipeline } from "./structuredBookingTurnCandidates.js";
 import {
+  executeDialogueGoalPlan,
+  selectDialogueResponseAuthority,
+} from "./dialogueGoalPlanner.js";
+import {
   buildSessionErrorBody,
   createInvalidSessionIdError,
   createSessionOwnershipMismatchError,
@@ -2055,6 +2059,7 @@ export function buildRuntimeAuthorityMetadata({
   semanticResult,
   routeResult,
   finalConversationContext,
+  dialogueResponseAuthority,
 } = {}) {
   const routeSemanticMetadata = routeResult?.semanticMetadata || {};
   const slotFillTransaction =
@@ -2114,6 +2119,15 @@ export function buildRuntimeAuthorityMetadata({
     final_response_kind:
       routeSemanticMetadata.transactional_response_kind ||
       (routeResult?.answerMode === "collect_info" ? "clarification" : "other"),
+    dialogue_lane:
+      structuredTurnResolution?.plan?.dialogue_goal_plan?.lane || "knowledge",
+    dialogue_goal_ids:
+      structuredTurnResolution?.plan?.dialogue_goal_plan?.goal_ids || [],
+    dialogue_primary_goal:
+      structuredTurnResolution?.plan?.dialogue_goal_plan?.primary_goal_id ||
+      "unrelated",
+    response_authority:
+      dialogueResponseAuthority?.authority || "knowledge_router",
   };
 }
 
@@ -2327,14 +2341,22 @@ export default async function handler(req, res) {
       incomingMessageContentHash
     );
     const semanticMode = getSemanticRouterMode();
-    const rawKnowledgeRoute = await routeKnowledge({
+    const dialogueGoalPlan =
+      structuredTurnResolution?.plan?.dialogue_goal_plan || null;
+    const dialogueGoalRoute = await executeDialogueGoalPlan(
+      dialogueGoalPlan,
+      {
+        pricing_options: { supabaseRequest },
+      },
+    );
+    const rawKnowledgeRoute = dialogueGoalRoute || await routeKnowledge({
       message,
       retrievalMessage: retrievalMessageForRouting,
       session,
       contextText,
       limit: 8,
     });
-    const legacyKnowledgeRoute = applyContextualRouteOverride(
+    const legacyKnowledgeRoute = dialogueGoalRoute || applyContextualRouteOverride(
       rawKnowledgeRoute,
       effectiveConversationContextUpdate.context
     );
@@ -2344,10 +2366,16 @@ export default async function handler(req, res) {
           structuredTurnResolution.result,
         )
       : legacyKnowledgeRoute;
+    const dialogueResponseAuthority = selectDialogueResponseAuthority({
+      goalPlan: dialogueGoalPlan,
+      structuredResolution: structuredTurnResolution,
+      routeResult: knowledgeRoute,
+    });
     let finalConversationContext = effectiveConversationContextUpdate.context;
     let finalConversationContextChanged =
       effectiveConversationContextUpdate.changed;
     let semanticResultForAction =
+      dialogueResponseAuthority.execute_transaction &&
       structuredTurnResolution?.authoritative &&
       !structuredTurnResolution.blockedByAmbiguity
         ? toTurnActionSemanticResult(
@@ -2369,7 +2397,7 @@ export default async function handler(req, res) {
       message,
       routeResult: knowledgeRoute,
       context: effectiveConversationContextUpdate.context,
-    }) || Boolean(
+    }) || Boolean(dialogueGoalRoute) || Boolean(
       structuredTurnResolution?.authoritative &&
         structuredTurnResolution.transactional,
     );
@@ -2382,6 +2410,7 @@ export default async function handler(req, res) {
 
     if (
       modelCallPlan.strategy === "semantic_only" &&
+      dialogueResponseAuthority.authority === "knowledge_router" &&
       !structuredTurnResolution?.authoritative &&
       shouldUseSemanticOrchestrator({
         mode: semanticMode,
@@ -2503,25 +2532,33 @@ export default async function handler(req, res) {
       };
     }
 
-    const freshnessGuard = applyContextFreshnessGuard({
-      oldContext: conversationContextUpdate.previousContext,
-      context: finalConversationContext,
-      semanticResult: semanticResultForAction,
-      currentMessage: message,
-      dateInfo,
-      nowIso: new Date().toISOString(),
-      sourceMessageId: requestId,
-      structuredAuthority: Boolean(
-        structuredTurnResolution?.authoritative &&
-          !structuredTurnResolution.blockedByAmbiguity,
-      ),
-    });
+    const freshnessGuard = dialogueResponseAuthority.allow_context_mutation
+      ? applyContextFreshnessGuard({
+          oldContext: conversationContextUpdate.previousContext,
+          context: finalConversationContext,
+          semanticResult: semanticResultForAction,
+          currentMessage: message,
+          dateInfo,
+          nowIso: new Date().toISOString(),
+          sourceMessageId: requestId,
+          structuredAuthority: Boolean(
+            structuredTurnResolution?.authoritative &&
+              !structuredTurnResolution.blockedByAmbiguity,
+          ),
+        })
+      : {
+          context: finalConversationContext,
+          changed: false,
+          uncertain_fields: [],
+        };
     if (freshnessGuard.changed) {
       finalConversationContext = freshnessGuard.context;
       finalConversationContextChanged = true;
     }
 
-    const actionRoute = structuredTurnResolution?.blockedByAmbiguity
+    const actionRoute =
+      !dialogueResponseAuthority.execute_transaction ||
+      structuredTurnResolution?.blockedByAmbiguity
       ? null
       : await executeTurnAction({
           message,
@@ -2747,6 +2784,7 @@ export default async function handler(req, res) {
       semanticResult: semanticResultForAction,
       routeResult: knowledgeRoute,
       finalConversationContext,
+      dialogueResponseAuthority,
     });
     const routeMetadata = buildRouteMetadata(
       knowledgeRoute,

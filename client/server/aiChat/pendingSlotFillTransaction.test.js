@@ -335,17 +335,19 @@ describe("pending slot-fill transactions", () => {
     });
   });
 
-  it("safely clarifies a pet weight phrase when no transaction is pending", async () => {
+  it("answers a pet weight phrase informationally when no transaction is pending", async () => {
+    const before = baseContext();
     const resolution = await runTurn(baseContext(), "20公斤狗", "no-pending");
 
-    expect(resolution.plan.slot_fill_transaction.status).toBe("created");
+    expect(resolution.plan.slot_fill_transaction.status).toBe("none");
+    expect(resolution.plan.dialogue_goal_plan.lane).toBe("informational");
     expect(resolution.result.operations).toEqual([]);
-    expect(resolution.result.ambiguities[0].question).toBe(
-      "請問是要新增一隻20公斤狗狗，還是修改原有狗狗的體重呢？",
-    );
+    expect(resolution.result.ambiguities).toEqual([]);
+    expect(resolution.changed).toBe(false);
     expect(resolution.context).toMatchObject({
-      pet_count: 1,
-      pet_weights_kg: [22],
+      pet_count: before.pet_count,
+      pet_weights_kg: before.pet_weights_kg,
+      pending_interaction: null,
     });
   });
 

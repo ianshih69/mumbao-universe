@@ -13,9 +13,25 @@ export const bookingPackageTypes = ["villa_10", "villa_18"];
 export const maxBookingPricingGuests = bookingGuestRules.maxAdultCount;
 export const maxBookingAdultGuests = bookingGuestRules.maxAdultCount;
 export const maxBookingChildGuests = bookingGuestRules.maxChildCount;
+export const baseBookingGuestCount = bookingGuestRules.basePackageGuestCount;
 export const childFeeUnitPrice = bookingGuestRules.childFeeUnitPrice;
 export const extraAdultUnitPrice = bookingGuestRules.extraAdultUnitPrice;
 export const breakfastAddonUnitPrice = 250;
+
+export function calculateBookingPetFees(input = {}) {
+  return resolveBookingPetPlan(input);
+}
+
+export function calculateBookingBreakfastFees(quantity = 0) {
+  const normalizedQuantity = Number.isInteger(quantity) && quantity > 0
+    ? quantity
+    : 0;
+  return {
+    quantity: normalizedQuantity,
+    unitPrice: breakfastAddonUnitPrice,
+    total: normalizedQuantity * breakfastAddonUnitPrice,
+  };
+}
 export const consecutiveStayDiscountType = "consecutive_stay_95";
 export const consecutiveStayDiscountRate = 0.95;
 

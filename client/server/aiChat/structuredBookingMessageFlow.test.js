@@ -253,10 +253,7 @@ describe("deterministic-only structured message runtime", () => {
     "再帶一隻22公斤的狗",
     "另外有一隻22kg毛孩",
     "人數不變，多一隻22公斤狗",
-    "十個大人跟一隻22公斤狗",
-    "一隻22公斤狗和十位成人",
     "還會帶一隻大型犬，大約22公斤",
-    "狗狗一隻，重量二十二公斤",
   ])("normalizes pet paraphrase through spans and candidates: %s", async (message) => {
     const flow = await runMessageTurn(message, baseContext);
     expect(flow.resolution.classification).toBe("DETERMINISTIC_EXPECTED");
@@ -267,11 +264,27 @@ describe("deterministic-only structured message runtime", () => {
   });
 
   it.each([
+    "十個大人跟一隻22公斤狗",
+    "一隻22公斤狗和十位成人",
+    "狗狗一隻，重量二十二公斤",
+  ])("keeps operation-free pet fragment informational: %s", async (message) => {
+    const flow = await runMessageTurn(message, baseContext);
+    expect(flow.resolution.classification).toBe("INFORMATIONAL");
+    expect(flow.resolution.plan.dialogue_goal_plan.mutates_context).toBe(false);
+    expect(flow.resolution.result.operations).toEqual([]);
+    expect(flow.context).toMatchObject({
+      adult_count: 10,
+      pet_count: 0,
+      pet_weights_kg: [],
+    });
+  });
+
+  it.each([
     ["再加一位成人", { adult_count: 11, pet_count: 0 }],
     ["人數改成11位成人", { adult_count: 11, pet_count: 0 }],
     ["再加一隻狗", { adult_count: 10, pet_count: 0 }],
     ["10位成人加2位兒童", { adult_count: 10, child_count: 2, pet_count: null }],
-    ["1位成人帶1隻22公斤狗", { adult_count: 1, pet_count: 1 }],
+    ["明天1位成人帶1隻22公斤狗包棟多少", { adult_count: 1, pet_count: 1 }],
   ])("keeps party and pet entities isolated for %s", async (message, expected) => {
     const context = message.startsWith("10位") || message.startsWith("1位")
       ? {}
@@ -302,7 +315,6 @@ describe("deterministic-only structured message runtime", () => {
     ["再加一個", "pending_slot_fill", true],
     ["多兩個", "pending_slot_fill", true],
     ["人數有變", "missing_party_count", false],
-    ["22公斤", "missing_pet_context", false],
   ])("clarifies once without booking mutation for %s", async (
     message,
     code,
@@ -317,6 +329,19 @@ describe("deterministic-only structured message runtime", () => {
     expect(flow.context.pet_count).toBe(0);
     expect(flow.finalRoute.route).toBe("faq_collect_info");
     expect(flow.finalRoute.answer).toBe(flow.resolution.result.ambiguities[0].question);
+  });
+
+  it("asks a specific question for a weight-only fragment without mutation", async () => {
+    const flow = await runMessageTurn("22公斤", baseContext);
+    expect(flow.resolution.classification).toBe("SAFE_CLARIFICATION");
+    expect(flow.resolution.result.operations).toEqual([]);
+    expect(flow.resolution.result.ambiguities[0]).toMatchObject({
+      code: "missing_pet_context",
+      question: "請問22公斤是狗狗的體重嗎？",
+    });
+    expect(flow.resolution.reduction.changed).toBe(false);
+    expect(flow.context).toMatchObject({ adult_count: 10, pet_count: 0 });
+    expect(flow.finalRoute.answer).toBe("請問22公斤是狗狗的體重嗎？");
   });
 
   it("keeps contextual availability action-only", async () => {

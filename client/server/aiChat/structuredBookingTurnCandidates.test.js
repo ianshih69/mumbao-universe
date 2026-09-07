@@ -73,12 +73,21 @@ describe("deterministic booking span extraction", () => {
     ["一隻8公斤、一隻15公斤", 2, [8, 15]],
     ["兩隻狗，分別8公斤跟15公斤", 2, [8, 15]],
     ["22kg的大型犬一隻", 1, [22]],
-  ])("resolves explicit pet form %s without a model", async (message, count, weights) => {
+  ])("recognizes contextless pet form %s without a model or mutation", async (message, count, weights) => {
     const resolution = await resolve(message);
-    expect(resolution.classification).toBe("DETERMINISTIC_EXPECTED");
+    expect(resolution.classification).toBe("INFORMATIONAL");
     expect(resolution.requiresModel).toBe(false);
-    expect(resolution.context.pet_count).toBe(count);
-    expect(resolution.context.pet_weights_kg).toEqual(weights);
+    expect(resolution.plan.dialogue_goal_plan).toMatchObject({
+      lane: "informational",
+      mutates_context: false,
+      slots: {
+        pet_count: count,
+        pet_weights_kg: weights,
+      },
+    });
+    expect(resolution.result.operations).toEqual([]);
+    expect(resolution.context.pet_count).toBeNull();
+    expect(resolution.context.pet_weights_kg).toEqual([]);
   });
 
   it.each([
@@ -96,29 +105,34 @@ describe("deterministic booking span extraction", () => {
     ]));
   });
 
-  it("keeps mixed adult and pet spans as separate deterministic candidates", async () => {
+  it("keeps mixed adult and pet understanding separate from transaction", async () => {
     const resolution = await resolve("十位成人和一隻22公斤狗");
-    expect(resolution.plan.candidates.map((candidate) => candidate.entity)).toEqual([
-      "adult",
-      "pet",
-    ]);
-    expect(resolution.context.adult_count).toBe(10);
-    expect(resolution.context.pet_count).toBe(1);
-    expect(resolution.context.pet_weights_kg).toEqual([22]);
+    expect(resolution.plan.candidates).toEqual([]);
+    expect(resolution.plan.dialogue_goal_plan).toMatchObject({
+      lane: "informational",
+      mutates_context: false,
+      slots: {
+        adult_count: 10,
+        pet_count: 1,
+        pet_weights_kg: [22],
+      },
+    });
+    expect(resolution.context.adult_count).toBeNull();
+    expect(resolution.context.pet_count).toBeNull();
   });
 });
 
 describe("booking candidate compiler and reducer", () => {
   it("stores no operation values directly in candidate AST", () => {
     const plan = compileBookingTurnCandidates({
-      message: "一隻22公斤狗",
+      message: "再加一隻22公斤狗",
       context: {},
     });
     expect(plan.candidates).toHaveLength(1);
     expect(plan.candidates[0]).toEqual({
-      candidate_id: "cand-001-pet-set",
+      candidate_id: "cand-001-pet-add",
       selection_group: "group-001",
-      operation: "set",
+      operation: "add",
       entity: "pet",
       bindings: expect.any(Array),
       evidence_span_ids: expect.any(Array),
@@ -143,7 +157,7 @@ describe("booking candidate compiler and reducer", () => {
     const resolveCandidates = vi.fn();
     const resolution = await resolveStructuredBookingTurnCandidatePipeline({
       mode: "active",
-      message: "一隻8公斤一隻15公斤",
+      message: "再加2隻狗，8公斤跟15公斤",
       previousContext: { ...baseContext, pet_count: null, pet_type: "dog" },
       legacyContext: baseContext,
       sourceMessageId: "pet-weights-07",

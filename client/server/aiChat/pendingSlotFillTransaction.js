@@ -322,24 +322,6 @@ function createInitialPartial({ message, spans, result, context }) {
   }
 
   if (
-    petOperation?.operation === "set" &&
-    !operationCue &&
-    weights.length &&
-    Number(state.pet_count || 0) > 0
-  ) {
-    return finalizePartial({
-      operation: null,
-      entity: "pet",
-      candidate_entities: ["pet"],
-      candidate_operations: ["add", "replace"],
-      count: petOperation.count || weights.length,
-      pet_type: petOperation.pet_type || petType || state.pet_type || "dog",
-      weights_kg: weights,
-      target_pet: null,
-    }, state);
-  }
-
-  if (
     operationCue === "replace" &&
     weights.length &&
     Number(state.pet_count || 0) > 0 &&

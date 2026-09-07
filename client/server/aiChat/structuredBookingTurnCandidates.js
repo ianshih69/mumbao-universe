@@ -25,6 +25,7 @@ import {
   normalizeQuoteSnapshotOperations,
 } from "./quoteDialogueState.js";
 import { planPendingSlotFillTransaction } from "./pendingSlotFillTransaction.js";
+import { planDialogueGoals } from "./dialogueGoalPlanner.js";
 
 export const bookingSpanTypes = Object.freeze([
   "date",
@@ -55,6 +56,7 @@ export const bookingTurnClassifications = Object.freeze([
   "LLM_CANDIDATE_SELECTION",
   "SAFE_CLARIFICATION",
   "CONTEXT_ACTION_ONLY",
+  "INFORMATIONAL",
 ]);
 
 const spanValueSchema = z.union([z.string(), z.number()]);
@@ -396,7 +398,7 @@ export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
 
   const operationPatterns = [
     [/(?:總共|共有|目前是|設定為)/gu, "set"],
-    [/(?:再加|加上|增加|追加|再帶|另外|多(?!少)|還有|還會帶)/gu, "add"],
+    [new RegExp(`(?:再加|加上|增加|追加|再帶|另外|多(?!少)|還有|還會帶|加(?=\\s*${numberToken}))`, "gu"), "add"],
     [/(?:減少|扣掉|移除|拿掉|(?<!多)少|不帶|不要帶|不要(?=\s*[零〇一二兩两三四五六七八九十百\d]))/gu, "remove"],
     [/(?:改成|改為|換成|變成|調整為|人數改|日期改|改到|改(?=\s*[零〇一二兩两三四五六七八九十百\d]))/gu, "replace"],
     [/(?:清除|取消早餐)/gu, "clear"],
@@ -812,6 +814,32 @@ export function compileBookingTurnCandidates({
       quote_scope: "patch",
     };
   }
+  const dialogueGoalPlan = planDialogueGoals({
+    message: sanitizedMessage,
+    spans,
+    structuredResult: preliminaryResult,
+    structuredPlan: dialogueState,
+    context,
+    slotFillTransaction,
+  });
+  if (["informational", "partial"].includes(dialogueGoalPlan.lane)) {
+    preliminaryResult = validateStructuredTurnResult({
+      ...preliminaryResult,
+      intents: [],
+      operations: [],
+      missing_fields: [],
+      ambiguities: [],
+      confidence: 1,
+    }, {
+      message: sanitizedMessage,
+      currentDate: dateInfo.currentDate,
+    });
+    dialogueState = {
+      ...dialogueState,
+      turn_type: "informational",
+      quote_scope: null,
+    };
+  }
   const deterministicResult = dialogueState.quote_scope === "snapshot"
     ? {
         ...preliminaryResult,
@@ -820,7 +848,7 @@ export function compileBookingTurnCandidates({
     : preliminaryResult;
   const bypassCandidateCompilation = ["completed", "direct_operation"].includes(
     slotFillTransaction.status,
-  );
+  ) || ["informational", "partial"].includes(dialogueGoalPlan.lane);
   const candidates = (bypassCandidateCompilation ? [] : deterministicResult.operations)
     .map((operation, index) =>
       compileOperationCandidate(operation, index, spans, currentState),
@@ -853,7 +881,9 @@ export function compileBookingTurnCandidates({
   const hasMultipleCandidateGroup = [...groups.values()].some((entries) => entries.length > 1);
   const requestedActions = actionIdsFromIntents(deterministicResult.intents);
   let classification;
-  if (hasAmbiguity || compilerFailures > 0) {
+  if (["informational", "partial"].includes(dialogueGoalPlan.lane)) {
+    classification = "INFORMATIONAL";
+  } else if (hasAmbiguity || compilerFailures > 0) {
     classification = "SAFE_CLARIFICATION";
   } else if (candidates.length && hasMultipleCandidateGroup) {
     classification = "LLM_CANDIDATE_SELECTION";
@@ -903,6 +933,7 @@ export function compileBookingTurnCandidates({
     dialogue_state: dialogueState,
     pending_scenario: pendingScenario,
     slot_fill_transaction: slotFillTransaction,
+    dialogue_goal_plan: dialogueGoalPlan,
     turn_type: dialogueState.turn_type,
     quote_scope: dialogueState.quote_scope,
     derived_checkout_used: deterministicResult.operations.some(
@@ -1313,6 +1344,14 @@ export async function resolveStructuredBookingTurnCandidatePipeline({
     result = actionOnlyResult(plan);
     reduction = unchangedReduction(previousContext, result, "legacy_mode");
     source = "legacy";
+  } else if (plan.classification === "INFORMATIONAL") {
+    result = plan.deterministic_result;
+    reduction = unchangedReduction(
+      previousContext,
+      result,
+      "informational_goal",
+    );
+    source = "candidate_informational";
   } else if (plan.classification === "SAFE_CLARIFICATION") {
     result = blockedResult(plan);
     reduction = ["created", "updated", "stale", "duplicate"].includes(

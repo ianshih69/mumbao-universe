@@ -86,7 +86,7 @@ function createHandlerHarness(initialContext = {}) {
           17: 33750,
           18: 35000,
         },
-        friday: { 10: 32000, 18: 42000 },
+        friday: { 10: 32000, 12: 34500, 18: 42000 },
         holiday: { 10: 39000, 18: 49000 },
       }[dayType]?.[guests];
       return jsonResponse(nightlyPrice == null
@@ -326,6 +326,106 @@ describe("production AI chat structured authority", () => {
     expect(harness.getNonFixtureCalls()).toBe(0);
   });
 
+  it("answers a contextless pet fragment without mutating booking state", async () => {
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    const harness = createHandlerHarness();
+    vi.stubGlobal("fetch", harness.fetchMock);
+
+    const result = await harness.send("20公斤狗", "contextless-pet-20kg");
+
+    expect(result.statusCode).toBe(200);
+    expect(result.payload.answer).toBe(
+      "可以入住，20公斤狗狗每隻每晚 TWD 800；另收每棟可退寵物押金 TWD 3,000。",
+    );
+    expect(result.payload.answer).not.toContain("沒有確認過的資料");
+    expect(result.payload.answer).not.toContain("幫你記錄");
+    expect(result.payload.answer).not.toContain("管家協助確認");
+    expect(result.payload.metadata).toMatchObject({
+      dialogue_lane: "informational",
+      dialogue_primary_goal: "pet_fee_lookup",
+      response_authority: "dialogue_goal_planner",
+      structured_provider_call_count: 0,
+      model_call_count: 0,
+    });
+    expect(harness.getSession().conversation_context).toEqual({});
+    expect(harness.getNonFixtureCalls()).toBe(0);
+  });
+
+  it("keeps an active quote unchanged for an operation-free pet fragment", async () => {
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    const initialContext = {
+      ...priorTenAdultContext,
+      check_in: "2026-11-01",
+      check_out: "2026-11-02",
+      stay_nights: 1,
+      pet_count: 1,
+      pet_type: "dog",
+      pet_weights_kg: [22],
+      dog_under_10kg_count: 0,
+      dog_10_to_20kg_count: 0,
+      dog_over_20kg_count: 1,
+    };
+    const harness = createHandlerHarness(structuredClone(initialContext));
+    vi.stubGlobal("fetch", harness.fetchMock);
+
+    const result = await harness.send("20公斤狗", "active-context-pet-fragment");
+
+    expect(result.statusCode).toBe(200);
+    expect(result.payload.answer).toBe(
+      "可以入住，20公斤狗狗每隻每晚 TWD 800；另收每棟可退寵物押金 TWD 3,000。",
+    );
+    expect(result.payload.metadata).toMatchObject({
+      dialogue_lane: "informational",
+      response_authority: "dialogue_goal_planner",
+      action_type: "none",
+      model_call_count: 0,
+    });
+    expect(harness.getSession().conversation_context).toEqual(initialContext);
+    expect(harness.getNonFixtureCalls()).toBe(0);
+  });
+
+  it.each([
+    ["22公斤狗", ["可以入住", "TWD 1,200", "押金 TWD 3,000"]],
+    ["10公斤狗", ["可以入住", "TWD 500", "押金 TWD 3,000"]],
+    ["早餐", ["TWD 250", "08:30"]],
+    ["退房", ["11:00 前"]],
+    ["有泳池", ["目前沒有提供泳池"]],
+    ["12人週五", ["12位成人", "TWD 34,500"]],
+    [
+      "兩隻狗，一隻8公斤一隻15公斤",
+      ["可以入住", "TWD 1,300", "押金 TWD 3,000"],
+    ],
+    ["20公斤狗住兩晚", ["TWD 1,560", "押金 TWD 3,000", "完整包棟價格"]],
+  ])("answers contextless domain fragment %s without fallback or mutation", async (
+    message,
+    expectedParts,
+  ) => {
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    const harness = createHandlerHarness();
+    vi.stubGlobal("fetch", harness.fetchMock);
+
+    const result = await harness.send(
+      message,
+      `contextless-${Buffer.from(message).toString("hex")}`,
+    );
+
+    expect(result.statusCode).toBe(200);
+    for (const expected of expectedParts) {
+      expect(result.payload.answer).toContain(expected);
+    }
+    expect(result.payload.answer).not.toContain("目前還沒有確認過的慢慢蒔光資料");
+    expect(result.payload.answer).not.toContain("幫你記錄");
+    expect(result.payload.answer).not.toContain("管家協助確認");
+    expect(result.payload.metadata).toMatchObject({
+      dialogue_lane: "informational",
+      response_authority: "dialogue_goal_planner",
+      structured_provider_call_count: 0,
+      model_call_count: 0,
+    });
+    expect(harness.getSession().conversation_context).toEqual({});
+    expect(harness.getNonFixtureCalls()).toBe(0);
+  });
+
   it("starts a new quote snapshot for the staged three-turn screenshot", async () => {
     vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
     const harness = createHandlerHarness();
@@ -546,7 +646,7 @@ describe("production AI chat structured authority", () => {
   });
 
   it.each([
-    ["12人多少？", ["入住日期或日期類型", "住宿晚數"], ["成人與4～12歲兒童各有幾位"]],
+    ["12人多少？", ["入住日期", "晚數"], ["成人與4～12歲兒童各有幾位"]],
     ["11月1日，10人多少？", ["請問是幾年的11月1日"], ["住宿晚數"]],
     [
       "10人一隻狗包棟多少？",

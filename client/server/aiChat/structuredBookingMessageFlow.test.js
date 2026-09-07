@@ -269,7 +269,7 @@ describe("deterministic-only structured message runtime", () => {
   it.each([
     ["再加一位成人", { adult_count: 11, pet_count: 0 }],
     ["人數改成11位成人", { adult_count: 11, pet_count: 0 }],
-    ["再加一隻狗", { adult_count: 10, pet_count: 1 }],
+    ["再加一隻狗", { adult_count: 10, pet_count: 0 }],
     ["10位成人加2位兒童", { adult_count: 10, child_count: 2, pet_count: null }],
     ["1位成人帶1隻22公斤狗", { adult_count: 1, pet_count: 1 }],
   ])("keeps party and pet entities isolated for %s", async (message, expected) => {
@@ -280,28 +280,39 @@ describe("deterministic-only structured message runtime", () => {
     expect(flow.context).toMatchObject(expected);
     if (message === "再加一隻狗") {
       expect(flow.resolution.result.missing_fields).toContain("pet_weights_kg");
-      expect(flow.finalRoute).toMatchObject({
-        route: "reprice_after_context_change",
-        semanticMetadata: {
-          pet_fee_status: "unresolved",
-          unresolved_price_items: ["pet_fee"],
+      expect(flow.resolution.reduction.applied).toBe(false);
+      expect(flow.context.pending_interaction).toMatchObject({
+        type: "slot_fill",
+        partial_operation: {
+          operation: "add",
+          entity: "pet",
+          count: 1,
+          missing_slots: ["weights_kg"],
         },
       });
-      expect(flow.finalRoute.answer).toContain("請提供每隻體重");
+      expect(flow.finalRoute).toMatchObject({
+        route: "faq_collect_info",
+      });
+      expect(flow.finalRoute.answer).toBe("請問狗狗大約幾公斤？");
       expect(flow.finalRoute.answer).not.toContain("狗狗住宿費為");
     }
   });
 
   it.each([
-    ["再加一個", "missing_entity"],
-    ["多兩個", "missing_entity"],
-    ["人數有變", "missing_party_count"],
-    ["22公斤", "missing_pet_context"],
-  ])("clarifies once without mutation for %s", async (message, code) => {
+    ["再加一個", "pending_slot_fill", true],
+    ["多兩個", "pending_slot_fill", true],
+    ["人數有變", "missing_party_count", false],
+    ["22公斤", "missing_pet_context", false],
+  ])("clarifies once without booking mutation for %s", async (
+    message,
+    code,
+    persistsPending,
+  ) => {
     const flow = await runMessageTurn(message, baseContext);
     expect(flow.resolution.result.ambiguities).toHaveLength(1);
     expect(flow.resolution.result.ambiguities[0].code).toBe(code);
-    expect(flow.resolution.reduction.changed).toBe(false);
+    expect(flow.resolution.reduction.changed).toBe(persistsPending);
+    expect(flow.resolution.reduction.applied).toBe(false);
     expect(flow.context.adult_count).toBe(10);
     expect(flow.context.pet_count).toBe(0);
     expect(flow.finalRoute.route).toBe("faq_collect_info");
@@ -375,8 +386,10 @@ describe("structured interpreter runtime modes", () => {
   it("keeps active ambiguity non-mutating", async () => {
     const flow = await runMessageTurn("再加一個", baseContext, "active");
     expect(flow.resolution.blockedByAmbiguity).toBe(true);
-    expect(flow.resolution.reduction.changed).toBe(false);
+    expect(flow.resolution.reduction.changed).toBe(true);
+    expect(flow.resolution.reduction.applied).toBe(false);
     expect(flow.context.adult_count).toBe(10);
     expect(flow.context.pet_count).toBe(0);
+    expect(flow.context.pending_interaction?.type).toBe("slot_fill");
   });
 });

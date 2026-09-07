@@ -967,6 +967,7 @@ async function executePricingAction({
   nowIso,
   sourceMessageId,
   pricingOptions,
+  slotFillCompletion,
 }) {
   const missingFields = getMissingBookingContextFields(context);
   const uncertainPricingFields = (freshnessGuard?.uncertain_fields || []).filter((field) =>
@@ -1027,6 +1028,7 @@ async function executePricingAction({
     recentMessages,
     previousContext,
     turnAction: action,
+    slotFillCompletion,
     ...(pricingOptions || {}),
   });
 
@@ -1064,6 +1066,7 @@ export async function executeTurnAction({
   nowIso = new Date().toISOString(),
   sourceMessageId = "",
   pricingOptions = {},
+  slotFillCompletion = null,
 } = {}) {
   const pendingInteraction = normalizePendingInteraction(context?.pending_interaction);
   const resolvedTurnState = resolveTurnState({
@@ -1128,6 +1131,9 @@ export async function executeTurnAction({
     uses_relative_date:
       freshnessGuard?.uses_relative_date || semanticResult?.uses_relative_date || false,
     pricing_called: false,
+    pending_slot_fill_existed: Boolean(slotFillCompletion),
+    pending_slot_fill_consumed: slotFillCompletion?.status === "completed",
+    pending_transaction_id: slotFillCompletion?.transaction_id || null,
   };
 
   if (resolvedTurnState.stalePendingInteraction) {
@@ -1221,6 +1227,7 @@ export async function executeTurnAction({
       nowIso,
       sourceMessageId,
       pricingOptions,
+      slotFillCompletion,
     });
   }
 
@@ -1238,6 +1245,7 @@ export async function executeTurnAction({
       nowIso,
       sourceMessageId,
       pricingOptions,
+      slotFillCompletion,
     });
   }
 

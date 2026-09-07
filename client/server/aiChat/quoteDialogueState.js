@@ -81,7 +81,7 @@ export function isPendingInteractionCurrent(context, pendingInteraction) {
   );
 }
 
-function hasCompleteQuoteCore(result) {
+export function hasCompleteQuoteCore(result) {
   const operations = Array.isArray(result?.operations) ? result.operations : [];
   const stay = operations.find((operation) => operation.entity === "stay");
   const adult = operations.find(
@@ -95,7 +95,7 @@ function hasCompleteQuoteCore(result) {
       adult &&
       stay &&
       hasDate &&
-      hasDuration,
+      (stay.check_in || hasDuration),
   );
 }
 

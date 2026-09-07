@@ -328,10 +328,40 @@ function formatNightLabel(state) {
   return nights > 1 ? `${nights}晚` : "";
 }
 
+function formatChineseCounter(value, classifier) {
+  const labels = ["零", "一", "兩", "三", "四", "五", "六", "七", "八", "九", "十"];
+  const count = Number(value || 0);
+  return `${labels[count] || count}${classifier}`;
+}
+
+function buildCompletedPetAddSentence(pricingResolution, slotFillCompletion) {
+  const partial = slotFillCompletion?.partial_operation;
+  const pet = pricingResolution?.pet_fee;
+  if (
+    slotFillCompletion?.status !== "completed" ||
+    partial?.operation !== "add" ||
+    partial?.entity !== "pet" ||
+    pet?.status !== "resolved" ||
+    !partial.weights_kg?.length
+  ) {
+    return "";
+  }
+  const addedCount = Number(partial.count || partial.weights_kg.length);
+  const weightLabel = partial.weights_kg.length === 1
+    ? `${partial.weights_kg[0]}公斤`
+    : partial.weights_kg.map((weight) => `${weight}公斤`).join("、");
+  return `再加${formatChineseCounter(addedCount, "隻")}${weightLabel}狗後，${formatChineseCounter(
+    pet.dog_count,
+    "隻",
+  )}狗狗住宿費共 ${formatMoney(pet.amount)}，合計 ${formatMoney(
+    pricingResolution.total_amount,
+  )}；另收可退寵物押金 ${formatMoney(pet.deposit_amount)}。`;
+}
+
 export function buildTransactionalPricingResponsePlan(
   context,
   pricingResolution,
-  { message = "" } = {},
+  { message = "", slotFillCompletion = null } = {},
 ) {
   const state = normalizeConversationContext(context);
   if (pricingResolution?.lodging_price?.status !== "resolved") {
@@ -383,10 +413,18 @@ export function buildTransactionalPricingResponsePlan(
     pet?.status === "unresolved" ? buildPetExplanation(pricingResolution) : "",
     buildAvailabilityExplanation(message),
   ].filter(Boolean);
-  const answer = [quoteSentence, ...policyDetails].join("");
+  const completedPetAddSentence = buildCompletedPetAddSentence(
+    pricingResolution,
+    slotFillCompletion,
+  );
+  const answer = [completedPetAddSentence || quoteSentence, ...policyDetails].join("");
 
   return {
-    response_kind: hasAddons ? "quote_with_addons" : "quote_only",
+    response_kind: completedPetAddSentence
+      ? "slot_fill_transaction"
+      : hasAddons
+        ? "quote_with_addons"
+        : "quote_only",
     primary_answer: primaryAnswer,
     essential_breakdown: essentialBreakdown,
     clarification_question: "",
@@ -703,8 +741,14 @@ function buildControlRoute(routeResult, { answer, intent, reason, contextPatch =
   };
 }
 
-function selectPricingReply({ intent, context, pricingResolution, message }) {
-  const options = { message };
+function selectPricingReply({
+  intent,
+  context,
+  pricingResolution,
+  message,
+  slotFillCompletion = null,
+}) {
+  const options = { message, slotFillCompletion };
   if (intent === "quote_confirmation") {
     return buildOfficialPricingConfirmationReply(context, pricingResolution, options);
   }
@@ -779,6 +823,7 @@ export async function buildOfficialPricingRouteOverride(context, routeResult, op
     context,
     pricingResolution,
     message: options.message,
+    slotFillCompletion: options.slotFillCompletion,
   });
   const transactionalResponseKind =
     currentTurnIntent === "quote_breakdown"
@@ -788,7 +833,10 @@ export async function buildOfficialPricingRouteOverride(context, routeResult, op
         : buildTransactionalPricingResponsePlan(
             context,
             pricingResolution,
-            { message: options.message },
+            {
+              message: options.message,
+              slotFillCompletion: options.slotFillCompletion,
+            },
           ).response_kind;
   const metadata = {
     ...buildOfficialPricingMetadata(pricingResolution),

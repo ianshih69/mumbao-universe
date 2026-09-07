@@ -226,7 +226,16 @@ describe("ambiguity and action/state separation", () => {
       ]);
       expect(resolveCandidates).not.toHaveBeenCalled();
       expect(resolution.turn_delta.operations).toEqual([]);
-      expect(resolution.reduction.changed).toBe(false);
+      expect(resolution.reduction.changed).toBe(true);
+      expect(resolution.reduction.applied).toBe(false);
+      expect(resolution.context.pending_interaction).toMatchObject({
+        type: "slot_fill",
+        partial_operation: {
+          operation: "add",
+          entity: null,
+          missing_slots: ["entity"],
+        },
+      });
     },
   );
 

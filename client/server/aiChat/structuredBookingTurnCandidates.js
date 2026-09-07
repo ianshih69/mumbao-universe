@@ -24,6 +24,7 @@ import {
   getYearlessDateClarification,
   normalizeQuoteSnapshotOperations,
 } from "./quoteDialogueState.js";
+import { planPendingSlotFillTransaction } from "./pendingSlotFillTransaction.js";
 
 export const bookingSpanTypes = Object.freeze([
   "date",
@@ -188,6 +189,18 @@ function isoDate(year, month, day) {
     .join("-");
 }
 
+function addIsoDays(dateText, days) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateText || ""))) return null;
+  const date = new Date(`${dateText}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setUTCDate(date.getUTCDate() + days);
+  return isoDate(
+    date.getUTCFullYear(),
+    date.getUTCMonth() + 1,
+    date.getUTCDate(),
+  );
+}
+
 function buildNormalizedView(source) {
   let text = "";
   const offsets = [];
@@ -223,7 +236,7 @@ function ageEntity(age) {
   return "adult";
 }
 
-export function extractBookingTurnSpans(message) {
+export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
   const source = String(message || "");
   const view = buildNormalizedView(source);
   const found = [];
@@ -260,6 +273,20 @@ export function extractBookingTurnSpans(message) {
     return {
       normalized_type: "date",
       normalized_value: isoDate(parts[0], parts[1], parts[2]),
+      unit: "date",
+      entity_hints: ["stay"],
+    };
+  });
+  scan(/大後天|後天|明天|今天/gu, (match) => {
+    const offset = {
+      今天: 0,
+      明天: 1,
+      後天: 2,
+      大後天: 3,
+    }[match[0]];
+    return {
+      normalized_type: "date",
+      normalized_value: addIsoDays(currentDate, offset),
       unit: "date",
       entity_hints: ["stay"],
     };
@@ -370,8 +397,8 @@ export function extractBookingTurnSpans(message) {
   const operationPatterns = [
     [/(?:總共|共有|目前是|設定為)/gu, "set"],
     [/(?:再加|加上|增加|追加|再帶|另外|多(?!少)|還有|還會帶)/gu, "add"],
-    [/(?:減少|扣掉|移除|拿掉|(?<!多)少|不帶|不要帶)/gu, "remove"],
-    [/(?:改成|改為|換成|變成|調整為|人數改|日期改|改到)/gu, "replace"],
+    [/(?:減少|扣掉|移除|拿掉|(?<!多)少|不帶|不要帶|不要(?=\s*[零〇一二兩两三四五六七八九十百\d]))/gu, "remove"],
+    [/(?:改成|改為|換成|變成|調整為|人數改|日期改|改到|改(?=\s*[零〇一二兩两三四五六七八九十百\d]))/gu, "replace"],
     [/(?:清除|取消早餐)/gu, "clear"],
   ];
   for (const [pattern, value] of operationPatterns) {
@@ -394,7 +421,7 @@ export function extractBookingTurnSpans(message) {
     }));
   }
 
-  scan(new RegExp(`(?:再加|增加|多)\\s*(${numberToken})(個|位|隻|只)?`, "gu"), (match) => ({
+  scan(new RegExp(`(?:再加|增加|多|改成?|換成?|不要|移除|減少)\\s*(${numberToken})(個|位|隻|只)?`, "gu"), (match) => ({
     normalized_type: "generic_quantity",
     normalized_value: parseNumber(match[1]),
     classifier: match[2] || "個",
@@ -689,13 +716,17 @@ export function compileBookingTurnCandidates({
   previousTopic = "",
   dateInfo = {},
   sourceTurnId = "",
+  nowIso = new Date().toISOString(),
 } = {}) {
   const sanitizedMessage = sanitizeStructuredTurnUtterance(message);
-  const spans = extractBookingTurnSpans(sanitizedMessage);
+  const spans = extractBookingTurnSpans(sanitizedMessage, {
+    currentDate: dateInfo.currentDate,
+  });
   const currentState = toTypedBookingContext(context);
   const deterministic = interpretBookingTurnDeterministically({
     message: sanitizedMessage,
     context,
+    dateInfo,
   });
   const enrichedOperations = enrichPetOperationFromSpans(
     deterministic.result.operations,
@@ -735,26 +766,79 @@ export function compileBookingTurnCandidates({
       confidence: 1,
     };
   }
-  const dialogueState = classifyQuoteDialogueTurn({
+  let dialogueState = classifyQuoteDialogueTurn({
     message: sanitizedMessage,
     context,
     result: preliminaryResult,
   });
+  const currentScenario = normalizeConversationContext(context).quote_scenario;
+  const pendingScenario = currentScenario || {
+    scenario_id: String(sourceTurnId || "pending-quote").slice(0, 120),
+    context_version: 0,
+  };
+  const slotFillTransaction = planPendingSlotFillTransaction({
+    message: sanitizedMessage,
+    spans,
+    result: preliminaryResult,
+    context,
+    dialogueState,
+    sourceTurnId,
+    nowIso,
+    scenario: pendingScenario,
+  });
+  if (["created", "updated", "stale", "duplicate"].includes(slotFillTransaction.status)) {
+    preliminaryResult = {
+      ...preliminaryResult,
+      operations: [],
+      ambiguities: [slotFillTransaction.ambiguity],
+      confidence: 1,
+    };
+    dialogueState = {
+      ...dialogueState,
+      turn_type: slotFillTransaction.status === "created"
+        ? "quote_patch"
+        : "clarification_answer",
+      quote_scope: "patch",
+    };
+  } else if (["completed", "direct_operation"].includes(slotFillTransaction.status)) {
+    preliminaryResult = validateStructuredTurnResult(slotFillTransaction.result, {
+      message: slotFillTransaction.evidence_message,
+    });
+    dialogueState = {
+      ...dialogueState,
+      turn_type: slotFillTransaction.status === "completed"
+        ? "clarification_answer"
+        : "correction",
+      quote_scope: "patch",
+    };
+  }
   const deterministicResult = dialogueState.quote_scope === "snapshot"
     ? {
         ...preliminaryResult,
         operations: normalizeQuoteSnapshotOperations(preliminaryResult.operations),
       }
     : preliminaryResult;
-  const candidates = deterministicResult.operations
+  const bypassCandidateCompilation = ["completed", "direct_operation"].includes(
+    slotFillTransaction.status,
+  );
+  const candidates = (bypassCandidateCompilation ? [] : deterministicResult.operations)
     .map((operation, index) =>
       compileOperationCandidate(operation, index, spans, currentState),
     )
     .filter(Boolean);
-  const compilerFailures = deterministicResult.operations.length - candidates.length;
-  const missingEntity = deterministicResult.ambiguities.some(
-    (ambiguity) => ambiguity.code === "missing_entity",
-  );
+  const compilerFailures = bypassCandidateCompilation
+    ? 0
+    : deterministicResult.operations.length - candidates.length;
+  const missingEntity =
+    deterministicResult.ambiguities.some(
+      (ambiguity) => ambiguity.code === "missing_entity",
+    ) ||
+    (
+      ["created", "updated"].includes(slotFillTransaction.status) &&
+      slotFillTransaction.pending?.partial_operation?.missing_slots?.includes(
+        "entity",
+      )
+    );
   if (missingEntity && candidates.length === 0) {
     candidates.push(...compileMissingEntityCandidates(spans, candidates.length));
   }
@@ -788,6 +872,9 @@ export function compileBookingTurnCandidates({
   ) {
     classification = "CONTEXT_ACTION_ONLY";
   }
+  if (["completed", "direct_operation"].includes(slotFillTransaction.status)) {
+    classification = "DETERMINISTIC_EXPECTED";
+  }
 
   return {
     source_turn_id: String(sourceTurnId || "").slice(0, 120),
@@ -814,13 +901,33 @@ export function compileBookingTurnCandidates({
     classification,
     deterministic_result: deterministicResult,
     dialogue_state: dialogueState,
+    pending_scenario: pendingScenario,
+    slot_fill_transaction: slotFillTransaction,
     turn_type: dialogueState.turn_type,
     quote_scope: dialogueState.quote_scope,
     derived_checkout_used: deterministicResult.operations.some(
       (operation) =>
         operation.entity === "stay" &&
         Boolean(operation.check_in && operation.nights && !operation.check_out),
+    ) || (
+      dialogueState.quote_scope === "snapshot" &&
+      deterministicResult.intents.includes("request_quote") &&
+      deterministicResult.operations.some(
+        (operation) =>
+          operation.entity === "stay" &&
+          Boolean(operation.check_in && !operation.check_out && !operation.nights),
+      ) &&
+      spans.filter((span) => span.normalized_type === "date").length === 1
     ),
+    single_date_one_night_default_used:
+      dialogueState.quote_scope === "snapshot" &&
+      deterministicResult.intents.includes("request_quote") &&
+      deterministicResult.operations.some(
+        (operation) =>
+          operation.entity === "stay" &&
+          Boolean(operation.check_in && !operation.check_out && !operation.nights),
+      ) &&
+      spans.filter((span) => span.normalized_type === "date").length === 1,
     inherited_optional_addons_count: countInheritedOptionalAddons(
       context,
       dialogueState,
@@ -955,7 +1062,10 @@ export function reduceBookingContextFromCandidates(
     missing_fields: plan.deterministic_result.missing_fields,
     ambiguities: [],
     confidence,
-  }, { message: plan.sanitized_message });
+  }, {
+    message: plan.sanitized_message,
+    currentDate: plan.current_date,
+  });
   const scopeBaseContext = buildQuoteScopeBaseContext(
     currentContext,
     plan.dialogue_state,
@@ -965,10 +1075,22 @@ export function reduceBookingContextFromCandidates(
     message: plan.sanitized_message,
     nowIso,
     sourceMessageId: sourceTurnId,
+    currentDate: plan.current_date,
   });
+  const reducedContext =
+    plan.single_date_one_night_default_used &&
+    reduction.context.check_in &&
+    !reduction.context.check_out &&
+    !reduction.context.stay_nights
+      ? normalizeConversationContext({
+          ...reduction.context,
+          check_out: addIsoDays(reduction.context.check_in, 1),
+          stay_nights: 1,
+        })
+      : reduction.context;
   const context = finalizeQuoteScenarioContext({
     previousContext: currentContext,
-    context: reduction.context,
+    context: reducedContext,
     dialogueState: plan.dialogue_state,
     sourceTurnId,
     changed: reduction.changed,
@@ -1080,6 +1202,88 @@ function unchangedReduction(context, result, reason) {
   };
 }
 
+function pendingSlotFillReduction(context, result, plan) {
+  const beforeContext = normalizeConversationContext(context);
+  const transaction = plan.slot_fill_transaction;
+  const keepsPending = ["created", "updated"].includes(transaction.status);
+  const nextContext = getConversationContextForStorage({
+    ...beforeContext,
+    ...(keepsPending && !beforeContext.quote_scenario
+      ? { quote_scenario: plan.pending_scenario }
+      : {}),
+    pending_interaction: keepsPending ? transaction.pending : null,
+  });
+  const changed =
+    JSON.stringify(getConversationContextForStorage(beforeContext)) !==
+    JSON.stringify(nextContext);
+  return {
+    before: toTypedBookingContext(beforeContext),
+    operations: [],
+    after: toTypedBookingContext(nextContext),
+    context: nextContext,
+    changed,
+    applied: false,
+    reason: `pending_slot_fill_${transaction.status}`,
+    turn_delta: {
+      selected_candidate_ids: [],
+      candidates: [],
+      operations: [],
+    },
+  };
+}
+
+function completedSlotFillReduction({
+  context,
+  result,
+  plan,
+  nowIso,
+  sourceMessageId,
+}) {
+  const transaction = plan.slot_fill_transaction;
+  const reduced = reduceBookingContext(context, result, {
+    message: transaction.evidence_message,
+    nowIso,
+    sourceMessageId,
+  });
+  let nextContext = finalizeQuoteScenarioContext({
+    previousContext: context,
+    context: {
+      ...reduced.context,
+      pending_interaction: null,
+    },
+    dialogueState: { quote_scope: "patch" },
+    sourceTurnId: sourceMessageId,
+    changed: reduced.changed,
+  });
+  if (transaction.status === "completed" && nextContext.quote_scenario) {
+    nextContext = normalizeConversationContext({
+      ...nextContext,
+      quote_scenario: {
+        ...nextContext.quote_scenario,
+        last_applied_transaction_id: transaction.transaction_id,
+        last_applied_turn_id: sourceMessageId,
+      },
+    });
+  }
+  const stored = getConversationContextForStorage(nextContext);
+  const changed =
+    JSON.stringify(getConversationContextForStorage(context)) !==
+    JSON.stringify(stored);
+  return {
+    ...reduced,
+    context: stored,
+    changed,
+    applied: true,
+    reason: `pending_slot_fill_${transaction.status}`,
+    after: toTypedBookingContext(stored, { quote: true }),
+    turn_delta: {
+      selected_candidate_ids: [],
+      candidates: [],
+      operations: result.operations,
+    },
+  };
+}
+
 export async function resolveStructuredBookingTurnCandidatePipeline({
   mode,
   message,
@@ -1098,6 +1302,7 @@ export async function resolveStructuredBookingTurnCandidatePipeline({
     previousTopic,
     dateInfo,
     sourceTurnId: sourceMessageId,
+    nowIso,
   });
   let source = "candidate_compiler";
   let provider = null;
@@ -1110,8 +1315,28 @@ export async function resolveStructuredBookingTurnCandidatePipeline({
     source = "legacy";
   } else if (plan.classification === "SAFE_CLARIFICATION") {
     result = blockedResult(plan);
-    reduction = unchangedReduction(previousContext, result, "ambiguity_blocked");
-    source = "candidate_safe_clarification";
+    reduction = ["created", "updated", "stale", "duplicate"].includes(
+      plan.slot_fill_transaction.status,
+    )
+      ? pendingSlotFillReduction(previousContext, result, plan)
+      : unchangedReduction(previousContext, result, "ambiguity_blocked");
+    source = ["created", "updated"].includes(plan.slot_fill_transaction.status)
+      ? "candidate_pending_slot_fill"
+      : "candidate_safe_clarification";
+  } else if (["completed", "direct_operation"].includes(
+    plan.slot_fill_transaction.status,
+  )) {
+    result = plan.deterministic_result;
+    reduction = completedSlotFillReduction({
+      context: previousContext,
+      result,
+      plan,
+      nowIso,
+      sourceMessageId,
+    });
+    source = plan.slot_fill_transaction.status === "completed"
+      ? "candidate_pending_slot_fill_completed"
+      : "candidate_direct_operation";
   } else if (plan.classification === "CONTEXT_ACTION_ONLY") {
     result = actionOnlyResult(plan);
     reduction = reduceBookingContext(previousContext, result, {
@@ -1184,7 +1409,10 @@ export async function resolveStructuredBookingTurnCandidatePipeline({
         missing_fields: plan.deterministic_result.missing_fields,
         ambiguities: [],
         confidence,
-      }, { message: plan.sanitized_message });
+      }, {
+        message: plan.sanitized_message,
+        currentDate: plan.current_date,
+      });
     }
   }
 

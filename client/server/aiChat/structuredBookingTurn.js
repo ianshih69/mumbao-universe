@@ -66,6 +66,7 @@ const operationSchema = z
     count: z.number().int().min(0).max(99).optional(),
     pet_type: z.enum(["dog", "cat", "pet"]).optional(),
     weights_kg: z.array(z.number().positive().max(200)).max(20).optional(),
+    target_pet: z.number().int().min(0).max(19).optional(),
     ages_years: z.array(z.number().min(0).max(120)).max(30).optional(),
     mode: z.enum(["villa", "room"]).optional(),
     check_in: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -83,6 +84,9 @@ const ambiguitySchema = z
       "missing_pet_context",
       "missing_party_count",
       "missing_exact_year",
+      "pending_slot_fill",
+      "pending_slot_fill_stale",
+      "pending_slot_fill_duplicate",
       "conflicting_operations",
       "unsupported_entity_value",
       "low_confidence",
@@ -572,7 +576,7 @@ function collectBreakfastOperations(text) {
   return operations;
 }
 
-function extractStayOperation(text) {
+function extractStayOperation(text, { baseDateText = "" } = {}) {
   const clearMatch = text.match(/清除日期|取消日期條件|先不看日期/);
   if (clearMatch) {
     return {
@@ -612,6 +616,20 @@ function extractStayOperation(text) {
         Number(match[3]),
       );
       evidence = match[0];
+    }
+  }
+
+  if (!checkIn && isIsoDate(baseDateText)) {
+    const relativeMatch = text.match(/大後天|後天|明天|今天/);
+    if (relativeMatch) {
+      const offset = {
+        今天: 0,
+        明天: 1,
+        後天: 2,
+        大後天: 3,
+      }[relativeMatch[0]];
+      checkIn = addDays(baseDateText, offset);
+      evidence = relativeMatch[0];
     }
   }
 
@@ -779,7 +797,20 @@ function dateNumbers(value) {
   return isIsoDate(value) ? value.split("-").map(Number) : [];
 }
 
-function getOperationEvidenceFailure(operation, message) {
+function relativeDateFromEvidence(evidence, currentDate) {
+  if (!isIsoDate(currentDate)) return null;
+  const relativeMatch = compactText(evidence).match(/大後天|後天|明天|今天/);
+  if (!relativeMatch) return null;
+  const offset = {
+    今天: 0,
+    明天: 1,
+    後天: 2,
+    大後天: 3,
+  }[relativeMatch[0]];
+  return addDays(currentDate, offset);
+}
+
+function getOperationEvidenceFailure(operation, message, { currentDate = "" } = {}) {
   const compactMessage = compactText(message);
   const evidenceParts = String(operation.evidence || "")
     .split("、")
@@ -830,7 +861,11 @@ function getOperationEvidenceFailure(operation, message) {
   ) {
     return "nights_not_supported";
   }
+  const checkInSupportedByRelativeDate =
+    operation.check_in &&
+    relativeDateFromEvidence(operation.evidence, currentDate) === operation.check_in;
   if (
+    !checkInSupportedByRelativeDate &&
     dateNumbers(operation.check_in).some(
       (number) => !evidenceNumbers.includes(number),
     )
@@ -849,6 +884,13 @@ function getOperationEvidenceFailure(operation, message) {
 
 function validateOperationShape(operation) {
   if (operation.operation === "clear") return true;
+  if (
+    operation.target_pet !== undefined &&
+    (operation.entity !== "pet" ||
+      !["replace", "remove"].includes(operation.operation))
+  ) {
+    return false;
+  }
   if (operation.entity === "stay") {
     return Boolean(
       operation.mode ||
@@ -888,7 +930,10 @@ function parseJsonObject(value) {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-export function validateStructuredTurnResult(rawValue, { message = "" } = {}) {
+export function validateStructuredTurnResult(
+  rawValue,
+  { message = "", currentDate = "" } = {},
+) {
   let result;
   try {
     result = structuredTurnResultSchema.parse(parseJsonObject(rawValue));
@@ -907,7 +952,7 @@ export function validateStructuredTurnResult(rawValue, { message = "" } = {}) {
     );
   }
   for (const operation of result.operations) {
-    const failure = getOperationEvidenceFailure(operation, message);
+    const failure = getOperationEvidenceFailure(operation, message, { currentDate });
     if (failure) {
       throw new Error(
         `structured_turn_invalid_evidence:${operation.entity}:${failure}`,
@@ -1045,7 +1090,23 @@ function applyPetOperation(context, operation) {
 
   const existingWeights = currentPetWeights(context);
   let weights = existingWeights;
-  if (operation.weights_kg) {
+  if (
+    operation.operation === "replace" &&
+    Number.isInteger(operation.target_pet) &&
+    operation.weights_kg?.length === 1 &&
+    operation.target_pet < existingWeights.length
+  ) {
+    weights = [...existingWeights];
+    weights[operation.target_pet] = operation.weights_kg[0];
+  } else if (
+    operation.operation === "remove" &&
+    Number.isInteger(operation.target_pet) &&
+    operation.target_pet < existingWeights.length
+  ) {
+    weights = existingWeights.filter(
+      (_weight, index) => index !== operation.target_pet,
+    );
+  } else if (operation.weights_kg) {
     if (operation.operation === "add") {
       weights = [...existingWeights, ...operation.weights_kg];
     } else if (operation.operation === "remove") {
@@ -1056,10 +1117,28 @@ function applyPetOperation(context, operation) {
     } else {
       weights = [...operation.weights_kg];
     }
+  } else if (
+    operation.operation === "remove" &&
+    Number.isInteger(operation.count)
+  ) {
+    weights = existingWeights.slice(
+      0,
+      Math.max(0, existingWeights.length - operation.count),
+    );
   }
 
   let petCount;
-  if (operation.count !== undefined) {
+  if (
+    operation.operation === "replace" &&
+    Number.isInteger(operation.target_pet)
+  ) {
+    petCount = context.pet_count ?? weights.length;
+  } else if (
+    operation.operation === "remove" &&
+    Number.isInteger(operation.target_pet)
+  ) {
+    petCount = Math.max(0, (context.pet_count || 0) - 1);
+  } else if (operation.count !== undefined) {
     petCount = applyCountOperation(context.pet_count, operation);
   } else if (operation.operation === "add") {
     petCount = (context.pet_count || 0) + (operation.weights_kg?.length || 0);
@@ -1205,9 +1284,14 @@ export function buildStructuredTurnOutboundInput({
 export function reduceBookingContext(
   currentContext,
   rawResult,
-  { message = "", nowIso = new Date().toISOString(), sourceMessageId = "" } = {},
+  {
+    message = "",
+    nowIso = new Date().toISOString(),
+    sourceMessageId = "",
+    currentDate = "",
+  } = {},
 ) {
-  const result = validateStructuredTurnResult(rawResult, { message });
+  const result = validateStructuredTurnResult(rawResult, { message, currentDate });
   const original = normalizeConversationContext(currentContext);
   const before = toTypedBookingContext(original);
   if (result.ambiguities.length) {
@@ -1330,12 +1414,15 @@ function getMissingFields(context, intents) {
 export function interpretBookingTurnDeterministically({
   message,
   context = null,
+  dateInfo = {},
 } = {}) {
   const text = compactText(message);
   const ageResult = collectAgeOperations(text);
   const partyResult = collectPartyOperations(text, ageResult.spans);
   const petResult = collectPetOperations(text);
-  const stayOperation = extractStayOperation(text);
+  const stayOperation = extractStayOperation(text, {
+    baseDateText: dateInfo.currentDate,
+  });
   const operations = [
     ...ageResult.operations,
     ...partyResult.operations,
@@ -1392,8 +1479,14 @@ export function interpretBookingTurnDeterministically({
         ? 0.98
         : 0.35,
   };
-  const validated = validateStructuredTurnResult(initial, { message });
-  const preview = reduceBookingContext(context, validated, { message });
+  const validated = validateStructuredTurnResult(initial, {
+    message,
+    currentDate: dateInfo.currentDate,
+  });
+  const preview = reduceBookingContext(context, validated, {
+    message,
+    currentDate: dateInfo.currentDate,
+  });
   const result = {
     ...validated,
     missing_fields: getMissingFields(preview.context, intents),
@@ -1447,7 +1540,9 @@ function buildLegacyStructuredTurnMessages({
   dateInfo = {},
 } = {}) {
   const sanitizedMessage = sanitizeStructuredTurnUtterance(message);
-  const deterministicStay = extractStayOperation(compactText(sanitizedMessage));
+  const deterministicStay = extractStayOperation(compactText(sanitizedMessage), {
+    baseDateText: dateInfo.currentDate,
+  });
   const checkOutAllowed = Boolean(deterministicStay?.check_out);
   const typedContext = toTypedBookingContext(context);
   const pendingFields = getStructuredTurnPendingFields(context);
@@ -1472,7 +1567,7 @@ function buildLegacyStructuredTurnMessages({
   "intents": ["request_quote|update_party|update_pet|update_dates|update_breakfast|availability_request|policy_question"],
   "operations": ["下列封閉 operation variants 之一"],
   "missing_fields": [],
-  "ambiguities": [{"code":"missing_entity|missing_pet_context|missing_party_count|conflicting_operations|unsupported_entity_value|low_confidence","evidence":"原句文字","question":"一個精準澄清問題"}],
+  "ambiguities": [{"code":"missing_entity|missing_pet_context|missing_party_count|missing_exact_year|pending_slot_fill|pending_slot_fill_stale|pending_slot_fill_duplicate|conflicting_operations|unsupported_entity_value|low_confidence","evidence":"原句文字","question":"一個精準澄清問題"}],
   "confidence": 0.0
 }
 

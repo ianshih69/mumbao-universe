@@ -2057,6 +2057,9 @@ export function buildRuntimeAuthorityMetadata({
   finalConversationContext,
 } = {}) {
   const routeSemanticMetadata = routeResult?.semanticMetadata || {};
+  const slotFillTransaction =
+    structuredTurnResolution?.plan?.slot_fill_transaction || null;
+  const slotFillStatus = slotFillTransaction?.status || "none";
   return {
     structured_mode: conversationAuthority?.mode || "legacy",
     authority_path: conversationAuthority?.authorityPath || "legacy",
@@ -2090,6 +2093,19 @@ export function buildRuntimeAuthorityMetadata({
     ),
     pending_confirmation_consumed:
       routeSemanticMetadata.pending_resolution === "confirmed",
+    pending_slot_fill_existed: [
+      "updated",
+      "completed",
+      "stale",
+      "duplicate",
+      "ignored_policy",
+    ].includes(slotFillStatus),
+    pending_slot_fill_consumed: slotFillStatus === "completed",
+    pending_slot_fill_status: slotFillStatus,
+    pending_transaction_id:
+      slotFillTransaction?.transaction_id ||
+      slotFillTransaction?.pending?.transaction_id ||
+      null,
     derived_checkout_used: Boolean(
       structuredTurnResolution?.plan?.derived_checkout_used,
     ),
@@ -2240,7 +2256,7 @@ export default async function handler(req, res) {
       previousContext: session.conversation_context,
       dateInfo,
       nowIso: new Date().toISOString(),
-      sourceMessageId: requestId,
+      sourceMessageId: incomingMessageId || requestId,
     });
     const {
       conversationContextUpdate,
@@ -2520,7 +2536,20 @@ export default async function handler(req, res) {
           recentMessages,
           freshnessGuard,
           nowIso: new Date().toISOString(),
-          sourceMessageId: requestId,
+          sourceMessageId: incomingMessageId || requestId,
+          slotFillCompletion:
+            structuredTurnResolution?.plan?.slot_fill_transaction?.status ===
+            "completed"
+              ? {
+                  status: "completed",
+                  transaction_id:
+                    structuredTurnResolution.plan.slot_fill_transaction
+                      .transaction_id,
+                  partial_operation:
+                    structuredTurnResolution.plan.slot_fill_transaction
+                      .partial_operation,
+                }
+              : null,
         });
     if (actionRoute) {
       const { conversationContextPatch, ...routeOverride } =

@@ -646,7 +646,87 @@ function normalizeQuoteScenario(value) {
   return {
     scenario_id: scenarioId,
     context_version: contextVersion,
+    last_applied_transaction_id:
+      normalizeNullableText(value.last_applied_transaction_id)?.slice(0, 160) || null,
+    last_applied_turn_id:
+      normalizeNullableText(value.last_applied_turn_id)?.slice(0, 120) || null,
   };
+}
+
+const pendingOperationTypes = new Set(["set", "add", "remove", "replace", "clear"]);
+const pendingOperationEntities = new Set([
+  "adult",
+  "child",
+  "infant",
+  "pet",
+  "breakfast",
+]);
+const pendingSlotNames = new Set([
+  "operation",
+  "entity",
+  "count",
+  "pet_type",
+  "weights_kg",
+  "target_pet",
+]);
+
+function normalizeStringList(value, allowed, limit = 20) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => String(entry || "").trim())
+    .filter(
+      (entry, index, entries) =>
+        (!allowed || allowed.has(entry)) && entries.indexOf(entry) === index,
+    )
+    .slice(0, limit);
+}
+
+function normalizePendingPartialOperation(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const operation = pendingOperationTypes.has(value.operation)
+    ? value.operation
+    : null;
+  const entity = pendingOperationEntities.has(value.entity) ? value.entity : null;
+  const count = normalizeInteger(value.count);
+  const petType = ["dog", "cat", "pet"].includes(value.pet_type)
+    ? value.pet_type
+    : null;
+  const candidateEntities = normalizeStringList(
+    value.candidate_entities,
+    pendingOperationEntities,
+  );
+  const candidateOperations = normalizeStringList(
+    value.candidate_operations,
+    pendingOperationTypes,
+  );
+  const filledSlots = normalizeStringList(value.filled_slots, pendingSlotNames);
+  const missingSlots = normalizeStringList(value.missing_slots, pendingSlotNames);
+  return {
+    operation,
+    entity,
+    candidate_entities: candidateEntities,
+    candidate_operations: candidateOperations,
+    count,
+    pet_type: petType,
+    weights_kg: normalizeNumberArray(value.weights_kg, { min: 0.1, max: 200, limit: 20 }),
+    target_pet: normalizeInteger(value.target_pet),
+    filled_slots: filledSlots,
+    missing_slots: missingSlots,
+  };
+}
+
+function normalizePendingProvenance(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry))
+    .map((entry) => ({
+      source_turn_id:
+        normalizeNullableText(entry.source_turn_id)?.slice(0, 120) || null,
+      evidence: normalizeNullableText(entry.evidence)?.slice(0, 280) || null,
+      filled_slots: normalizeStringList(entry.filled_slots, pendingSlotNames),
+    }))
+    .filter((entry) => entry.evidence && entry.filled_slots.length)
+    .slice(0, 12);
 }
 
 export function normalizePendingInteraction(value) {
@@ -656,6 +736,17 @@ export function normalizePendingInteraction(value) {
   const requiredResponseType = normalizeNullableText(value.required_response_type);
   const resumeAction = normalizeNullableText(value.resume_action);
   if (!action || !requiredResponseType || !resumeAction) return null;
+  const pendingType = ["confirmation", "slot_fill", "correction", "clarification"].includes(
+    value.type,
+  )
+    ? value.type
+    : requiredResponseType === "confirmation"
+      ? "confirmation"
+      : action === "resolve_slot_fill"
+        ? "slot_fill"
+        : action === "modify_pending"
+          ? "correction"
+          : "clarification";
 
   const requiredFields = Array.isArray(value.required_fields)
     ? value.required_fields
@@ -664,7 +755,12 @@ export function normalizePendingInteraction(value) {
     : [];
 
   return {
+    type: pendingType,
     action: action.slice(0, 80),
+    transaction_id:
+      normalizeNullableText(value.transaction_id)?.slice(0, 160) || null,
+    partial_operation: normalizePendingPartialOperation(value.partial_operation),
+    provenance: normalizePendingProvenance(value.provenance),
     proposed_values: normalizePendingProposedValues(value.proposed_values),
     required_response_type: requiredResponseType.slice(0, 80),
     resume_action: resumeAction.slice(0, 80),

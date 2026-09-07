@@ -165,6 +165,7 @@ describe("production AI chat structured authority", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -234,6 +235,94 @@ describe("production AI chat structured authority", () => {
       pet_count: 1,
       pet_weights_kg: [22],
     });
+    expect(harness.getNonFixtureCalls()).toBe(0);
+  });
+
+  it("completes an ambiguous add as one pending slot-fill transaction", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-30T16:00:00.000Z"));
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    const harness = createHandlerHarness();
+    vi.stubGlobal("fetch", harness.fetchMock);
+
+    const first = await harness.send(
+      "明天1人包棟多少錢",
+      "slot-fill-turn-1",
+    );
+    expect(first.payload.answer).toBe("1位成人包棟一晚 TWD 25,000。");
+
+    const second = await harness.send(
+      "再加一隻22公斤狗狗呢？",
+      "slot-fill-turn-2",
+    );
+    expect(second.payload.answer).toBe(
+      "包棟 TWD 25,000，加狗狗 TWD 1,200，合計 TWD 26,200；另收可退寵物押金 TWD 3,000。",
+    );
+
+    const beforePending = structuredClone(
+      harness.getSession().conversation_context,
+    );
+    const third = await harness.send("再加一個", "slot-fill-turn-3");
+    expect(third.payload.answer).toBe(
+      "請問是增加一位成人、一位兒童，還是一隻狗狗呢？",
+    );
+    expect(harness.getSession().conversation_context).toMatchObject({
+      adult_count: 1,
+      pet_count: 1,
+      pet_weights_kg: [22],
+      pending_interaction: {
+        type: "slot_fill",
+        transaction_id: expect.any(String),
+        partial_operation: {
+          operation: "add",
+          entity: null,
+          candidate_entities: ["adult", "child", "pet"],
+          count: 1,
+          filled_slots: ["operation", "count"],
+          missing_slots: ["entity"],
+        },
+        resume_action: "request_quote",
+        scenario_id: beforePending.quote_scenario.scenario_id,
+        context_version: beforePending.quote_scenario.context_version,
+        asked_turn_id: "slot-fill-turn-3",
+        expires_after_turns: 1,
+      },
+    });
+
+    const pendingTransactionId =
+      harness.getSession().conversation_context.pending_interaction.transaction_id;
+    const fourth = await harness.send("20公斤狗", "slot-fill-turn-4");
+    expect(fourth.payload.answer).toBe(
+      "再加一隻20公斤狗後，兩隻狗狗住宿費共 TWD 2,000，合計 TWD 27,000；另收可退寵物押金 TWD 3,000。",
+    );
+    expect(fourth.payload.metadata).toMatchObject({
+      pending_slot_fill_existed: true,
+      pending_slot_fill_consumed: true,
+      pending_transaction_id: pendingTransactionId,
+      structured_provider_call_count: 0,
+    });
+    expect(harness.getSession().conversation_context).toMatchObject({
+      adult_count: 1,
+      pet_count: 2,
+      pet_weights_kg: [22, 20],
+      dog_10_to_20kg_count: 1,
+      dog_over_20kg_count: 1,
+      pending_interaction: null,
+      quote_scenario: {
+        last_applied_transaction_id: pendingTransactionId,
+        last_applied_turn_id: "slot-fill-turn-4",
+      },
+    });
+    const completedContext = structuredClone(
+      harness.getSession().conversation_context,
+    );
+    const replay = await harness.send("20公斤狗", "slot-fill-turn-4");
+    expect(replay.payload.answer).toBe(fourth.payload.answer);
+    expect(replay.payload.metadata).toMatchObject({
+      deduped_incoming_message: true,
+      model_call_count: 0,
+    });
+    expect(harness.getSession().conversation_context).toEqual(completedContext);
     expect(harness.getNonFixtureCalls()).toBe(0);
   });
 

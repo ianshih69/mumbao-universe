@@ -27,11 +27,12 @@ import {
 import { planPendingSlotFillTransaction } from "./pendingSlotFillTransaction.js";
 import { planDialogueGoals } from "./dialogueGoalPlanner.js";
 import { resolveSemanticTurn } from "./semanticTurnResolver.js";
-import { applyDialogueStateTransition } from "./dialogueStateEngine.js";
+import { applyScenarioTransition } from "./dialogueStateEngine.js";
 
 export const bookingSpanTypes = Object.freeze([
   "date",
   "nights",
+  "duration_days",
   "adult_count",
   "child_count",
   "infant_count",
@@ -296,11 +297,18 @@ export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
     };
   });
 
-  scan(new RegExp(`(${numberToken})(晚|夜)`, "gu"), (match) => ({
+  scan(new RegExp(`(${numberToken})(?:個)?(晚上?|夜)`, "gu"), (match) => ({
     normalized_type: "nights",
     normalized_value: parseNumber(match[1]),
     classifier: match[2],
     unit: "night",
+    entity_hints: ["stay"],
+  }));
+  scan(new RegExp(`(${numberToken})天`, "gu"), (match) => ({
+    normalized_type: "duration_days",
+    normalized_value: parseNumber(match[1]),
+    classifier: "天",
+    unit: "day",
     entity_hints: ["stay"],
   }));
 
@@ -789,8 +797,15 @@ export function compileBookingTurnCandidates({
     semanticTurn.ast.turn_kind === "clarification" &&
     !preliminaryResult.ambiguities.length
   ) {
-    const code = semanticTurn.ast.clarification_code === "missing_entity"
-      ? "missing_entity"
+    const semanticClarifications = {
+      missing_entity: "請問要調整目前情境中的哪一項資料？",
+      missing_reference: "請問你指的是哪些項目呢？",
+    };
+    const code = Object.hasOwn(
+      semanticClarifications,
+      semanticTurn.ast.clarification_code,
+    )
+      ? semanticTurn.ast.clarification_code
       : "low_confidence";
     preliminaryResult = {
       ...preliminaryResult,
@@ -799,9 +814,8 @@ export function compileBookingTurnCandidates({
       ambiguities: [{
         code,
         evidence: sanitizedMessage.slice(0, 280) || "本輪訊息",
-        question: code === "missing_entity"
-          ? "請問要調整目前情境中的哪一項資料？"
-          : "目前沒有可安全延續的報價情境，請提供完整條件或說明要調整的項目。",
+        question: semanticClarifications[code] ||
+          "目前沒有可安全延續的報價情境，請提供完整條件或說明要調整的項目。",
       }],
       confidence: 0,
     };
@@ -1270,6 +1284,8 @@ function clarificationForPlan(plan, code = "") {
     missing_pet_context: "請問這個重量是狗狗的體重嗎？",
     missing_party_count: "請問調整後有幾位成人、兒童及幼兒呢？",
     missing_exact_year: "請問入住日期是哪一年？",
+    ambiguous_stay_days: existing?.question || "請問要住幾晚呢？",
+    missing_reference: "請問你指的是哪些項目呢？",
     conflicting_operations: "這次的調整有衝突，請告訴我最後要保留的數量。",
     unsupported_entity_value: "這項資料無法安全套用，請換一種方式說明。",
     low_confidence: "我還不確定這次要調整哪項訂房資料，可以再說明一次嗎？",
@@ -1277,7 +1293,7 @@ function clarificationForPlan(plan, code = "") {
   const question =
     plan.turn_type === "confirmation" &&
     !plan.dialogue_state?.pending_confirmation_existed
-      ? "目前沒有待確認的內容，請告訴我想確認哪一項。"
+      ? "請問你指的是哪些項目呢？"
       : existing?.question || questions[ambiguityCode] || questions.low_confidence;
   return {
     code: ambiguityCode,
@@ -1527,7 +1543,7 @@ async function resolveActiveDialoguePlan({
   }
 
   if (!operations.length) operations = result.operations;
-  const reduction = applyDialogueStateTransition({
+  const reduction = applyScenarioTransition({
     context: previousContext,
     ast: plan.intent_ast,
     operations,

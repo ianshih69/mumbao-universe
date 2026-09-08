@@ -69,6 +69,7 @@ const operationSchema = z
     pet_type: z.enum(["dog", "cat", "pet"]).optional(),
     weights_kg: z.array(z.number().positive().max(200)).max(20).optional(),
     target_pet: z.number().int().min(0).max(19).optional(),
+    target_scope: z.enum(["all"]).optional(),
     ages_years: z.array(z.number().min(0).max(120)).max(30).optional(),
     mode: z.enum(["villa", "room"]).optional(),
     check_in: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -86,6 +87,8 @@ const ambiguitySchema = z
       "missing_pet_context",
       "missing_party_count",
       "missing_exact_year",
+      "ambiguous_stay_days",
+      "missing_reference",
       "pending_slot_fill",
       "pending_slot_fill_stale",
       "pending_slot_fill_duplicate",
@@ -641,7 +644,7 @@ function extractStayOperation(text, { baseDateText = "" } = {}) {
   }
 
   const nightsMatch = text.match(
-    new RegExp(String.raw`(${numberTokenSource})(?:晚|夜)`),
+    new RegExp(String.raw`(${numberTokenSource})(?:個)?(?:晚上?|夜)`),
   );
   const nights = nightsMatch ? parseNumberToken(nightsMatch[1]) : null;
   const modeEvidence = text.match(
@@ -722,6 +725,23 @@ function detectAmbiguities(text, context, operations, petResult) {
       evidence: genericAdd[0],
       question: "請問是增加一位成人、一位兒童，還是一隻狗狗呢？",
     });
+  }
+
+  const explicitNightDuration = new RegExp(
+    String.raw`${numberTokenSource}(?:個)?(?:晚上?|夜)`,
+  ).test(text);
+  const dayDuration = text.match(
+    new RegExp(String.raw`(${numberTokenSource})天(?:[？?。！!]|$)`),
+  );
+  if (dayDuration && !explicitNightDuration) {
+    const days = parseNumberToken(dayDuration[1]);
+    if (Number.isInteger(days) && days > 0) {
+      ambiguities.push({
+        code: "ambiguous_stay_days",
+        evidence: dayDuration[0].replace(/[？?。！!]$/, ""),
+        question: `請問是要住${days}晚嗎？`,
+      });
+    }
   }
 
   if (/人數有變|人數要改|人數變了/.test(text) && !operations.some((entry) =>
@@ -895,6 +915,13 @@ function validateOperationShape(operation) {
   if (operation.operation === "clear") return true;
   if (
     operation.target_pet !== undefined &&
+    (operation.entity !== "pet" ||
+      !["replace", "remove"].includes(operation.operation))
+  ) {
+    return false;
+  }
+  if (
+    operation.target_scope !== undefined &&
     (operation.entity !== "pet" ||
       !["replace", "remove"].includes(operation.operation))
   ) {
@@ -1101,6 +1128,18 @@ function applyPetOperation(context, operation) {
   let weights = existingWeights;
   if (
     operation.operation === "replace" &&
+    operation.target_scope === "all" &&
+    operation.weights_kg?.length === 1 &&
+    existingWeights.length
+  ) {
+    weights = existingWeights.map(() => operation.weights_kg[0]);
+  } else if (
+    operation.operation === "remove" &&
+    operation.target_scope === "all"
+  ) {
+    weights = [];
+  } else if (
+    operation.operation === "replace" &&
     Number.isInteger(operation.target_pet) &&
     operation.weights_kg?.length === 1 &&
     operation.target_pet < existingWeights.length
@@ -1138,6 +1177,16 @@ function applyPetOperation(context, operation) {
 
   let petCount;
   if (
+    operation.operation === "replace" &&
+    operation.target_scope === "all"
+  ) {
+    petCount = context.pet_count ?? weights.length;
+  } else if (
+    operation.operation === "remove" &&
+    operation.target_scope === "all"
+  ) {
+    petCount = 0;
+  } else if (
     operation.operation === "replace" &&
     Number.isInteger(operation.target_pet)
   ) {
@@ -1576,7 +1625,7 @@ function buildLegacyStructuredTurnMessages({
   "intents": ["request_quote|update_party|update_pet|update_dates|update_breakfast|availability_request|policy_question"],
   "operations": ["下列封閉 operation variants 之一"],
   "missing_fields": [],
-  "ambiguities": [{"code":"missing_entity|missing_pet_context|missing_party_count|missing_exact_year|pending_slot_fill|pending_slot_fill_stale|pending_slot_fill_duplicate|conflicting_operations|unsupported_entity_value|low_confidence","evidence":"原句文字","question":"一個精準澄清問題"}],
+  "ambiguities": [{"code":"missing_entity|missing_pet_context|missing_party_count|missing_exact_year|ambiguous_stay_days|missing_reference|pending_slot_fill|pending_slot_fill_stale|pending_slot_fill_duplicate|conflicting_operations|unsupported_entity_value|low_confidence","evidence":"原句文字","question":"一個精準澄清問題"}],
   "confidence": 0.0
 }
 

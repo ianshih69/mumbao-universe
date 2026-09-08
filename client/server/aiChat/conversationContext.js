@@ -703,6 +703,7 @@ function normalizeDialogueEventData(value) {
     ...(Number.isInteger(normalizeInteger(value.target_pet))
       ? { target_pet: normalizeInteger(value.target_pet) }
       : {}),
+    ...(value.target_scope === "all" ? { target_scope: "all" } : {}),
     ...(["dog", "cat", "pet"].includes(value.pet_type)
       ? { pet_type: value.pet_type }
       : {}),
@@ -779,6 +780,7 @@ function normalizeDialogueEvents(value) {
 
 const pendingOperationTypes = new Set(["set", "add", "remove", "replace", "clear"]);
 const pendingOperationEntities = new Set([
+  "stay",
   "adult",
   "child",
   "infant",
@@ -792,6 +794,8 @@ const pendingSlotNames = new Set([
   "pet_type",
   "weights_kg",
   "target_pet",
+  "target_scope",
+  "nights",
 ]);
 
 function normalizeStringList(value, allowed, limit = 20) {
@@ -834,6 +838,7 @@ function normalizePendingPartialOperation(value) {
     pet_type: petType,
     weights_kg: normalizeNumberArray(value.weights_kg, { min: 0.1, max: 200, limit: 20 }),
     target_pet: normalizeInteger(value.target_pet),
+    target_scope: value.target_scope === "all" ? "all" : null,
     filled_slots: filledSlots,
     missing_slots: missingSlots,
   };

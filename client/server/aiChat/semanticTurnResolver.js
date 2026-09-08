@@ -39,6 +39,7 @@ const continuationForm = /^(?:那|再|改|換|少|多|不要|取消|清除)|同�
 const resumeQuoteForm = /^(?:其他|其餘|剩下)(?:都)?(?:一樣|不變)(?:呢|[？?])?$|^(?:照|跟)(?:剛才|原本|前面)(?:一樣)?(?:呢|[？?])?$/;
 const contextualTimingForm = /^(?:那)?(?:最晚|最早|幾點|時間)(?:呢|[？?])?$/;
 const unresolvedReferenceForm = /^(?:原本|剛才|前面|上一(?:個|隻|筆))(?:那)?(?:一)?(?:個|隻|筆|項)?(?:呢|[？?])?$/;
+const pendingAnswerForm = /^(?:都是|全部|都|通通|所有(?:的)?|對|是|沒錯|正確|不是|不對|否)(?:呢|[？?])?$/;
 const quoteForm = /多少|多少錢|價格|房價|費用|報價|總共|試算|算一下/;
 const availabilityForm = /有房|房況|空房|可訂|能訂|可以訂/;
 const policyPriceForm = /押金|訂金|退款|取消費|違約|賠償|訪客費|延遲退房/;
@@ -289,6 +290,9 @@ export function resolveSemanticTurn({
     turnKind = "informational";
   } else if (availabilityForm.test(text)) {
     turnKind = "informational";
+  } else if (!pendingCurrent && pendingAnswerForm.test(text)) {
+    turnKind = "clarification";
+    clarificationCode = "missing_reference";
   } else if (activeScenario && unresolvedReferenceForm.test(text)) {
     turnKind = "clarification";
     clarificationCode = "missing_entity";

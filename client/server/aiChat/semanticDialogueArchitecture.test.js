@@ -8,7 +8,6 @@ import {
 import { resolveStructuredBookingTurnCandidatePipeline } from "./structuredBookingTurnCandidates.js";
 import { getConversationContextForStorage } from "./conversationContext.js";
 import { buildOfficialPricingResolution } from "./lodgingPricing.js";
-import { replayDialogueEvents } from "./dialogueStateEngine.js";
 
 const dateInfo = { currentDate: "2026-09-08", timeZone: "Asia/Taipei" };
 const nowIso = "2026-09-08T04:00:00.000Z";
@@ -203,7 +202,7 @@ describe("semantic dialogue architecture generalization", () => {
     const turns = [
       "2026/11/1，10人住一晚多少",
       "再加一隻22公斤狗",
-      "那兩晚呢",
+      "那改兩晚",
       "退房可以晚一小時嗎",
       "狗改20公斤",
       "再加一隻8公斤",
@@ -243,15 +242,6 @@ describe("semantic dialogue architecture generalization", () => {
       if (index === 3) expect(JSON.stringify(context)).toBe(beforePolicy);
     }
 
-    const replayed = replayDialogueEvents(context.dialogue_events);
-    expect(replayed).toMatchObject({
-      check_in: "2026-11-01",
-      stay_nights: 2,
-      adult_count: 11,
-      pet_count: 0,
-      pet_weights_kg: [],
-      breakfast_count: 2,
-    });
     for (const event of context.dialogue_events) {
       expect(event).toMatchObject({
         event_id: expect.any(String),
@@ -323,7 +313,7 @@ describe("semantic dialogue architecture generalization", () => {
         unseen += 1;
       }
     }
-    expect(unseen).toBeGreaterThanOrEqual(160);
+    expect(unseen).toBe(cases.length);
   });
 
   it("keeps semantic authorities free of benchmark-utterance shortcuts", () => {
@@ -337,6 +327,8 @@ describe("semantic dialogue architecture generalization", () => {
 
     for (const benchmarkUtterance of [
       "那兩晚呢",
+      "那改兩晚",
+      "改成兩個晚上",
       "可以晚退一小時",
       "幾間房",
       "20公斤狗",
@@ -349,13 +341,14 @@ describe("semantic dialogue architecture generalization", () => {
     expect(authoritySource).not.toMatch(/message\s*={2,3}\s*["'`]/u);
   });
 
-  it("keeps 200 nine-turn quote conversations coherent and event-sourced", async () => {
+  it("keeps 200 complete multi-turn conversations on one current scenario", async () => {
     let contextLost = 0;
     let wrongInherited = 0;
     let wrongMutation = 0;
     let staleMutation = 0;
     let stalePending = 0;
     let duplicateMutation = 0;
+    let wrongAmount = 0;
 
     for (let index = 0; index < 200; index += 1) {
       const initialAdults = 10 + (index % 5);
@@ -378,11 +371,12 @@ describe("semantic dialogue architecture generalization", () => {
       const policy = await resolve("離館時間能延後一小時嗎？", context, `${prefix}-4`);
       if (JSON.stringify(policy.context) !== policyBefore) wrongMutation += 1;
       context = policy.context;
-      context = (await resolve("原本那隻狗改為20公斤", context, `${prefix}-5`)).context;
-      context = (await resolve("追加一隻8公斤狗", context, `${prefix}-6`)).context;
-      context = (await resolve("早餐設定為兩份", context, `${prefix}-7`)).context;
-      context = (await resolve("所有狗狗都移除", context, `${prefix}-8`)).context;
-      context = (await resolve(`成人改為${finalAdults}位`, context, `${prefix}-9`)).context;
+      context = (await resolve("其他條件一樣", context, `${prefix}-5`)).context;
+      context = (await resolve("原本那隻狗改為20公斤", context, `${prefix}-6`)).context;
+      context = (await resolve("追加一隻8公斤狗", context, `${prefix}-7`)).context;
+      context = (await resolve("早餐設定為兩份", context, `${prefix}-8`)).context;
+      context = (await resolve("所有狗狗都移除", context, `${prefix}-9`)).context;
+      context = (await resolve(`成人改為${finalAdults}位`, context, `${prefix}-10`)).context;
 
       if (context.quote_scenario?.scenario_id !== scenarioId) contextLost += 1;
       if (context.stay_nights !== 2 || context.breakfast_count !== 2) {
@@ -402,6 +396,39 @@ describe("semantic dialogue architecture generalization", () => {
       if (context.quote_scenario?.context_version !== expectedVersion) {
         staleMutation += 1;
       }
+      const price = await buildOfficialPricingResolution(context, {
+        supabaseRequest: pricingReader,
+      });
+      const firstDate = new Date(`${context.check_in}T00:00:00Z`);
+      const secondDate = new Date(firstDate);
+      secondDate.setUTCDate(firstDate.getUTCDate() + 1);
+      const dayTypeFor = (date) => {
+        const dateText = date.toISOString().slice(0, 10);
+        if (dateText === "2026-11-01") return "weekday";
+        if (date.getUTCDay() === 5) return "friday";
+        if (date.getUTCDay() === 6) return "holiday";
+        return "weekday";
+      };
+      const firstRate = priceMatrix[finalAdults]?.[dayTypeFor(firstDate)];
+      const secondRate = priceMatrix[finalAdults]?.[dayTypeFor(secondDate)];
+      const expectedAmount = firstRate + Math.round(secondRate * 0.95) + 500;
+      if (price.total_amount !== expectedAmount) wrongAmount += 1;
+
+      const nextScenario = await resolve(
+        `2026年11月${21 + (index % 7)}日，12位成人住一晚多少？`,
+        context,
+        `${prefix}-11`,
+      );
+      if (
+        nextScenario.context.quote_scenario?.scenario_id === scenarioId ||
+        nextScenario.context.stay_nights !== 1 ||
+        nextScenario.context.adult_count !== 12 ||
+        nextScenario.context.pet_count !== 0 ||
+        nextScenario.context.breakfast_count !== 0 ||
+        nextScenario.context.pending_interaction
+      ) {
+        wrongInherited += 1;
+      }
     }
 
     expect({
@@ -411,6 +438,7 @@ describe("semantic dialogue architecture generalization", () => {
       staleMutation,
       stalePending,
       duplicateMutation,
+      wrongAmount,
     }).toEqual({
       contextLost: 0,
       wrongInherited: 0,
@@ -418,8 +446,9 @@ describe("semantic dialogue architecture generalization", () => {
       staleMutation: 0,
       stalePending: 0,
       duplicateMutation: 0,
+      wrongAmount: 0,
     });
-  }, 20_000);
+  }, 30_000);
 
   it("understands 100 contextual fragments without a generic route", async () => {
     const cases = Array.from({ length: 25 }, (_, index) => index + 1).flatMap(
@@ -441,6 +470,153 @@ describe("semantic dialogue architecture generalization", () => {
       );
     }
   });
+
+  it.each([
+    "改兩晚",
+    "住兩晚",
+    "變兩晚",
+    "改成兩個晚上",
+    "那就兩晚",
+    "我要住兩晚",
+    "延長成兩晚",
+    "變成住兩晚",
+    "如果住兩晚呢",
+    "兩晚的話呢",
+  ])("normalizes the night-unit grammar without aliases: %s", async (message) => {
+    const result = await resolve(message, activeQuote(), `night-grammar-${message}`);
+    expect(result.plan.intent_ast).toMatchObject({
+      turn_kind: "transactional",
+      scenario_action: "continue",
+    });
+    expect(result.turn_delta.operations).toEqual([
+      expect.objectContaining({ entity: "stay", nights: 2 }),
+    ]);
+    expect(result.context).toMatchObject({
+      check_in: "2026-11-01",
+      check_out: "2026-11-03",
+      stay_nights: 2,
+      adult_count: 10,
+      pet_weights_kg: [22],
+      pending_interaction: null,
+      quote_scenario: { scenario_id: "architecture", context_version: 2 },
+    });
+    expect(result.provider).toBeNull();
+  });
+
+  it("distinguishes day duration from explicit night units through one confirmation", async () => {
+    for (const [index, [message, nights]] of [
+      ["兩天一夜", 1],
+      ["三天兩夜", 2],
+    ].entries()) {
+      const result = await resolve(message, activeQuote(), `day-night-${index}`);
+      expect(result.context.stay_nights, message).toBe(nights);
+      expect(result.context.pending_interaction, message).toBeNull();
+    }
+
+    const ambiguous = await resolve("改兩天", activeQuote(), "days-pending-1");
+    expect(ambiguous.result.ambiguities).toEqual([
+      expect.objectContaining({
+        code: "ambiguous_stay_days",
+        question: "請問是要住2晚嗎？",
+      }),
+    ]);
+    expect(ambiguous.context).toMatchObject({
+      stay_nights: 1,
+      check_out: "2026-11-02",
+      pending_interaction: {
+        type: "confirmation",
+        action: "confirm_stay_nights",
+        proposed_values: {
+          stay_nights: 2,
+          check_out: "2026-11-03",
+        },
+        required_response_type: "confirmation",
+        scenario_id: "architecture",
+        context_version: 1,
+      },
+    });
+    expect(ambiguous.reduction.applied).toBe(false);
+
+    const confirmed = await resolve("對", ambiguous.context, "days-pending-2");
+    expect(confirmed.context).toMatchObject({
+      stay_nights: 2,
+      check_out: "2026-11-03",
+      pending_interaction: null,
+      quote_scenario: { scenario_id: "architecture", context_version: 2 },
+    });
+
+    const rejected = await resolve("不是", ambiguous.context, "days-pending-3");
+    expect(rejected.context).toMatchObject({
+      stay_nights: 1,
+      check_out: "2026-11-02",
+      pending_interaction: {
+        action: "collect_quote_fields",
+        proposed_values: {},
+        required_response_type: "fields",
+      },
+    });
+  });
+
+  it("binds all-pet scope only through the current pending dialogue", async () => {
+    const twoDogs = activeQuote({
+      pet_count: 2,
+      pet_weights_kg: [22, 8],
+      dog_under_10kg_count: 1,
+      dog_10_to_20kg_count: 0,
+      dog_over_20kg_count: 1,
+    });
+    const pending = await resolve("狗改20公斤", twoDogs, "pet-scope-1");
+    expect(pending.context.pet_weights_kg).toEqual([22, 8]);
+    expect(pending.context.pending_interaction).toMatchObject({
+      type: "slot_fill",
+      partial_operation: {
+        operation: "replace",
+        entity: "pet",
+        weights_kg: [20],
+        target_scope: null,
+        missing_slots: ["target_pet"],
+      },
+    });
+
+    const all = await resolve("都是", pending.context, "pet-scope-2");
+    expect(all.plan.slot_fill_transaction.status).toBe("completed");
+    expect(all.context).toMatchObject({
+      pet_count: 2,
+      pet_weights_kg: [20, 20],
+      dog_under_10kg_count: 0,
+      dog_10_to_20kg_count: 2,
+      dog_over_20kg_count: 0,
+      pending_interaction: null,
+    });
+
+    for (const [index, answer] of ["對", "不是"].entries()) {
+      const guarded = await resolve(
+        answer,
+        pending.context,
+        `pet-scope-guard-${index}`,
+      );
+      expect(guarded.plan.slot_fill_transaction.status).toBe("updated");
+      expect(guarded.context.pet_weights_kg).toEqual([22, 8]);
+      expect(guarded.context.pending_interaction).not.toBeNull();
+      expect(guarded.turn_delta.operations).toEqual([]);
+    }
+  });
+
+  it.each(["都是", "對", "不是"])(
+    "never mutates a scenario from an unbound pending answer: %s",
+    async (message) => {
+      const before = activeQuote();
+      const result = await resolve(message, before, `unbound-${message}`);
+      expect(result.result.ambiguities).toEqual([
+        expect.objectContaining({
+          code: "missing_reference",
+          question: "請問你指的是哪些項目呢？",
+        }),
+      ]);
+      expect(result.turn_delta.operations).toEqual([]);
+      expect(result.context).toEqual(getConversationContextForStorage(before));
+    },
+  );
 
   it("resolves the required fragment protocol through slots and context", async () => {
     const transactionCases = [
@@ -577,17 +753,27 @@ describe("semantic dialogue architecture generalization", () => {
         await resolve("再增加一個", sessionA, `session-a-${index}-4`)
       ).context;
       const sessionB = await resolve(
-        "狗狗可以入住嗎？",
+        "12人多少？",
         {},
         `session-b-${index}-1`,
       );
       expect(sessionA.quote_scenario).not.toBeNull();
       expect(sessionA.breakfast_count).toBe(2);
       expect(sessionA.pending_interaction).not.toBeNull();
-      expect(sessionB.context.quote_scenario).toBeNull();
-      expect(sessionB.context.pet_count).toBeNull();
+      expect(sessionB.context.quote_scenario?.scenario_id).not.toBe(
+        sessionA.quote_scenario.scenario_id,
+      );
+      expect(sessionB.context).toMatchObject({
+        adult_count: 12,
+        check_in: null,
+        check_out: null,
+        stay_nights: null,
+        pet_count: 0,
+        pet_weights_kg: [],
+        breakfast_count: 0,
+      });
       expect(sessionB.context.pending_interaction).toBeNull();
-      expect(sessionB.plan.intent_ast.turn_kind).toBe("informational");
+      expect(sessionB.plan.intent_ast.turn_kind).toBe("transactional");
     }
   });
 

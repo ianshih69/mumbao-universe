@@ -22,6 +22,13 @@ function addMinutes(isoText, minutes) {
   return new Date(base + minutes * 60 * 1000).toISOString();
 }
 
+function addIsoDays(dateText, days) {
+  const date = new Date(`${String(dateText || "")}T00:00:00Z`);
+  if (Number.isNaN(date.getTime()) || !Number.isInteger(days)) return "";
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function isExpired(pending, nowIso) {
   const expiresAt = Date.parse(String(pending?.expires_at || ""));
   const now = Date.parse(String(nowIso || ""));
@@ -133,7 +140,8 @@ function requiredSlots(partial, context) {
     partial.entity === "pet" &&
     ["replace", "remove"].includes(partial.operation) &&
     Number(state.pet_count || 0) > 1 &&
-    !Number.isInteger(partial.target_pet)
+    !Number.isInteger(partial.target_pet) &&
+    partial.target_scope !== "all"
   ) {
     missing.push("target_pet");
   }
@@ -152,6 +160,7 @@ function finalizePartial(partial, context) {
       (weight) => Number.isFinite(Number(weight)) && Number(weight) > 0,
     ).map(Number),
     target_pet: Number.isInteger(partial.target_pet) ? partial.target_pet : null,
+    target_scope: partial.target_scope === "all" ? "all" : null,
   };
   next.missing_slots = requiredSlots(next, context);
   next.filled_slots = [
@@ -161,6 +170,7 @@ function finalizePartial(partial, context) {
     next.pet_type ? "pet_type" : null,
     next.weights_kg.length ? "weights_kg" : null,
     Number.isInteger(next.target_pet) ? "target_pet" : null,
+    next.target_scope === "all" ? "target_scope" : null,
   ].filter(Boolean);
   return next;
 }
@@ -182,6 +192,13 @@ export function buildSlotFillQuestion(partial) {
   }
   if (missing.has("weights_kg")) return "請問狗狗大約幾公斤？";
   if (missing.has("target_pet")) {
+    const weight = partial.weights_kg?.[0];
+    if (partial.operation === "replace" && weight) {
+      return `請回答「全部狗狗」，或告訴我要把哪一隻改成${weight}公斤。`;
+    }
+    if (partial.operation === "remove") {
+      return "請回答「全部狗狗」，或告訴我要移除哪一隻。";
+    }
     return "目前有多隻狗狗，請問要修改哪一隻狗狗的體重呢？";
   }
   if (missing.has("count")) return "請問要調整幾位或幾隻呢？";
@@ -242,6 +259,48 @@ function pendingFromPartial({
   };
 }
 
+function pendingStayDaysConfirmation({
+  days,
+  question,
+  context,
+  sourceTurnId,
+  nowIso,
+}) {
+  const state = normalizeConversationContext(context);
+  const scenario = state.quote_scenario;
+  if (!scenario || !Number.isInteger(days) || days < 1) return null;
+  const checkOut = state.check_in ? addIsoDays(state.check_in, days) : "";
+  return {
+    type: "confirmation",
+    action: "confirm_stay_nights",
+    transaction_id: `confirm-stay-nights:${String(sourceTurnId || "anonymous").slice(0, 120)}`,
+    partial_operation: null,
+    operation: "replace",
+    entity: "stay",
+    filled_slots: ["nights"],
+    missing_slots: [],
+    candidate_references: ["stay.nights"],
+    provenance: [provenanceEntry(sourceTurnId, `${days}天`, ["nights"])],
+    proposed_values: {
+      stay_nights: days,
+      ...(checkOut ? { check_out: checkOut } : {}),
+    },
+    required_response_type: "confirmation",
+    resume_action: "request_quote",
+    resume_goal: "request_quote",
+    source_assistant_message_id: sourceTurnId || null,
+    scenario_id: scenario.scenario_id,
+    context_version: scenario.context_version,
+    base_state_version: scenario.context_version,
+    asked_turn_id: sourceTurnId || null,
+    created_turn_id: sourceTurnId || null,
+    expires_after_turns: 1,
+    created_at: nowIso,
+    expires_at: addMinutes(nowIso, 30),
+    question,
+  };
+}
+
 function ambiguityForPartial(partial) {
   return {
     code: "pending_slot_fill",
@@ -278,6 +337,7 @@ function operationFromPartial(partial, provenance) {
     ...(Number.isInteger(partial.target_pet)
       ? { target_pet: partial.target_pet }
       : {}),
+    ...(partial.target_scope === "all" ? { target_scope: "all" } : {}),
     evidence: unique(provenance.map((entry) => entry.evidence)).join("、"),
   };
   return operation;
@@ -309,6 +369,21 @@ function createInitialPartial({ message, spans, result, context }) {
 
   const petOperation = result.operations.find((operation) => operation.entity === "pet");
   if (
+    petOperation &&
+    ["replace", "remove"].includes(petOperation.operation) &&
+    Number(state.pet_count || 0) > 1 &&
+    !Number.isInteger(petOperation.target_pet) &&
+    petOperation.target_scope !== "all"
+  ) {
+    return finalizePartial({
+      ...petOperation,
+      candidate_entities: ["pet"],
+      candidate_operations: [petOperation.operation],
+      target_pet: null,
+      target_scope: null,
+    }, state);
+  }
+  if (
     operationCue === "replace" &&
     weights.length &&
     Number(state.pet_count || 0) > 0 &&
@@ -326,7 +401,10 @@ function createInitialPartial({ message, spans, result, context }) {
     }, state);
   }
 
-  if (missingEntity || (operationCue && Number.isInteger(genericCount) && !inferredEntity)) {
+  if (
+    result.operations.length === 0 &&
+    (missingEntity || (operationCue && Number.isInteger(genericCount) && !inferredEntity))
+  ) {
     return finalizePartial({
       operation: operationCue,
       entity: null,
@@ -358,6 +436,12 @@ function createInitialPartial({ message, spans, result, context }) {
 function fillPartialFromAnswer(partial, { message, spans, context }) {
   const next = { ...partial };
   const filled = [];
+  const protocolText = compact(message).replace(/[。.!！、]+$/g, "");
+  const protocol = /^(?:都是|全部|都|通通|所有(?:的)?)(?:狗狗?)?$/.test(protocolText)
+    ? "all"
+    : /^(?:對|是|沒錯|正確|可以|好|好的|嗯|就這樣|yes|y|ok|okay|不對|不是|否|no|n)$/.test(protocolText)
+      ? "insufficient_scope"
+      : "none";
   if (!next.operation) {
     const operation = operationFromSpans(spans);
     if (operation && (next.candidate_operations || []).includes(operation)) {
@@ -396,7 +480,10 @@ function fillPartialFromAnswer(partial, { message, spans, context }) {
       !Number.isInteger(next.target_pet)
     ) {
       const target = targetPetFromAnswer(message, context);
-      if (Number.isInteger(target)) {
+      if (protocol === "all") {
+        next.target_scope = "all";
+        filled.push("target_scope");
+      } else if (Number.isInteger(target)) {
         next.target_pet = target;
         filled.push("target_pet");
       }
@@ -405,6 +492,7 @@ function fillPartialFromAnswer(partial, { message, spans, context }) {
   return {
     partial: finalizePartial(next, context),
     filled_slots: unique(filled),
+    protocol_requires_scope: protocol === "insufficient_scope",
   };
 }
 
@@ -451,6 +539,17 @@ export function planPendingSlotFillTransaction({
       spans,
       context: state,
     });
+    if (filled.protocol_requires_scope) {
+      return {
+        status: "updated",
+        pending,
+        ambiguity: {
+          code: "pending_slot_fill",
+          evidence: "pending_slot_fill",
+          question: "請回答「全部狗狗」，或指定要修改哪一隻狗狗。",
+        },
+      };
+    }
     if (!filled.filled_slots.length) return staleTransactionResult();
     const provenance = [
       ...(pending.provenance || []),
@@ -483,6 +582,30 @@ export function planPendingSlotFillTransaction({
       evidence_message: provenance.map((entry) => entry.evidence).join("、"),
       result: resultForOperation(operation, pending.resume_action),
     };
+  }
+
+  const ambiguousStayDays = result.ambiguities.find(
+    (ambiguity) => ambiguity.code === "ambiguous_stay_days",
+  );
+  if (ambiguousStayDays) {
+    const dayValues = spansOfType(spans, "duration_days")
+      .map((span) => Number(span.normalized_value))
+      .filter((value) => Number.isInteger(value) && value > 0);
+    const days = dayValues.length === 1 ? dayValues[0] : null;
+    const confirmation = pendingStayDaysConfirmation({
+      days,
+      question: ambiguousStayDays.question,
+      context: state,
+      sourceTurnId,
+      nowIso,
+    });
+    if (confirmation) {
+      return {
+        status: "created",
+        pending: confirmation,
+        ambiguity: ambiguousStayDays,
+      };
+    }
   }
 
   const partial = createInitialPartial({ message, spans, result, context: state });

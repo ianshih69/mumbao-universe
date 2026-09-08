@@ -209,11 +209,32 @@ describe("deterministic-only structured message runtime", () => {
     expect(legacyBuilder).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps active state writes behind the event transition engine", () => {
-    const source = readFileSync(new URL("./message.js", import.meta.url), "utf8");
-    expect(source).toContain('conversationAuthority.mode !== "active" &&');
-    expect(source).toContain("applyContextFreshnessGuard({");
-    expect(source).toContain("conversationContextPatch &&");
+  it("keeps active state writes behind one scenario transition authority", () => {
+    const messageSource = readFileSync(
+      new URL("./message.js", import.meta.url),
+      "utf8",
+    );
+    const candidateSource = readFileSync(
+      new URL("./structuredBookingTurnCandidates.js", import.meta.url),
+      "utf8",
+    );
+    const transitionSource = readFileSync(
+      new URL("./dialogueStateEngine.js", import.meta.url),
+      "utf8",
+    );
+    const plannerSource = readFileSync(
+      new URL("./dialogueGoalPlanner.js", import.meta.url),
+      "utf8",
+    );
+    expect(messageSource).toContain('conversationAuthority.mode !== "active" &&');
+    expect(messageSource).toContain("applyContextFreshnessGuard({");
+    expect(messageSource).toContain("conversationContextPatch &&");
+    expect(candidateSource.match(/applyScenarioTransition\(/gu)).toHaveLength(1);
+    expect(candidateSource).not.toContain("applyDialogueStateTransition");
+    expect(transitionSource.match(/export function applyScenarioTransition/gu))
+      .toHaveLength(1);
+    expect(plannerSource.match(/export function selectDialogueResponseAuthority/gu))
+      .toHaveLength(1);
   });
 
   it("returns the complete one-turn quote without a structured provider", async () => {

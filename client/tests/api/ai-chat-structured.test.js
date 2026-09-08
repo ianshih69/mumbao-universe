@@ -722,11 +722,49 @@ describe("production AI chat structured authority", () => {
 
     const beforeConfirmation = harness.getSession().conversation_context;
     const third = await harness.send("對", "incoming-snapshot-third");
-    expect(third.payload.answer).toBe(
-      "目前沒有待確認的內容，請告訴我想確認哪一項。",
-    );
+    expect(third.payload.answer).toBe("請問你指的是哪些項目呢？");
     expect(third.payload.answer).not.toContain("要調整哪項訂房資料");
     expect(harness.getSession().conversation_context).toEqual(beforeConfirmation);
+    expect(harness.getNonFixtureCalls()).toBe(0);
+  });
+
+  it("keeps the exact staged quote scenario while replacing only its nights", async () => {
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    const harness = createHandlerHarness();
+    vi.stubGlobal("fetch", harness.fetchMock);
+
+    const first = await harness.send(
+      "2026年11月1日，10位成人住一晚多少？",
+      "exact-scenario-1",
+    );
+    expect(first.payload.answer).toContain("TWD 25,000");
+    const scenarioId =
+      harness.getSession().conversation_context.quote_scenario.scenario_id;
+
+    const second = await harness.send("再加一隻22公斤狗", "exact-scenario-2");
+    expect(second.payload.answer).toContain("TWD 26,200");
+
+    const third = await harness.send("那改兩晚", "exact-scenario-3");
+    expect(third.payload.answer).toContain("TWD 51,090");
+    expect(third.payload.answer).not.toContain("成人、兒童");
+    expect(third.payload.metadata).toMatchObject({
+      structured_mode: "active",
+      structured_provider_call_count: 0,
+      legacy_context_mutation_invoked: false,
+    });
+    expect(harness.getSession().conversation_context).toMatchObject({
+      check_in: "2026-11-01",
+      check_out: "2026-11-03",
+      stay_nights: 2,
+      adult_count: 10,
+      pet_count: 1,
+      pet_weights_kg: [22],
+      pending_interaction: null,
+      quote_scenario: {
+        scenario_id: scenarioId,
+        context_version: 3,
+      },
+    });
     expect(harness.getNonFixtureCalls()).toBe(0);
   });
 

@@ -202,7 +202,9 @@ function pendingEventType(status) {
   return null;
 }
 
-export function applyDialogueStateTransition({
+// Active mode has one mutation entry point. Event records are provenance only;
+// they never act as a second reducer or response authority.
+export function applyScenarioTransition({
   context,
   ast,
   operations = [],

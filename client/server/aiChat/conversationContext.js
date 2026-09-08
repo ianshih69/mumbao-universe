@@ -1,4 +1,5 @@
 import { isDeterministicPricingRequest } from "./pricingIntent.js";
+import { normalizeEntityReferences } from "./typedEntityReferences.js";
 
 const contextFields = [
   "active_intent",
@@ -616,7 +617,7 @@ function normalizeSlotMeta(value) {
       meta.context_refs = rawMeta.context_refs
         .map((entry) => String(entry || "").trim())
         .filter((entry, index, entries) =>
-          /^(?:stay|party|pets|addons)\.[a-z_]+$/.test(entry) &&
+          /^(?:(?:stay|party|pets|addons)\.[a-z_]+|pets\.pet_[1-9]\d{0,8}|pending\.partial_operation)$/.test(entry) &&
           entries.indexOf(entry) === index,
         )
         .slice(0, 12);
@@ -703,6 +704,7 @@ function normalizeDialogueEventData(value) {
     ...(Number.isInteger(normalizeInteger(value.target_pet))
       ? { target_pet: normalizeInteger(value.target_pet) }
       : {}),
+    ...(/^pet_[1-9]\d{0,8}$/.test(value.target_entity_id) ? { target_entity_id: value.target_entity_id } : {}),
     ...(value.target_scope === "all" ? { target_scope: "all" } : {}),
     ...(["dog", "cat", "pet"].includes(value.pet_type)
       ? { pet_type: value.pet_type }
@@ -838,6 +840,7 @@ function normalizePendingPartialOperation(value) {
     pet_type: petType,
     weights_kg: normalizeNumberArray(value.weights_kg, { min: 0.1, max: 200, limit: 20 }),
     target_pet: normalizeInteger(value.target_pet),
+    target_entity_id: /^pet_[1-9]\d{0,8}$/.test(value.target_entity_id) ? value.target_entity_id : null,
     target_scope: value.target_scope === "all" ? "all" : null,
     filled_slots: filledSlots,
     missing_slots: missingSlots,
@@ -922,8 +925,16 @@ export function normalizePendingInteraction(value) {
     ...(requiredFields.length ? { required_fields: requiredFields } : {}),
     source_assistant_message_id:
       normalizeNullableText(value.source_assistant_message_id)?.slice(0, 80) || null,
+    conversation_id:
+      normalizeNullableText(value.conversation_id)?.slice(0, 120) || null,
     scenario_id: normalizeNullableText(value.scenario_id)?.slice(0, 120) || null,
     context_version: normalizeInteger(value.context_version),
+    scenario_version: normalizeInteger(
+      value.scenario_version ?? value.context_version,
+    ),
+    base_version: normalizeInteger(
+      value.base_version ?? value.base_state_version ?? value.context_version,
+    ),
     base_state_version: normalizeInteger(
       value.base_state_version ?? value.context_version,
     ),
@@ -933,6 +944,7 @@ export function normalizePendingInteraction(value) {
         0,
         120,
       ) || null,
+    pending_version: normalizeInteger(value.pending_version) || 1,
     expires_after_turns: normalizeInteger(value.expires_after_turns),
     created_at: normalizeNullableText(value.created_at),
     expires_at: normalizeNullableText(value.expires_at),
@@ -1112,6 +1124,7 @@ export function normalizeConversationContext(value) {
     null,
     80,
   );
+  context.entity_references = normalizeEntityReferences(source.entity_references, context);
 
   return context;
 }

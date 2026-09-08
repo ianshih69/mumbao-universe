@@ -123,6 +123,54 @@ describe("deterministic booking span extraction", () => {
 });
 
 describe("booking candidate compiler and reducer", () => {
+  it("keeps clear self-contained turns on the deterministic zero-call path", async () => {
+    const cases = [
+      ["2026年11月1日，10位成人住一晚多少", {}],
+      ["再加一隻22公斤狗", baseContext],
+      ["早餐三份", baseContext],
+    ];
+    for (const [message, context] of cases) {
+      const resolveCandidates = vi.fn();
+      const resolution = await resolveStructuredBookingTurnCandidatePipeline({
+        mode: "active",
+        message,
+        previousContext: context,
+        legacyContext: context,
+        contextResolverEnabled: true,
+        resolveCandidates,
+        sourceMessageId: `fast-path-${message.length}`,
+        dateInfo: { currentDate: "2026-09-06" },
+      });
+      expect(resolution.requiresModel, message).toBe(false);
+      expect(resolveCandidates, message).not.toHaveBeenCalled();
+    }
+  });
+
+  it("fails closed without mutating when a contextual resolver rejects", async () => {
+    const resolveCandidates = vi.fn(async () => {
+      throw new Error("synthetic_resolver_rejection");
+    });
+    const resolution = await resolveStructuredBookingTurnCandidatePipeline({
+      mode: "active",
+      message: "那改兩晚",
+      previousContext: baseContext,
+      legacyContext: baseContext,
+      contextResolverEnabled: true,
+      resolveCandidates,
+      sourceMessageId: "rejected-contextual-turn",
+      dateInfo: { currentDate: "2026-09-06" },
+    });
+    expect(resolveCandidates).toHaveBeenCalledTimes(1);
+    expect(resolution.source).toBe("semantic_model_rejected");
+    expect(resolution.reduction.applied).toBe(false);
+    expect(resolution.context).toMatchObject({
+      check_in: "2026-11-01",
+      check_out: "2026-11-02",
+      stay_nights: 1,
+      adult_count: 10,
+    });
+  });
+
   it("stores no operation values directly in candidate AST", () => {
     const plan = compileBookingTurnCandidates({
       message: "再加一隻22公斤狗",

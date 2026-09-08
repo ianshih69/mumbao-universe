@@ -16,6 +16,8 @@ export function createAiModelExecutionContext({
     model_call_strategy: "",
     model_call_allowed_purpose: null,
     model_call_plan_reason: "",
+    semantic_input_token_estimate: 0,
+    semantic_output_token_estimate: 0,
   };
 }
 
@@ -81,6 +83,15 @@ export function createModelCallPlan({
     allowed_purpose: null,
     reason: "legacy_local_route",
     model_call_budget: 0,
+  };
+}
+
+export function createStructuredTurnResolverCallPlan() {
+  return {
+    strategy: "structured_turn_semantic_resolver_only",
+    allowed_purpose: "structured_turn_candidate_resolver",
+    reason: "context_dependent_structured_turn",
+    model_call_budget: 1,
   };
 }
 
@@ -198,7 +209,9 @@ export function buildModelExecutionMetadata(executionContext) {
     semantic_resolver_called: semanticResolverCalled,
     faq_selector_called: faqSelectorCalled,
     total_provider_calls: executionContext.model_call_count,
-    semantic_input_token_estimate: 0,
-    semantic_output_token_estimate: 0,
+    semantic_input_token_estimate:
+      executionContext.semantic_input_token_estimate || 0,
+    semantic_output_token_estimate:
+      executionContext.semantic_output_token_estimate || 0,
   };
 }

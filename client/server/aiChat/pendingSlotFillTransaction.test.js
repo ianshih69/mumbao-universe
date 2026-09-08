@@ -56,7 +56,7 @@ async function createGenericPending(context, message, id) {
     scenario_id: context.quote_scenario.scenario_id,
     context_version: context.quote_scenario.context_version,
     asked_turn_id: id,
-    expires_after_turns: 1,
+    expires_after_turns: null,
   });
   return resolution;
 }
@@ -210,20 +210,47 @@ describe("pending slot-fill transactions", () => {
     expect(policy.context.pet_weights_kg).toEqual([22]);
   });
 
-  it("expires after one unanswered non-policy turn", async () => {
+  it("keeps a current pending transaction after an unrecognized answer", async () => {
     const pending = await createGenericPending(
       baseContext(),
       "再加一個",
       "unanswered-add",
     );
-    const stale = await runTurn(pending.context, "謝謝", "unanswered-turn");
+    const unresolved = await runTurn(
+      pending.context,
+      "人",
+      "unanswered-turn",
+    );
 
-    expect(stale.plan.slot_fill_transaction.status).toBe("stale");
-    expect(stale.reduction.applied).toBe(false);
-    expect(stale.context).toMatchObject({
+    expect(unresolved.plan.slot_fill_transaction.status).toBe(
+      "awaiting_resolver",
+    );
+    expect(unresolved.reduction.applied).toBe(false);
+    expect(unresolved.changed).toBe(false);
+    expect(unresolved.result.ambiguities[0]).toMatchObject({
+      code: "pending_slot_fill",
+      question: "請問是增加一位成人、一位兒童，還是一隻狗狗呢？",
+    });
+    expect(unresolved.context).toMatchObject({
       adult_count: 1,
       pet_count: 1,
       pet_weights_kg: [22],
+      pending_interaction: {
+        transaction_id: pending.context.pending_interaction.transaction_id,
+        created_turn_id: "unanswered-add",
+        pending_version: 1,
+      },
+    });
+
+    const completed = await runTurn(
+      unresolved.context,
+      "成人",
+      "recognized-turn",
+    );
+    expect(completed.plan.slot_fill_transaction.status).toBe("completed");
+    expect(completed.context).toMatchObject({
+      adult_count: 2,
+      pet_count: 1,
       pending_interaction: null,
     });
   });

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import aiChatHandler from "../../api/ai-chat.js";
+import { classifyFallbackDayType } from "../../server/bookingPricing/index.js";
+import { setDiscourseAnchor } from "../../server/aiChat/typedEntityReferences.js";
+import { definitions as ownerRuntimeCases, fixtureContext as ownerFixture,
+  loadRuntime as ownerRuntime, stateView as ownerStateView } from "../../scripts/ai/runOwnerSemanticProviderBenchmark.mjs";
 
 const sessionId = "00000000-0000-4000-8000-000000000777";
 const ruleSet = {
@@ -34,9 +38,37 @@ function createHandlerHarness(initialContext = {}) {
   };
   const messages = [];
   let nonFixtureCalls = 0;
+  let structuredProviderCalls = 0;
 
   const fetchMock = vi.fn(async (input, options = {}) => {
     const url = new URL(String(input));
+    if (url.origin === "https://api.deepseek.test") {
+      structuredProviderCalls += 1;
+      const request = JSON.parse(options.body || "{}");
+      const resolverInput = JSON.parse(request.messages?.[1]?.content || "{}");
+      const candidate = resolverInput.operation_candidates?.[0] || null;
+      return jsonResponse({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              goal_id: resolverInput.goal_candidates?.[0]?.goal_id || "none",
+              scenario_action:
+                resolverInput.allowed_scenario_actions?.[0] || "read_only",
+              operation: candidate?.operation || "none",
+              entity: candidate?.entity || "none",
+              field: candidate?.field || "none",
+              span_ids: candidate?.span_ids || [],
+              context_reference_ids:
+                candidate?.context_reference_ids || [],
+              clarification_code: null,
+              confidence: 0.99,
+            }),
+          },
+          finish_reason: "stop",
+        }],
+        usage: { prompt_tokens: 120, completion_tokens: 30 },
+      });
+    }
     if (url.origin !== "https://supabase.test") {
       nonFixtureCalls += 1;
       throw new Error(`unexpected_external_request:${url.origin}`);
@@ -136,6 +168,7 @@ function createHandlerHarness(initialContext = {}) {
     fetchMock,
     getMessages: () => messages,
     getNonFixtureCalls: () => nonFixtureCalls,
+    getStructuredProviderCalls: () => structuredProviderCalls,
     getSession: () => session,
     send,
   };
@@ -161,6 +194,9 @@ describe("production AI chat structured authority", () => {
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-service-role");
     vi.stubEnv("AI_MODE", "cloud_only");
     vi.stubEnv("AI_SEMANTIC_ROUTER_MODE", "legacy");
+    vi.stubEnv("DEEPSEEK_API_KEY", "structured-test-key");
+    vi.stubEnv("DEEPSEEK_BASE_URL", "https://api.deepseek.test");
+    vi.stubEnv("DEEPSEEK_MODEL", "deepseek-v4-flash");
     vi.spyOn(console, "info").mockImplementation(() => {});
   });
 
@@ -169,6 +205,134 @@ describe("production AI chat structured authority", () => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["另外一隻呢", null, 2, [22, 8], null],
+    ["另外一隻呢", "pet_1", 2, [22, 20], 27000],
+    ["剩下那隻", "pet_1", 2, [22, 20], 27000],
+    ["另外那個", "pet_1", 3, [22, 8, 12], null],
+    ["原本那個", "pet_2", 2, [22, 20], 27000],
+    ["剛才那隻", "pet_1", 2, [20, 8], 26300],
+    ["那隻", null, 2, [22, 8], null],
+    ["不是那個", "pet_1", 2, [22, 8], null],
+    ["前一隻", "pet_2", 3, [20, 8, 12], 27100],
+    ["後面那隻", "pet_1", 3, [22, 20, 12], 27800],
+    ["8公斤那隻", "pet_1", 2, [22, 20], 27000],
+    ["兩隻都", null, 2, [20, 20], 26600],
+  ])("keeps typed reference semantics through the actual handler: %s/%s/%i", async (phrase, anchor, count, weights, amount) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-08T04:00:00.000Z"));
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    vi.stubEnv("AI_CONTEXT_SEMANTIC_RESOLVER_ENABLED", "true");
+    const runtime = await ownerRuntime();
+    let before = await ownerFixture("pet-target", runtime);
+    before = runtime.normalizeConversationContext({ ...before, pet_count: count, entity_references: null,
+      pet_weights_kg: [22, 8, 12].slice(0, count) });
+    if (anchor) before = setDiscourseAnchor(before, [anchor], "explicit-reference");
+    const harness = createHandlerHarness(before);
+    vi.stubGlobal("fetch", harness.fetchMock);
+    const response = await harness.send(phrase, "actual-reference-turn");
+    const state = harness.getSession().conversation_context;
+    expect(response.statusCode).toBe(200);
+    expect(state.pet_weights_kg).toEqual(weights);
+    expect(state.adult_count).toBe(10);
+    expect(state.stay_nights).toBe(1);
+    expect(state.quote_scenario.scenario_id).toBe(before.quote_scenario.scenario_id);
+    expect(response.payload.metadata.total_price_amount ?? null).toBe(amount);
+    expect(response.payload.answer).not.toMatch(/目前還沒有確認過|還沒有.*資料|知識缺口|pet_\d/);
+    if (amount === null) {
+      expect(response.payload.answer).toMatch(/哪一隻|全部狗狗/);
+      expect(state.pending_interaction.operation).toBe("replace");
+    } else {
+      expect(response.payload.answer).toContain(`TWD ${amount.toLocaleString("en-US")}`);
+      expect(state.pending_interaction).toBeNull();
+    }
+    expect(harness.getStructuredProviderCalls()).toBe(0);
+    expect(harness.getNonFixtureCalls()).toBe(0);
+  });
+
+  it.each(ownerRuntimeCases())("certifies customer behavior for owner case $id: $phrase", async (entry) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-08T04:00:00.000Z"));
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    vi.stubEnv("AI_CONTEXT_SEMANTIC_RESOLVER_ENABLED", "true");
+    const before = await ownerFixture(entry.fixture, await ownerRuntime());
+    const harness = createHandlerHarness(before);
+    vi.stubGlobal("fetch", harness.fetchMock);
+    const response = await harness.send(entry.phrase, `owner-actual-${entry.id}`);
+    const state = harness.getSession().conversation_context;
+    expect(response.statusCode, JSON.stringify(response.payload)).toBe(200);
+    expect(ownerStateView(state), JSON.stringify(response.payload)).toEqual({ ...ownerStateView(before), ...entry.expected.patch });
+    expect(state.quote_scenario.scenario_id).toBe(before.quote_scenario.scenario_id);
+    expect(response.payload.answer).not.toMatch(/目前還沒有確認過|還沒有.*資料|知識缺口|雲朵訊號/);
+    const expectedAmounts = { "stay-01": 51090, "stay-02": 51090, "stay-03": 51090,
+      "stay-04": 51090, "day-05": 33200, "pet-06": 25800, "pet-07": 25800,
+      "pet-08": 25000, "resume-10": 26200, "pending-11": 25000, "pending-12": 26600,
+      "pending-13": 51090, "resume-18": 26200, "resume-19": 26200, "resume-20": 26200 };
+    if (Object.hasOwn(expectedAmounts, entry.id)) {
+      const amount = expectedAmounts[entry.id];
+      expect(response.payload.answer).toContain(`TWD ${amount.toLocaleString("en-US")}`);
+      expect(response.payload.metadata.total_price_amount).toBe(amount);
+      expect(state.pending_interaction).toBeNull();
+    } else {
+      expect(response.payload.metadata.total_price_amount ?? null).toBeNull();
+      expect(response.payload.answer).toMatch(/請|哪|幾/);
+      if (entry.id === "party-16") expect(response.payload.answer).toMatch(/人數|幾位/);
+      if (entry.id === "pending-14") {
+        expect(response.payload.answer).toMatch(/幾晚|晚數/);
+        expect(state.pending_interaction.proposed_values).toEqual({});
+      }
+    }
+    expect(harness.getStructuredProviderCalls()).toBeLessThanOrEqual(1);
+    expect(harness.getNonFixtureCalls()).toBe(0);
+  });
+
+  it.each([
+    [10, 25000], [11, 26250], [12, 27500], [13, 28750], [14, 30000],
+    [15, 31250], [16, 32500], [17, 33750], [18, 35000], [19, 35800],
+  ])("preserves numeric token boundaries through the actual handler: %i adults", async (adults, amount) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-08T04:00:00.000Z"));
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    vi.stubEnv("AI_CONTEXT_SEMANTIC_RESOLVER_ENABLED", "true");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const harness = createHandlerHarness();
+    vi.stubGlobal("fetch", harness.fetchMock);
+    const input = `2026/11/1 ${adults}人住一晚多少`;
+    const actual = await harness.send(input, `control-quote-${adults - 10}`);
+    const state = harness.getSession().conversation_context;
+    console.log("CONTROL_QUOTE_FORENSICS", JSON.stringify({
+      case_id: `control-quote-${adults - 10}`, input, expected_amount: amount,
+      expected_route: "grounded_reply", date_type: classifyFallbackDayType("2026-11-01"),
+      http_status: actual.statusCode,
+      actual_route: actual.payload.metadata?.final_result_category ?? null,
+      actual_amount: actual.payload.metadata?.total_price_amount ?? null,
+      actual_response: actual.payload.answer ?? actual.payload.error ?? null,
+      actual_state: { check_in: state.check_in ?? null, check_out: state.check_out ?? null,
+        nights: state.stay_nights ?? null, adults: state.adult_count ?? null,
+        children: state.child_count ?? null, infants: state.infant_count ?? null,
+        pets: state.pet_count ?? null, weights: state.pet_weights_kg ?? [],
+        breakfast: state.breakfast_count ?? null, pending: state.pending_interaction ?? null },
+      provider_calls: harness.getStructuredProviderCalls(), non_fixture_calls: harness.getNonFixtureCalls(),
+    }));
+    expect(actual.statusCode).toBe(200);
+    expect(classifyFallbackDayType("2026-11-01")).toBe("weekday");
+    const rateRequests = harness.fetchMock.mock.calls
+      .map(([url]) => new URL(String(url)))
+      .filter((url) => url.pathname.endsWith("/booking_package_rates"));
+    expect(rateRequests.length).toBeGreaterThan(0);
+    expect(rateRequests.every((url) => url.searchParams.get("day_type") === "eq.weekday")).toBe(true);
+    expect(actual.payload.metadata).toMatchObject({
+      final_result_category: "grounded_reply", total_price_amount: amount,
+      structured_provider_call_count: 0, total_provider_calls: 0,
+    });
+    expect(actual.payload.answer).toContain(`TWD ${amount.toLocaleString("en-US")}`);
+    expect(state).toMatchObject({ check_in: "2026-11-01", check_out: "2026-11-02",
+      stay_nights: 1, adult_count: adults, child_count: 0, infant_count: 0,
+      pet_count: 0, pet_weights_kg: [], breakfast_count: 0, pending_interaction: null });
+    expect(harness.getStructuredProviderCalls()).toBe(0);
+    expect(harness.getNonFixtureCalls()).toBe(0);
   });
 
   it("uses structured active as the sole booking authority through the production handler", async () => {
@@ -285,12 +449,26 @@ describe("production AI chat structured authority", () => {
         scenario_id: beforePending.quote_scenario.scenario_id,
         context_version: beforePending.quote_scenario.context_version,
         asked_turn_id: "slot-fill-turn-3",
-        expires_after_turns: 1,
+        expires_after_turns: null,
       },
     });
 
     const pendingTransactionId =
       harness.getSession().conversation_context.pending_interaction.transaction_id;
+    const unresolved = await harness.send("人", "slot-fill-turn-3b");
+    expect(unresolved.payload.answer).toBe(
+      "請問是增加一位成人、一位兒童，還是一隻狗狗呢？",
+    );
+    expect(unresolved.payload.answer).not.toContain("失效");
+    expect(unresolved.payload.metadata).toMatchObject({
+      pending_slot_fill_status: "awaiting_resolver",
+      pending_slot_fill_consumed: false,
+      structured_provider_call_count: 0,
+    });
+    expect(
+      harness.getSession().conversation_context.pending_interaction.transaction_id,
+    ).toBe(pendingTransactionId);
+
     const fourth = await harness.send("20公斤狗", "slot-fill-turn-4");
     expect(fourth.payload.answer).toBe(
       "再加一隻20公斤狗後，兩隻狗狗住宿費共 TWD 2,000，合計 TWD 27,000；另收可退寵物押金 TWD 3,000。",
@@ -730,6 +908,7 @@ describe("production AI chat structured authority", () => {
 
   it("keeps the exact staged quote scenario while replacing only its nights", async () => {
     vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    vi.stubEnv("AI_CONTEXT_SEMANTIC_RESOLVER_ENABLED", "true");
     const harness = createHandlerHarness();
     vi.stubGlobal("fetch", harness.fetchMock);
 
@@ -749,7 +928,10 @@ describe("production AI chat structured authority", () => {
     expect(third.payload.answer).not.toContain("成人、兒童");
     expect(third.payload.metadata).toMatchObject({
       structured_mode: "active",
-      structured_provider_call_count: 0,
+      structured_provider_call_count: 1,
+      semantic_resolver_called: true,
+      faq_selector_called: false,
+      total_provider_calls: 1,
       legacy_context_mutation_invoked: false,
     });
     expect(harness.getSession().conversation_context).toMatchObject({
@@ -765,6 +947,39 @@ describe("production AI chat structured authority", () => {
         context_version: 3,
       },
     });
+    expect(harness.getStructuredProviderCalls()).toBe(1);
+
+    const beforePolicy = structuredClone(
+      harness.getSession().conversation_context,
+    );
+    const fourth = await harness.send(
+      "退房可以晚一小時嗎？",
+      "exact-scenario-4",
+    );
+    expect(fourth.payload.answer).toBeTruthy();
+    expect(harness.getSession().conversation_context).toEqual(beforePolicy);
+
+    const fifth = await harness.send("狗改20公斤", "exact-scenario-5");
+    expect(fifth.payload.answer).toContain("TWD 50,310");
+    expect(fifth.payload.metadata).toMatchObject({
+      structured_provider_call_count: 1,
+      semantic_resolver_called: true,
+      faq_selector_called: false,
+      total_provider_calls: 1,
+    });
+    expect(harness.getSession().conversation_context).toMatchObject({
+      check_in: "2026-11-01",
+      check_out: "2026-11-03",
+      stay_nights: 2,
+      adult_count: 10,
+      pet_count: 1,
+      pet_weights_kg: [20],
+      quote_scenario: {
+        scenario_id: scenarioId,
+        context_version: 4,
+      },
+    });
+    expect(harness.getStructuredProviderCalls()).toBe(2);
     expect(harness.getNonFixtureCalls()).toBe(0);
   });
 

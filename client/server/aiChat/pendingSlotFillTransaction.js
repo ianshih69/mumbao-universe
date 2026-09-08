@@ -1,5 +1,7 @@
 import { normalizeConversationContext } from "./conversationContext.js";
 import { hasCompleteQuoteCore, isPendingInteractionCurrent } from "./quoteDialogueState.js";
+import { analyzeDialogueReferences } from "./dialogueReferenceSemantics.js";
+import { resolveTypedEntityReference } from "./typedEntityReferences.js";
 
 const countEntities = new Set(["adult", "child", "infant", "pet", "breakfast"]);
 const entityCandidates = Object.freeze(["adult", "child", "pet"]);
@@ -96,40 +98,14 @@ function petTypeFromAnswer(message, spans) {
   return petTypes[0] || null;
 }
 
-function targetPetFromAnswer(message, context) {
-  const state = normalizeConversationContext(context);
-  const weights = state.pet_weights_kg || [];
-  const text = compact(message);
-  const ordinal = text.match(/第([一二兩三四五六七八九十\d]+)隻/);
-  if (ordinal) {
-    const map = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
-    const value = Number(ordinal[1]) || map[ordinal[1]] || null;
-    if (value && value <= weights.length) return value - 1;
-  }
-  const mentionedWeight = petWeightsFromSpans(
-    (weights || []).map((weight, index) => ({
-      normalized_type: "pet_weight",
-      normalized_value: text.includes(`${weight}公斤`) ? weight : null,
-      index,
-    })).filter((entry) => entry.normalized_value !== null),
-  )[0];
-  if (mentionedWeight !== undefined) {
-    const matches = weights
-      .map((weight, index) => weight === mentionedWeight ? index : -1)
-      .filter((index) => index >= 0);
-    if (matches.length === 1) return matches[0];
-  }
-  return null;
-}
-
 function requiredSlots(partial, context) {
   const missing = [];
   if (!partial.operation) missing.push("operation");
   if (!partial.entity) missing.push("entity");
-  if (partial.entity && countEntities.has(partial.entity) && !Number.isInteger(partial.count)) {
+  if (partial.operation !== "clear" && partial.target_scope !== "all" && partial.entity && countEntities.has(partial.entity) && !Number.isInteger(partial.count)) {
     missing.push("count");
   }
-  if (partial.entity === "pet" && partial.operation === "add") {
+  if (partial.entity === "pet" && ["add", "replace"].includes(partial.operation)) {
     const requiredWeightCount = Number.isInteger(partial.count) ? partial.count : 1;
     if ((partial.weights_kg || []).length < requiredWeightCount) {
       missing.push("weights_kg");
@@ -160,6 +136,7 @@ function finalizePartial(partial, context) {
       (weight) => Number.isFinite(Number(weight)) && Number(weight) > 0,
     ).map(Number),
     target_pet: Number.isInteger(partial.target_pet) ? partial.target_pet : null,
+    target_entity_id: partial.target_entity_id || null,
     target_scope: partial.target_scope === "all" ? "all" : null,
   };
   next.missing_slots = requiredSlots(next, context);
@@ -217,9 +194,11 @@ function pendingFromPartial({
   partial,
   provenance,
   scenario,
+  conversationId,
   sourceTurnId,
   nowIso,
   transactionId,
+  existingPending = null,
   resumeAction = "request_quote",
 }) {
   const requiredFields = partial.missing_slots.includes("weights_kg")
@@ -248,14 +227,23 @@ function pendingFromPartial({
     resume_action: resumeAction,
     resume_goal: resumeAction,
     source_assistant_message_id: sourceTurnId || null,
+    conversation_id:
+      String(existingPending?.conversation_id || conversationId || "").slice(0, 120) ||
+      null,
     scenario_id: scenario?.scenario_id || null,
     context_version: scenario?.context_version ?? null,
+    scenario_version: scenario?.context_version ?? null,
+    base_version:
+      existingPending?.base_version ?? scenario?.context_version ?? null,
     base_state_version: scenario?.context_version ?? null,
     asked_turn_id: sourceTurnId || null,
-    created_turn_id: sourceTurnId || null,
-    expires_after_turns: 1,
-    created_at: nowIso,
-    expires_at: addMinutes(nowIso, 30),
+    created_turn_id: existingPending?.created_turn_id || sourceTurnId || null,
+    pending_version: Number.isInteger(existingPending?.pending_version)
+      ? existingPending.pending_version + 1
+      : 1,
+    expires_after_turns: existingPending?.expires_after_turns ?? null,
+    created_at: existingPending?.created_at || nowIso,
+    expires_at: existingPending?.expires_at || addMinutes(nowIso, 30),
   };
 }
 
@@ -337,6 +325,7 @@ function operationFromPartial(partial, provenance) {
     ...(Number.isInteger(partial.target_pet)
       ? { target_pet: partial.target_pet }
       : {}),
+    ...(partial.target_entity_id ? { target_entity_id: partial.target_entity_id } : {}),
     ...(partial.target_scope === "all" ? { target_scope: "all" } : {}),
     evidence: unique(provenance.map((entry) => entry.evidence)).join("、"),
   };
@@ -358,7 +347,8 @@ function resultForOperation(operation, resumeAction) {
 
 function createInitialPartial({ message, spans, result, context }) {
   const state = normalizeConversationContext(context);
-  const operationCue = operationFromSpans(spans);
+  const reference = analyzeDialogueReferences(message, spans);
+  const operationCue = reference.operations.length === 1 ? reference.operations[0] : null;
   const genericCount = quantityFromSpans(spans);
   const inferredEntity = entityFromAnswer(message, spans);
   const weights = petWeightsFromSpans(spans);
@@ -366,6 +356,20 @@ function createInitialPartial({ message, spans, result, context }) {
   const missingEntity = result.ambiguities.some(
     (ambiguity) => ambiguity.code === "missing_entity",
   );
+  const target = resolveTypedEntityReference({ context: state, message, spans, allowAll: true });
+  if (reference.complete && ["replace", "remove"].includes(operationCue) &&
+      reference.entities.every((entity) => entity === "pet") &&
+      (reference.classifierEntities.includes("pet") || inferredEntity === "pet" || target.anchor_id) &&
+      !result.operations.some((operation) => operation.entity === "pet" && operation.operation === "clear") &&
+      Number(state.pet_count) > 0 && target.status !== "absent") {
+    const id = target.status === "unique" ? target.target_ids[0] : null;
+    return finalizePartial({ operation: operationCue, entity: "pet", count: id ? 1 : genericCount,
+      candidate_entities: ["pet"], candidate_operations: [operationCue],
+      weights_kg: weights.length ? [weights.at(-1)] : [], pet_type: state.pet_type,
+      target_entity_id: id, target_pet: id ? state.entity_references.pets.findIndex((pet) => pet.id === id) : null,
+      target_scope: target.status === "all" ? "all" : null,
+    }, state);
+  }
 
   const petOperation = result.operations.find((operation) => operation.entity === "pet");
   if (
@@ -437,7 +441,19 @@ function fillPartialFromAnswer(partial, { message, spans, context }) {
   const next = { ...partial };
   const filled = [];
   const protocolText = compact(message).replace(/[。.!！、]+$/g, "");
-  const protocol = /^(?:都是|全部|都|通通|所有(?:的)?)(?:狗狗?)?$/.test(protocolText)
+  const reference = analyzeDialogueReferences(message, spans);
+  const target = resolveTypedEntityReference({ context, message, spans, entity: partial.entity, allowAll: true });
+  const targetAnswer = partial.entity === "pet" && partial.missing_slots.includes("target_pet");
+  if (targetAnswer && (reference.rejected || reference.operations.some((operation) => operation !== partial.operation) ||
+      reference.entities.some((entity) => entity !== partial.entity) || !reference.complete)) {
+    return { partial, filled_slots: [], reference_resolution: { ...target, status: "ambiguous",
+      target_ids: [], clarification_code: "missing_target_reference" },
+      protocol_requires_scope: /^(?:對|是|沒錯|正確|不對|不是|否)$/.test(protocolText) };
+  }
+  const explicitAll = reference.all && (!targetAnswer || target.status === "all") &&
+    reference.operations.every((operation) => operation === partial.operation) &&
+    reference.entities.every((entity) => entity === partial.entity);
+  const protocol = explicitAll
     ? "all"
     : /^(?:對|是|沒錯|正確|可以|好|好的|嗯|就這樣|yes|y|ok|okay|不對|不是|否|no|n)$/.test(protocolText)
       ? "insufficient_scope"
@@ -470,7 +486,7 @@ function fillPartialFromAnswer(partial, { message, spans, context }) {
       filled.push("pet_type");
     }
     const weights = petWeightsFromSpans(spans);
-    if (weights.length) {
+    if (weights.length && (!targetAnswer || !next.weights_kg.length && target.category !== "attribute")) {
       const requiredCount = Number.isInteger(next.count) ? next.count : weights.length;
       next.weights_kg = [...(next.weights_kg || []), ...weights].slice(0, requiredCount);
       filled.push("weights_kg");
@@ -479,12 +495,13 @@ function fillPartialFromAnswer(partial, { message, spans, context }) {
       (next.missing_slots || []).includes("target_pet") &&
       !Number.isInteger(next.target_pet)
     ) {
-      const target = targetPetFromAnswer(message, context);
       if (protocol === "all") {
         next.target_scope = "all";
         filled.push("target_scope");
-      } else if (Number.isInteger(target)) {
-        next.target_pet = target;
+      } else if (target.status === "unique") {
+        next.target_entity_id = target.target_ids[0];
+        next.target_pet = context.entity_references.pets.findIndex((pet) => pet.id === next.target_entity_id);
+        if (!Number.isInteger(next.count)) next.count = 1;
         filled.push("target_pet");
       }
     }
@@ -493,6 +510,7 @@ function fillPartialFromAnswer(partial, { message, spans, context }) {
     partial: finalizePartial(next, context),
     filled_slots: unique(filled),
     protocol_requires_scope: protocol === "insufficient_scope",
+    reference_resolution: targetAnswer ? target : null,
   };
 }
 
@@ -502,6 +520,7 @@ export function planPendingSlotFillTransaction({
   result,
   context,
   dialogueState,
+  conversationId = "",
   sourceTurnId,
   nowIso = new Date().toISOString(),
   scenario,
@@ -550,7 +569,16 @@ export function planPendingSlotFillTransaction({
         },
       };
     }
-    if (!filled.filled_slots.length) return staleTransactionResult();
+    if (!filled.filled_slots.length) {
+      return {
+        status: "awaiting_resolver",
+        pending,
+        ambiguity: { ...ambiguityForPartial(pending.partial_operation),
+          ...(filled.reference_resolution ? { code: "missing_target_reference" } : {}) },
+        reference_resolution: filled.reference_resolution,
+        resolver_required: true,
+      };
+    }
     const provenance = [
       ...(pending.provenance || []),
       provenanceEntry(sourceTurnId, message, filled.filled_slots),
@@ -562,9 +590,11 @@ export function planPendingSlotFillTransaction({
           partial: filled.partial,
           provenance,
           scenario: state.quote_scenario,
+          conversationId,
           sourceTurnId,
           nowIso,
           transactionId: pending.transaction_id,
+          existingPending: pending,
           resumeAction: pending.resume_action,
         }),
         ambiguity: ambiguityForPartial(filled.partial),
@@ -578,6 +608,7 @@ export function planPendingSlotFillTransaction({
       asked_turn_id: pending.asked_turn_id,
       applied_turn_id: sourceTurnId,
       partial_operation: filled.partial,
+      reference_resolution: filled.reference_resolution,
       provenance,
       evidence_message: provenance.map((entry) => entry.evidence).join("、"),
       result: resultForOperation(operation, pending.resume_action),
@@ -629,6 +660,7 @@ export function planPendingSlotFillTransaction({
       partial,
       provenance,
       scenario,
+      conversationId,
       sourceTurnId,
       nowIso,
     }),

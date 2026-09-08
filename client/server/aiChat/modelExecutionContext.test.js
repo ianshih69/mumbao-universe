@@ -3,6 +3,7 @@ import {
   buildModelExecutionMetadata,
   createAiModelExecutionContext,
   createModelCallPlan,
+  createStructuredTurnResolverCallPlan,
   reserveModelCall,
   setModelCallPlan,
 } from "./modelExecutionContext.js";
@@ -46,6 +47,28 @@ describe("AI chat model execution context", () => {
       model_call_attempted: true,
       model_call_blocked_reason: "model_call_budget_exceeded",
       model_call_purposes: ["semantic_router"],
+    });
+  });
+
+  it("blocks FAQ selection after the structured resolver consumed the turn budget", () => {
+    const context = createAiModelExecutionContext();
+    setModelCallPlan(context, createStructuredTurnResolverCallPlan());
+    reserveModelCall(context, "structured_turn_candidate_resolver");
+    setModelCallPlan(context, createModelCallPlan({
+      routeResult: {
+        route: "faq_selector_required",
+        shouldCallDeepSeek: true,
+      },
+    }));
+
+    expect(() => reserveModelCall(context, "faq_full_catalog_selector")).toThrow(
+      "AI model call budget exceeded.",
+    );
+    expect(buildModelExecutionMetadata(context)).toMatchObject({
+      model_call_count: 1,
+      semantic_resolver_called: true,
+      faq_selector_called: false,
+      total_provider_calls: 1,
     });
   });
 

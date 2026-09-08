@@ -15,6 +15,7 @@ import {
   resolveMessageConversationAuthority,
   resolveStructuredMessageRuntime,
 } from "./message.js";
+import { summarizeBookingTurnCandidate } from "./structuredBookingTurnCandidates.js";
 
 const nowIso = "2026-09-06T00:00:00.000Z";
 const dateInfo = {
@@ -80,6 +81,41 @@ function createPricingReader() {
           }];
     }
     throw new Error(`unexpected_pricing_table:${table}`);
+  };
+}
+
+function resolvedCandidate(plan) {
+  const candidate = summarizeBookingTurnCandidate(plan.candidates[0]);
+  return {
+    result: {
+      goal_id: plan.allowed_intent_ids[0] || "none",
+      scenario_action: "continue",
+      operation: candidate.operation,
+      entity: candidate.entity,
+      field: candidate.field,
+      span_ids: candidate.span_ids,
+      context_reference_ids: candidate.context_reference_ids,
+      clarification_code: null,
+      confidence: 0.99,
+      selected_candidate_ids: [candidate.candidate_id],
+      intent_ids: plan.allowed_intent_ids,
+      semantic_ast: {
+        turn_kind: "transactional",
+        goal_ids: plan.allowed_intent_ids,
+        scenario_action: "continue",
+        operations: [{
+          operation: candidate.operation,
+          entity: candidate.entity,
+          span_bindings: candidate.span_ids,
+          context_bindings: candidate.context_reference_ids,
+        }],
+        references: candidate.context_reference_ids,
+        missing_slots: [],
+        clarification_code: null,
+        confidence: 0.99,
+      },
+    },
+    metadata: { called: true, validation_outcome: "accepted" },
   };
 }
 
@@ -174,12 +210,50 @@ async function runMessageTurn(message, previousContext = {}, mode = "active") {
   };
 }
 
-describe("deterministic-only structured message runtime", () => {
-  it("has no structured provider import, callback, warmup, or retry path", () => {
+describe("bounded structured message runtime", () => {
+  it("keeps the context resolver behind an explicit feature gate", () => {
     const source = readFileSync(new URL("./message.js", import.meta.url), "utf8");
-    expect(source).not.toContain("structuredBookingTurnProvider");
-    expect(source).not.toContain("callStructuredBookingTurnInterpreter");
-    expect(source).not.toContain("resolveCandidates:");
+    expect(source).toContain("structuredBookingTurnProvider");
+    expect(source).toContain("isContextSemanticResolverEnabled");
+    expect(source).toContain("createStructuredTurnResolverCallPlan");
+    expect(source).not.toContain("structured_turn_provider_retry");
+  });
+
+  it("uses one resolver call for a context-dependent stay replacement only when enabled", async () => {
+    const resolveCandidates = vi.fn(async ({ plan }) => resolvedCandidate(plan));
+    const disabled = await resolveMessageConversationAuthority({
+      mode: "active",
+      previousContext: baseContext,
+      message: "那改兩晚",
+      dateInfo,
+      nowIso,
+      contextResolverEnabled: false,
+      resolveCandidates,
+    });
+    expect(disabled.structuredTurnResolution.classification).toBe(
+      "DETERMINISTIC_EXPECTED",
+    );
+    expect(resolveCandidates).not.toHaveBeenCalled();
+
+    const enabled = await resolveMessageConversationAuthority({
+      mode: "active",
+      previousContext: baseContext,
+      message: "那改兩晚",
+      dateInfo,
+      nowIso,
+      contextResolverEnabled: true,
+      resolveCandidates,
+    });
+    expect(resolveCandidates).toHaveBeenCalledTimes(1);
+    expect(enabled.structuredTurnResolution).toMatchObject({
+      classification: "LLM_CANDIDATE_SELECTION",
+      source: "semantic_model_binding_selection",
+      context: {
+        stay_nights: 2,
+        check_out: "2026-11-03",
+        adult_count: 10,
+      },
+    });
   });
 
   it("does not invoke the legacy current-message mutator in active mode", async () => {

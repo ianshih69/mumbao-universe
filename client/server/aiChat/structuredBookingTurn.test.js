@@ -111,6 +111,25 @@ function expectSingleLargeDog(result, { adults = 10 } = {}) {
 
 describe("structured booking turn deterministic interpreter", () => {
   it.each([
+    ["2026/11/1 10人住一晚多少", "2026-11-01", 10, 1],
+    ["2026/11/1 1人住一晚多少", "2026-11-01", 1, 1],
+    ["2027-02-08\t12人住兩晚", "2027-02-08", 12, 2],
+    ["2026/12/7\n19成人住一晚", "2026-12-07", 19, 1],
+    ["２０２６／１１／１　１０人住一晚", "2026-11-01", 10, 1],
+    ["2026/11/1 十人住一晚", "2026-11-01", 10, 1],
+  ])("keeps distinct numeric lexemes separated: %s", (message, date, adults, nights) => {
+    const result = interpret(message, {});
+    expect(result.result.ambiguities).toEqual([]);
+    expect(result.result.operations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ entity: "adult", count: adults }),
+      expect.objectContaining({ entity: "stay", check_in: date, nights }),
+    ]));
+    expect(result.reduced.context).toMatchObject({
+      check_in: date, adult_count: adults, stay_nights: nights,
+    });
+  });
+
+  it.each([
     "加1隻22公斤狗狗",
     "再帶一隻22公斤的狗",
     "另外有一隻大約22kg的毛孩",

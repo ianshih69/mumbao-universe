@@ -834,6 +834,20 @@ async function executePendingAction({
     });
   }
 
+  if (action === "modify_pending" && hasProtocolRejection(message) &&
+    getPricingRelevantChangedFields(previousContext, context).length === 0) {
+    const fields = Object.keys(pending.proposed_values || {}).filter((field) => pricingGuardFields.has(field));
+    return buildCollectInfoRoute(routeResult, {
+      answer: buildMissingFieldsQuestion(context, "", fields) || "請提供要更正的欄位與資料。",
+      reason: "pending_proposal_rejected_without_replacement",
+      metadata: { ...pendingMetadata, pending_resolution: "rejected",
+        action_executor_result: "pending_replacement_required", pricing_called: false, total_price_amount: null },
+      contextPatch: { pending_interaction: { ...pending, action: "collect_quote_fields",
+        proposed_values: {}, required_response_type: "fields", required_fields: fields,
+        source_assistant_message_id: sourceMessageId, asked_turn_id: sourceMessageId } },
+    });
+  }
+
   if (
     action === "answer_pending" &&
     pending.required_response_type === "confirmation"

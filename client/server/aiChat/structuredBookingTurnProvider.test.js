@@ -27,25 +27,34 @@ function providerResponse(content, status = 200) {
   };
 }
 
-function resolverPlan(message = "姓名王小明，電話0912-345-678，再加一個") {
+function resolverPlan(message = "姓名王小明，電話0912-345-678，那改兩晚") {
   const plan = compileBookingTurnCandidates({
     message,
-    context: { adult_count: 10, email: "user@example.com" },
+    context: {
+      active_intent: "pricing",
+      current_topic: "booking_price",
+      check_in: "2026-11-01",
+      check_out: "2026-11-02",
+      stay_nights: 1,
+      adult_count: 10,
+      pet_count: 1,
+      pet_type: "dog",
+      pet_weights_kg: [22],
+      quote_scenario: { scenario_id: "provider-test", context_version: 2 },
+      email: "user@example.com",
+    },
     previousTopic: "booking_price",
     dateInfo: { currentDate: "2026-09-06" },
+    contextResolverEnabled: true,
   });
-  return {
-    ...plan,
-    classification: "LLM_CANDIDATE_SELECTION",
-    requires_model: true,
-  };
+  return plan;
 }
 
-describe("structured booking turn candidate-ID DeepSeek adapter", () => {
-  it("sends only the minimized allowlisted payload and accepts IDs only", async () => {
+describe("structured booking turn semantic AST DeepSeek adapter", () => {
+  it("sends only minimized candidates and accepts an exact provenance match", async () => {
     const logs = [];
     const plan = resolverPlan();
-    const adultCandidate = plan.candidates.find((candidate) => candidate.entity === "adult");
+    const candidate = plan.candidates[0];
     const fetchImpl = vi.fn(async (_url, options) => {
       const request = JSON.parse(options.body);
       const input = JSON.parse(request.messages[1].content);
@@ -54,44 +63,39 @@ describe("structured booking turn candidate-ID DeepSeek adapter", () => {
         temperature: 0,
         stream: false,
       });
-      expect(input).toEqual({
+      expect(input).toMatchObject({
         current_date: "2026-09-06",
         timezone: "Asia/Taipei",
-        current_booking_context: {
-          stay: {
-            mode: null,
-            check_in: null,
-            check_out: null,
-            nights: null,
-            date_type: null,
-          },
-          party: {
-            adults: 10,
-            children: null,
-            infants: null,
-            child_ages_years: [],
-          },
-          pets: {
-            species: null,
-            count: null,
-            individual_weights_kg: [],
-          },
-          addons: { breakfast_quantity: null },
-        },
-        pending_missing_fields: [],
+        scenario_version: 2,
+        pending_summary: null,
         previous_transaction_topic: "booking_price",
         latest_user_message:
-          "姓名[REDACTED_NAME],電話[REDACTED_PHONE],再加一個",
-        allowed_candidate_ids: plan.candidates.map((candidate) => candidate.candidate_id),
-        allowed_intent_ids: [],
+          "姓名[REDACTED_NAME],電話[REDACTED_PHONE],那改兩晚",
+        goal_candidates: [{ goal_id: "request_quote" }],
+        allowed_scenario_actions: ["continue"],
       });
-      expect(input).not.toHaveProperty("evidence_spans");
-      expect(input).not.toHaveProperty("candidates");
+      expect(input.deterministic_spans.length).toBeGreaterThan(0);
+      expect(input.operation_candidates).toHaveLength(1);
+      expect(input.operation_candidates[0]).toMatchObject({
+        candidate_id: candidate.candidate_id,
+        operation: "replace",
+        entity: "stay",
+        field: "stay.nights",
+      });
+      expect(input).not.toHaveProperty("faq_catalog");
+      expect(input).not.toHaveProperty("answer");
+      expect(input).not.toHaveProperty("internal_note");
       expect(options.headers.Authorization).toBe("Bearer benchmark-only-test-key");
+      const semantic = input.operation_candidates[0];
       return providerResponse(JSON.stringify({
-        selected_candidate_ids: [adultCandidate.candidate_id],
-        intent_ids: [],
-        clarification_code: "none",
+        goal_id: "request_quote",
+        scenario_action: "continue",
+        operation: semantic.operation,
+        entity: semantic.entity,
+        field: semantic.field,
+        span_ids: semantic.span_ids,
+        context_reference_ids: semantic.context_reference_ids,
+        clarification_code: null,
         confidence: 0.97,
       }));
     });
@@ -104,11 +108,16 @@ describe("structured booking turn candidate-ID DeepSeek adapter", () => {
       logger: (event, metadata) => logs.push({ event, metadata }),
     });
 
-    expect(response.result).toEqual({
-      selected_candidate_ids: [adultCandidate.candidate_id],
-      intent_ids: [],
-      clarification_code: "none",
+    expect(response.result).toMatchObject({
+      goal_id: "request_quote",
+      scenario_action: "continue",
+      operation: "replace",
+      entity: "stay",
+      field: "stay.nights",
+      clarification_code: null,
       confidence: 0.97,
+      selected_candidate_ids: [candidate.candidate_id],
+      intent_ids: ["request_quote"],
     });
     expect(response.metadata).toMatchObject({
       provider_status: 200,
@@ -141,15 +150,21 @@ describe("structured booking turn candidate-ID DeepSeek adapter", () => {
 
   it("rejects model-generated operation values", async () => {
     const plan = resolverPlan();
-    const adultCandidate = plan.candidates.find((candidate) => candidate.entity === "adult");
+    const semantic = buildStructuredTurnProviderPayload({ plan }).privacy.input
+      .operation_candidates[0];
     await expect(callStructuredBookingTurnInterpreter({
       plan,
       fetchImpl: async () => providerResponse(JSON.stringify({
-        selected_candidate_ids: [adultCandidate.candidate_id],
-        intent_ids: [],
-        clarification_code: "none",
+        goal_id: "request_quote",
+        scenario_action: "continue",
+        operation: semantic.operation,
+        entity: semantic.entity,
+        field: semantic.field,
+        span_ids: semantic.span_ids,
+        context_reference_ids: semantic.context_reference_ids,
+        clarification_code: null,
         confidence: 1,
-        operations: [{ entity: "adult", operation: "add", count: 99 }],
+        value: 99,
       })),
       env,
     })).rejects.toMatchObject({
@@ -157,18 +172,29 @@ describe("structured booking turn candidate-ID DeepSeek adapter", () => {
     });
   });
 
-  it("rejects unknown candidate IDs and ambiguous mutations", () => {
+  it("rejects provenance not copied from one legal candidate and ambiguous mutations", () => {
     const plan = resolverPlan();
-    const adultCandidate = plan.candidates.find((candidate) => candidate.entity === "adult");
+    const semantic = buildStructuredTurnProviderPayload({ plan }).privacy.input
+      .operation_candidates[0];
     expect(() => validateStructuredTurnCandidateResolverResult({
-      selected_candidate_ids: ["cand-999-adult-add"],
-      intent_ids: [],
-      clarification_code: "none",
+      goal_id: "request_quote",
+      scenario_action: "continue",
+      operation: semantic.operation,
+      entity: semantic.entity,
+      field: semantic.field,
+      span_ids: ["span-999"],
+      context_reference_ids: semantic.context_reference_ids,
+      clarification_code: null,
       confidence: 1,
-    }, plan)).toThrow("structured_turn_candidate_unknown_candidate_id");
+    }, plan)).toThrow("structured_turn_candidate_no_exact_provenance_match");
     expect(() => validateStructuredTurnCandidateResolverResult({
-      selected_candidate_ids: [adultCandidate.candidate_id],
-      intent_ids: [],
+      goal_id: "request_quote",
+      scenario_action: "continue",
+      operation: semantic.operation,
+      entity: semantic.entity,
+      field: semantic.field,
+      span_ids: semantic.span_ids,
+      context_reference_ids: semantic.context_reference_ids,
       clarification_code: "missing_entity",
       confidence: 0.4,
     }, plan)).toThrow("structured_turn_candidate_ambiguous_mutation");

@@ -3,6 +3,7 @@ import {
   getConversationContextForStorage,
   normalizeConversationContext,
 } from "./conversationContext.js";
+import { updatePetEntityReferences } from "./typedEntityReferences.js";
 
 export const structuredTurnOperations = Object.freeze([
   "set",
@@ -69,6 +70,7 @@ const operationSchema = z
     pet_type: z.enum(["dog", "cat", "pet"]).optional(),
     weights_kg: z.array(z.number().positive().max(200)).max(20).optional(),
     target_pet: z.number().int().min(0).max(19).optional(),
+    target_entity_id: z.string().regex(/^pet_[1-9]\d{0,8}$/).optional(),
     target_scope: z.enum(["all"]).optional(),
     ages_years: z.array(z.number().min(0).max(120)).max(30).optional(),
     mode: z.enum(["villa", "room"]).optional(),
@@ -90,6 +92,7 @@ const ambiguitySchema = z
       "ambiguous_stay_days",
       "missing_reference",
       "pending_slot_fill",
+      "missing_target_reference",
       "pending_slot_fill_stale",
       "pending_slot_fill_duplicate",
       "conflicting_operations",
@@ -128,6 +131,10 @@ const chineseDigits = new Map([
 ]);
 
 const numberTokenSource = String.raw`(?:\d+(?:\.\d+)?|[零〇一二兩两三四五六七八九十百]+)`;
+const separateNumberTokensPattern = new RegExp(
+  String.raw`(${numberTokenSource})\s+(?=${numberTokenSource})`,
+  "g",
+);
 const quoteCuePattern = /多少|價格|房價|費用|報價|總共|算一下|多少錢/;
 const availabilityCuePattern = /有房|房況|空房|可訂|可以訂|能入住|可以入住/;
 const policyCuePattern = /可以|能不能|是否|規定|政策|怎麼辦|有提供|接受/;
@@ -147,7 +154,10 @@ function normalizeText(value) {
 }
 
 function compactText(value) {
-  return normalizeText(value).replace(/\s+/g, "");
+  // Whitespace between numbers is a token boundary, not removable formatting.
+  return normalizeText(value)
+    .replace(separateNumberTokensPattern, "$1,")
+    .replace(/\s+/g, "");
 }
 
 function parseNumberToken(value) {
@@ -864,7 +874,9 @@ function getOperationEvidenceFailure(operation, message, { currentDate = "" } = 
     Number.isInteger(operation.count) &&
     repeatedValues.length === operation.count &&
     containsNumberMultiset(evidenceNumbers, repeatedValues);
-  if (!countIsExplicit && !countIsSupportedByMembers) {
+  const countIsSupportedByTarget = operation.count === 1 && operation.target_entity_id &&
+    Number.isInteger(operation.target_pet) && ["replace", "remove"].includes(operation.operation);
+  if (!countIsExplicit && !countIsSupportedByMembers && !countIsSupportedByTarget) {
     return "count_not_supported";
   }
 
@@ -912,7 +924,10 @@ function getOperationEvidenceFailure(operation, message, { currentDate = "" } = 
 }
 
 function validateOperationShape(operation) {
+  if (operation.target_entity_id && (operation.entity !== "pet" ||
+      !["replace", "remove"].includes(operation.operation) || !Number.isInteger(operation.target_pet))) return false;
   if (operation.operation === "clear") return true;
+  if (operation.entity === "pet" && operation.operation === "remove" && operation.target_scope === "all") return true;
   if (
     operation.target_pet !== undefined &&
     (operation.entity !== "pet" ||
@@ -1382,7 +1397,11 @@ export function reduceBookingContext(
       touchedFields.add("guest_count");
       if (operation.entity === "child") touchedFields.add("child_ages_years");
     } else if (operation.entity === "pet") {
-      context = applyPetOperation(context, operation);
+      if (operation.target_entity_id &&
+          context.entity_references.pets[operation.target_pet]?.id !== operation.target_entity_id) {
+        throw new Error("structured_turn_stale_entity_reference");
+      }
+      context = updatePetEntityReferences(context, applyPetOperation(context, operation), operation, sourceMessageId);
       [
         "pet_count",
         "pet_type",

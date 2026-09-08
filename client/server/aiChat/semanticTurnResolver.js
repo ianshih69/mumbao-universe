@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { normalizeConversationContext } from "./conversationContext.js";
 import { matchSemanticDialogueCapabilities } from "./dialogueCapabilities.js";
+import { analyzeDialogueReferences } from "./dialogueReferenceSemantics.js";
+import { resolveTypedEntityReference } from "./typedEntityReferences.js";
 
 export const semanticTurnKinds = Object.freeze([
   "informational",
@@ -36,7 +38,6 @@ export const semanticTurnAstSchema = z
 const questionForm = /[？?嗎呢]$|^(?:請問|想問|想知道|可否|能否|是否)|怎麼|如何|何時|幾點|幾間|多少|有沒有|有無|最晚|規定|政策|會不會/;
 const mutationForm = /再加|加上|增加|追加|另(?:外|[一二兩两三四五六七八九十\d])|改成|改為|改掉|換成|換|變成|調整|移除|拿掉|扣掉|減少|不要|取消|清除|少[一二兩两三四五六七八九十\d]/;
 const continuationForm = /^(?:那|再|改|換|少|多|不要|取消|清除)|同樣|一樣|照(?:剛才|原本)|其他不變|原本/;
-const resumeQuoteForm = /^(?:其他|其餘|剩下)(?:都)?(?:一樣|不變)(?:呢|[？?])?$|^(?:照|跟)(?:剛才|原本|前面)(?:一樣)?(?:呢|[？?])?$/;
 const contextualTimingForm = /^(?:那)?(?:最晚|最早|幾點|時間)(?:呢|[？?])?$/;
 const unresolvedReferenceForm = /^(?:原本|剛才|前面|上一(?:個|隻|筆))(?:那)?(?:一)?(?:個|隻|筆|項)?(?:呢|[？?])?$/;
 const pendingAnswerForm = /^(?:都是|全部|都|通通|所有(?:的)?|對|是|沒錯|正確|不是|不對|否)(?:呢|[？?])?$/;
@@ -91,14 +92,22 @@ function operationBinding(operation, spans) {
   const fallbackSpans = (spans || []).filter((span) =>
     span.entity_hints?.includes(operation.entity),
   );
+  const operationSpans = (spans || []).filter(
+    (span) =>
+      span.normalized_type === "operation_cue" &&
+      span.normalized_value === operation.operation,
+  );
   return {
     operation: operation.operation,
     entity: operation.entity,
     span_bindings: unique(
-      (entitySpans.length ? entitySpans : fallbackSpans).map((span) => span.span_id),
+      [
+        ...(entitySpans.length ? entitySpans : fallbackSpans),
+        ...operationSpans,
+      ].map((span) => span.span_id),
     ),
     context_bindings: (() => {
-      if (!["add", "replace", "remove"].includes(operation.operation)) {
+      if (!["add", "replace", "remove", "clear"].includes(operation.operation)) {
         return [];
       }
       const refs = {
@@ -112,7 +121,10 @@ function operationBinding(operation, spans) {
             : "pets.individual_weights_kg",
         breakfast: "addons.breakfast_quantity",
       };
-      return [refs[operation.entity], "quote_scenario.context_version"];
+      return [refs[operation.entity], "quote_scenario.context_version",
+        ...(operation.target_entity_id ? [`pets.${operation.target_entity_id}`] : [])].filter(
+        Boolean,
+      );
     })(),
   };
 }
@@ -162,7 +174,9 @@ export function validateSemanticTurnAst(rawAst, { plan, minConfidence = 0.7 } = 
     if (
       operation.context_bindings.some(
         (binding) =>
-          !/^(?:stay\.nights|party\.(?:adults|children|infants)|pets\.(?:count|individual_weights_kg)|addons\.breakfast_quantity|quote_scenario\.context_version)$/.test(binding),
+          !/^(?:stay\.nights|party\.(?:adults|children|infants)|pets\.(?:count|individual_weights_kg)|addons\.breakfast_quantity|quote_scenario\.context_version)$/.test(binding) &&
+          !(binding === "pending.partial_operation" && context.pending_interaction?.partial_operation) &&
+          !context.entity_references.pets.some((pet) => binding === `pets.${pet.id}`),
       )
     ) {
       throw new Error("semantic_turn_invalid_context_binding");
@@ -205,7 +219,9 @@ export function resolveSemanticTurn({
   const contextualGoal = isContextualTimingFragment(text)
     ? controlledPreviousTopic
     : "";
-  const resumeQuote = Boolean(activeScenario && resumeQuoteForm.test(text));
+  const reference = analyzeDialogueReferences(message, spans);
+  const entityReference = resolveTypedEntityReference({ context: state, message, spans });
+  const resumeQuote = Boolean(activeScenario && reference.resume);
   const explicitMutation = Boolean(
     mutationForm.test(text) ||
       rawOperations.some((operation) =>
@@ -253,6 +269,11 @@ export function resolveSemanticTurn({
       ...operation,
       operation: operation.operation === "clear" ? "clear" : "set",
     }));
+  } else if (activeScenario && reference.complete &&
+    reference.operations.includes("replace") && !rawOperations.length &&
+    reference.entities.some((entity) => ["adult", "child", "infant"].includes(entity))) {
+    turnKind = "clarification";
+    clarificationCode = "missing_party_count";
   } else if (
     policyQuestion &&
     (!explicitMutation || (!rawOperations.length && !ambiguities.length))
@@ -296,6 +317,9 @@ export function resolveSemanticTurn({
   } else if (activeScenario && unresolvedReferenceForm.test(text)) {
     turnKind = "clarification";
     clarificationCode = "missing_entity";
+  } else if (activeScenario && reference.complete && entityReference.status === "ambiguous") {
+    turnKind = "clarification";
+    clarificationCode = "missing_target_reference";
   } else if (explicitMutation && !rawOperations.length) {
     turnKind = "clarification";
     clarificationCode = "missing_entity";
@@ -335,6 +359,7 @@ export function resolveSemanticTurn({
     operations: selectedOperations,
     capabilities,
     deterministic_fast_path_used: true,
+    reference_resume: resumeQuote,
     requires_model: false,
   };
 }

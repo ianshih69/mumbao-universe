@@ -5,7 +5,10 @@ import {
   semanticTurnAstSchema,
   validateSemanticTurnAst,
 } from "./semanticTurnResolver.js";
-import { resolveStructuredBookingTurnCandidatePipeline } from "./structuredBookingTurnCandidates.js";
+import {
+  resolveStructuredBookingTurnCandidatePipeline,
+  summarizeBookingTurnCandidate,
+} from "./structuredBookingTurnCandidates.js";
 import { getConversationContextForStorage } from "./conversationContext.js";
 import { buildOfficialPricingResolution } from "./lodgingPricing.js";
 
@@ -29,6 +32,61 @@ async function resolve(
     nowIso,
     previousTopic,
   });
+}
+
+async function resolveWithContextModel(message, context, turnId) {
+  let calls = 0;
+  const resolution = await resolveStructuredBookingTurnCandidatePipeline({
+    mode: "active",
+    message,
+    previousContext: context,
+    legacyContext: context,
+    conversationId: "architecture-conversation",
+    sourceMessageId: turnId,
+    dateInfo,
+    nowIso,
+    contextResolverEnabled: true,
+    resolveCandidates: async ({ plan }) => {
+      calls += 1;
+      const candidate = plan.candidates[0]
+        ? summarizeBookingTurnCandidate(plan.candidates[0])
+        : null;
+      return {
+        result: {
+          goal_id: plan.allowed_intent_ids[0] || "none",
+          scenario_action: "continue",
+          operation: candidate?.operation || "none",
+          entity: candidate?.entity || "none",
+          field: candidate?.field || "none",
+          span_ids: candidate?.span_ids || [],
+          context_reference_ids: candidate?.context_reference_ids || [],
+          clarification_code: null,
+          confidence: 0.99,
+          selected_candidate_ids: candidate ? [candidate.candidate_id] : [],
+          intent_ids: plan.allowed_intent_ids,
+          semantic_ast: {
+            turn_kind: "transactional",
+            goal_ids: plan.allowed_intent_ids,
+            scenario_action: "continue",
+            operations: candidate
+              ? [{
+                  operation: candidate.operation,
+                  entity: candidate.entity,
+                  span_bindings: candidate.span_ids,
+                  context_bindings: candidate.context_reference_ids,
+                }]
+              : [],
+            references: candidate?.context_reference_ids || [],
+            missing_slots: [],
+            clarification_code: null,
+            confidence: 0.99,
+          },
+        },
+        metadata: { called: true, validation_outcome: "accepted" },
+      };
+    },
+  });
+  return { resolution, calls };
 }
 
 function activeQuote(overrides = {}) {
@@ -198,6 +256,58 @@ async function pricingReader(pathname) {
 }
 
 describe("semantic dialogue architecture generalization", () => {
+  it("resolves 100 unseen stay follow-ups with one bounded call and no context loss", async () => {
+    const stems = [
+      "住宿晚數調整為",
+      "住宿天數改成",
+      "包棟晚數換成",
+      "行程改為",
+      "那就住",
+    ];
+    const suffixes = ["", "。", "！", "喔", "吧"];
+    let passed = 0;
+    let providerCalls = 0;
+    let contextLost = 0;
+    let wrongMutation = 0;
+    const cases = stems.flatMap((stem) =>
+      [2, 3, 4, 5].flatMap((nights) =>
+        suffixes.map((suffix) => ({ message: `${stem}${nights}晚${suffix}`, nights })),
+      ),
+    );
+
+    for (const [index, entry] of cases.entries()) {
+      const before = activeQuote();
+      const { resolution, calls } = await resolveWithContextModel(
+        entry.message,
+        before,
+        `unseen-follow-up-${index}`,
+      );
+      providerCalls += calls;
+      if (resolution.context.quote_scenario?.scenario_id !== "architecture") {
+        contextLost += 1;
+      }
+      if (
+        resolution.context.adult_count !== 10 ||
+        resolution.context.pet_weights_kg[0] !== 22
+      ) {
+        wrongMutation += 1;
+      }
+      if (
+        calls === 1 &&
+        resolution.context.stay_nights === entry.nights &&
+        !resolution.context.pending_interaction
+      ) {
+        passed += 1;
+      }
+    }
+
+    expect(cases).toHaveLength(100);
+    expect(passed / cases.length).toBeGreaterThanOrEqual(0.99);
+    expect(providerCalls).toBe(cases.length);
+    expect(contextLost).toBe(0);
+    expect(wrongMutation).toBe(0);
+  });
+
   it("executes the required scenario with one scenario timeline and official prices", async () => {
     const turns = [
       "2026/11/1，10人住一晚多少",

@@ -24,6 +24,7 @@ import {
   buildModelExecutionMetadata,
   createModelCallPlan,
   createAiModelExecutionContext,
+  createStructuredTurnResolverCallPlan,
   reserveModelCall,
   setModelCallPlan,
 } from "./modelExecutionContext.js";
@@ -64,6 +65,10 @@ import {
   toTurnActionSemanticResult,
 } from "./structuredBookingTurn.js";
 import { resolveStructuredBookingTurnCandidatePipeline } from "./structuredBookingTurnCandidates.js";
+import {
+  callStructuredBookingTurnInterpreter,
+  isContextSemanticResolverEnabled,
+} from "./structuredBookingTurnProvider.js";
 import {
   executeDialogueGoalPlan,
   selectDialogueResponseAuthority,
@@ -1940,6 +1945,8 @@ export async function resolveStructuredMessageRuntime({
   dateInfo = {},
   nowIso = new Date().toISOString(),
   sourceMessageId = "",
+  contextResolverEnabled = false,
+  resolveCandidates = null,
 } = {}) {
   const normalizedMode = getStructuredTurnInterpreterMode(mode);
   if (normalizedMode === "legacy") return null;
@@ -1957,6 +1964,8 @@ export async function resolveStructuredMessageRuntime({
     },
     previousTopic:
       previousTopic || conversationContextUpdate.previousContext?.current_topic || "",
+    contextResolverEnabled,
+    resolveCandidates,
   });
 }
 
@@ -2010,6 +2019,8 @@ export async function resolveMessageConversationAuthority({
   dateInfo = {},
   nowIso = new Date().toISOString(),
   sourceMessageId = "",
+  contextResolverEnabled = false,
+  resolveCandidates = null,
   buildLegacyContextUpdate = buildConversationContextUpdate,
 } = {}) {
   const normalizedMode = getStructuredTurnInterpreterMode(mode);
@@ -2028,6 +2039,8 @@ export async function resolveMessageConversationAuthority({
       dateInfo,
       nowIso,
       sourceMessageId,
+      contextResolverEnabled,
+      resolveCandidates,
     });
     return {
       mode: normalizedMode,
@@ -2059,6 +2072,8 @@ export async function resolveMessageConversationAuthority({
         dateInfo,
         nowIso,
         sourceMessageId,
+        contextResolverEnabled,
+        resolveCandidates,
       })
     : null;
 
@@ -2123,6 +2138,7 @@ export function buildRuntimeAuthorityMetadata({
       routeSemanticMetadata.pending_resolution === "confirmed",
     pending_slot_fill_existed: [
       "updated",
+      "awaiting_resolver",
       "completed",
       "stale",
       "duplicate",
@@ -2295,6 +2311,27 @@ export default async function handler(req, res) {
       serverRecentMessages,
       clientRecentMessages
     );
+    const contextResolverEnabled = isContextSemanticResolverEnabled();
+    const resolveCandidates = contextResolverEnabled
+      ? async ({ plan }) => {
+          setModelCallPlan(
+            executionContext,
+            createStructuredTurnResolverCallPlan(),
+          );
+          return callStructuredBookingTurnInterpreter({
+            plan,
+            requestId,
+            executionContext,
+            logger: (event, metadata) => {
+              console.info("[ai-chat] structured semantic resolver", {
+                requestId,
+                event,
+                ...metadata,
+              });
+            },
+          });
+        }
+      : null;
     const conversationAuthority = await resolveMessageConversationAuthority({
       mode: getStructuredTurnInterpreterMode(),
       recentMessages,
@@ -2304,6 +2341,8 @@ export default async function handler(req, res) {
       dateInfo,
       nowIso: new Date().toISOString(),
       sourceMessageId: incomingMessageId || requestId,
+      contextResolverEnabled,
+      resolveCandidates,
     });
     const {
       conversationContextUpdate,
@@ -2458,11 +2497,18 @@ export default async function handler(req, res) {
       structuredTurnResolution?.authoritative &&
         structuredTurnResolution.transactional,
     );
-    const modelCallPlan = createModelCallPlan({
-      semanticMode,
-      canAnswerLocally,
-      routeResult: rawKnowledgeRoute,
-    });
+    const structuredResolverConsumedBudget =
+      executionContext.model_call_count > 0 &&
+      executionContext.model_call_purposes.includes(
+        "structured_turn_candidate_resolver",
+      );
+    const modelCallPlan = structuredResolverConsumedBudget
+      ? createStructuredTurnResolverCallPlan()
+      : createModelCallPlan({
+          semanticMode,
+          canAnswerLocally,
+          routeResult: rawKnowledgeRoute,
+        });
     setModelCallPlan(executionContext, modelCallPlan);
 
     if (

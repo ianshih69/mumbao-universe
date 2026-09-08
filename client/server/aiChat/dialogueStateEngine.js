@@ -11,6 +11,7 @@ import {
   buildQuoteScopeBaseContext,
   finalizeQuoteScenarioContext,
 } from "./quoteDialogueState.js";
+import { setDiscourseAnchor } from "./typedEntityReferences.js";
 
 function addIsoDays(dateText, days) {
   const date = new Date(`${dateText}T00:00:00Z`);
@@ -376,6 +377,11 @@ export function applyScenarioTransition({
   }
 
   if (ast.turn_kind !== "transactional") {
+    if (ast.turn_kind === "informational" && plan.entity_reference?.status === "unique") {
+      const next = getConversationContextForStorage(setDiscourseAnchor(previous, plan.entity_reference.target_ids, turnId));
+      return { ...unchanged(previous, validatedResult, "read_only_entity_reference"), context: next,
+        changed: JSON.stringify(previous) !== JSON.stringify(next) };
+    }
     return unchanged(previous, validatedResult, "read_only_turn");
   }
   if (

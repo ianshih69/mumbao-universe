@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-import { aboutOriginContent } from "@/data/aboutContent";
+import { aboutOriginContent, aboutUniverseParagraphs } from "@/data/aboutContent";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
 
@@ -132,10 +132,12 @@ export default function About() {
                   <p>{aboutOriginContent.paragraphs[0]}</p>
                   <div className="mt-8 md:mt-10">
                     <p>{aboutOriginContent.paragraphs[1]}</p>
-                    <p className="mt-6">
-                      在浩瀚的宇宙中，每顆星辰都蘊含著古老的行星能量。我們以神秘而浪漫的希臘神話為靈感，一手點亮了『慢寶宇宙』。我們把諸神的祝福與星軌的溫柔凝結在此，邀請你住進這場穿越千年的浪漫神話，漫遊在時間之外。
-                    </p>
-                    <div className="mt-8 space-y-6 md:mt-10">
+                    <div data-about-universe className="mx-auto mt-10 max-w-[640px] space-y-6 md:mt-12 md:space-y-7">
+                      {aboutUniverseParagraphs.map((paragraph) => (
+                        <p key={paragraph} className="md:text-balance">{paragraph}</p>
+                      ))}
+                    </div>
+                    <div className="mt-10 space-y-6 md:mt-12">
                       {aboutOriginContent.paragraphs.slice(2).map((paragraph) => (
                         <p key={paragraph}>{paragraph}</p>
                       ))}

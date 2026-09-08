@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/sheet";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { asArray, asBoolean, asString, fetchSiteGlobalContent } from "@/lib/site/siteContentApi";
+import { withFacilitiesNavigation } from "@/lib/site/facilitiesNavigation";
 
 type MenuItem = {
   label: string;
@@ -72,7 +73,7 @@ export function Header() {
     { label: "宇宙碎品", href: "/shop", internal: true },
     { label: "媒體報導", href: "/#news", internal: false },
   ];
-  const menuItems = cmsMenuItems?.length ? cmsMenuItems : fallbackMenuItems;
+  const menuItems = withFacilitiesNavigation(cmsMenuItems?.length ? cmsMenuItems : fallbackMenuItems);
 
   useEffect(() => {
     let isCurrent = true;
@@ -188,20 +189,20 @@ export function Header() {
           </SheetTrigger>
           <SheetContent
             side="left"
-            overlayClassName="!bg-[rgba(28,22,18,0.48)] backdrop-blur-[2px] data-[state=open]:duration-[260ms] data-[state=closed]:duration-[240ms]"
-            className="!w-[84vw] !max-w-[420px] gap-0 border-r border-[rgba(120,95,70,0.12)] !bg-[rgba(248,243,235,0.92)] p-0 !shadow-[18px_0_60px_rgba(60,45,32,0.16)] backdrop-blur-[18px] data-[state=open]:duration-[300ms] data-[state=closed]:duration-[260ms] sm:!w-[360px] sm:!max-w-[420px] md:!w-[400px] lg:!w-[420px]"
+            overlayClassName="!z-[99] !bg-[rgba(28,22,18,0.48)] backdrop-blur-[2px] data-[state=open]:duration-[260ms] data-[state=closed]:duration-[240ms]"
+            className="!z-[100] !w-[84vw] !max-w-[420px] gap-0 border-r border-[rgba(120,95,70,0.12)] !bg-[rgba(248,243,235,0.92)] p-0 !shadow-[18px_0_60px_rgba(60,45,32,0.16)] backdrop-blur-[18px] data-[state=open]:duration-[300ms] data-[state=closed]:duration-[260ms] sm:!w-[360px] sm:!max-w-[420px] md:!w-[400px] lg:!w-[420px]"
           >
             <SheetTitle asChild>
               <VisuallyHidden>Navigation Menu</VisuallyHidden>
             </SheetTitle>
             <SheetClose
               aria-label="關閉導覽選單"
-              className="group absolute right-5 top-6 flex h-11 w-11 items-center justify-center rounded-full border border-[rgba(120,95,70,0.18)] bg-[rgba(255,250,242,0.72)] text-[#3D332B] transition duration-200 hover:bg-[#fff0df] hover:text-[#C58A54]"
+              className="group absolute right-5 top-6 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-[rgba(120,95,70,0.18)] bg-[rgba(255,250,242,0.72)] text-[#3D332B] transition duration-200 hover:bg-[#fff0df] hover:text-[#C58A54]"
             >
               <X className="h-5 w-5 transition-transform duration-200 group-hover:rotate-90" />
             </SheetClose>
-            <div className="flex h-full flex-col px-8 pb-10 pt-24 sm:px-12 sm:pt-28 md:px-14 md:pt-[116px]">
-              <nav className="flex flex-1 flex-col">
+            <div className="flex h-full min-h-0 flex-col overflow-y-auto px-8 pb-10 pt-24 sm:px-12 sm:pt-28 md:px-14 md:pt-[116px]">
+              <nav className="flex flex-1 flex-col [&>div]:shrink-0">
                 <div className="flex flex-col gap-8">
                   {menuItems.map((item, index) => {
                     const className = cn(
@@ -214,6 +215,7 @@ export function Header() {
                         {item.internal ? (
                           <Link
                             href={item.href}
+                            aria-current={isMenuItemActive(item) ? "page" : undefined}
                             className={className}
                             style={{ animationDelay: `${80 + index * 30}ms` }}
                           >
@@ -309,7 +311,7 @@ export function Header() {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-4 md:gap-6">
-          <div className="hidden items-center gap-2 md:flex">
+          <div className="hidden items-center gap-2 lg:flex">
             <Link href="/booking/lookup" className={authLinkClass}>
               訂單查詢
             </Link>

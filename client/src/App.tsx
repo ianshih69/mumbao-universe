@@ -13,6 +13,7 @@ import { ScrollToTop } from "./components/layout/ScrollToTop";
 import { ShopTestGate } from "./components/shop/ShopTestGate";
 import Home from "./pages/Home";
 import About from "./pages/About";
+import Facilities from "./pages/Facilities";
 import Breakfast from "./pages/Breakfast";
 import SlowGuide from "./pages/SlowGuide";
 import WholeHouse from "./pages/WholeHouse";
@@ -184,6 +185,7 @@ function Router() {
         </AdminPage>
       </Route>
       <Route path={"/about"} component={About} />
+      <Route path={"/facilities"} component={Facilities} />
       <Route path={"/stay/whole-house"} component={WholeHouse} />
       <Route path={"/experience/breakfast"} component={Breakfast} />
       <Route path={"/experience/slow-guide"} component={SlowGuide} />

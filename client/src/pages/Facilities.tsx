@@ -1,9 +1,10 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, type CSSProperties, type ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Link } from "wouter";
 import { ArrowRight } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { useMobileViewportHeight } from "@/hooks/useMobileViewportHeight";
 import { facilitiesContent as copy, type FacilityChapter, type FacilityFeature } from "@/data/facilitiesContent";
 import styles from "./Facilities.module.css";
 
@@ -101,19 +102,24 @@ function useFacilitiesMetadata() {
 
 export default function Facilities() {
   useFacilitiesMetadata();
+  const viewportHeight = useMobileViewportHeight();
+  const heroStyle = viewportHeight === null ? undefined : {
+    "--facilities-hero-height": `${viewportHeight * 0.8}px`,
+  } as CSSProperties;
   const [art, family, pets, summer, night] = copy.chapters;
 
   return (
     <div className={styles.page}>
       <Header />
       <main>
-        <section className={styles.hero} aria-labelledby="facilities-title">
+        <section className={styles.hero} style={heroStyle} aria-labelledby="facilities-title">
           <img
             className={styles.heroImage}
             src="/images/aboutMe/aboutMe-4.jpg"
             alt="慢慢蒔光館內拱門、玻璃磚與餐桌空間"
             width="1086"
             height="1448"
+            loading="eager"
             fetchPriority="high"
           />
           <div className={styles.heroShade} aria-hidden="true" />

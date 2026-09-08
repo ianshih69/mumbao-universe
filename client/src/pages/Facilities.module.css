@@ -29,6 +29,13 @@
   text-align: center;
 }
 
+@media (max-width: 767px) {
+  .hero {
+    /* Reuse Home's mount-time viewport snapshot; scrolling must not resize the hero. */
+    height: min(var(--facilities-hero-height, 80svh), 820px);
+  }
+}
+
 .heroImage, .heroShade {
   position: absolute;
   inset: 0;

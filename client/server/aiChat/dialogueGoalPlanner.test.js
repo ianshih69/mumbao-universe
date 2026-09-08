@@ -10,6 +10,7 @@ import {
   resolveStructuredBookingTurnCandidatePipeline,
 } from "./structuredBookingTurnCandidates.js";
 import { getConversationContextForStorage } from "./conversationContext.js";
+import { routeKnowledge } from "./knowledgeRouter.js";
 
 const dateInfo = { currentDate: "2026-09-07", timeZone: "Asia/Taipei" };
 const nowIso = "2026-09-07T04:00:00.000Z";
@@ -261,7 +262,7 @@ describe("unified dialogue goal planner", () => {
       mutates_context: false,
     });
     expect(route.answer).toBe(
-      "包棟價格還需要入住日期與晚數；狗狗費則依體重計算。請提供入住日期、晚數、狗狗體重。"
+      "包棟價格還需要入住日期與晚數；狗狗費則依體重計算。請提供入住日期或日期類型、住宿晚數、每隻狗狗體重。"
     );
     expect(route.knowledgeGap).toBe(false);
   });
@@ -324,6 +325,84 @@ describe("unified dialogue goal planner", () => {
       mutates_context: false,
     });
     expect(await executeDialogueGoalPlan(plan)).toBeNull();
+  });
+
+  it("uses day-type pricing as an informational quote without mutating booking state", async () => {
+    const compiled = compile("12人週五包棟多少");
+    const route = await executeDialogueGoalPlan(compiled.dialogue_goal_plan, {
+      pricing_options: {
+        supabaseRequest: async (pathname) => {
+          if (pathname.includes("booking_price_rule_sets")) {
+            return [{
+              id: "rules",
+              name: "rules",
+              effective_from: "2026-11-01",
+              effective_to: "2027-02-01",
+              deposit_rate: 0.3,
+              is_active: true,
+            }];
+          }
+          if (pathname.includes("booking_special_dates")) return [];
+          if (pathname.includes("booking_package_rates")) {
+            return [{ nightly_price: 34500 }];
+          }
+          throw new Error(`unexpected request: ${pathname}`);
+        },
+      },
+    });
+
+    expect(compiled.dialogue_goal_plan).toMatchObject({
+      lane: "informational",
+      primary_goal_id: "lodging_fee_lookup",
+      mutates_context: false,
+    });
+    expect(route.answer).toContain("TWD 34,500");
+  });
+
+  it.each([
+    ["可以晚一小時退房嗎", "faq-079"],
+    ["訪客一位多少", "faq-320"],
+    ["一般押金多少", "faq-050"],
+    ["退房後可以寄放行李嗎", "faq-092"],
+    ["幾間房", "faq-131"],
+    ["房間怎麼分配？", "faq-130"],
+    ["有四人房嗎？", "faq-135"],
+    ["早餐可以素食嗎？", "faq-203"],
+    ["可以帶寵物嗎？", "faq-226"],
+    ["大型犬可以入住嗎？", "faq-234"],
+    ["有寵物用品嗎？", "faq-237"],
+    ["寵物掉毛會被收費嗎？", "faq-243"],
+    ["寵物可以洗澡嗎？", "faq-244"],
+  ])("lets the more specific approved FAQ own policy intent: %s", async (message, faqId) => {
+    const compiled = compile(message);
+    const route = await routeKnowledge({ message, contextText: message });
+    const authority = selectDialogueResponseAuthority({
+      goalPlan: compiled.dialogue_goal_plan,
+      structuredResolution: { blockedByAmbiguity: false },
+      routeResult: route,
+    });
+
+    expect(compiled.deterministic_result.operations).toEqual([]);
+    expect(route.matchedFaqIds).toContain(faqId);
+    expect(["faq_direct", "faq_collect_info", "ask_human"]).toContain(
+      route.route
+    );
+    expect(authority).toEqual({
+      authority: "knowledge_router",
+      execute_transaction: false,
+      allow_context_mutation: false,
+    });
+  });
+
+  it("does not treat room type or room-allocation wording as a booking mutation", () => {
+    const allocation = compile("房間怎麼分配？");
+    const roomType = compile("有四人房嗎？");
+
+    expect(allocation.deterministic_result.operations).toEqual([]);
+    expect(roomType.deterministic_result.operations).toEqual([]);
+    expect(
+      roomType.spans.some(span => span.normalized_type === "adult_count")
+    ).toBe(false);
   });
 });
 

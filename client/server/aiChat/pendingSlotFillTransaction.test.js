@@ -72,7 +72,19 @@ describe("pending slot-fill transactions", () => {
       pet_count: 1,
       pet_weights_kg: [22],
       pending_interaction: {
+        operation: "add",
+        entity: null,
+        filled_slots: ["operation", "count"],
+        missing_slots: ["entity"],
+        candidate_references: [
+          "entity:adult",
+          "entity:child",
+          "entity:pet",
+        ],
         resume_action: "request_quote",
+        resume_goal: "request_quote",
+        base_state_version: before.quote_scenario.context_version,
+        created_turn_id: "add-pending",
         partial_operation: {
           operation: "add",
           candidate_entities: ["adult", "child", "pet"],

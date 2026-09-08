@@ -26,6 +26,8 @@ import {
 } from "./quoteDialogueState.js";
 import { planPendingSlotFillTransaction } from "./pendingSlotFillTransaction.js";
 import { planDialogueGoals } from "./dialogueGoalPlanner.js";
+import { resolveSemanticTurn } from "./semanticTurnResolver.js";
+import { applyDialogueStateTransition } from "./dialogueStateEngine.js";
 
 export const bookingSpanTypes = Object.freeze([
   "date",
@@ -303,7 +305,7 @@ export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
   }));
 
   const entityLabels = "(?:成人|大人|成年(?:旅客)?|兒童|小孩|小朋友|嬰幼兒|幼兒|嬰兒|狗狗|狗|大型犬|犬|毛孩|寵物)";
-  scan(new RegExp(`(${numberToken})人(?!數)`, "gu"), (match) => ({
+  scan(new RegExp(`(${numberToken})人(?!數|房)`, "gu"), (match) => ({
     normalized_type: "adult_count",
     normalized_value: parseNumber(match[1]),
     classifier: "人",
@@ -324,7 +326,7 @@ export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
     },
   );
   scan(
-    new RegExp(`(成人|大人|兒童|小孩|小朋友|嬰幼兒|幼兒|嬰兒|人|狗狗|狗|大型犬|犬|毛孩|寵物)\\s*(${numberToken})(個|位|人|隻|只)?`, "gu"),
+    new RegExp(`(成人|大人|兒童|小孩|小朋友|嬰幼兒|幼兒|嬰兒|人|狗狗|狗|大型犬|犬|毛孩|寵物)(?:數)?(?:共|有|是|改成|改為|換成|變成|調整為)?\\s*(${numberToken})(個|位|人|隻|只)?`, "gu"),
     (match) => {
       const entity = entityForLabel(match[1]);
       if (entity !== "pet" && /隻|只/.test(match[3] || "")) return null;
@@ -361,7 +363,7 @@ export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
     };
   });
 
-  scan(new RegExp(`早餐\\s*(${numberToken})(份|個|位)?`, "gu"), (match) => ({
+  scan(new RegExp(`早餐(?:設定為|改成|改為|換成|變成|調整為)?\\s*(${numberToken})(份|個|位)?`, "gu"), (match) => ({
     normalized_type: "breakfast_count",
     normalized_value: parseNumber(match[1]),
     classifier: match[2] || "份",
@@ -381,7 +383,7 @@ export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
     normalized_value: /狗|犬/.test(match[0]) ? "dog" : "pet",
     entity_hints: ["pet"],
   }));
-  scan(/包棟|整棟|單間|房間/gu, (match) => ({
+  scan(/包棟|整棟|單間|一間房|(?:預訂|訂|改成|改為|換成)房間|房間(?:價格|房價)/gu, (match) => ({
     normalized_type: "stay_mode",
     normalized_value: /包棟|整棟/.test(match[0]) ? "villa" : "room",
     entity_hints: ["stay"],
@@ -398,7 +400,7 @@ export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
 
   const operationPatterns = [
     [/(?:總共|共有|目前是|設定為)/gu, "set"],
-    [new RegExp(`(?:再加|加上|增加|追加|再帶|另外|多(?!少)|還有|還會帶|加(?=\\s*${numberToken}))`, "gu"), "add"],
+    [new RegExp(`(?:再加|加上|增加|追加|再帶|另(?:外|[一二兩两三四五六七八九十\\d])|多(?!少)|還有|還會帶|加(?=\\s*${numberToken}))`, "gu"), "add"],
     [/(?:減少|扣掉|移除|拿掉|(?<!多)少|不帶|不要帶|不要(?=\s*[零〇一二兩两三四五六七八九十百\d]))/gu, "remove"],
     [/(?:改成|改為|換成|變成|調整為|人數改|日期改|改到|改(?=\s*[零〇一二兩两三四五六七八九十百\d]))/gu, "replace"],
     [/(?:清除|取消早餐)/gu, "clear"],
@@ -704,6 +706,13 @@ function enrichPetOperationFromSpans(operations, spans, context) {
         ? { pet_type: pendingPet.pet_type }
         : {}),
     ...(weights.length ? { weights_kg: weights.map((span) => span.normalized_value) } : {}),
+    evidence: [
+      existing?.evidence || petTypes[0]?.text || petCounts[0]?.text,
+      ...weights.map((span) => span.text),
+    ]
+      .filter(Boolean)
+      .filter((value, index, values) => values.indexOf(value) === index)
+      .join("、"),
   };
   if (!petTypes.length && !pendingPet.pet_type) delete operation.pet_type;
   if (existingIndex >= 0) {
@@ -715,6 +724,7 @@ function enrichPetOperationFromSpans(operations, spans, context) {
 export function compileBookingTurnCandidates({
   message,
   context = null,
+  conversationId = "",
   previousTopic = "",
   dateInfo = {},
   sourceTurnId = "",
@@ -768,6 +778,54 @@ export function compileBookingTurnCandidates({
       confidence: 1,
     };
   }
+  let semanticTurn = resolveSemanticTurn({
+    message: sanitizedMessage,
+    context,
+    spans,
+    deterministicResult: preliminaryResult,
+    previousTopic,
+  });
+  if (
+    semanticTurn.ast.turn_kind === "clarification" &&
+    !preliminaryResult.ambiguities.length
+  ) {
+    const code = semanticTurn.ast.clarification_code === "missing_entity"
+      ? "missing_entity"
+      : "low_confidence";
+    preliminaryResult = {
+      ...preliminaryResult,
+      intents: [],
+      operations: [],
+      ambiguities: [{
+        code,
+        evidence: sanitizedMessage.slice(0, 280) || "本輪訊息",
+        question: code === "missing_entity"
+          ? "請問要調整目前情境中的哪一項資料？"
+          : "目前沒有可安全延續的報價情境，請提供完整條件或說明要調整的項目。",
+      }],
+      confidence: 0,
+    };
+  }
+  if (
+    semanticTurn.ast.turn_kind === "transactional" &&
+    semanticTurn.ast.goal_ids.includes("request_quote") &&
+    !preliminaryResult.intents.includes("request_quote")
+  ) {
+    preliminaryResult = {
+      ...preliminaryResult,
+      intents: [...preliminaryResult.intents, "request_quote"],
+    };
+  }
+  preliminaryResult = validateStructuredTurnResult(
+    {
+      ...preliminaryResult,
+      operations: semanticTurn.operations,
+    },
+    {
+      message: sanitizedMessage,
+      currentDate: dateInfo.currentDate,
+    },
+  );
   let dialogueState = classifyQuoteDialogueTurn({
     message: sanitizedMessage,
     context,
@@ -814,11 +872,32 @@ export function compileBookingTurnCandidates({
       quote_scope: "patch",
     };
   }
+  semanticTurn = resolveSemanticTurn({
+    message: sanitizedMessage,
+    context,
+    spans,
+    deterministicResult: preliminaryResult,
+    previousTopic,
+  });
+  if (["completed", "direct_operation"].includes(slotFillTransaction.status)) {
+    semanticTurn = {
+      ...semanticTurn,
+      ast: {
+        ...semanticTurn.ast,
+        turn_kind: "transactional",
+        scenario_action: currentScenario ? "continue" : "new",
+        clarification_code: null,
+        confidence: 1,
+      },
+      operations: preliminaryResult.operations,
+    };
+  }
   const dialogueGoalPlan = planDialogueGoals({
     message: sanitizedMessage,
     spans,
     structuredResult: preliminaryResult,
     structuredPlan: dialogueState,
+    semanticAst: semanticTurn.ast,
     context,
     slotFillTransaction,
   });
@@ -907,6 +986,7 @@ export function compileBookingTurnCandidates({
   }
 
   return {
+    conversation_id: String(conversationId || "").slice(0, 120),
     source_turn_id: String(sourceTurnId || "").slice(0, 120),
     sanitized_message: sanitizedMessage,
     current_date: /^\d{4}-\d{2}-\d{2}$/.test(String(dateInfo.currentDate || ""))
@@ -919,6 +999,8 @@ export function compileBookingTurnCandidates({
       "booking_update",
       "pricing",
       "availability",
+      "checkin_info",
+      "checkout_info",
     ].includes(String(previousTopic || "").trim().toLowerCase())
       ? String(previousTopic).trim().toLowerCase()
       : "",
@@ -934,6 +1016,18 @@ export function compileBookingTurnCandidates({
     pending_scenario: pendingScenario,
     slot_fill_transaction: slotFillTransaction,
     dialogue_goal_plan: dialogueGoalPlan,
+    intent_ast: semanticTurn.ast,
+    semantic_capabilities: semanticTurn.capabilities.matches.map((entry) => ({
+      capability_id: entry.capability_id,
+      goal_id: entry.goal_id,
+      canonical_faq_ids: entry.canonical_faq_ids,
+      authoritative_source: entry.canonical_faq_ids.length
+        ? "approved_faq"
+        : entry.unknown_policy
+          ? "none"
+          : "deterministic_capability",
+    })),
+    deterministic_fast_path_used: semanticTurn.deterministic_fast_path_used,
     turn_type: dialogueState.turn_type,
     quote_scope: dialogueState.quote_scope,
     derived_checkout_used: deterministicResult.operations.some(
@@ -1315,11 +1409,173 @@ function completedSlotFillReduction({
   };
 }
 
+async function resolveActiveDialoguePlan({
+  plan,
+  previousContext,
+  legacyContext,
+  resolveCandidates,
+  nowIso,
+  sourceMessageId,
+}) {
+  let source = "semantic_intent_ast";
+  let provider = null;
+  let result;
+  let selectedCandidateIds = [];
+  let selectedCandidates = [];
+  let operations = [];
+
+  if (plan.classification === "INFORMATIONAL") {
+    result = plan.deterministic_result;
+    source = "semantic_informational";
+  } else if (plan.classification === "SAFE_CLARIFICATION") {
+    result = blockedResult(plan);
+    source = ["created", "updated"].includes(plan.slot_fill_transaction.status)
+      ? "semantic_pending_slot_fill"
+      : "semantic_safe_clarification";
+  } else if (
+    ["completed", "direct_operation"].includes(
+      plan.slot_fill_transaction.status,
+    )
+  ) {
+    result = plan.deterministic_result;
+    operations = result.operations;
+    source =
+      plan.slot_fill_transaction.status === "completed"
+        ? "semantic_pending_resolved"
+        : "semantic_direct_operation";
+  } else if (plan.classification === "CONTEXT_ACTION_ONLY") {
+    result = actionOnlyResult(plan);
+    source = "semantic_context_action";
+  } else {
+    let intentIds = plan.requested_actions;
+    let confidence = 1;
+    if (plan.classification === "DETERMINISTIC_EXPECTED") {
+      selectedCandidateIds = plan.candidates.map(
+        (candidate) => candidate.candidate_id,
+      );
+      source = "semantic_deterministic_bindings";
+    } else if (typeof resolveCandidates === "function") {
+      try {
+        const response = await resolveCandidates({ plan });
+        selectedCandidateIds = response?.result?.selected_candidate_ids || [];
+        intentIds = response?.result?.intent_ids || [];
+        confidence = response?.result?.confidence ?? 0;
+        provider = response?.metadata || null;
+        if (response?.result?.clarification_code !== "none") {
+          throw new Error(
+            `structured_candidate_clarification:${response.result.clarification_code}`,
+          );
+        }
+        source = "semantic_model_binding_selection";
+      } catch (error) {
+        result = blockedResult(plan, "low_confidence");
+        provider = {
+          called: true,
+          validation_outcome: "rejected",
+          failure_code: String(
+            error?.structuredTurnFailureCode ||
+              error?.providerErrorCode ||
+              error?.message ||
+              "structured_candidate_resolver_failed",
+          ).slice(0, 120),
+          provider_status: Number.isInteger(error?.providerStatus)
+            ? error.providerStatus
+            : null,
+          latency_ms: Number(error?.structuredTurnLatencyMs || 0),
+        };
+        source = "semantic_model_rejected";
+      }
+    } else {
+      result = blockedResult(plan, "low_confidence");
+      source = "semantic_resolver_unavailable";
+    }
+
+    if (!result) {
+      const candidateById = new Map(
+        plan.candidates.map((candidate) => [candidate.candidate_id, candidate]),
+      );
+      const selectedGroups = new Set();
+      selectedCandidates = [...new Set(selectedCandidateIds)].map((candidateId) => {
+        const candidate = candidateById.get(candidateId);
+        if (!candidate) {
+          throw new Error("structured_candidate_unknown_candidate_id");
+        }
+        const parsed = bookingTurnCandidateSchema.parse(candidate);
+        if (selectedGroups.has(parsed.selection_group)) {
+          throw new Error("structured_candidate_conflicting_selection_group");
+        }
+        selectedGroups.add(parsed.selection_group);
+        return parsed;
+      });
+      operations = selectedCandidates.map((candidate) =>
+        materializeBookingTurnCandidate(candidate, plan),
+      );
+      result = validateStructuredTurnResult(
+        {
+          intents: legacyIntentsFor(plan, selectedCandidates, intentIds),
+          operations,
+          missing_fields: plan.deterministic_result.missing_fields,
+          ambiguities: [],
+          confidence,
+        },
+        {
+          message: plan.sanitized_message,
+          currentDate: plan.current_date,
+        },
+      );
+    }
+  }
+
+  if (!operations.length) operations = result.operations;
+  const reduction = applyDialogueStateTransition({
+    context: previousContext,
+    ast: plan.intent_ast,
+    operations,
+    result,
+    plan,
+    nowIso,
+    sourceTurnId: sourceMessageId,
+  });
+  result = reduction.result || result;
+  reduction.turn_delta = {
+    selected_candidate_ids: selectedCandidateIds,
+    candidates: selectedCandidates,
+    operations: reduction.turn_delta.operations,
+  };
+  const transactional = isStructuredTransactionalResult(result);
+  const comparison = compareStructuredAndLegacyContext(
+    legacyContext,
+    reduction.context,
+  );
+
+  return {
+    mode: "active",
+    source,
+    requiresModel: plan.requires_model,
+    classification: plan.classification,
+    plan,
+    current_state: plan.current_state,
+    turn_delta: reduction.turn_delta,
+    requested_actions: plan.requested_actions,
+    result,
+    reduction,
+    comparison,
+    provider,
+    transactional,
+    authoritative: transactional,
+    blockedByAmbiguity: transactional && result.ambiguities.length > 0,
+    context: reduction.context,
+    changed: reduction.changed,
+    hasContext: hasMeaningfulBookingContext(reduction.context),
+  };
+}
+
 export async function resolveStructuredBookingTurnCandidatePipeline({
   mode,
   message,
   previousContext,
   legacyContext,
+  conversationId = "",
   resolveCandidates = null,
   nowIso = new Date().toISOString(),
   sourceMessageId = "",
@@ -1330,11 +1586,22 @@ export async function resolveStructuredBookingTurnCandidatePipeline({
   const plan = compileBookingTurnCandidates({
     message,
     context: previousContext,
+    conversationId,
     previousTopic,
     dateInfo,
     sourceTurnId: sourceMessageId,
     nowIso,
   });
+  if (normalizedMode === "active") {
+    return resolveActiveDialoguePlan({
+      plan,
+      previousContext,
+      legacyContext,
+      resolveCandidates,
+      nowIso,
+      sourceMessageId,
+    });
+  }
   let source = "candidate_compiler";
   let provider = null;
   let result;

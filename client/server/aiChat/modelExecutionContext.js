@@ -167,8 +167,21 @@ export function buildModelExecutionMetadata(executionContext) {
       model_call_budget: 1,
       model_call_count: 0,
       model_call_blocked_reason: null,
+      semantic_resolver_called: false,
+      faq_selector_called: false,
+      total_provider_calls: 0,
+      semantic_input_token_estimate: 0,
+      semantic_output_token_estimate: 0,
     };
   }
+
+  const purposes = executionContext.model_call_purposes || [];
+  const semanticResolverCalled = purposes.includes(
+    "structured_turn_candidate_resolver",
+  );
+  const faqSelectorCalled = purposes.some((purpose) =>
+    ["faq_full_catalog_selector", "faq_semantic_verifier"].includes(purpose),
+  );
 
   return {
     incoming_message_id: executionContext.incoming_message_id || undefined,
@@ -181,6 +194,11 @@ export function buildModelExecutionMetadata(executionContext) {
     model_call_attempted: executionContext.model_call_attempted,
     model_call_blocked_reason:
       executionContext.model_call_blocked_reason || null,
-    model_call_purposes: executionContext.model_call_purposes || [],
+    model_call_purposes: purposes,
+    semantic_resolver_called: semanticResolverCalled,
+    faq_selector_called: faqSelectorCalled,
+    total_provider_calls: executionContext.model_call_count,
+    semantic_input_token_estimate: 0,
+    semantic_output_token_estimate: 0,
   };
 }

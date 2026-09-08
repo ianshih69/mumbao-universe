@@ -126,7 +126,11 @@ describe("booking candidate compiler and reducer", () => {
   it("stores no operation values directly in candidate AST", () => {
     const plan = compileBookingTurnCandidates({
       message: "再加一隻22公斤狗",
-      context: {},
+      context: {
+        active_intent: "pricing",
+        current_topic: "booking_price",
+        quote_scenario: { scenario_id: "candidate-test", context_version: 1 },
+      },
     });
     expect(plan.candidates).toHaveLength(1);
     expect(plan.candidates[0]).toEqual({

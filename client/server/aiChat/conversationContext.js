@@ -51,6 +51,8 @@ const nullContext = Object.freeze({
   slot_meta: {},
   pending_interaction: null,
   quote_scenario: null,
+  dialogue_events: [],
+  processed_turn_ids: [],
 });
 
 const chineseNumberValues = new Map([
@@ -78,6 +80,8 @@ function cloneNullContext() {
     slot_meta: {},
     pending_interaction: null,
     quote_scenario: null,
+    dialogue_events: [],
+    processed_turn_ids: [],
   };
 }
 
@@ -653,6 +657,126 @@ function normalizeQuoteScenario(value) {
   };
 }
 
+const dialogueEventTypes = new Set([
+  "QuoteScenarioCreated",
+  "AdultCountSet",
+  "AdultCountAdded",
+  "AdultCountRemoved",
+  "ChildCountSet",
+  "ChildCountAdded",
+  "ChildCountRemoved",
+  "InfantCountSet",
+  "InfantCountAdded",
+  "InfantCountRemoved",
+  "PetAdded",
+  "PetRemoved",
+  "PetWeightChanged",
+  "PetsCleared",
+  "StayDateChanged",
+  "NightCountChanged",
+  "BreakfastAdded",
+  "BreakfastRemoved",
+  "BreakfastCountSet",
+  "PendingCreated",
+  "PendingResolved",
+  "PendingExpired",
+  "ScenarioSuperseded",
+]);
+
+function normalizeDialogueEventData(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const weights = normalizeNumberArray(value.weights_kg, {
+    min: Number.EPSILON,
+    max: 200,
+    limit: 20,
+  });
+  const ages = normalizeNumberArray(value.ages_years, {
+    min: 0,
+    max: 120,
+    limit: 30,
+  });
+  return {
+    ...(Number.isInteger(normalizeInteger(value.count))
+      ? { count: normalizeInteger(value.count) }
+      : {}),
+    ...(weights.length ? { weights_kg: weights } : {}),
+    ...(Number.isInteger(normalizeInteger(value.target_pet))
+      ? { target_pet: normalizeInteger(value.target_pet) }
+      : {}),
+    ...(["dog", "cat", "pet"].includes(value.pet_type)
+      ? { pet_type: value.pet_type }
+      : {}),
+    ...(["villa", "room"].includes(value.mode) ? { mode: value.mode } : {}),
+    ...(normalizeIsoDate(value.check_in)
+      ? { check_in: normalizeIsoDate(value.check_in) }
+      : {}),
+    ...(normalizeIsoDate(value.check_out)
+      ? { check_out: normalizeIsoDate(value.check_out) }
+      : {}),
+    ...(Number.isInteger(normalizeInteger(value.nights))
+      ? { nights: normalizeInteger(value.nights) }
+      : {}),
+    ...(["weekday", "friday", "holiday"].includes(value.date_type)
+      ? { date_type: value.date_type }
+      : {}),
+    ...(ages.length ? { ages_years: ages } : {}),
+  };
+}
+
+function normalizeDialogueEvents(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(
+      (event) =>
+        event &&
+        typeof event === "object" &&
+        !Array.isArray(event) &&
+        dialogueEventTypes.has(event.type),
+    )
+    .map((event) => {
+      const data = normalizeDialogueEventData(
+        event.data || event.validated_value,
+      );
+      const spanIds = normalizeStringList(
+        event.span_ids || event.source_span_ids,
+        null,
+        20,
+      );
+      const contextRefs = normalizeStringList(
+        event.context_refs || event.source_context_ids,
+        null,
+        20,
+      );
+      const timestamp = normalizeNullableText(event.created_at || event.timestamp);
+      return {
+        event_id: normalizeNullableText(event.event_id)?.slice(0, 180) || null,
+        conversation_id:
+          normalizeNullableText(event.conversation_id)?.slice(0, 120) || null,
+        type: event.type,
+        scenario_id:
+          normalizeNullableText(event.scenario_id)?.slice(0, 120) || null,
+        base_version: normalizeInteger(event.base_version),
+        applied_version: normalizeInteger(event.applied_version),
+        state_version: normalizeInteger(
+          event.state_version ?? event.applied_version,
+        ),
+        turn_id: normalizeNullableText(event.turn_id)?.slice(0, 120) || null,
+        entity: normalizeNullableText(event.entity)?.slice(0, 40) || null,
+        operation: normalizeNullableText(event.operation)?.slice(0, 40) || null,
+        data,
+        validated_value: data,
+        span_ids: spanIds,
+        source_span_ids: spanIds,
+        context_refs: contextRefs,
+        source_context_ids: contextRefs,
+        created_at: timestamp,
+        timestamp,
+      };
+    })
+    .filter((event) => event.event_id && event.turn_id)
+    .slice(-80);
+}
+
 const pendingOperationTypes = new Set(["set", "add", "remove", "replace", "clear"]);
 const pendingOperationEntities = new Set([
   "adult",
@@ -760,16 +884,50 @@ export function normalizePendingInteraction(value) {
     transaction_id:
       normalizeNullableText(value.transaction_id)?.slice(0, 160) || null,
     partial_operation: normalizePendingPartialOperation(value.partial_operation),
+    operation:
+      pendingOperationTypes.has(value.operation)
+        ? value.operation
+        : normalizePendingPartialOperation(value.partial_operation)?.operation,
+    entity:
+      pendingOperationEntities.has(value.entity)
+        ? value.entity
+        : normalizePendingPartialOperation(value.partial_operation)?.entity,
+    filled_slots: normalizeStringList(
+      value.filled_slots || value.partial_operation?.filled_slots,
+      pendingSlotNames,
+    ),
+    missing_slots: normalizeStringList(
+      value.missing_slots || value.partial_operation?.missing_slots,
+      pendingSlotNames,
+    ),
+    candidate_references: normalizeStringList(
+      value.candidate_references,
+      null,
+      20,
+    ),
     provenance: normalizePendingProvenance(value.provenance),
     proposed_values: normalizePendingProposedValues(value.proposed_values),
     required_response_type: requiredResponseType.slice(0, 80),
     resume_action: resumeAction.slice(0, 80),
+    resume_goal:
+      normalizeNullableText(value.resume_goal || value.resume_action)?.slice(
+        0,
+        80,
+      ) || null,
     ...(requiredFields.length ? { required_fields: requiredFields } : {}),
     source_assistant_message_id:
       normalizeNullableText(value.source_assistant_message_id)?.slice(0, 80) || null,
     scenario_id: normalizeNullableText(value.scenario_id)?.slice(0, 120) || null,
     context_version: normalizeInteger(value.context_version),
+    base_state_version: normalizeInteger(
+      value.base_state_version ?? value.context_version,
+    ),
     asked_turn_id: normalizeNullableText(value.asked_turn_id)?.slice(0, 120) || null,
+    created_turn_id:
+      normalizeNullableText(value.created_turn_id || value.asked_turn_id)?.slice(
+        0,
+        120,
+      ) || null,
     expires_after_turns: normalizeInteger(value.expires_after_turns),
     created_at: normalizeNullableText(value.created_at),
     expires_at: normalizeNullableText(value.expires_at),
@@ -798,7 +956,11 @@ function contextsEqual(a, b) {
     JSON.stringify(normalizePendingInteraction(a?.pending_interaction)) ===
       JSON.stringify(normalizePendingInteraction(b?.pending_interaction)) &&
     JSON.stringify(normalizeQuoteScenario(a?.quote_scenario)) ===
-      JSON.stringify(normalizeQuoteScenario(b?.quote_scenario))
+      JSON.stringify(normalizeQuoteScenario(b?.quote_scenario)) &&
+    JSON.stringify(normalizeDialogueEvents(a?.dialogue_events)) ===
+      JSON.stringify(normalizeDialogueEvents(b?.dialogue_events)) &&
+    JSON.stringify(normalizeStringList(a?.processed_turn_ids, null, 80)) ===
+      JSON.stringify(normalizeStringList(b?.processed_turn_ids, null, 80))
   );
 }
 
@@ -939,6 +1101,12 @@ export function normalizeConversationContext(value) {
   context.slot_meta = normalizeSlotMeta(source.slot_meta);
   context.pending_interaction = normalizePendingInteraction(source.pending_interaction);
   context.quote_scenario = normalizeQuoteScenario(source.quote_scenario);
+  context.dialogue_events = normalizeDialogueEvents(source.dialogue_events);
+  context.processed_turn_ids = normalizeStringList(
+    source.processed_turn_ids,
+    null,
+    80,
+  );
 
   return context;
 }
@@ -1189,6 +1357,7 @@ export function buildContextualKnowledgeRouteOverride(
   options = {}
 ) {
   if (!hasPricingContext(context)) return null;
+  if (routeResult?.lexicalSafeDirect) return null;
 
   const eligibleRoute = [
     "faq_direct",

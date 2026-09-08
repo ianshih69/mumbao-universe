@@ -37,6 +37,8 @@ const structuredTurnPreviousTopics = new Set([
   "booking_update",
   "pricing",
   "availability",
+  "checkin_info",
+  "checkout_info",
 ]);
 
 const structuredTurnPendingFields = new Set([
@@ -127,8 +129,10 @@ const quoteCuePattern = /多少|價格|房價|費用|報價|總共|算一下|多
 const availabilityCuePattern = /有房|房況|空房|可訂|可以訂|能入住|可以入住/;
 const policyCuePattern = /可以|能不能|是否|規定|政策|怎麼辦|有提供|接受/;
 const hardPolicyPricingCuePattern = /押金|訂金|退款|取消費|違約|賠償/;
-const addCuePattern = /再加|加上|增加|追加|再帶|另外|多(?:一|二|兩|两|三|四|五|六|七|八|九|十|\d)|還有|還會帶/;
-const replaceCuePattern = /改成|改為|換成|變成|調整為|人數改|日期改|改到/;
+const addCuePattern = /再加|加上|增加|追加|再帶|另(?:外|一|二|兩|两|三|四|五|六|七|八|九|十|\d)|多(?:一|二|兩|两|三|四|五|六|七|八|九|十|\d)|還有|還會帶/;
+const replaceCuePattern = new RegExp(
+  String.raw`改成|改為|換成|變成|調整為|人數改|日期改|改到|改(?=${numberTokenSource})`,
+);
 const removeCuePattern = /減少|扣掉|移除|拿掉|少(?:一|二|兩|两|三|四|五|六|七|八|九|十|\d)|不帶|不要帶/;
 const clauseBoundaryPattern = /[，,。；;！？!?＋+、]|(?:跟|和|以及)/g;
 
@@ -364,7 +368,7 @@ function collectPartyOperations(text, occupiedSpans) {
 
   if (!operations.some((operation) => operation.entity === "adult")) {
     const genericPeoplePattern = new RegExp(
-      String.raw`(${numberTokenSource})(?:位)?人(?!數)`,
+      String.raw`(${numberTokenSource})(?:位)?人(?!數|房)`,
       "g",
     );
     for (const entry of matchEntries(text, genericPeoplePattern)) {
@@ -387,7 +391,7 @@ function collectPartyOperations(text, occupiedSpans) {
 
   if (!operations.some((operation) => operation.entity === "adult")) {
     const reversePeoplePattern = new RegExp(
-      String.raw`(?:大人|成人|人)(?:數)?(?:共|有|是)?(${numberTokenSource})(?:位|個)?`,
+      String.raw`(?:大人|成人|人)(?:數)?(?:共|有|是|改成|改為|換成|變成|調整為)?(${numberTokenSource})(?:位|個)?`,
       "g",
     );
     for (const entry of matchEntries(text, reversePeoplePattern)) {
@@ -523,7 +527,7 @@ function collectPetOperations(text) {
   }
 
   const clearMatch = text.match(
-    /(?:不帶|不要(?:帶)?|取消攜帶|沒有|無)(?:狗狗|狗|犬|毛孩|寵物)|(?:狗狗|狗|犬|毛孩|寵物)(?:不帶|不要|不去|不來)/,
+    /(?:不帶|不要(?:帶)?|取消攜帶|沒有|無|移除|拿掉)(?:全部|所有|都|通通)?(?:狗狗|狗|犬|毛孩|寵物)|(?:狗狗|狗|犬|毛孩|寵物)(?:全部|所有|都|通通)?(?:不帶|不要|不去|不來|取消|移除|拿掉)/,
   );
   if (clearMatch && !operations.length) {
     operations.push({
@@ -542,7 +546,10 @@ function collectPetOperations(text) {
 
 function collectBreakfastOperations(text) {
   const patterns = [
-    new RegExp(String.raw`早餐(${numberTokenSource})(?:份)?`, "g"),
+    new RegExp(
+      String.raw`早餐(?:設定為|改成|改為|換成|變成|調整為)?(${numberTokenSource})(?:份)?`,
+      "g",
+    ),
     new RegExp(String.raw`(${numberTokenSource})份早餐`, "g"),
   ];
   const operations = [];
@@ -637,7 +644,9 @@ function extractStayOperation(text, { baseDateText = "" } = {}) {
     new RegExp(String.raw`(${numberTokenSource})(?:晚|夜)`),
   );
   const nights = nightsMatch ? parseNumberToken(nightsMatch[1]) : null;
-  const modeEvidence = text.match(/包棟|整棟|全棟|villa|單間|房間|一間房/)?.[0] || "";
+  const modeEvidence = text.match(
+    /包棟|整棟|全棟|villa|單間|一間房|(?:預訂|訂|改成|改為|換成)房間|房間(?:價格|房價)/,
+  )?.[0] || "";
   const mode = /包棟|整棟|全棟|villa/.test(modeEvidence)
     ? "villa"
     : /單間|房間|一間房/.test(modeEvidence)
@@ -1809,6 +1818,19 @@ export function buildStructuredTurnMetadata(resolution) {
     ),
     structured_turn_ambiguity_codes: resolution.result.ambiguities.map(
       (ambiguity) => ambiguity.code,
+    ),
+    semantic_turn_kind:
+      resolution.plan?.intent_ast?.turn_kind || "unrelated",
+    semantic_scenario_action:
+      resolution.plan?.intent_ast?.scenario_action || "none",
+    semantic_goal_ids: resolution.plan?.intent_ast?.goal_ids || [],
+    semantic_previous_transaction_topic:
+      resolution.plan?.previous_transaction_topic || "none",
+    semantic_event_count: resolution.reduction?.events?.length || 0,
+    semantic_duplicate_turn: Boolean(resolution.reduction?.duplicate),
+    semantic_stale_reference_blocked: Boolean(resolution.reduction?.stale),
+    deterministic_fast_path_used: Boolean(
+      resolution.plan?.deterministic_fast_path_used,
     ),
     turn_type: resolution.plan?.turn_type || "unrelated",
     quote_scope: resolution.plan?.quote_scope || null,

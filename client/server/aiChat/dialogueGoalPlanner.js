@@ -8,6 +8,7 @@ import {
 import { normalizeConversationContext } from "./conversationContext.js";
 import { loadFaqItems } from "./faqRetrieval.js";
 import { buildOfficialPricingResolution } from "./lodgingPricing.js";
+import { matchSemanticDialogueCapabilities } from "./dialogueCapabilities.js";
 
 export const dialogueGoalTaxonomy = Object.freeze({
   informational: Object.freeze([
@@ -43,6 +44,11 @@ export const dialogueGoalTaxonomy = Object.freeze({
     "unrelated",
     "true_knowledge_gap",
   ]),
+});
+
+const contextualFaqIds = Object.freeze({
+  checkin_info: ["faq-076"],
+  checkout_info: ["faq-077"],
 });
 
 function compact(value) {
@@ -157,6 +163,33 @@ function detectInformationalGoals(message, slots) {
   const goals = [];
   const faqIds = [];
   const hasPet = hasKnownPetEntity(text, slots);
+  const semanticCapabilities = matchSemanticDialogueCapabilities(message);
+
+  if (semanticCapabilities.unknown_policy) {
+    return {
+      goal_ids: ["true_knowledge_gap"],
+      canonical_faq_ids: [],
+      unknown_policy: true,
+      capability_ids: semanticCapabilities.matches.map(
+        (entry) => entry.capability_id,
+      ),
+    };
+  }
+
+  const bareWeightedPet = Boolean(
+    slots.pet_weights_kg.length &&
+      semanticCapabilities.primary?.capability_id === "pet_eligibility_policy",
+  );
+  if (semanticCapabilities.primary && !bareWeightedPet) {
+    return {
+      goal_ids: semanticCapabilities.goal_ids,
+      canonical_faq_ids: semanticCapabilities.canonical_faq_ids,
+      unknown_policy: false,
+      capability_ids: semanticCapabilities.matches.map(
+        (entry) => entry.capability_id,
+      ),
+    };
+  }
 
   if (/行李/.test(text) && /宅配|寄送|代收|先送/.test(text)) {
     return {
@@ -265,6 +298,7 @@ export function planDialogueGoals({
   spans = [],
   structuredResult = null,
   structuredPlan = null,
+  semanticAst = null,
   context = null,
   slotFillTransaction = null,
 } = {}) {
@@ -285,7 +319,7 @@ export function planDialogueGoals({
   const completeSnapshot =
     structuredPlan?.turn_type === "quote_snapshot" &&
     structuredResult?.operations?.some(
-      operation => operation.entity === "stay"
+      operation => operation.entity === "stay" && operation.check_in
     ) &&
     structuredResult?.operations?.some(
       operation => operation.entity === "adult"
@@ -311,6 +345,47 @@ export function planDialogueGoals({
         ? "active_confirmation_protocol"
         : "confirmation_without_active_proposal",
       slots,
+    });
+  }
+  if (
+    semanticAst?.turn_kind === "informational" &&
+    semanticAst.goal_ids.length > 0 &&
+    (
+      !currentRequestQuote ||
+      semanticAst.goal_ids.some((goalId) =>
+        [
+          "general_policy_lookup",
+          "true_knowledge_gap",
+          "checkin_info",
+          "checkout_info",
+        ].includes(goalId),
+      )
+    )
+  ) {
+    const goalIds = informational.unknown_policy
+      ? ["true_knowledge_gap"]
+      : informational.goal_ids.length
+        ? informational.goal_ids
+        : semanticAst.goal_ids;
+    return buildGoalPlan({
+      lane: informational.unknown_policy ? "knowledge" : "informational",
+      goalIds,
+      responseKind: informational.unknown_policy
+        ? "knowledge_gap"
+        : "informational_answer",
+      mutatesContext: false,
+      reason: informational.unknown_policy
+        ? "no_approved_policy_capability"
+        : "validated_semantic_information_intent",
+      slots,
+      canonicalFaqIds: informational.canonical_faq_ids.length
+        ? informational.canonical_faq_ids
+        : unique(
+            semanticAst.goal_ids.flatMap(
+              (goalId) => contextualFaqIds[goalId] || [],
+            ),
+          ),
+      canAnswerPartially: !informational.unknown_policy,
     });
   }
   if (["completed", "direct_operation"].includes(transactionStatus)) {
@@ -354,6 +429,45 @@ export function planDialogueGoals({
       slots,
     });
   }
+  if (
+    semanticAst?.turn_kind === "transactional" &&
+    (structuredResult?.operations || []).length
+  ) {
+    const operations = structuredResult.operations;
+    const mutation = operations.find((operation) =>
+      ["add", "remove", "replace", "clear"].includes(operation.operation),
+    );
+    const goalId =
+      semanticAst.scenario_action === "new"
+        ? "quote_snapshot"
+        : mutation?.operation === "add"
+          ? "quote_patch_add"
+          : mutation && ["remove", "clear"].includes(mutation.operation)
+            ? "quote_patch_remove"
+            : "quote_patch_replace";
+    return buildGoalPlan({
+      lane: "transactional",
+      goalIds: [goalId, "request_quote"],
+      responseKind: "transactional_quote",
+      mutatesContext: true,
+      reason: "validated_semantic_intent_ast",
+      slots,
+    });
+  }
+  if (
+    semanticAst?.turn_kind === "transactional" &&
+    semanticAst.goal_ids.includes("request_quote") &&
+    state.quote_scenario
+  ) {
+    return buildGoalPlan({
+      lane: "transactional",
+      goalIds: ["request_quote"],
+      responseKind: "transactional_quote",
+      mutatesContext: false,
+      reason: "validated_semantic_scenario_resume",
+      slots,
+    });
+  }
   const structuredMutation = (structuredResult?.operations || []).find(
     operation =>
       ["add", "remove", "replace", "clear"].includes(operation.operation)
@@ -378,7 +492,10 @@ export function planDialogueGoals({
       slots,
     });
   }
-  if (explicitOperations.length) {
+  if (
+    explicitOperations.length &&
+    semanticAst?.turn_kind !== "informational"
+  ) {
     const operation = explicitOperations[0];
     return buildGoalPlan({
       lane: "transactional",
@@ -649,10 +766,12 @@ async function handlePartialQuote(goalPlan) {
   const hasPet = goalPlan.goal_ids.includes("pet_fee_lookup");
   const missing = [];
   if (!(goalPlan.slots.dates.length || goalPlan.slots.date_type)) {
-    missing.push("入住日期");
+    missing.push("入住日期或日期類型");
   }
-  if (!goalPlan.slots.nights) missing.push("晚數");
-  if (hasPet && !goalPlan.slots.pet_weights_kg.length) missing.push("狗狗體重");
+  if (!goalPlan.slots.nights) missing.push("住宿晚數");
+  if (hasPet && !goalPlan.slots.pet_weights_kg.length) {
+    missing.push("每隻狗狗體重");
+  }
   if (goalPlan.slots.adult_count === null) missing.push("入住人數");
   if (hasPet) {
     return `包棟價格還需要入住日期與晚數；狗狗費則依體重計算。請提供${unique(
@@ -864,6 +983,36 @@ export async function executeDialogueGoalPlan(goalPlan, options = {}) {
   });
 }
 
+function isApprovedKnowledgeAnswer(routeResult) {
+  return Boolean(
+    ["faq_direct", "faq_collect_info", "ask_human"].includes(
+      routeResult?.route
+    ) &&
+      (routeResult?.topCandidate?.id || routeResult?.matchedFaqIds?.length)
+  );
+}
+
+function plannerHasMoreSpecificAuthority(goalPlan) {
+  if (!goalPlan) return false;
+  if (goalPlan.lane === "partial") return true;
+  if (goalPlan.lane === "transactional") {
+    return goalPlan.reason !== "explicit_action_request";
+  }
+  if (goalPlan.lane !== "informational") return false;
+  if (goalPlan.primary_goal_id === "lodging_fee_lookup") return true;
+  if (
+    goalPlan.primary_goal_id === "pet_fee_lookup" &&
+    goalPlan.slots?.pet_weights_kg?.length
+  ) {
+    return true;
+  }
+  return Boolean(
+    goalPlan.primary_goal_id === "breakfast_info_lookup" &&
+      Number.isInteger(goalPlan.slots?.breakfast_count) &&
+      goalPlan.slots.breakfast_count > 0
+  );
+}
+
 export function selectDialogueResponseAuthority({
   goalPlan,
   structuredResolution,
@@ -876,18 +1025,28 @@ export function selectDialogueResponseAuthority({
       allow_context_mutation: true,
     };
   }
-  if (["informational", "partial"].includes(goalPlan?.lane)) {
-    return {
-      authority: "dialogue_goal_planner",
-      execute_transaction: false,
-      allow_context_mutation: false,
-    };
-  }
   if (goalPlan?.goal_ids?.includes("confirmation")) {
     return {
       authority: "dialogue_protocol",
       execute_transaction: true,
       allow_context_mutation: true,
+    };
+  }
+  if (
+    isApprovedKnowledgeAnswer(routeResult) &&
+    !plannerHasMoreSpecificAuthority(goalPlan)
+  ) {
+    return {
+      authority: "knowledge_router",
+      execute_transaction: false,
+      allow_context_mutation: false,
+    };
+  }
+  if (["informational", "partial"].includes(goalPlan?.lane)) {
+    return {
+      authority: "dialogue_goal_planner",
+      execute_transaction: false,
+      allow_context_mutation: false,
     };
   }
   if (

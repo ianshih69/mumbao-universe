@@ -214,15 +214,28 @@ function pendingFromPartial({
     transaction_id:
       transactionId || `slot-fill:${String(sourceTurnId || "anonymous").slice(0, 120)}`,
     partial_operation: partial,
+    operation: partial.operation,
+    entity: partial.entity,
+    filled_slots: partial.filled_slots,
+    missing_slots: partial.missing_slots,
+    candidate_references: unique([
+      ...partial.candidate_entities.map((entity) => `entity:${entity}`),
+      ...partial.candidate_operations.map(
+        (operation) => `operation:${operation}`,
+      ),
+    ]),
     provenance,
     proposed_values: {},
     required_response_type: "slot_fill",
     ...(requiredFields.length ? { required_fields: requiredFields } : {}),
     resume_action: resumeAction,
+    resume_goal: resumeAction,
     source_assistant_message_id: sourceTurnId || null,
     scenario_id: scenario?.scenario_id || null,
     context_version: scenario?.context_version ?? null,
+    base_state_version: scenario?.context_version ?? null,
     asked_turn_id: sourceTurnId || null,
+    created_turn_id: sourceTurnId || null,
     expires_after_turns: 1,
     created_at: nowIso,
     expires_at: addMinutes(nowIso, 30),
@@ -294,33 +307,7 @@ function createInitialPartial({ message, spans, result, context }) {
     (ambiguity) => ambiguity.code === "missing_entity",
   );
 
-  if (missingEntity || (operationCue && Number.isInteger(genericCount) && !inferredEntity)) {
-    return finalizePartial({
-      operation: operationCue,
-      entity: null,
-      candidate_entities: entityCandidates,
-      candidate_operations: [],
-      count: genericCount,
-      pet_type: null,
-      weights_kg: [],
-      target_pet: null,
-    }, state);
-  }
-
   const petOperation = result.operations.find((operation) => operation.entity === "pet");
-  if (
-    petOperation?.operation === "add" &&
-    Number.isInteger(petOperation.count) &&
-    (petOperation.weights_kg || []).length < petOperation.count
-  ) {
-    return finalizePartial({
-      ...petOperation,
-      candidate_entities: ["pet"],
-      candidate_operations: ["add"],
-      target_pet: null,
-    }, state);
-  }
-
   if (
     operationCue === "replace" &&
     weights.length &&
@@ -336,6 +323,32 @@ function createInitialPartial({ message, spans, result, context }) {
       pet_type: state.pet_type || "dog",
       weights_kg: [weights.at(-1)],
       target_pet: Number(state.pet_count || 0) === 1 ? 0 : null,
+    }, state);
+  }
+
+  if (missingEntity || (operationCue && Number.isInteger(genericCount) && !inferredEntity)) {
+    return finalizePartial({
+      operation: operationCue,
+      entity: null,
+      candidate_entities: entityCandidates,
+      candidate_operations: [],
+      count: genericCount,
+      pet_type: null,
+      weights_kg: [],
+      target_pet: null,
+    }, state);
+  }
+
+  if (
+    petOperation?.operation === "add" &&
+    Number.isInteger(petOperation.count) &&
+    (petOperation.weights_kg || []).length < petOperation.count
+  ) {
+    return finalizePartial({
+      ...petOperation,
+      candidate_entities: ["pet"],
+      candidate_operations: ["add"],
+      target_pet: null,
     }, state);
   }
 

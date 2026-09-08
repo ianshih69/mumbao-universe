@@ -68,6 +68,8 @@ import {
   executeDialogueGoalPlan,
   selectDialogueResponseAuthority,
 } from "./dialogueGoalPlanner.js";
+import { matchSemanticDialogueCapabilities } from "./dialogueCapabilities.js";
+import { isContextualTimingFragment } from "./semanticTurnResolver.js";
 import {
   buildSessionErrorBody,
   createInvalidSessionIdError,
@@ -83,10 +85,10 @@ import {
 } from "./sessionAiMode.js";
 
 const systemPrompt = `你是「慢慢蒔光｜白雲基地」的 AI 客服小幫手。
-回答要溫柔、清楚、簡短，使用繁體中文。
+回答要溫柔、清楚、直接、簡短，使用繁體中文。
 你要幫客人理解包棟、訂房、入住、退房、設施、寵物友善、白雲基地與慢寶 MUMBAO 相關問題。
 如果不確定答案，不要亂編，請引導客人私訊官方 LINE 或等人工客服確認。
-每次回答盡量控制在 80～180 字。`;
+交易與結構化政策問題以 1～2 句為主，移除不必要的前言與贅詞。`;
 const aiErrorReply = "慢寶的雲朵訊號暫時不穩，請稍後再試。";
 const inputTooLongReply =
   "這則訊息有點太長了，我怕一次讀不完整。請分成幾段傳送，我會接著幫你整理。";
@@ -1933,6 +1935,8 @@ export async function resolveStructuredMessageRuntime({
   mode = getStructuredTurnInterpreterMode(),
   message,
   conversationContextUpdate,
+  conversationId = "",
+  previousTopic = "",
   dateInfo = {},
   nowIso = new Date().toISOString(),
   sourceMessageId = "",
@@ -1944,6 +1948,7 @@ export async function resolveStructuredMessageRuntime({
     message,
     previousContext: conversationContextUpdate.previousContext,
     legacyContext: conversationContextUpdate.context,
+    conversationId,
     nowIso,
     sourceMessageId,
     dateInfo: {
@@ -1951,8 +1956,22 @@ export async function resolveStructuredMessageRuntime({
       timeZone: "Asia/Taipei",
     },
     previousTopic:
-      conversationContextUpdate.previousContext?.current_topic || "",
+      previousTopic || conversationContextUpdate.previousContext?.current_topic || "",
   });
+}
+
+function inferPreviousSemanticTopic(recentMessages, currentMessage) {
+  if (!isContextualTimingFragment(currentMessage)) return "";
+  const previousUserMessage = String(
+    [...(Array.isArray(recentMessages) ? recentMessages : [])]
+      .reverse()
+      .find((entry) => entry?.sender === "user" && entry?.message)?.message || "",
+  )
+    .trim()
+    .slice(0, 300);
+  const goalId = matchSemanticDialogueCapabilities(previousUserMessage).primary
+    ?.goal_id;
+  return ["checkin_info", "checkout_info"].includes(goalId) ? goalId : "";
 }
 
 function buildPassiveConversationContextUpdate({ previousContext, message }) {
@@ -1986,6 +2005,7 @@ export async function resolveMessageConversationAuthority({
   mode = getStructuredTurnInterpreterMode(),
   message,
   previousContext,
+  conversationId = "",
   recentMessages = [],
   dateInfo = {},
   nowIso = new Date().toISOString(),
@@ -2003,6 +2023,8 @@ export async function resolveMessageConversationAuthority({
       mode: normalizedMode,
       message,
       conversationContextUpdate,
+      conversationId,
+      previousTopic: inferPreviousSemanticTopic(recentMessages, message),
       dateInfo,
       nowIso,
       sourceMessageId,
@@ -2033,6 +2055,7 @@ export async function resolveMessageConversationAuthority({
         mode: normalizedMode,
         message,
         conversationContextUpdate,
+        conversationId,
         dateInfo,
         nowIso,
         sourceMessageId,
@@ -2128,6 +2151,15 @@ export function buildRuntimeAuthorityMetadata({
       "unrelated",
     response_authority:
       dialogueResponseAuthority?.authority || "knowledge_router",
+    response_authority_owner: "unified_dialogue_goal_planner",
+    mutation_authority:
+      conversationAuthority?.mode === "active"
+        ? "dialogue_event_transition_engine"
+        : "legacy_context_mutator",
+    semantic_event_count: structuredTurnResolution?.reduction?.events?.length || 0,
+    semantic_duplicate_turn: Boolean(
+      structuredTurnResolution?.reduction?.duplicate,
+    ),
   };
 }
 
@@ -2268,6 +2300,7 @@ export default async function handler(req, res) {
       recentMessages,
       message,
       previousContext: session.conversation_context,
+      conversationId: session.id,
       dateInfo,
       nowIso: new Date().toISOString(),
       sourceMessageId: incomingMessageId || requestId,
@@ -2349,31 +2382,55 @@ export default async function handler(req, res) {
         pricing_options: { supabaseRequest },
       },
     );
-    const rawKnowledgeRoute = dialogueGoalRoute || await routeKnowledge({
+    const directKnowledgeRoute = await routeKnowledge({
       message,
-      retrievalMessage: retrievalMessageForRouting,
+      retrievalMessage: message,
       session,
       contextText,
       limit: 8,
     });
-    const legacyKnowledgeRoute = dialogueGoalRoute || applyContextualRouteOverride(
+    const preserveDirectKnowledgeRoute = Boolean(
+      directKnowledgeRoute?.lexicalSafeDirect ||
+        ["human_takeover", "local_intent", "scope_guard"].includes(
+          directKnowledgeRoute?.route,
+        ),
+    );
+    const rawKnowledgeRoute =
+      preserveDirectKnowledgeRoute || retrievalMessageForRouting === message
+        ? directKnowledgeRoute
+        : await routeKnowledge({
+            message,
+            retrievalMessage: retrievalMessageForRouting,
+            session,
+            contextText,
+            limit: 8,
+          });
+    const legacyKnowledgeRoute = applyContextualRouteOverride(
       rawKnowledgeRoute,
       effectiveConversationContextUpdate.context
     );
-    let knowledgeRoute = structuredTurnResolution?.blockedByAmbiguity
-      ? buildStructuredClarificationRoute(
-          legacyKnowledgeRoute,
-          structuredTurnResolution.result,
-        )
-      : legacyKnowledgeRoute;
     const dialogueResponseAuthority = selectDialogueResponseAuthority({
       goalPlan: dialogueGoalPlan,
       structuredResolution: structuredTurnResolution,
-      routeResult: knowledgeRoute,
+      routeResult: legacyKnowledgeRoute,
     });
-    let finalConversationContext = effectiveConversationContextUpdate.context;
-    let finalConversationContextChanged =
-      effectiveConversationContextUpdate.changed;
+    let knowledgeRoute =
+      dialogueResponseAuthority.authority === "dialogue_goal_planner" &&
+      dialogueGoalRoute
+        ? dialogueGoalRoute
+        : structuredTurnResolution?.blockedByAmbiguity &&
+            dialogueResponseAuthority.authority === "dialogue_protocol"
+          ? buildStructuredClarificationRoute(
+              legacyKnowledgeRoute,
+              structuredTurnResolution.result,
+            )
+          : legacyKnowledgeRoute;
+    let finalConversationContext = dialogueResponseAuthority.allow_context_mutation
+      ? effectiveConversationContextUpdate.context
+      : conversationContextUpdate.previousContext;
+    let finalConversationContextChanged = dialogueResponseAuthority.allow_context_mutation
+      ? effectiveConversationContextUpdate.changed
+      : false;
     let semanticResultForAction =
       dialogueResponseAuthority.execute_transaction &&
       structuredTurnResolution?.authoritative &&
@@ -2532,7 +2589,9 @@ export default async function handler(req, res) {
       };
     }
 
-    const freshnessGuard = dialogueResponseAuthority.allow_context_mutation
+    const freshnessGuard =
+      conversationAuthority.mode !== "active" &&
+      dialogueResponseAuthority.allow_context_mutation
       ? applyContextFreshnessGuard({
           oldContext: conversationContextUpdate.previousContext,
           context: finalConversationContext,
@@ -2592,6 +2651,7 @@ export default async function handler(req, res) {
       const { conversationContextPatch, ...routeOverride } =
         actionRoute;
       if (
+        conversationAuthority.mode !== "active" &&
         conversationContextPatch &&
         typeof conversationContextPatch === "object"
       ) {

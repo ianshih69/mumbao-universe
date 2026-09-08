@@ -209,6 +209,13 @@ describe("deterministic-only structured message runtime", () => {
     expect(legacyBuilder).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps active state writes behind the event transition engine", () => {
+    const source = readFileSync(new URL("./message.js", import.meta.url), "utf8");
+    expect(source).toContain('conversationAuthority.mode !== "active" &&');
+    expect(source).toContain("applyContextFreshnessGuard({");
+    expect(source).toContain("conversationContextPatch &&");
+  });
+
   it("returns the complete one-turn quote without a structured provider", async () => {
     const flow = await runMessageTurn(
       "2026年11月1日，10位成人，加1隻22公斤狗狗，住一晚包棟多少？",
@@ -283,7 +290,7 @@ describe("deterministic-only structured message runtime", () => {
     ["再加一位成人", { adult_count: 11, pet_count: 0 }],
     ["人數改成11位成人", { adult_count: 11, pet_count: 0 }],
     ["再加一隻狗", { adult_count: 10, pet_count: 0 }],
-    ["10位成人加2位兒童", { adult_count: 10, child_count: 2, pet_count: null }],
+    ["10位成人加2位兒童", { adult_count: null, child_count: null, pet_count: null }],
     ["明天1位成人帶1隻22公斤狗包棟多少", { adult_count: 1, pet_count: 1 }],
   ])("keeps party and pet entities isolated for %s", async (message, expected) => {
     const context = message.startsWith("10位") || message.startsWith("1位")
@@ -291,6 +298,13 @@ describe("deterministic-only structured message runtime", () => {
       : baseContext;
     const flow = await runMessageTurn(message, context);
     expect(flow.context).toMatchObject(expected);
+    if (message === "10位成人加2位兒童") {
+      expect(flow.resolution.plan.dialogue_goal_plan.slots).toMatchObject({
+        adult_count: 10,
+        child_count: 2,
+      });
+      expect(flow.resolution.result.operations).toEqual([]);
+    }
     if (message === "再加一隻狗") {
       expect(flow.resolution.result.missing_fields).toContain("pet_weights_kg");
       expect(flow.resolution.reduction.applied).toBe(false);

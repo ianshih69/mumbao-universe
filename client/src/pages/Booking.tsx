@@ -159,6 +159,9 @@ const breakfastAddon = {
   image: "/images/Main/breakfaset.JPG",
   note: "於早餐日 08:30 送達。",
 };
+const generalAccommodationDepositAmount = 10_000;
+const generalAccommodationDepositNotice =
+  "入住時另收，不計入住宿總價、訂金 30% 或尾款 70%；退房檢查無損壞、污損或違規後全額退還。";
 
 const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
 function fieldClassName() {
@@ -1799,6 +1802,8 @@ export default function Booking() {
           {renderCompactSummaryRow("總價", formatTwd(displayTotal), true)}
           {renderCompactSummaryRow(`訂金 ${quoteDepositRatePercent ?? 30}%`, formatTwd(displayDepositAmount))}
           {renderCompactSummaryRow(`尾款 ${quoteBalanceRatePercent ?? 70}%`, formatTwd(displayBalanceAmount))}
+          {renderCompactSummaryRow("一般住宿押金（入住時另收）", formatTwd(generalAccommodationDepositAmount))}
+          <p className="text-xs leading-5 text-stone-500">{generalAccommodationDepositNotice}</p>
         </div>
       </aside>
     );
@@ -1865,6 +1870,11 @@ export default function Booking() {
           {renderStep3AmountRow("總價", displayTotal, undefined, true)}
           {renderStep3AmountRow(`訂金 ${quoteDepositRatePercent ?? 30}%`, displayDepositAmount)}
           {renderStep3AmountRow(`尾款 ${quoteBalanceRatePercent ?? 70}%`, displayBalanceAmount)}
+        </div>
+
+        <div className="mt-4 border-t border-[#f1e8dc] pt-4 text-sm leading-6">
+          {renderStep3AmountRow("一般住宿押金（入住時另收）", generalAccommodationDepositAmount)}
+          <p className="mt-2 text-xs leading-5 text-stone-500">{generalAccommodationDepositNotice}</p>
         </div>
 
         {quoteReady && quoteDogCount > 0 && quotePetDepositAmount > 0 && (
@@ -2643,8 +2653,12 @@ export default function Booking() {
                                 <span className="text-stone-600">尾款 {quoteBalanceRatePercent ?? 70}%</span>
                                 <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">{formatTwd(priceQuote?.pricing.balanceAmount)}</span>
                               </div>
+                              <div className="grid gap-1 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2">
+                                <span className="text-stone-600">一般住宿押金（入住時另收）</span>
+                                <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">{formatTwd(generalAccommodationDepositAmount)}</span>
+                              </div>
                               <p className="text-xs leading-5 text-stone-500">
-                                此頁不需付款。送出後，我們將依此房價明細與您確認房況及訂房細節。
+                                {generalAccommodationDepositNotice} 此頁不需付款。送出後，我們將依此房價明細與您確認房況及訂房細節。
                               </p>
                             </div>
                           )}
@@ -2960,8 +2974,10 @@ export default function Booking() {
                     {renderStep3AmountRow("訂房總額", submittedTotal)}
                     {renderStep3AmountRow(`訂金 ${submittedDepositRatePercent ?? 30}%`, submittedDepositAmount)}
                     {renderStep3AmountRow(`尾款 ${submittedDepositRatePercent == null ? 70 : 100 - submittedDepositRatePercent}%`, submittedBalanceAmount)}
+                    {renderStep3AmountRow("一般住宿押金（入住時另收）", generalAccommodationDepositAmount)}
                     {submittedPetDepositAmount > 0 && renderStep3AmountRow("寵物押金（入住時另收）", submittedPetDepositAmount)}
                   </div>
+                  <p className="mt-3 text-xs leading-5 text-stone-500">{generalAccommodationDepositNotice}</p>
                 </section>
               )}
 
@@ -3122,8 +3138,10 @@ export default function Booking() {
                     {renderStep3AmountRow("總價", submittedTotal, undefined, true)}
                     {renderStep3AmountRow(`應付訂金 ${submittedDepositRatePercent ?? 30}%`, submittedDepositAmount)}
                     {renderStep3AmountRow(`尾款 ${submittedDepositRatePercent == null ? 70 : 100 - submittedDepositRatePercent}%`, submittedBalanceAmount)}
+                    {renderStep3AmountRow("一般住宿押金（入住時另收）", generalAccommodationDepositAmount)}
                     {submittedPetDepositAmount > 0 && renderStep3AmountRow("寵物押金（入住時另收）", submittedPetDepositAmount)}
                   </div>
+                  <p className="mt-3 text-xs leading-5 text-stone-500">{generalAccommodationDepositNotice}</p>
                 </div>
               </section>
 

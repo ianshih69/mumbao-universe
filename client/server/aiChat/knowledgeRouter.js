@@ -202,6 +202,15 @@ const forcedExternalScopeKeywords = [
   "信用卡推薦",
 ];
 
+const protectedInstructionPatterns = [
+  /internal[_\s-]*note/i,
+  /system\s*prompt/i,
+  /系統提示|內部提示|內部評分|內部指令/,
+  /faq[-_\s]*[a-z0-9]+/i,
+  /知識庫.{0,8}(?:原文|全文|全部)/,
+  /api[_\s-]*key|service[_\s-]*role|秘密金鑰/i,
+];
+
 const contextFollowUpKeywords = [
   "今年",
   "明年",
@@ -493,11 +502,17 @@ function createRouteResult(overrides = {}) {
   };
 }
 
-function isExplicitExternalScope(message) {
+function isForcedExternalScope(message) {
   const normalizedMessage = String(message || "").toLowerCase().trim();
-  if (includesKeyword(normalizedMessage, forcedExternalScopeKeywords)) {
+  if (protectedInstructionPatterns.some(pattern => pattern.test(normalizedMessage))) {
     return true;
   }
+  return includesKeyword(normalizedMessage, forcedExternalScopeKeywords);
+}
+
+function isExplicitExternalScope(message) {
+  const normalizedMessage = String(message || "").toLowerCase().trim();
+  if (isForcedExternalScope(normalizedMessage)) return true;
 
   return (
     includesKeyword(normalizedMessage, blockedScopeKeywords) &&
@@ -591,7 +606,11 @@ export async function routeKnowledge({
   const lexicalSafeDirectTop = Boolean(top?.lexicalSafeDirect);
   const topAnswerMode = normalizeAnswerMode(top?.answer_mode);
 
-  if (!lexicalSafeDirectTop && isExplicitExternalScope(message)) {
+  if (
+    !lexicalSafeDirectTop &&
+    isExplicitExternalScope(message) &&
+    (isForcedExternalScope(message) || !top)
+  ) {
     return createRouteResult({
       route: "scope_guard",
       providerUsed: "scope_guard",
@@ -602,7 +621,11 @@ export async function routeKnowledge({
     });
   }
 
-  if (!lexicalSafeDirectTop && isUnsafeStandaloneFragment(message, contextText)) {
+  if (
+    !lexicalSafeDirectTop &&
+    isUnsafeStandaloneFragment(message, contextText) &&
+    (isDateOrPeopleFragment(message) || !top)
+  ) {
     return createRouteResult({
       route: "scope_guard",
       providerUsed: "scope_guard",

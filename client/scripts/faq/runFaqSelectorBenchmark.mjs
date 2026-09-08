@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +10,7 @@ import {
   buildApprovedFaqSelectorCatalog,
   callFaqFullCatalogSelector,
   getFaqSelectorModelName,
+  hashFaqSelectorCatalog,
 } from "../../server/aiChat/faqSemanticVerifier.js";
 import {
   createAiModelExecutionContext,
@@ -31,6 +33,7 @@ Usage:
 
 Options:
   --smoke                     Run a deterministic 30-case mixed smoke sample.
+  --validate-only             Validate dataset/catalog provenance without loading env or calling the provider.
   --limit <n>                 Run at most n cases after filtering.
   --suite <name>              Filter by suite: positive, negative, multi_intent.
   --type <name>               Filter by type; may be repeated or comma-separated.
@@ -46,6 +49,7 @@ Options:
 function parseArgs(argv) {
   const args = {
     smoke: false,
+    validateOnly: false,
     limit: 0,
     suites: new Set(),
     types: new Set(),
@@ -65,6 +69,8 @@ function parseArgs(argv) {
       process.exit(0);
     } else if (arg === "--smoke") {
       args.smoke = true;
+    } else if (arg === "--validate-only") {
+      args.validateOnly = true;
     } else if (arg === "--limit") {
       args.limit = Math.max(0, Number(next() || 0));
     } else if (arg === "--suite") {
@@ -206,10 +212,45 @@ function loadResumeResults(resumePath) {
   );
 }
 
-function validateDatasetAgainstCatalog({ dataset, cases, approvedById }) {
+function sha256File(filePath) {
+  return createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+}
+
+function validateDatasetAgainstCatalog({
+  dataset,
+  cases,
+  approvedById,
+  catalog,
+}) {
   const errors = [];
   const positiveCount = (dataset.positive || []).length;
   const expectedPositiveCount = approvedById.size * 5;
+  const source = dataset.source || {};
+  const faqItemsPath = path.resolve(
+    repoRoot,
+    source.faq_items_path || "client/api/knowledge/faq-items.json",
+  );
+  const faqItemsSha256 = sha256File(faqItemsPath);
+  const selectorCatalogSha256 = hashFaqSelectorCatalog(catalog);
+
+  if (String(source.faq_items_sha256 || "").toLowerCase() !== faqItemsSha256) {
+    errors.push(
+      `faq_items_sha256 expected ${faqItemsSha256}, got ${source.faq_items_sha256 || "missing"}`,
+    );
+  }
+  if (
+    String(source.selector_catalog_sha256 || "").toLowerCase() !==
+    selectorCatalogSha256
+  ) {
+    errors.push(
+      `selector_catalog_sha256 expected ${selectorCatalogSha256}, got ${source.selector_catalog_sha256 || "missing"}`,
+    );
+  }
+  if (Number(source.approved_active_count) !== approvedById.size) {
+    errors.push(
+      `approved_active_count expected ${approvedById.size}, got ${source.approved_active_count ?? "missing"}`,
+    );
+  }
 
   if (positiveCount !== expectedPositiveCount) {
     errors.push(
@@ -238,6 +279,8 @@ function validateDatasetAgainstCatalog({ dataset, cases, approvedById }) {
   if (errors.length) {
     throw new Error(`Benchmark dataset validation failed:\n${errors.join("\n")}`);
   }
+
+  return { faqItemsSha256, selectorCatalogSha256 };
 }
 
 async function runSelectorWithRetry({ item, routeResult, retries }) {
@@ -559,18 +602,33 @@ async function runPool(items, concurrency, worker) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const envInfo = loadLocalEnv(args.envPath);
   const { dataset, cases: allCases } = readDataset(args.datasetPath);
   const selectedCases = filterCases(allCases, args);
   const faqItems = await loadFaqItems();
   const catalog = buildApprovedFaqSelectorCatalog(faqItems);
   const approvedById = new Map(catalog.map((item) => [item.id, item]));
 
-  validateDatasetAgainstCatalog({
+  const provenance = validateDatasetAgainstCatalog({
     dataset,
     cases: allCases,
     approvedById,
+    catalog,
   });
+
+  if (args.validateOnly) {
+    console.log(JSON.stringify({
+      ok: true,
+      mode: "validate_only",
+      cases: allCases.length,
+      selected_cases: selectedCases.length,
+      approved_active_count: approvedById.size,
+      ...provenance,
+      provider_calls: 0,
+    }, null, 2));
+    return;
+  }
+
+  const envInfo = loadLocalEnv(args.envPath);
 
   if (!process.env.DEEPSEEK_API_KEY) {
     const summary = {

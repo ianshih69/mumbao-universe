@@ -1068,12 +1068,29 @@ export async function executeTurnAction({
   pricingOptions = {},
   slotFillCompletion = null,
 } = {}) {
-  const pendingInteraction = normalizePendingInteraction(context?.pending_interaction);
+  const currentPending = normalizePendingInteraction(context?.pending_interaction);
+  const previousPending = normalizePendingInteraction(
+    previousContext?.pending_interaction,
+  );
+  const usePreviousConfirmation = Boolean(
+    previousPending?.required_response_type === "confirmation" &&
+      classifyConfirmationProtocol(message) !== "none",
+  );
+  const pendingInteraction = usePreviousConfirmation
+    ? previousPending
+    : currentPending;
+  const contextForResolution = usePreviousConfirmation
+    ? {
+        ...context,
+        quote_scenario: previousContext?.quote_scenario || null,
+        pending_interaction: previousPending,
+      }
+    : context;
   const resolvedTurnState = resolveTurnState({
     semanticResult,
     message,
     routeResult,
-    context,
+    context: contextForResolution,
     previousContext,
     recentMessages,
     pendingInteraction,

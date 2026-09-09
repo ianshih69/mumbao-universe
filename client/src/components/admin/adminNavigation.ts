@@ -36,7 +36,10 @@ export const adminNavigationSections: AdminNavSection[] = [
   },
   {
     label: "客服管理",
-    items: [{ key: "chats", label: "問慢寶客服", href: "/admin/chats", roles: ["super_admin", "admin", "manager"] }],
+    items: [
+      { key: "chats", label: "問慢寶客服", href: "/admin/chats", roles: ["super_admin", "admin", "manager"] },
+      { key: "ai-improvement", label: "AI 改善中心", href: "/admin/ai-improvement", permission: "ai_quality.view" },
+    ],
   },
   {
     label: "商城管理",

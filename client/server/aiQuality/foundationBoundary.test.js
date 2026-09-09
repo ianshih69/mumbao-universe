@@ -37,12 +37,16 @@ describe("Quality sidecar integration boundary", () => {
     expect(calls.filter(([, call]) => /^(?:fetch|fetchImpl)$/.test(call))).toEqual([["persistence.js", "fetchImpl"]]);
     expect(calls.filter(([, call]) => /writeFile|appendFile|createClient|applyScenarioTransition|matchSemantic|console\.(log|info|error)/.test(call))).toEqual([]);
   });
-  it("allows only the approved completed-turn observer hook, never browser or other APIs", () => {
+  it("allows only the completed-turn hook and the two approved server quality APIs", () => {
     const forbidden = /\b(?:aiQuality|sanitizeAiQualityText|hashAiQualityConversationKey|ai_quality_(?:conversations|messages|events)|aggregate_ai_daily_metrics|delete_expired_ai_quality_data)\b/;
     const offenders = ["api","server","src"].flatMap((folder) => sources(path.join(client,folder)))
       .filter((file) => forbidden.test(readFileSync(file,"utf8")))
       .map((file) => path.relative(client,file));
-    expect(offenders).toEqual([path.join("server", "aiChat", "message.js")]);
+    expect(offenders.sort()).toEqual([
+      path.join("api", "admin-ai-quality.js"),
+      path.join("api", "ai-quality-feedback.js"),
+      path.join("server", "aiChat", "message.js"),
+    ].sort());
   });
   it("quality helpers contain no network, DB, file-write or logging calls and only one dedicated env lookup", () => {
     const calls = [];

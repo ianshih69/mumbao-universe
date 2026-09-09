@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 import { Send } from "lucide-react";
+import AiAnswerFeedback from "./AiAnswerFeedback";
 import { Button } from "@/components/ui/button";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ import { cn } from "@/lib/utils";
 type ChatRole = "assistant" | "user" | "human" | "system";
 
 export type ChatMessage = {
+  feedback_token?: string;
   id: string;
   role: ChatRole;
   message: string;
@@ -33,6 +35,7 @@ export type ChatMessage = {
 };
 
 type ApiMessage = {
+  feedback_token?: string;
   id?: string | number;
   session_id?: string | number;
   role?: string;
@@ -749,6 +752,7 @@ function normalizeMessage(apiMessage: ApiMessage): ChatMessage {
     provider_used: apiMessage.provider_used || apiMessage.provider,
     created_at: apiMessage.created_at,
     deleted_at: apiMessage.deleted_at,
+    feedback_token: role === "assistant" ? apiMessage.feedback_token : undefined,
   };
 }
 
@@ -887,6 +891,9 @@ function areDuplicateMessages(first: ChatMessage, second: ChatMessage) {
 function choosePreferredMessage(current: ChatMessage, next: ChatMessage) {
   if (current.isOptimistic && !next.isOptimistic) {
     return next;
+  }
+  if (current.id === next.id && current.role === "assistant" && !current.feedback_token && next.feedback_token) {
+    return { ...current, feedback_token: next.feedback_token };
   }
 
   return current;
@@ -3772,6 +3779,9 @@ export function MumbaoChat({
                 >
                   {message.message}
                 </div>
+                {message.role === "assistant" && !message.isWelcome && !message.isOptimistic && message.feedback_token && (
+                  <AiAnswerFeedback token={message.feedback_token} />
+                )}
                 {messageTime && (
                   <span
                     className={cn(

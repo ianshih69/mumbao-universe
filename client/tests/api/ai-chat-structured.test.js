@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomBytes } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import * as qualityPrivacy from "../../server/aiQuality/privacy.js";
+import { verifyAiQualityFeedbackToken } from "../../server/aiQuality/feedbackToken.js";
 import aiChatHandler from "../../api/ai-chat.js";
 import { classifyFallbackDayType } from "../../server/bookingPricing/index.js";
 import { setDiscourseAnchor } from "../../server/aiChat/typedEntityReferences.js";
@@ -199,6 +200,7 @@ describe("Phase 1B actual-handler observer equivalence", () => {
     vi.stubEnv("SUPABASE_URL", "https://supabase.test");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "synthetic-quality-transport");
     vi.stubEnv("AI_QUALITY_HMAC_SECRET", randomBytes(32).toString("hex"));
+    vi.stubEnv("AI_QUALITY_FEEDBACK_ENABLED", "false");
     vi.stubEnv("VERCEL", "0");
     vi.stubEnv("AI_MODE", "cloud_only");
     vi.stubEnv("AI_SEMANTIC_ROUTER_MODE", "legacy");
@@ -238,6 +240,33 @@ describe("Phase 1B actual-handler observer equivalence", () => {
     };
   }
 
+  it.each(["有停車位嗎", "那改兩晚", "大型犬可以住嗎？", "早餐三份", "原本那隻不要"])("Phase 1C feedback metadata preserves actual response/scenario/pending/calls: %s", async text => {
+    const off = await run(true, text);
+    vi.stubEnv("AI_QUALITY_FEEDBACK_ENABLED", "true");
+    const on = await run(true, text);
+    expect(on.behavior).toEqual(off.behavior);
+    expect(off.response.payload.aiMessage).not.toHaveProperty("feedback_token");
+    const token = on.response.payload.aiMessage.feedback_token;
+    expect(typeof token).toBe("string");
+    const observation = on.harness.getQualityTurns()[0];
+    expect(verifyAiQualityFeedbackToken(token)).toEqual({
+      conversation_key_hash: observation.conversation_key_hash, turn_key_hash: observation.turn_key_hash,
+    });
+    expect(JSON.stringify(on.harness.getMessages())).not.toContain(token);
+    expect(JSON.stringify(observation)).not.toContain(token);
+    expect(Buffer.from(token.split(".")[0],"base64url").toString()).not.toContain(sessionId);
+  });
+  it("Phase 1C missing secret/observer OFF omit token without changing actual answer", async () => {
+    const off = await run(false, "有停車位嗎");
+    vi.stubEnv("AI_QUALITY_FEEDBACK_ENABLED", "true");
+    const observerOff = await run(false, "有停車位嗎");
+    expect(observerOff.behavior).toEqual(off.behavior);
+    expect(observerOff.response.payload.aiMessage).not.toHaveProperty("feedback_token");
+    vi.stubEnv("AI_QUALITY_HMAC_SECRET", "");
+    const missing = await run(true, "有停車位嗎");
+    expect(missing.behavior).toEqual(off.behavior);
+    expect(missing.response.payload.aiMessage).not.toHaveProperty("feedback_token");
+  });
   it.each(["有停車位嗎", "那改兩晚", "大型犬可以住嗎？"])("preserves response, state, pending and provider budget: %s", async text => {
     const off = await run(false, text);
     const on = await run(true, text);
@@ -310,6 +339,10 @@ describe("Phase 1B actual-handler observer equivalence", () => {
     expect(p.metadata.provider_call_count).toBe(on.behavior.calls);
     expect(on.behavior.calls).toBeLessThanOrEqual(1);
     expect(p.events).toEqual([]);
+    vi.stubEnv("AI_QUALITY_FEEDBACK_ENABLED", "true");
+    const feedbackOn = await run(true, entry.phrase, { startingContext });
+    expect(feedbackOn.behavior).toEqual(on.behavior);
+    expect(verifyAiQualityFeedbackToken(feedbackOn.response.payload.aiMessage.feedback_token)).not.toBeNull();
   });
   it("sanitizes user PII in the completed actual-handler path", async () => {
     const on = await run(true, "我的電話0988-123-456，2026年11月1日十個人帶22公斤狗住兩晚多少？");

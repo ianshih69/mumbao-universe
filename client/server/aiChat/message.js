@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { captureAiQualityTurn, observeAiQualityTurn } from "../aiQuality/observer.js";
+import { createAiQualityFeedbackToken } from "../aiQuality/feedbackToken.js";
 import { enforceAiChatRateLimit } from "./rateLimit.js";
 import { buildFaqPromptSection, normalizeAnswerMode } from "./faqRetrieval.js";
 import {
@@ -2967,10 +2968,11 @@ export default async function handler(req, res) {
       });
 
       captureCompletedQualityTurn(userMessage, aiMessage, knowledgeRoute, routeMetadata);
+      const feedbackToken = createAiQualityFeedbackToken(completedQualityTurn);
       return sendJson(res, 200, {
         session: serializeSessionForClient(session),
         userMessage,
-        aiMessage,
+        aiMessage: feedbackToken ? { ...aiMessage, feedback_token: feedbackToken } : aiMessage,
         answer: knowledgeRoute.answer || knowledgeRoute.notice || "",
         provider_used: knowledgeRoute.providerUsed,
         ai_skipped: knowledgeRoute.aiSkipped,
@@ -3100,11 +3102,13 @@ export default async function handler(req, res) {
     });
     logChatDebug("saved assistant message");
     captureCompletedQualityTurn(userMessage, aiMessage, knowledgeRoute, providerMetadata);
+    const feedbackToken = providerResult.providerStatus >= 200 && providerResult.providerStatus < 300
+      ? createAiQualityFeedbackToken(completedQualityTurn) : null;
 
     return sendJson(res, 200, {
       session: serializeSessionForClient(session),
       userMessage,
-      aiMessage,
+      aiMessage: feedbackToken ? { ...aiMessage, feedback_token: feedbackToken } : aiMessage,
       answer: providerResult.answer,
       provider_used: knowledgeRoute.providerUsed,
       ai_skipped: false,

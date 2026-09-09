@@ -25,6 +25,7 @@ import Mumbao from "./pages/Mumbao";
 import Admin from "./pages/Admin";
 import AdminOverview from "./pages/AdminOverview";
 import AdminChats from "./pages/AdminChats";
+import AdminAiImprovement from "./pages/AdminAiImprovement";
 import AdminMemberDetail from "./pages/AdminMemberDetail";
 import AdminMembers from "./pages/AdminMembers";
 import AdminPointRedemptions from "./pages/AdminPointRedemptions";
@@ -92,6 +93,11 @@ function Router() {
       <Route path={"/admin/chats"}>
         <AdminPage title="問慢寶客服" contentClassName="min-h-0">
           <AdminChats />
+        </AdminPage>
+      </Route>
+      <Route path="/admin/ai-improvement">
+        <AdminPage title="AI 改善中心">
+          <AdminAiImprovement />
         </AdminPage>
       </Route>
       <Route path={"/admin/members/:memberId"}>

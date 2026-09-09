@@ -58,6 +58,7 @@ const iconByKey: Record<string, typeof Home> = {
   "booking-pricing": CalendarDays,
   site: FileText,
   chats: MessageCircle,
+  "ai-improvement": MessageCircle,
   shop: ShoppingBag,
   products: Boxes,
   orders: ClipboardList,

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { captureAiQualityTurn, observeAiQualityTurn } from "../aiQuality/observer.js";
 import { enforceAiChatRateLimit } from "./rateLimit.js";
 import { buildFaqPromptSection, normalizeAnswerMode } from "./faqRetrieval.js";
 import {
@@ -2187,6 +2188,7 @@ export default async function handler(req, res) {
 
   const requestId = randomUUID();
   let releaseIncomingMessageLock = null;
+  let completedQualityTurn = null;
 
   try {
     const body = await readBody(req);
@@ -2901,6 +2903,21 @@ export default async function handler(req, res) {
       runtimeAuthorityMetadata,
     );
     console.info("[ai-chat] runtime authority", runtimeAuthorityMetadata);
+    const captureCompletedQualityTurn = (userMessage, aiMessage, finalRoute, finalMetadata) => {
+      completedQualityTurn = captureAiQualityTurn(() => ({
+        conversationId: session.id,
+        turnId: incomingMessageId || userMessage.id,
+        userText: message,
+        assistantText: aiMessage.message,
+        beforeContext: conversationContextUpdate.previousContext,
+        afterContext: finalConversationContext,
+        route: finalRoute,
+        metadata: finalMetadata,
+        structured: structuredTurnResolution,
+        responseAuthority: dialogueResponseAuthority,
+        executionContext,
+      }));
+    };
     logChatDebug("knowledge route", {
       route: knowledgeRoute.route,
       reason: knowledgeRoute.reason,
@@ -2949,6 +2966,7 @@ export default async function handler(req, res) {
         supportStatus,
       });
 
+      captureCompletedQualityTurn(userMessage, aiMessage, knowledgeRoute, routeMetadata);
       return sendJson(res, 200, {
         session: serializeSessionForClient(session),
         userMessage,
@@ -3038,6 +3056,7 @@ export default async function handler(req, res) {
         supportStatus: autoReplySupportStatus,
       });
 
+      captureCompletedQualityTurn(userMessage, aiMessage, inputTooLongRoute, inputTooLongMetadata);
       return sendJson(res, 200, {
         session: serializeSessionForClient(session),
         userMessage,
@@ -3080,6 +3099,7 @@ export default async function handler(req, res) {
       supportStatus: autoReplySupportStatus,
     });
     logChatDebug("saved assistant message");
+    captureCompletedQualityTurn(userMessage, aiMessage, knowledgeRoute, providerMetadata);
 
     return sendJson(res, 200, {
       session: serializeSessionForClient(session),
@@ -3112,5 +3132,6 @@ export default async function handler(req, res) {
     if (typeof releaseIncomingMessageLock === "function") {
       releaseIncomingMessageLock();
     }
+    await observeAiQualityTurn(completedQualityTurn);
   }
 }

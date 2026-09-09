@@ -12,13 +12,37 @@ function sources(directory) {
     return /\.[cm]?[jt]sx?$/.test(entry.name) && !/\.(test|spec)\./.test(entry.name) ? [full] : [];
   });
 }
-describe("Phase 1A integration boundary", () => {
-  it("has no quality imports or hooks in current APIs, AI runtime or browser source", () => {
+describe("Quality sidecar integration boundary", () => {
+  it("has one bounded DB authority and no LLM, analyzer, file-write or raw logging surface", () => {
+    const calls = [];
+    const imports = [];
+    for (const name of ["observer.js", "snapshot.js", "signals.js", "persistence.js"]) {
+      const text = readFileSync(new URL(name, import.meta.url), "utf8");
+      const source = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+      function visit(node) {
+        if (ts.isCallExpression(node)) {
+          calls.push([name, node.expression.getText(source)]);
+          if (node.expression.getText(source) === "console.warn") {
+            expect(node.arguments.map(value => value.getText(source)).join(" ")).not.toMatch(/snapshot|payload|error\.|source_id|user_text|assistant_text/);
+          }
+        }
+        if (ts.isImportDeclaration(node)) imports.push(node.moduleSpecifier.text);
+        ts.forEachChild(node, visit);
+      }
+      visit(source);
+      expect(text).not.toMatch(/DEEPSEEK_API_KEY|aggregate_ai_daily_metrics|ai_review_items|ai_daily_metrics|JSON\.stringify\((?:before|after|context|snapshot|error)\)/);
+    }
+    expect(imports).not.toContain("node:fs");
+    expect(imports.some(value => /deepSeek|semanticOrchestrator|Provider|Resolver|Router/.test(value))).toBe(false);
+    expect(calls.filter(([, call]) => /^(?:fetch|fetchImpl)$/.test(call))).toEqual([["persistence.js", "fetchImpl"]]);
+    expect(calls.filter(([, call]) => /writeFile|appendFile|createClient|applyScenarioTransition|matchSemantic|console\.(log|info|error)/.test(call))).toEqual([]);
+  });
+  it("allows only the approved completed-turn observer hook, never browser or other APIs", () => {
     const forbidden = /\b(?:aiQuality|sanitizeAiQualityText|hashAiQualityConversationKey|ai_quality_(?:conversations|messages|events)|aggregate_ai_daily_metrics|delete_expired_ai_quality_data)\b/;
     const offenders = ["api","server","src"].flatMap((folder) => sources(path.join(client,folder)))
       .filter((file) => forbidden.test(readFileSync(file,"utf8")))
       .map((file) => path.relative(client,file));
-    expect(offenders).toEqual([]);
+    expect(offenders).toEqual([path.join("server", "aiChat", "message.js")]);
   });
   it("quality helpers contain no network, DB, file-write or logging calls and only one dedicated env lookup", () => {
     const calls = [];

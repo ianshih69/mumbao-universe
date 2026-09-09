@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { randomBytes } from "node:crypto";
+import { performance } from "node:perf_hooks";
+import * as qualityPrivacy from "../../server/aiQuality/privacy.js";
 import aiChatHandler from "../../api/ai-chat.js";
 import { classifyFallbackDayType } from "../../server/bookingPricing/index.js";
 import { setDiscourseAnchor } from "../../server/aiChat/typedEntityReferences.js";
@@ -22,7 +25,7 @@ function jsonResponse(data, status = 200) {
   });
 }
 
-function createHandlerHarness(initialContext = {}) {
+function createHandlerHarness(initialContext = {}, { qualityResponse, providerResponse, onResponse } = {}) {
   let sequence = 0;
   let session = {
     id: sessionId,
@@ -39,11 +42,13 @@ function createHandlerHarness(initialContext = {}) {
   const messages = [];
   let nonFixtureCalls = 0;
   let structuredProviderCalls = 0;
+  const qualityTurns = [];
 
   const fetchMock = vi.fn(async (input, options = {}) => {
     const url = new URL(String(input));
     if (url.origin === "https://api.deepseek.test") {
       structuredProviderCalls += 1;
+      if (providerResponse) return providerResponse(input, options);
       const request = JSON.parse(options.body || "{}");
       const resolverInput = JSON.parse(request.messages?.[1]?.content || "{}");
       const candidate = resolverInput.operation_candidates?.[0] || null;
@@ -76,6 +81,10 @@ function createHandlerHarness(initialContext = {}) {
 
     const method = String(options.method || "GET").toUpperCase();
     const table = url.pathname.replace(/^\/rest\/v1\/?/, "");
+    if (table === "rpc/record_ai_quality_turn") {
+      qualityTurns.push(JSON.parse(options.body).p_turn);
+      return qualityResponse ? qualityResponse() : new Response(null, { status: 204 });
+    }
     if (table === "chat_sessions") {
       if (method === "PATCH") {
         session = { ...session, ...JSON.parse(options.body || "{}") };
@@ -157,6 +166,7 @@ function createHandlerHarness(initialContext = {}) {
       },
       end(body) {
         payload = JSON.parse(body);
+        onResponse?.();
       },
     };
 
@@ -170,9 +180,164 @@ function createHandlerHarness(initialContext = {}) {
     getNonFixtureCalls: () => nonFixtureCalls,
     getStructuredProviderCalls: () => structuredProviderCalls,
     getSession: () => session,
+    getQualityTurns: () => qualityTurns,
     send,
   };
 }
+
+describe("Phase 1B actual-handler observer equivalence", () => {
+  const initial = {
+    active_intent: "pricing", current_topic: "booking_price", stay_type: "villa",
+    check_in: "2026-11-01", check_out: "2026-11-02", stay_nights: 1,
+    guest_count: 10, adult_count: 10, child_count: 0, infant_count: 0,
+    pet_count: 1, pet_type: "dog", pet_weights_kg: [22],
+    quote_scenario: { scenario_id: "quality-fixture-scenario", context_version: 1 },
+  };
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-08T04:00:00.000Z"));
+    vi.stubEnv("SUPABASE_URL", "https://supabase.test");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "synthetic-quality-transport");
+    vi.stubEnv("AI_QUALITY_HMAC_SECRET", randomBytes(32).toString("hex"));
+    vi.stubEnv("VERCEL", "0");
+    vi.stubEnv("AI_MODE", "cloud_only");
+    vi.stubEnv("AI_SEMANTIC_ROUTER_MODE", "legacy");
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    vi.stubEnv("AI_CONTEXT_SEMANTIC_RESOLVER_ENABLED", "true");
+    vi.stubEnv("DEEPSEEK_API_KEY", "synthetic-provider-fixture-only");
+    vi.stubEnv("DEEPSEEK_BASE_URL", "https://api.deepseek.test");
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+  async function run(enabled, text, options = {}) {
+    vi.stubEnv("AI_QUALITY_OBSERVER_ENABLED", enabled ? "true" : "false");
+    const start = performance.now();
+    let responseMs;
+    const harness = createHandlerHarness(structuredClone(options.startingContext || initial), {
+      ...options, onResponse: () => { responseMs = performance.now() - start; },
+    });
+    vi.stubGlobal("fetch", harness.fetchMock);
+    const response = await harness.send(text, "quality-equivalence-turn");
+    const context = harness.getSession().conversation_context;
+    const { last_updated_at, slot_meta, dialogue_events, processed_turn_ids, entity_references, ...state } = context;
+    // Request/event IDs and timestamps are intentionally new for independent executions.
+    if (state.quote_scenario) state.quote_scenario = {
+      scenario_id: state.quote_scenario.scenario_id,
+      context_version: state.quote_scenario.context_version,
+    };
+    return {
+      response, state, harness, responseMs, completionMs: performance.now() - start,
+      behavior: {
+        status: response.statusCode, answer: response.payload.answer,
+        responseKind: response.payload.metadata?.final_response_kind, state,
+        calls: harness.getStructuredProviderCalls(),
+        executionCalls: response.payload.metadata?.total_provider_calls,
+      },
+    };
+  }
+
+  it.each(["有停車位嗎", "那改兩晚", "大型犬可以住嗎？"])("preserves response, state, pending and provider budget: %s", async text => {
+    const off = await run(false, text);
+    const on = await run(true, text);
+    expect(on.behavior).toEqual(off.behavior);
+    expect(on.response.statusCode).toBe(200);
+    expect(off.harness.getQualityTurns()).toHaveLength(0);
+    expect(on.harness.getQualityTurns()).toHaveLength(1);
+    const observation = on.harness.getQualityTurns()[0];
+    expect(observation.assistant_text).toBe(on.response.payload.answer);
+    expect(observation.metadata.provider_call_count).toBe(on.behavior.calls);
+    expect(on.behavior.calls).toBeLessThanOrEqual(1);
+    expect(observation.events).toEqual([]);
+    expect(observation.metadata.scenario_changed).toBe(text === "那改兩晚");
+    if (text === "大型犬可以住嗎？") {
+      expect(observation.metadata).toMatchObject({
+        capability_id: "large_dog_policy", goal_id: "general_policy_lookup", read_only_turn: true,
+      });
+    }
+    if (text === "那改兩晚") expect(on.state.stay_nights).toBe(2);
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+  it.each(["missing_schema", "throw", "timeout", "sanitizer", "hmac", "permission", "conflict"])("isolates %s from the actual customer response", async failure => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const off = await run(false, "那改兩晚");
+    if (failure === "hmac") vi.stubEnv("AI_QUALITY_HMAC_SECRET", undefined);
+    if (failure === "sanitizer") vi.spyOn(qualityPrivacy, "sanitizeAiQualityText").mockImplementation(() => { throw new Error("PRIVATE_FIXTURE"); });
+    const qualityResponse = () => {
+      if (failure === "timeout") return new Promise(() => {});
+      if (failure === "throw") throw new Error("PRIVATE_FIXTURE");
+      return new Response("PRIVATE_FIXTURE", { status: { missing_schema: 404, permission: 403, conflict: 409 }[failure] || 204 });
+    };
+    const result = run(true, "那改兩晚", { qualityResponse });
+    await vi.advanceTimersByTimeAsync(3100);
+    const on = await result;
+    expect(on.behavior).toEqual(off.behavior);
+    expect(on.response.statusCode).toBe(200);
+    expect(on.behavior.calls).toBe(1);
+    expect(console.warn.mock.calls.flat().join(" ")).not.toContain("PRIVATE_FIXTURE");
+    expect(console.warn).toHaveBeenCalled();
+  });
+  it.each(["timeout", "schema"])("keeps mocked provider %s fallback and records one safe event", async failure => {
+    const providerResponse = () => {
+      if (failure === "timeout") throw new DOMException("PRIVATE_PROVIDER_ERROR", "AbortError");
+      return jsonResponse({ choices: [{ message: { content: JSON.stringify({ illegal_ast: "PRIVATE_PROVIDER_ERROR" }) } }] });
+    };
+    const off = await run(false, "那改兩晚", { providerResponse });
+    const on = await run(true, "那改兩晚", { providerResponse });
+    expect(on.behavior).toEqual(off.behavior);
+    expect(on.behavior.calls).toBe(1);
+    const p = on.harness.getQualityTurns()[0];
+    expect(p.events.filter(event => event.event_type === (failure === "timeout" ? "provider_error" : "provider_schema_reject"))).toHaveLength(1);
+    if (failure === "timeout") expect(p.metadata.provider_error_type).toBe("timeout");
+    expect(JSON.stringify(p)).not.toContain("PRIVATE_PROVIDER_ERROR");
+  });
+  it("does not duplicate observations on the existing client replay path", async () => {
+    const on = await run(true, "有停車位嗎");
+    const replay = await on.harness.send("有停車位嗎", "quality-equivalence-turn");
+    expect(replay.statusCode).toBe(200);
+    expect(on.harness.getQualityTurns()).toHaveLength(1);
+  });
+  it.each(ownerRuntimeCases())("preserves certified owner behavior with observer ON: $id", async entry => {
+    const startingContext = await ownerFixture(entry.fixture, await ownerRuntime());
+    const off = await run(false, entry.phrase, { startingContext });
+    const on = await run(true, entry.phrase, { startingContext });
+    expect(on.behavior).toEqual(off.behavior);
+    expect(on.response.statusCode).toBe(200);
+    expect(ownerStateView(on.state)).toEqual({ ...ownerStateView(startingContext), ...entry.expected.patch });
+    const p = on.harness.getQualityTurns()[0];
+    expect(p).toBeDefined();
+    expect(p.metadata.provider_call_count).toBe(on.behavior.calls);
+    expect(on.behavior.calls).toBeLessThanOrEqual(1);
+    expect(p.events).toEqual([]);
+  });
+  it("sanitizes user PII in the completed actual-handler path", async () => {
+    const on = await run(true, "我的電話0988-123-456，2026年11月1日十個人帶22公斤狗住兩晚多少？");
+    expect(on.response.statusCode).toBe(200);
+    const p = on.harness.getQualityTurns()[0];
+    expect(p.user_text).toContain("[PHONE]");
+    expect(JSON.stringify(p)).not.toContain("0988-123-456");
+    expect(p.assistant_text).toBe(qualityPrivacy.sanitizeAiQualityText(on.response.payload.answer));
+  });
+  it("measures customer response latency separately from bounded sidecar completion", async () => {
+    const timings = {};
+    // Warm all fixture paths before measuring; no external service is contacted.
+    await run(false, "大型犬可以住嗎？");
+    for (const mode of ["off", "healthy", "failed"]) {
+      const samples = [];
+      for (let index = 0; index < 12; index += 1) {
+        const sample = await run(mode !== "off", "大型犬可以住嗎？", {
+          qualityResponse: mode === "failed" ? () => { throw new Error("synthetic"); } : undefined,
+        });
+        expect(sample.response.statusCode).toBe(200);
+        samples.push({ response_ms: sample.responseMs, completion_ms: sample.completionMs });
+      }
+      timings[mode] = Object.fromEntries(["response_ms", "completion_ms"].map(key =>
+        [key, Number((samples.reduce((sum, sample) => sum + sample[key], 0) / samples.length).toFixed(3))]));
+    }
+    console.log("AI_QUALITY_LOCAL_TIMING " + JSON.stringify(timings));
+  });
+});
 
 const priorTenAdultContext = {
   active_intent: "pricing",
@@ -197,6 +362,7 @@ describe("production AI chat structured authority", () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "structured-test-key");
     vi.stubEnv("DEEPSEEK_BASE_URL", "https://api.deepseek.test");
     vi.stubEnv("DEEPSEEK_MODEL", "deepseek-v4-flash");
+    vi.stubEnv("AI_QUALITY_OBSERVER_ENABLED", "false");
     vi.spyOn(console, "info").mockImplementation(() => {});
   });
 

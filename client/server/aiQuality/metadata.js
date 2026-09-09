@@ -11,15 +11,33 @@ const responseKinds = new Set([
 ]);
 const booleanFields = [
   "provider_used", "scenario_changed", "pending_created", "pending_consumed",
-  "generic_fallback", "clarification", "semantic_resolver_used",
+  "generic_fallback", "clarification", "semantic_resolver_used", "read_only_turn",
 ];
-const integerLimits = { provider_call_count: 32, latency_ms: 120000 };
+const integerLimits = {
+  provider_call_count: 32, latency_ms: 120000,
+  before_version: 1000000, after_version: 1000000,
+};
 const enumFields = {
   capability_id: capabilityIds,
   response_kind: responseKinds,
   structured_mode: new Set(["legacy", "shadow", "active"]),
   validation_outcome: new Set(["accepted", "rejected", "not_called"]),
-  provider_error_type: new Set(["timeout", "network_error", "http_error", "schema_reject", "invalid_response", "unknown"]),
+  provider_error_type: new Set(["timeout", "network", "network_error", "rate_limit", "http_error", "schema_reject", "invalid_response", "unknown"]),
+  provider_role: new Set(["semantic_resolver", "faq_selector", "answer", "unknown"]),
+  route_kind: new Set(["informational", "transactional", "dialogue", "fallback", "other"]),
+  goal_id: new Set([
+    "pet_eligibility_lookup", "pet_fee_lookup", "pet_deposit_lookup", "child_policy_lookup",
+    "breakfast_info_lookup", "checkin_info", "checkout_info", "facility_policy_lookup",
+    "payment_policy_lookup", "cancellation_policy_lookup", "transport_policy_lookup",
+    "general_policy_lookup", "lodging_fee_lookup", "guest_count_lookup", "stay_duration_lookup",
+    "quote_snapshot", "quote_patch_add", "quote_patch_replace", "quote_patch_remove",
+    "request_quote", "request_availability", "pending_slot_fill", "confirmation",
+    "correction", "clarification", "unrelated", "true_knowledge_gap",
+  ]),
+  signal_code: new Set([
+    "readonly_scenario_changed", "continuation_lost", "pending_disappeared",
+    "known_slot_requested", "provider_budget_exceeded",
+  ]),
 };
 const pendingFields = new Set([
   "check_in", "check_out", "nights", "adults", "children", "infants",

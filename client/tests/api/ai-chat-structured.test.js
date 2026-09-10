@@ -288,7 +288,7 @@ describe("Phase 1B actual-handler observer equivalence", () => {
     if (text === "那改兩晚") expect(on.state.stay_nights).toBe(2);
     expect(console.warn).not.toHaveBeenCalled();
   });
-  it.each(["missing_schema", "throw", "timeout", "sanitizer", "hmac", "permission", "conflict"])("isolates %s from the actual customer response", async failure => {
+  it.each(["missing_schema", "throw", "timeout", "sanitizer", "hmac", "permission", "conflict", "maintenance_required"])("isolates %s from the actual customer response", async failure => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const off = await run(false, "那改兩晚");
     if (failure === "hmac") vi.stubEnv("AI_QUALITY_HMAC_SECRET", undefined);
@@ -296,7 +296,7 @@ describe("Phase 1B actual-handler observer equivalence", () => {
     const qualityResponse = () => {
       if (failure === "timeout") return new Promise(() => {});
       if (failure === "throw") throw new Error("PRIVATE_FIXTURE");
-      return new Response("PRIVATE_FIXTURE", { status: { missing_schema: 404, permission: 403, conflict: 409 }[failure] || 204 });
+      return new Response("PRIVATE_FIXTURE", { status: { missing_schema: 404, permission: 403, conflict: 409, maintenance_required: 500 }[failure] || 204 });
     };
     const result = run(true, "那改兩晚", { qualityResponse });
     await vi.advanceTimersByTimeAsync(3100);
@@ -343,6 +343,20 @@ describe("Phase 1B actual-handler observer equivalence", () => {
     const feedbackOn = await run(true, entry.phrase, { startingContext });
     expect(feedbackOn.behavior).toEqual(on.behavior);
     expect(verifyAiQualityFeedbackToken(feedbackOn.response.payload.aiMessage.feedback_token)).not.toBeNull();
+  });
+  it.each([
+    "姓名:王小明，2026/11/01 10人住一晚多少？",
+    "地址:新北市板橋區文化路一段123號，早餐三份",
+    "姓名:這是一個超出支援長度而無法確認安全的稱謂，有停車位嗎？",
+  ])("A1.1 privacy sidecar preserves actual answer/state/provider budget: %s", async text => {
+    const off = await run(false, text);
+    const on = await run(true, text);
+    expect(on.behavior).toEqual(off.behavior);
+    expect(on.response.statusCode).toBe(200);
+    const payload = on.harness.getQualityTurns()[0];
+    expect(payload.user_text).toBe(qualityPrivacy.sanitizeAiQualityText(text));
+    expect(payload.user_text).not.toMatch(/王小明|文化路一段123號|無法確認安全的稱謂/);
+    expect(payload.assistant_text).toBe(qualityPrivacy.sanitizeAiQualityText(on.response.payload.answer));
   });
   it("sanitizes user PII in the completed actual-handler path", async () => {
     const on = await run(true, "我的電話0988-123-456，2026年11月1日十個人帶22公斤狗住兩晚多少？");

@@ -10,6 +10,62 @@ const separator = "[\\s\\-‐‑‒–—−]*";
 const mobile = new RegExp("(?<![A-Za-z0-9])(?:\\+?886" + separator + "(?:\\(0\\)" + separator + ")?|0)9[0-9xX*]{2}" + separator + "[0-9xX*]{3}" + separator + "[0-9xX*]{3}(?![0-9xX*])", "g");
 const landline = new RegExp("(?<![A-Za-z0-9])(?:\\(\\s*)?(?:\\+?886" + separator + "[2-8][0-9]{0,2}|0[2-8][0-9]{0,2})(?:\\s*\\))?[\\s\\-‐‑‒–—−]+[0-9xX*]{3,4}" + separator + "[0-9xX*]{3,4}(?![0-9xX*])(?:\\s*(?:#|ext\\.?|分機)\\s*\\d{1,6})?", "gi");
 
+const nameLabel = "(?:姓名|訂房人|聯絡人|入住人|收件人|(?:guest|contact|customer|full|recipient)[_ -]?name|name)";
+const labelSeparator = "[\"']?(?:[ \\t]*[:=]\\s*|[ \\t]+)[\"']?";
+const nameEnd = "(?=$|[\\s,，。;；!?！？、\"'<>]|想|希望|要訂|要住|電話|手機|地址|email)";
+const chineseName = "[\\p{Script=Han}]{2,8}?";
+const englishName = "[A-Za-z][A-Za-z'-]{0,30}(?:[ \\t\\r\\n]+[A-Za-z][A-Za-z'-]{0,30}){0,3}";
+const labelledName = new RegExp("(" + nameLabel + labelSeparator + ")(" + chineseName + "|" + englishName + ")" + nameEnd, "giu");
+// A surname alone is not evidence. Require an introduction and a bounded name,
+// then a sentence/booking-clause boundary; never classify arbitrary Han words.
+const surnames = "(?:歐陽|司馬|上官|諸葛|皇甫|司徒|[王陳林張李黃吳劉蔡楊許鄭謝郭洪曾邱廖賴徐周葉蘇莊呂江何蕭羅高潘簡朱鍾游彭詹胡施沈余盧梁趙顏柯孫魏翁戴范宋方鄧杜傅侯曹薛丁卓阮馬董温溫唐藍石蔣古紀姚連馮歐程湯田康姜白汪鄒熊金陸夏龔邵萬嚴秦袁])";
+const introducedName = new RegExp("((?:我是|我叫|我名叫|我的名字是)[ \\t]*)(" + surnames +
+  "[\\p{Script=Han}]{1,3}?|[A-Z][a-z'-]{1,30}(?:[ \\t]+[A-Z][a-z'-]{1,30}){0,3})" + nameEnd, "gu");
+const introducedEnglishName = /\b((?:I am|I'm|My name is)[ \t]+)([A-Z][a-z'-]{1,30}(?:[ \t]+[A-Z][a-z'-]{1,30}){0,3})(?=$|[\s,.;!?])/g;
+const nonIdentity = /(?:人|入住|帶|星期|週[一二三四五六日天]|預訂|訂房|朋友|旅客|家庭|小孩|成人|會員|學生|老師|旅遊|來自|住宿)/u;
+const city = "(?:臺北|台北|新北|桃園|臺中|台中|臺南|台南|高雄|基隆|新竹|嘉義|苗栗|彰化|南投|雲林|屏東|宜蘭|花蓮|臺東|台東|澎湖|金門|連江)[縣市]";
+const district = "[\\p{Script=Han}]{1,4}[區鄉鎮市]";
+const number = "[0-9一二三四五六七八九十百零〇之-]+";
+const street = "[\\p{Script=Han}]{1,12}?(?:大道|路|街)(?:[ \\t]*" + number + "段)?";
+const door = "(?:[ \\t]*" + number + "[巷弄]){0,2}[ \\t]*" + number +
+  "[ \\t]*號(?:[ \\t]*之[ \\t]*" + number + ")?(?:[ \\t]*" + number + "[樓室Ff]){0,2}";
+const fullAddress = new RegExp("(?:(?:台灣|臺灣)[ \\t]*)?(?:[0-9]{3,6}[ \\t]*)?" +
+  city + "[ \\t]*(?:" + district + "[ \\t]*)?" + street + door, "gu");
+const labelledAddress = new RegExp("((?:地址|住址|收件地址|寄送地址|(?:shipping[_ -]?)?address)" +
+  labelSeparator + ")(?:" + district + "[ \\t]*)?" + street + door, "giu");
+// Fixed server-owned public business data, verified against canonical faq-101.
+// A floor/unit/door-number suffix is NOT allowlisted.
+const businessAddress = "宜蘭縣員山鄉深洲二路158號";
+const isBusinessAddress = value => value.replace(/[ \t]/g, "").replace(/^(?:台灣|臺灣)?(?:264)?/, "") === businessAddress;
+const identityPlaceholder = /^\[(?:NAME|ADDRESS|TOKEN|PRIVACY_REDACTED)\]/;
+const explicitDoorAddress = new RegExp("(?:地址|住址|收件地址|寄送地址|address)" +
+  labelSeparator + "([^,，;；。]+)", "giu");
+
+function redactIdentityText(text) {
+  return text
+    .replace(fullAddress, value => isBusinessAddress(value) ? value : "[ADDRESS]")
+    .replace(labelledAddress, (value, label) => isBusinessAddress(value.slice(label.length)) ? value : label + "[ADDRESS]")
+    .replace(labelledName, (_value, label) => label + "[NAME]")
+    .replace(introducedName, (value, intro, name) => nonIdentity.test(name) ? value : intro + "[NAME]")
+    .replace(introducedEnglishName, (_value, intro) => intro + "[NAME]");
+}
+
+export function detectResidualHighRiskPii(value) {
+  if (typeof value !== "string") return true;
+  // Re-detection covers the legacy high-risk formats. The broader explicit-label
+  // check catches unsupported/overlong names which the precision matcher rejects.
+  if (redactPlainText(value) !== value || redactIdentityText(value) !== value) return true;
+  const labels = new RegExp(nameLabel + labelSeparator + "([^\\r\\n,，;；]+)", "giu");
+  if ([...value.matchAll(labels)].some(match => !identityPlaceholder.test(match[1].trim()))) return true;
+  // An explicit address label plus a private door number is high-confidence even
+  // when separators or a nonstandard street spelling defeat the precise grammar.
+  return [...value.matchAll(explicitDoorAddress)].some(match => {
+    const address = match[1].trim();
+    return !identityPlaceholder.test(address) && !isBusinessAddress(address) &&
+      /[0-9一二三四五六七八九十百]+[\s]*號/u.test(address) && /路|街|大道|巷|弄/u.test(address);
+  });
+}
+
 function queryPlaceholder(key) {
   const normalized = key.normalize("NFKC").replace(/[^a-z0-9]/gi, "");
   if (secretParameter.test(normalized)) return "[TOKEN]";
@@ -17,6 +73,8 @@ function queryPlaceholder(key) {
   if (/phone|mobile|^(?:tel|telephone)$/i.test(normalized)) return "[PHONE]";
   if (/booking|orderref/i.test(normalized)) return "[BOOKING_REF]";
   if (/bank|account/i.test(normalized)) return "[BANK_DATA]";
+  if (/^(?:name|guestname|contactname|customername|fullname|recipientname)$/i.test(normalized)) return "[NAME]";
+  if (/^(?:address|shippingaddress|homeaddress|contactaddress)$/i.test(normalized)) return "[ADDRESS]";
   return null;
 }
 
@@ -83,7 +141,7 @@ function sanitizeUrl(input, depth = 0) {
       url.hash = fragment.includes("=") ? cleanParams(new URLSearchParams(fragment)).toString() : redactPlainText(fragment);
     }
     url.pathname = redactPlainText(decodeURIComponent(url.pathname));
-    return url.toString().replace(/%5B(TOKEN|PHONE|EMAIL|ID|BOOKING_REF|BANK_DATA|CARD_DATA)%5D/gi, "[$1]");
+    return url.toString().replace(/%5B(TOKEN|PHONE|EMAIL|ID|BOOKING_REF|BANK_DATA|CARD_DATA|NAME|ADDRESS|PRIVACY_REDACTED)%5D/gi, "[$1]");
   } catch {
     return "[TOKEN]";
   }
@@ -97,9 +155,10 @@ export function sanitizeAiQualityText(value) {
   const normalized = value.replace(/[０-９Ａ-Ｚａ-ｚ＠．＿＋－＝：／？＆％＃]/g, (char) => char.normalize("NFKC"))
     .replace(/[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f]/gu, "");
   const withSafeUrls = normalized.replace(/https?:\/\/[^\s<>"'，。；、）]+/gi, (url) => sanitizeUrl(url));
-  const safe = redactPlainText(withSafeUrls);
+  const redacted = redactIdentityText(redactPlainText(withSafeUrls));
+  const safe = detectResidualHighRiskPii(redacted) ? "[PRIVACY_REDACTED]" : redacted;
   let end = Math.min(safe.length, 8000);
-  for (const match of safe.matchAll(/\[(?:PHONE|EMAIL|ID|BOOKING_REF|BANK_DATA|CARD_DATA|TOKEN)\]/g)) {
+  for (const match of safe.matchAll(/\[(?:PHONE|EMAIL|ID|BOOKING_REF|BANK_DATA|CARD_DATA|TOKEN|NAME|ADDRESS|PRIVACY_REDACTED)\]/g)) {
     if (match.index < end && match.index + match[0].length > end) end = match.index;
   }
   if (/[\uD800-\uDBFF]/.test(safe.charAt(end - 1))) end -= 1;

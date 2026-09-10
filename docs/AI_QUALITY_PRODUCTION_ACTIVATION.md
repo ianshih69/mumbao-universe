@@ -1,5 +1,535 @@
 # AI Quality Production Activation
 
+## A2.1-T2B Same-Session SET Qualification: PASS
+
+2026-09-10; main / 114d513a221297e00b872e0693e92cdddc948660.
+Only this runbook was dirty on entry. This section supersedes the historical
+PGOPTIONS/startup-timeout command patterns in A2.1-T below. They are NOT valid
+Production execution templates. Do not execute a migration in A2.1-T2B.
+
+### Corrected Production Evidence
+
+The owner supplied the preceding native psql T2 result:
+
+- External CA verify-full: PASS; password authentication: PASS.
+- Exact Session Pooler: aws-1-ap-northeast-1.pooler.supabase.com:5432.
+- Client user postgres.jgmgniftiwngvljdeytt; database postgres.
+- Three same-session backend PID observations: 6246, stable.
+- statement_timeout=2min, lock_timeout=0: FAIL against required 10s/2s.
+- application_name=Supavisor; startup PGAPPNAME is not a reliable identity marker.
+- read_only=off meant no default read-only session setting, NOT a data write.
+- Production schema/data writes=0; credential persistence=0.
+
+These are owner-reported live Production observations, not substituted local
+results. Supavisor did not propagate PGOPTIONS as expected. Do not lower the
+timeout requirements or rely on PGOPTIONS, including on a fresh connection.
+
+The authenticated project Dashboard was freshly checked in T2B:
+mumbao-ai-chat / main PRODUCTION / jgmgniftiwngvljdeytt, status Healthy.
+This is pre-proof health, NOT the required post-proof health check.
+
+The existing repo-external CA E:/mumbao/certs/supabase-prod-ca.crt is a valid
+CA within its validity period. It was not copied, moved or added to the repo.
+
+### Completed Production Proof And Health After
+
+The owner confirmed completion of the newly launched A2.1-T2B native psql
+qualification. The old PROOF FINISHED output with 2min/0/off is NOT T2B evidence.
+These Production SQL results were supplied by the owner after native password
+entry; they were not inferred from the earlier local rehearsal:
+
+| Production T2B check | Final result |
+| --- | --- |
+| SESSION_1_TIMEOUT | PASS |
+| SESSION_2_FRESH | PASS; a new psql process reapplied SET/VERIFY |
+| Same-session backend PID | Stable: YES. Numeric T2B PIDs were not supplied; do not reuse the earlier T2 PID 6246. |
+| statement_timeout / lock_timeout | 10s / 2s |
+| Qualification read-only | on |
+| pg_sleep(11) timeout | 10,042.752 ms; SQLSTATE 57014 |
+| Production schema/data writes | 0 |
+| Password persisted | false |
+| Production env changes | 0 |
+
+After that owner confirmation, Codex opened a fresh authenticated Dashboard at
+https://supabase.com/dashboard/project/jgmgniftiwngvljdeytt and read the loaded
+project status. At 2026-09-10 13:11 UTC (21:11 Asia/Taipei), exact identity was
+mumbao-ai-chat / main PRODUCTION / jgmgniftiwngvljdeytt; Database Health after
+was **Healthy**. This was a read-only Dashboard check, not a SQL Editor Run,
+psql reconnection, migration or ledger action.
+
+The Dashboard also displayed two PostgreSQL errors in its last-60-minute
+aggregate. No detailed logs were opened, so this closure does not attribute
+those errors to a particular query or claim an error-free traffic window.
+The required Database Health indicator itself was Healthy.
+
+Together with the prior verified TLS/authentication, immutable local -f
+rehearsal and ON_ERROR_STOP checks, this completes **A2.1-T2B GATE = PASS**.
+The selected transport remains same-session SET + VERIFY + immutable -f,
+with verify-full and the external CA, not PGOPTIONS timeout inheritance.
+
+This closes transport qualification ONLY. A2.1 is NOT started or implicitly
+reapproved. Stop and wait for explicit A2.1 reapproval; no migration, ledger,
+Production env change, Quality flag activation, HMAC or scheduler action.
+
+### Selected Strategy And Failure Boundary
+
+Every invocation must itself perform session SET, fail-closed VERIFY, then
+the authorized operation on that SAME connection. Never SET in one psql
+process and run -f in another. Port 6543 is not an alternative for this proof.
+
+The owner qualification below performs only read-only SQL and session-local
+settings. A random, non-secret session GUC binds the initial PID to this
+invocation; it is not a table, ledger, credential or persistent database setting.
+A guard checks the marker/PID, database/user, 10s/2s and read-only=on before
+the sleep. Any mismatch raises a SQL error and ON_ERROR_STOP stops psql.
+
+Three output PIDs must also match. The timeout test must exit nonzero with
+57014 at approximately ten seconds and must not execute its following SELECT.
+Only that expected timeout permits a new psql process and a second native
+owner password prompt. Every fresh process reapplies and verifies settings.
+A pooler may reuse a backend PID across distinct connections; independence
+is established by ending/restarting psql, not requiring unequal cross-session PIDs.
+
+The requested application_name remains best-effort. Through Session Pooler
+it is not reliable as a migration identity marker; do not weaken TLS or
+change pooler to make it match.
+
+Qualification uses default_transaction_read_only=on and verifies both default
+and current transaction read-only. A future authorized migration invocation
+must NOT use that qualification-only setting.
+
+### New Local Same-Invocation Evidence
+
+Reused PostgreSQL 17.6 at verified 127.0.0.1:55441, with no Production
+connection or credential. Fresh local fixtures:
+quality_t2b_pass_1789044052634 / quality_t2b_fail_1789044052634,
+non-superuser BYPASSRLS owner quality_t2b_owner_1789044052634.
+No PGOPTIONS was present in child environments.
+
+| Proof | Result |
+| --- | --- |
+| SET -> guarded VERIFY -> original immutable -f -> guarded VERIFY | Four files PASS; 1A PID 9708/9708, 1B 22976/22976, 1C 26720/26720, hardening 5568/5568. Each before/after proof retained 10s/2s. |
+| Immutable bytes | Four manifest SHA256 values matched checkpoint raw bytes before/after; original files executed by absolute -f path, no rewrite/copy. |
+| Per-prefix contract | Tables/columns/indexes/functions: 7/85/29/8, 7/89/31/9, 7/94/34/14, 8/102/35/16. ACL violations=0, RLS/owners/indexes valid, evidence=0, final maintenance=1, exact permissions=2, synthetic core sentinel unchanged. |
+| Timeout inside -f stdin synthetic input | pg_sleep(11) canceled after 10,042 ms, 57014, exit 3; following statement and following -c did not execute. |
+| ON_ERROR_STOP after SET/VERIFY | Synthetic division error 22012, exit 3; later statement and following original foundation -f did not execute. Fresh failure DB Quality objects remained 0. |
+| Fresh connection | Explicit SET/VERIFY PASS, PID 3604, 10s/2s without inherited PGOPTIONS. |
+| Exact owner PowerShell control flow, local endpoint only | First PID 13092/13092/13092, read-only on, 57014 after 10,003.424 ms, exit 1. Fresh process PID 30076/30076/30076, settings/read-only valid, exit 0. |
+
+One preliminary in-memory local guard used a SQL concatenation typo and
+stopped with 42883 before the first -f. It was corrected in the harness only;
+the zero-object precheck passed before the chain. No successful migration
+prefix was replayed, and no migration file was changed.
+
+The local successful databases are synthetic fixtures, not Production.
+The local server was stopped with pg_ctl after these checks. Final raw-byte
+checksum recheck passed for all four migrations; git diff --check passed.
+No Production lock contention is authorized or needed. The Production
+lock-timeout proof is same-session SHOW/current_setting=2s.
+
+### Owner-Only Read-Only Qualification
+
+Reviewed Windows PowerShell syntax follows. It contains no credential and
+does not open any migration file. It removes named inherited PG overrides
+without reading their values. psql -X avoids psqlrc; -W requests the owner's
+native masked console prompt; pgpass/service-file persistence is disabled.
+Only safe metadata/results and SQLSTATE are reported. Output parsing is
+in-memory, not a log/artifact. The password is never supplied to PowerShell.
+
+~~~powershell
+$ErrorActionPreference = 'Stop'
+$Psql = 'C:\Users\IAN\AppData\Local\Temp\codex-postgresql-client-17.11\runtime\pgsql\bin\psql.exe'
+$Ca = 'E:\mumbao\certs\supabase-prod-ca.crt'
+$HostName = 'aws-1-ap-northeast-1.pooler.supabase.com'
+$PortNumber = '5432'
+$Login = 'postgres.jgmgniftiwngvljdeytt'
+$Database = 'postgres'
+$BackendUser = 'postgres'
+$PasswordFlag = '-W'
+$ProductionProof = $true
+$controls = @('PGPASSWORD','PGSERVICE','PGOPTIONS','PGAPPNAME','PGHOST','PGHOSTADDR',
+ 'PGPORT','PGUSER','PGDATABASE','PGSSLMODE','PGSSLROOTCERT','PGSSLKEY','PGSSLCERT',
+ 'PGSSLCRL','PGSSLCRLDIR','PGPASSFILE','PGSERVICEFILE','PGCONNECT_TIMEOUT',
+ 'PGCLIENTENCODING','PGREQUIRESSL','PGREQUIREAUTH','PGCHANNELBINDING','PGTARGETSESSIONATTRS',
+ 'PGGSSENCMODE','PGKRBSRVNAME','PGGSSLIB','PGSSLNEGOTIATION')
+foreach ($name in $controls) {
+ Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+}
+try {
+ if (-not (Test-Path -LiteralPath $Psql -PathType Leaf)) { throw 'PSQL_MISSING' }
+ if ($ProductionProof -and -not (Test-Path -LiteralPath $Ca -PathType Leaf)) { throw 'CA_MISSING' }
+ $env:PGSSLMODE = $(if ($ProductionProof) { 'verify-full' } else { 'disable' })
+ if ($ProductionProof) { $env:PGSSLROOTCERT = $Ca }
+ $env:PGPASSFILE = 'NUL'
+ $env:PGSERVICEFILE = 'NUL'
+ $env:PGCONNECT_TIMEOUT = '10'
+ $env:PGCLIENTENCODING = 'UTF8'
+ $env:PGAPPNAME = 'mumbao-ai-quality-migration'
+ $base = @('-X',$PasswordFlag,'-qAt','-P','pager=off','-v','ON_ERROR_STOP=1',
+  '-v','VERBOSITY=sqlstate','-h',$HostName,'-p',$PortNumber,'-U',$Login,'-d',$Database)
+ function Invoke-Qualification([string]$Phase, [bool]$SleepProbe) {
+  $nonce = [guid]::NewGuid().ToString('N')
+  $initial = "select json_build_object('label','PID_BEFORE','pid',pg_backend_pid(),'session_marker',set_config('mumbao.transport_guard','$nonce'||':'||pg_backend_pid()::text,false));"
+  $guard = "select 1/(coalesce(current_setting('mumbao.transport_guard',true)='$nonce'||':'||pg_backend_pid()::text,false) and current_database()='$Database' and current_user='$BackendUser' and current_setting('statement_timeout')='10s' and current_setting('lock_timeout')='2s' and current_setting('default_transaction_read_only')='on' and current_setting('transaction_read_only')='on')::int;"
+  $fields = "'pid',pg_backend_pid(),'database',current_database(),'user',current_user,'statement_timeout',current_setting('statement_timeout'),'lock_timeout',current_setting('lock_timeout'),'default_read_only',current_setting('default_transaction_read_only'),'read_only',current_setting('transaction_read_only'),'application_name',current_setting('application_name')"
+  $after = "select json_build_object('label','PID_AFTER',$fields);"
+  $last = "select json_build_object('label','PID_FINAL',$fields);"
+  $commands = @('-c',$initial,
+   '-c',"SET statement_timeout='10s'",
+   '-c',"SET lock_timeout='2s'",
+   '-c',"SET default_transaction_read_only=on",
+   '-c',$guard,
+   '-c','SHOW statement_timeout',
+   '-c','SHOW lock_timeout',
+   '-c','SHOW default_transaction_read_only',
+   '-c',$after,'-c','SELECT 1','-c',$last,'-c',$guard)
+  if ($SleepProbe) {
+   $commands += @('-c','\timing on','-c','SELECT pg_sleep(11)',
+    '-c',"SELECT 'UNEXPECTED_FOLLOWUP'")
+  }
+  Write-Host "$Phase : enter the database password only in the native masked psql prompt."
+  $ErrorActionPreference = 'Continue'
+  $lines = @(& $Psql @base @commands 2>&1 | ForEach-Object { $_.ToString() })
+  $exitCode = $LASTEXITCODE
+  $ErrorActionPreference = 'Stop'
+  $records = @($lines | Where-Object { $_ -match '^\{' } | ForEach-Object { ConvertFrom-Json $_ })
+  $states = @($lines | ForEach-Object {
+   if ($_ -match '\b(?:ERROR|FATAL):\s+([0-9A-Z]{5})\b') { $Matches[1] }
+  })
+  $timings = @($lines | ForEach-Object {
+   if ($_ -match '^Time:\s+([0-9]+(?:\.[0-9]+)?)\s+ms') {
+    [double]::Parse($Matches[1],[Globalization.CultureInfo]::InvariantCulture)
+   }
+  })
+  $pidMatch = $records.Count -eq 3 -and @($records.pid | Select-Object -Unique).Count -eq 1
+  $settingsMatch = $records.Count -eq 3
+  foreach ($r in @($records | Select-Object -Skip 1)) {
+   $settingsMatch = $settingsMatch -and $r.statement_timeout -eq '10s' -and
+    $r.lock_timeout -eq '2s' -and $r.default_read_only -eq 'on' -and
+    $r.read_only -eq 'on' -and $r.database -eq $Database -and $r.user -eq $BackendUser
+  }
+  $followupRan = @($lines | Where-Object { $_ -match 'UNEXPECTED_FOLLOWUP' }).Count -gt 0
+  $elapsed = if ($timings.Count) { $timings[-1] } else { $null }
+  $passed = $pidMatch -and $settingsMatch -and -not $followupRan
+  if ($SleepProbe) {
+   $passed = $passed -and $exitCode -eq 1 -and $states.Count -eq 1 -and
+    $states[0] -eq '57014' -and $null -ne $elapsed -and $elapsed -ge 9500 -and $elapsed -lt 15000
+  } else {
+   $passed = $passed -and $exitCode -eq 0 -and $states.Count -eq 0
+  }
+  $safe = [ordered]@{
+   phase=$Phase; result=$(if($passed){'PASS'}else{'STOP'});
+   pids=@($records.pid); pid_stable=$pidMatch; settings_verified=$settingsMatch;
+   statement_timeout=$(if($records.Count -ge 2){$records[1].statement_timeout}else{$null});
+   lock_timeout=$(if($records.Count -ge 2){$records[1].lock_timeout}else{$null});
+   qualification_read_only=$(if($records.Count -ge 2){$records[1].default_read_only}else{$null});
+   application_name=$(if($records.Count -ge 2){$records[1].application_name}else{$null});
+   exit_code=$exitCode; sqlstates=$states; sleep_elapsed_ms=$elapsed;
+   followup_executed=$followupRan; schema_data_writes=0; password_persisted=$false
+  }
+  Write-Host ($safe | ConvertTo-Json -Compress)
+  $lines=$null
+  $records=$null
+  if (-not $passed) { throw 'QUALIFICATION_STOP' }
+ }
+ Write-Host 'A2.1-T2B: read-only queries and session-local SET only. No migration.'
+ Invoke-Qualification 'SESSION_1_TIMEOUT' $true
+ Write-Host 'First psql process ended. The second process requires a new native password entry.'
+ Invoke-Qualification 'SESSION_2_FRESH' $false
+ Write-Host 'T2B_SQL_PROOF_PASS; DB_HEALTH_AFTER_REQUIRES_SEPARATE_VERIFICATION'
+} catch {
+ Write-Host 'T2B_STOP; no migration or follow-up write is allowed.'
+} finally {
+ foreach ($name in $controls) {
+  Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+ }
+ Write-Host 'PRODUCTION_SCHEMA_DATA_WRITES=0; SECRET_PERSISTENCE=0; ENV_CHANGES=0'
+}
+~~~
+
+The password prompt uses the native Windows console, independently of captured
+safe SQL output; password echo is disabled by psql. See PostgreSQL's
+[console prompt implementation](https://github.com/postgres/postgres/blob/REL_17_STABLE/src/common/sprompt.c)
+and [psql reference](https://www.postgresql.org/docs/17/app-psql.html).
+Do not substitute Read-Host password capture, a connection URI password,
+PGPASSWORD, a password file, a transcript or any credential-bearing argument.
+
+### Future Immutable File Pattern: Not Authorized In This Round
+
+After successful Production T2B proof AND separate A2.1 reapproval only:
+
+1. Recheck exact project/health, clean checkpoint, all four checksums,
+   collisions, core metadata snapshot, flags OFF and approved ledger strategy.
+2. Start a fresh verified-TLS Session Pooler psql process with -X,
+   ON_ERROR_STOP=1, and the owner's native password prompt.
+3. In that invocation: -c "SET statement_timeout='10s'; SET lock_timeout='2s';"
+   followed by an identity/PID/settings guard. Require transaction_read_only=off
+   for migration, without setting any persistent database configuration.
+4. In the SAME invocation: -f "<original absolute immutable migration path>",
+   then the post-file PID/timeouts proof; no -1/--single-transaction because
+   each original migration owns BEGIN/COMMIT.
+5. Require exit zero, exact prefix/core/ACL verification, then the separately
+   approved ledger attestation; only then proceed to the next phase.
+6. Any failure, timeout, uncertain commit, PID/settings mismatch or lost
+   connection means STOP. No repair SQL, DROP, replay or automatic retry.
+
+Production T2B same-session SET, sleep cancellation and fresh-session output
+are owner-confirmed PASS. The post-proof authenticated Dashboard check above
+confirmed Healthy. Local results alone were not used to certify Production.
+A2.1-T2B GATE: PASS; ready to request separate A2.1 reapproval: YES.
+No A2.1 execution is authorized by this qualification closure.
+
+Production migrations/ledger/schema/data writes=0; Production env changes=0;
+DeepSeek calls=0; flags/HMAC/scheduler untouched. No credential was read or
+persisted by Codex. Only this runbook is modified; no code, test, migration,
+FAQ, pricing, booking or certificate change.
+
+
+## A2.1-T Migration Transport Qualification: STOP / FAIL
+
+2026-09-10; branch main; HEAD 114d513a221297e00b872e0693e92cdddc948660.
+Initial working tree clean. This section supersedes the SQL Editor transport
+selection below; the immutable artifact manifest and schema contract remain
+unchanged. This is NOT authorization to resume A2.1 or to execute Production
+migrations, ledger bootstrap/attestations, permission seeds or maintenance.
+
+### SQL Editor Root Cause And Prohibition
+
+The preceding A2.1 attempt stopped before all schema/data/ledger writes.
+Database-source SQL Editor Run set statement_timeout=10s and lock_timeout=2s
+on backend PID 4191480. The next Run used PID 4191483 and reported 2min / 0.
+Those settings were session-local, not persistent settings or Production env.
+
+**Forbidden: SET in one SQL Editor Run, then migration in another Run.**
+One editor tab is not one PostgreSQL connection. No cross-Run PID/timeout
+inheritance may be assumed, even if two adjacent queries happen to match.
+Do not weaken either timeout, edit committed SQL, or use transaction pooler
+6543/serverless pooling to bypass this failure.
+
+### Transport Inventory And Current Blockers
+
+The authenticated Dashboard identifies mumbao-ai-chat / main PRODUCTION,
+project jgmgniftiwngvljdeytt. Database Health was Healthy before and after this
+qualification. Only Connect/health UI was read; no SQL Editor Run occurred
+in A2.1-T. This Dashboard identity is NOT yet authenticated psql identity proof.
+
+| Option | Observed endpoint category / port | Current evidence |
+| --- | --- | --- |
+| A, preferred | Project-specific db.*.supabase.co / 5432, Direct | Windows DNS resolves an AAAA record. IPv6 TCP attempt returned ENETUNREACH; unavailable from this host/network. Node default lookup first returned ENOTFOUND, not proof that the project lacked DNS. |
+| B, candidate only | aws-1-ap-northeast-1.pooler.supabase.com / 5432, Supavisor SESSION MODE | Exact host copied as non-secret metadata from Connect, not inferred from region. Three resolved IPv4 addresses accepted TCP connections; authentication/session semantics remain unproved. |
+| C, not qualified | SQL Editor single execution | Not selected while B awaits credentials and TLS trust. No Production wrapper experiment performed. |
+
+No software was installed. Existing client:
+C:/Users/IAN/AppData/Local/Temp/codex-postgresql-client-17.11/runtime/pgsql/bin/psql.exe
+reports PostgreSQL 17.11. It is not on PATH; use its absolute path. Existing
+local server is native PostgreSQL 17.6, matching the last verified Production
+engine. Version availability is verified, not a new installation permission.
+
+SUPABASE_DB_URL, PGPASSWORD, PGSERVICE and PGPASSFILE were NOT SET in the Codex
+execution process. Only presence was checked; no credential value was read.
+No .env, pgpass, service file, Vercel secret or credential store was opened.
+
+A passwordless psql session-pooler probe used -w, PGPASSFILE=NUL,
+PGSERVICEFILE=NUL, PGSSLMODE=verify-full, PGSSLROOTCERT=system, startup timeouts
+and default_transaction_read_only=on. It exited 2 at TLS trust verification;
+SELECT 1 did not run and no password was supplied. A separate PostgreSQL SSL
+handshake using the default Windows SslStream verifier also failed. This does
+not establish a particular certificate/root/interception root cause. No
+certificate-validation bypass, trust-store change or software install occurred.
+
+**B is a proposed candidate, not a certified transport.** Remaining blockers:
+verified TLS trust for the exact endpoint and a safely supplied existing DB
+credential. Production PID, startup settings, identity and pg_sleep proof are
+NOT RUN. A local proof cannot satisfy these Production gates.
+
+Direct is preferred for native migrations; shared session mode is the IPv4
+alternative. The documented host/port distinction is confirmed by the
+[Supabase connection guide](https://supabase.com/docs/guides/database/connecting-to-postgres).
+
+### Completed Local Psql Rehearsal
+
+Reused the previously installed isolated server, bound only to 127.0.0.1:55441.
+pg_ctl start hit a Windows restricted-token error; the same existing binary
+started with Start-Process -WindowStyle Hidden. No software was installed.
+Verified localhost address, port, PostgreSQL 17.6 and bootstrap identity before
+creating fresh synthetic databases and a non-superuser BYPASSRLS login role.
+No Production connection string or password was used by this harness.
+
+Local-only retained test databases:
+quality_a21t_pass_1789036942256 and quality_a21t_fail_1789036942256.
+They are in the pre-existing OS TEMP cluster, not repo files or Production.
+The server was stopped with pg_ctl after testing; no test session remains.
+No local or Production ledger was created in this qualification.
+
+Every client invocation used -X, -w, ON_ERROR_STOP=1 and an explicit local
+host/port/database/user. Child environment was allowlisted; no inherited DB
+credential/config was used. PGOPTIONS supplied both timeouts at connection
+startup, PGAPPNAME=mumbao-ai-quality-migration, PGCLIENTENCODING=UTF8.
+Local SSL was disabled only for the explicitly verified loopback fixture;
+that choice is NOT the proposed Production TLS configuration.
+
+| Local proof | Measured result |
+| --- | --- |
+| Separate -c commands within one invocation | Same PID 15020; SHOW and current_setting both 10s / 2s; SELECT 1 succeeded; application_name matched. |
+| pg_sleep(11) | Cancelled at 10,036 ms, SQLSTATE 57014; later command did not run; a fresh startup-configured session succeeded. |
+| ON_ERROR_STOP script | Synthetic stdin script SELECT 1/0 exited 3 / 22012; next statement AND following original -f foundation file did not execute. |
+| Lock timeout | Local-only lock held by an acknowledged separate local connection; psql SELECT timed out at 2,040 ms / 55P03. No Production table lock was taken. |
+| Complete immutable chain | Four original absolute -f paths applied once each, with per-file verification before advancing; no copy/rewrite/concatenated migration file. |
+| Partial failure | Separate clean synthetic DB intentionally lacked admin_permissions. 1A/1B succeeded, original 1C exited 3 / 42P01, hardening was never invoked. |
+
+Observed psql -c query errors exited **1**, whereas errors in -f scripts
+exited **3**. Any nonzero exit, signal, connection failure or absent verification
+is STOP; do not accept only one numeric failure code. An initial local harness
+assertion expecting 3 for -c was corrected to this observed CLI distinction.
+An initial text rendering assertion used inet::text (which includes /32);
+host(inet_server_addr()) now checks the exact loopback address. The lock test
+uses server acknowledgment, not a buffered multi-command output marker.
+These were in-memory harness corrections, not runtime/migration/test edits.
+
+| Prefix | Tables | Columns | Indexes | Functions | Policies | PID before/after same -f |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1A | 7 | 85 | 29 | 8 | 0 | 11632 / 11632 |
+| 1A+1B | 7 | 89 | 31 | 9 | 0 | 24336 / 24336 |
+| 1A+1B+1C | 7 | 94 | 34 | 14 | 0 | 21912 / 21912 |
+| Full chain | 8 | 102 | 35 | 16 | 0 | 30960 / 30960 |
+
+Each prefix checked all eight table privileges for anon/authenticated/service_role,
+PUBLIC ACL absence, function browser/PUBLIC EXECUTE denial, service-role EXECUTE,
+trusted owner/fixed search_path, RLS, valid/ready indexes, three user triggers,
+zero evidence rows and unchanged synthetic core sentinel. Permission count was
+0/0/2/2 with exact approved descriptions. Final maintenance seed count=1 and
+all initial fields matched. No privacy/runtime write RPC was called.
+
+All four SHA256 values matched the manifest and checkpoint raw bytes before
+execution and again afterward. Partial-failure DB retained exactly the verified
+1A/1B metadata hash, 89 columns and no Phase C partial columns; maintenance
+table absent. Attempted phases=[1,2,3], successful=[1,2], replayed prefixes=0,
+next phase invocations=0, ledger writes=0. No failed prefix was repaired.
+
+### Safe Command Pattern: Prepared, Not Executed In Production
+
+Use a separate owner-controlled PowerShell process with no inherited PG
+credential/service/connection overrides. Do not print the environment. Prefer
+psql's own masked -W password prompt, entered by the owner, not a password/URI
+argument. No password belongs in PowerShell history, .env, logs or this document.
+Temporary credential env, if separately supplied, must be process-scoped and
+cleared in finally; no credential was supplied or persisted in A2.1-T.
+
+The following is a **read-only qualification template**, blocked until the
+owner has a verified trusted CA configuration and an existing DB password.
+It does not download/install a CA or disable TLS verification. A CA path is
+public configuration, not a credential. Do not run a migration with this block.
+
+~~~powershell
+$ErrorActionPreference = 'Stop'
+$Psql = 'C:\Users\IAN\AppData\Local\Temp\codex-postgresql-client-17.11\runtime\pgsql\bin\psql.exe'
+$Ca = 'REPLACE_WITH_VERIFIED_PUBLIC_CA_FILE_PATH'
+if (-not (Test-Path -LiteralPath $Ca -PathType Leaf)) { throw 'VERIFIED_CA_REQUIRED' }
+$controls = @('PGOPTIONS','PGAPPNAME','PGSSLMODE','PGSSLROOTCERT','PGPASSFILE',
+  'PGSERVICEFILE','PGCONNECT_TIMEOUT','PGCLIENTENCODING')
+foreach ($name in ($controls + @('PGPASSWORD','PGSERVICE','PGHOSTADDR','PGSSLKEY','PGSSLCERT'))) {
+  if (Test-Path -LiteralPath "Env:$name") { throw 'USE_FRESH_PROCESS_WITHOUT_PG_OVERRIDES' }
+}
+try {
+  $env:PGOPTIONS = '-c statement_timeout=10000 -c lock_timeout=2000 -c default_transaction_read_only=on'
+  $env:PGAPPNAME = 'mumbao-ai-quality-migration'
+  $env:PGSSLMODE = 'verify-full'
+  $env:PGSSLROOTCERT = $Ca
+  $env:PGPASSFILE = 'NUL'
+  $env:PGSERVICEFILE = 'NUL'
+  $env:PGCONNECT_TIMEOUT = '5'
+  $env:PGCLIENTENCODING = 'UTF8'
+  $base = @('-X','-W','-qAt','-P','pager=off','-v','ON_ERROR_STOP=1',
+    '-v','VERBOSITY=sqlstate','-h','aws-1-ap-northeast-1.pooler.supabase.com',
+    '-p','5432','-U','postgres.jgmgniftiwngvljdeytt','-d','postgres')
+  $proof = "select json_build_object('pid',pg_backend_pid(),'database',current_database(),'user',current_user,'version',current_setting('server_version'),'statement_timeout',current_setting('statement_timeout'),'lock_timeout',current_setting('lock_timeout'),'read_only',current_setting('transaction_read_only'),'app',current_setting('application_name'));"
+  & $Psql @base -c $proof -c 'SHOW statement_timeout' -c 'SHOW lock_timeout' -c $proof -c 'SELECT 1'
+  if ($LASTEXITCODE -ne 0) { throw 'QUALIFICATION_STOP' }
+  # Stop here for identity/PID/settings review before the separately approved sleep probe.
+} finally {
+  foreach ($name in $controls) { Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue }
+}
+~~~
+
+The reviewed continuation uses a new safe invocation with the SAME startup
+settings and -c "SELECT pg_sleep(11)". Require 57014 at about 10 seconds and
+nonzero exit; no arbitrary SQL-error chain in Production. Then open another
+new safe invocation and recheck PID/settings/SELECT 1. Do not mistake this
+expected cancellation for unhealthy DB or continue on any other failure.
+Production lock proof is only current_setting('lock_timeout')=2s, never contention.
+
+Before accepting identity, compare current_database/current_user/version and
+safe core metadata against the authenticated Dashboard's exact project. For
+stronger session binding, keep the psql connection open and read its application
+name/PID/backend_start from pg_stat_activity in that authenticated project's
+SQL Editor (no query text or customer data). A host label or matching generic
+database name/version alone is insufficient. This proof remains NOT RUN.
+
+After a future explicit A2.1 reapproval only, the file-apply pattern is:
+connection startup PGOPTIONS (10s/2s, without the qualification read-only flag)
+and verified TLS + `psql -X -v ON_ERROR_STOP=1 -c <identity/settings guard>
+-f <original absolute approved file path> -c <post-file settings proof>`.
+The guard must fail closed on wrong identity/timeouts, not merely print them.
+Local rehearsal kept one connection over each file; separate invocations may
+use different PIDs because EVERY connection gets checked startup configuration.
+Never place the password or a secret connection URI in any argument.
+
+Do not add -1/--single-transaction: the approved files already contain their
+own BEGIN/COMMIT. Startup options belong to libpq/runner configuration, never
+migration content. These psql behaviors are documented in the
+[psql reference](https://www.postgresql.org/docs/17/app-psql.html) and
+[libpq environment reference](https://www.postgresql.org/docs/17/libpq-envars.html).
+
+### Future Apply / Verify / Ledger Sequence
+
+All steps remain unexecuted in Production. First reapprove the certified
+transport, exact four checksums and the already-designed separate ledger.
+Repeat health, identity, flags OFF, collisions, permission dependency and core
+snapshot; bootstrap/verify only the approved owner-only ledger once.
+
+For each phase in explicit 1A -> 1B -> 1C -> hardening order:
+
+1. Require the exact already-verified prefix and ledger; verify committed bytes.
+2. Open a safely configured connection; enforce identity/settings before -f.
+3. Apply the one original file exactly once; require zero psql exit.
+4. Run the complete read-only prefix/core/ACL checks; require PASS.
+5. In a distinct, bounded operation, insert only that filename/SHA attestation.
+6. Read back the exact ledger prefix; only then consider the next phase.
+
+No next migration shares a command batch with the preceding ledger insert.
+No automatic skip, retry, repair, rollback DROP or replay. Artifact commit and
+ledger attestation are separate transactions: an uncertain commit/ledger gap
+means STOP and separately approved reconciliation, never a guessed ledger row.
+
+### SQL Editor Emergency Fallback
+
+Cross-Run SET is permanently disqualified. A same-Run wrapper is NOT certified
+by that statement: PostgreSQL does not provide nested transactions merely by
+stacking BEGIN/COMMIT, and these files already own their boundaries. No wrapper
+was executed, no artifact was concatenated/reformatted, and no emergency path
+is approved. Consider C only after A/B are genuinely unavailable and an exact
+single-execution/backend/timeout/transaction-compatible local proof is approved.
+Missing credentials alone are not permission to bypass B's safety gates.
+
+### A2.1-T Verdict And Minimal Owner Step
+
+Local transport rehearsal PASS; overall **A2.1-T GATE FAIL / BLOCKED**.
+Next minimal owner action: resolve trusted TLS validation for the observed
+Session pooler endpoint using a verified CA configuration, then supply the
+existing database password only through the owner's masked psql prompt or an
+explicitly authorized temporary process environment. Never paste it into chat.
+Share only the safe qualification output, not the credential. Rerun the missing
+Production read-only proofs before requesting A2.1 again. Recommend A2.1 now: NO.
+
+Production CREATE/ALTER/DROP/INSERT/UPDATE/DELETE/GRANT/REVOKE/TRUNCATE=0;
+Production migration/ledger/permission/maintenance writes=0; Production SQL
+queries via psql=0 (TLS failed before authentication/query); env changes=0;
+Quality flags unchanged; HMAC/scheduler untouched; DeepSeek/LLM calls=0.
+No credential was acquired, exported or persisted. No Production env was read.
+Only this runbook is modified; no migration/runtime/FAQ/pricing/test file changed.
+OS TEMP artifacts are synthetic PostgreSQL state and the attempted local server
+log only; no script/credential/secret artifact was generated in the repository.
+
 ## A2.0.1 Production Readiness Closure
 
 2026-09-10; checkpoint main / 7052205d8eb88f201bf40f3baac38e63b05dc22e.

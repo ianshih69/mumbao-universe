@@ -1,5 +1,1111 @@
 # AI Quality Production Activation
 
+## A2.0.1 Production Readiness Closure
+
+2026-09-10; checkpoint main / 7052205d8eb88f201bf40f3baac38e63b05dc22e.
+Initial dirty inventory contained only this A2.0 runbook. No reset, stash,
+restore or clean. This section supersedes A2.0's stopped findings below.
+Production remained read-only; all apply/ledger SQL in this section is a
+future plan, NOT permission to execute A2.1.
+
+### Fresh PostgreSQL 17.6 Privilege Proof
+
+Used a disposable native PostgreSQL **17.6**, matching the Production engine
+version, on 127.0.0.1:55441. Tools were installed only under OS TEMP:
+@embedded-postgres/windows-x64 17.6.0-beta.15 and pg 8.16.3, install scripts
+disabled. The earlier client-only 17.11 installation lacked server share
+files and was not used for certification. No project dependency changed.
+
+The inline local runner accepted no connection URL/remote host/credential,
+cleared named PG credential/config variables in its own process without reading
+values, fixed localhost/port and an empty password callback, and verified
+server address, port and the dedicated bootstrap role before creating any DB.
+The migration executor was a non-superuser BYPASSRLS role named
+quality_migration_owner, equivalent in the relevant attributes to Production
+postgres. Each profile used a separate fresh database. Required Admin table
+shape matched the observed Production metadata; no unrelated old migration
+was replayed. A synthetic core-table sentinel was also included.
+
+The four files were read as bytes, SHA256 checked against the manifest below,
+and compared byte-for-byte with git show at the approved checkpoint. All are
+UTF-8 without BOM and use LF. The complete SQL of each file was sent unchanged
+as one request, in A -> B -> C -> hardening order. No post-migration manual
+REVOKE or other repair was performed.
+
+| Fresh profile | Defaults present BEFORE applying Quality | Result |
+| --- | --- | --- |
+| postgres_observed | anon/authenticated table TRUNCATE, REFERENCES, TRIGGER, MAINTAIN; built-in PUBLIC function EXECUTE | PASS |
+| broader_owner | anon/authenticated ALL table and sequence privileges plus function EXECUTE, equivalent to the observed broader creator defaults | PASS |
+| public_stress | Broader profile plus PUBLIC ALL table privileges and PUBLIC function EXECUTE | PASS |
+
+A non-Quality probe table/function first demonstrated that the dangerous
+defaults really applied. The defaults and existing dependency/core-table
+metadata were unchanged after the chain. No blanket public-schema ACL repair
+was used. The local cluster was stopped after testing; no server remains active.
+
+Per profile, final assertions were **256/256 table privilege checks** and
+**64/64 function privilege checks**. Across the final three profiles:
+768/768 and 192/192 respectively. Each table was checked for all eight PG17
+privileges using has_table_privilege, including MAINTAIN. A role with only
+PUBLIC inheritance tested effective PUBLIC access in addition to inspecting
+aclexplode/acldefault directly. information_schema.role_table_grants independently
+returned zero PUBLIC/anon/authenticated entries.
+
+| Principal | Eight Quality tables | Sixteen Quality functions |
+| --- | --- | --- |
+| anon | All eight privileges denied | EXECUTE denied |
+| authenticated | All eight privileges denied | EXECUTE denied |
+| PUBLIC-only probe | All eight privileges denied; explicit PUBLIC ACL empty | EXECUTE denied; explicit/default PUBLIC ACL empty |
+| service_role | CRUD on seven evidence tables; SELECT only on maintenance state; no extra privileges | EXECUTE allowed |
+
+Every intermediate committed prefix also denied browser/PUBLIC access:
+168 checks after A, 168 after B, 168 after C, 192 after hardening, per profile.
+The eight tables have RLS enabled and zero policies. Seven evidence tables
+are empty; the sole maintenance seed has the exact critical/null/zero initial
+state. Two Admin permission seeds match code/module/action/description.
+
+**Default ACL blocker: PASS under the newly approved A2.0.1 rule.**
+Global default ACLs are broad, but the Quality chain explicitly resets ACLs
+at the object level when creating/replacing affected tables/functions;
+fresh simulation proves final PUBLIC/anon/authenticated effective privileges
+are zero. No new privilege-hardening migration is needed or was created.
+
+### SECURITY DEFINER And Production Dependencies
+
+Production still resolves to project jgmgniftiwngvljdeytt, main / Production,
+postgres database, postgres role, PostgreSQL 17.6, not in recovery.
+The 39 public functions observed are owned by postgres (31 definers, eight
+invokers). This is an owner-pattern observation, not a blanket security
+certification of old functions.
+
+Production has_schema_privilege confirms anon/authenticated/service_role
+cannot CREATE in public or extensions; postgres can. anon/authenticated do
+not inherit postgres or service_role. The future executor must remain
+postgres; switching creator/role requires a new preflight.
+
+The local final 16 Quality functions all have the expected signatures, six
+invokers/ten definers, trusted non-superuser BYPASSRLS ownership, fixed
+public,pg_temp search_path and expected EXECUTE ACLs. A service-role caller
+with search_path=pg_temp and a conflicting temporary conversations table
+could not redirect the public read-overview RPC. No Quality runtime function
+uses caller-controlled dynamic relation/function names. Migration DO blocks
+use fixed server-authored table lists and identifier quoting, not user input.
+Fixed trusted paths and revoking default PUBLIC EXECUTE follow the
+[PostgreSQL SECURITY DEFINER guidance](https://www.postgresql.org/docs/17/sql-createfunction.html#SQL-CREATEFUNCTION-SECURITY).
+
+Production permission dependency is now fully checked:
+
+| Item | Observed result |
+| --- | --- |
+| ai_quality.view | Absent; no conflicting semantic row |
+| ai_quality.review | Absent; no conflicting semantic row |
+| Existing permissions | 38 rows; all 38 use code=module.action |
+| Shape | code/module/action NOT NULL text; description nullable text; created_at NOT NULL timestamptz default now() |
+| Owner / RLS | postgres / enabled |
+| Index / constraint | One B-tree unique PRIMARY KEY(code); no other index |
+| User triggers | None |
+| Size | 16,384 table bytes + 16,384 index bytes = 32,768 total |
+| Row estimate | reltuples=-1 (unknown); direct bounded-table count verified 38 |
+| Locks at inspection | Zero ungranted relation locks |
+
+**Lock risk LOW for the approved two seed inserts**, not a guarantee against
+future concurrent writers. C uses INSERT ... ON CONFLICT(code) DO NOTHING,
+not an ALTER, full update or backfill of admin_permissions. Recheck locks and
+keys immediately before execution and use a bounded statement timeout.
+No existing permission row was changed. All table/function/type/index/policy/
+constraint/trigger/view/sequence Quality collision checks remain zero.
+
+### Health And Recovery
+
+Dashboard is now **Healthy**, Primary Database nano, Tokyo. At the observed
+sample CPU 2%, disk 14%, RAM 50%, connections 8/60. The SQL sample connected
+successfully, reported max_connections=60, ten connections, one active and
+zero idle-in-transaction. Dashboard Postgres showed zero warnings/errors in
+its selected last-60-minute window. API Gateway/Auth each showed one warning,
+not a database-error diagnosis. No restart, pause/resume or repair occurred.
+The cause of the prior Unhealthy badge remains UNKNOWN; this blocker closes
+because health recovered, not because a UI-only cause was invented.
+
+Scheduled-backups page explicitly says Free Plan does not include project
+backups; overview says No backups. PITR page offers a Pro add-on and is not
+enabled. There is no verified latest backup time, downloadable snapshot or
+restore point; external backups remain UNKNOWN. Nothing was created/exported.
+
+This limitation is disclosed for the owner's schema-only risk decision.
+Recovery is containment: flags OFF, no observers/users writing new Quality
+data, preserve verified prefixes, never touch core data to repair Quality.
+The four files have transaction boundaries and affect new Quality objects
+plus two permission seeds. Hardening DOES drop/rebuild a generated Quality
+expiry column/index; do not claim the SQL contains no DROP whatsoever.
+Those operations are acceptable only on the newly created, verified-empty
+Quality table. No destructive operation targets existing Booking/Payment/chat.
+Unexpected existing Quality rows are an absolute STOP, not permission to delete.
+Flags OFF are not a database backup and cannot undo an accidental core change.
+
+### Ledger Decision And Canonical Method
+
+Repo audit covered package scripts, tracked config/CI/README/docs/scripts,
+both migration directories and migration comments, plus relevant Git history.
+No ledger-aware Production runner, Supabase config or CI migration job was
+found. Existing runner scripts are local synthetic tests, not deployment tools.
+The Dashboard has no repository connection and no migration ledger entries;
+catalog shows no supabase_migrations relations while existing schema is present.
+The exact historic operator/tool is UNKNOWN. The evidence supports untracked
+schema application, not a fabricated complete file-to-Production mapping.
+
+**Select method C for the new Quality-only workflow:** authenticated Dashboard
+SQL Editor, full immutable files in explicit order, per-file read-only
+verification, plus an independent Quality-only ledger. This is a newly
+documented bounded method, not a claim to have discovered a historic canonical
+runner. The native 17.6 rehearsal proves the unchanged full-file execution and
+transaction/ACL result; Production UI writes are intentionally not rehearsed.
+
+Do not use db push, baseline/repair the whole repo, rename historical files,
+select files by glob/date sort, or replay unrelated migrations. The absence of
+a ledger is not itself a prohibition on new schema; it prohibits pretending
+that CLI history is reconciled. See the
+[Supabase migration/history workflow](https://supabase.com/docs/guides/deployment/database-migrations).
+
+#### Dedicated Ledger Design Only
+
+Proposed A2.1-only bootstrap, NOT executed locally or in Production here:
+
+~~~sql
+begin;
+create table public.ai_quality_schema_migrations (
+  filename text primary key,
+  sha256 text not null check (sha256 ~ '^[0-9a-f]{64}$'),
+  applied_at timestamptz not null default now()
+);
+alter table public.ai_quality_schema_migrations enable row level security;
+revoke all privileges on public.ai_quality_schema_migrations
+  from public,anon,authenticated,service_role;
+commit;
+~~~
+
+Use no IF NOT EXISTS: an unexpected ledger must stop for inspection, not be
+silently reused. Owner postgres; no runtime API, PUBLIC policy, public/server
+DML grant or new function. Only the migration owner can attest application.
+Four rows ultimately identify only the four Quality artifacts by exact
+filename/SHA; this ledger never claims the historic whole-repo chain is applied.
+The bootstrap itself is approved as this explicit runbook block and separately
+verified. It is not a fifth privilege-hardening migration.
+
+**Ledger is a ninth metadata table**, separate from eight runtime Quality
+tables. Final ledger count=4; business/evidence rows=0; maintenance count=1.
+With this ledger the overall Quality namespace would have 9 tables, 105
+columns, 36 indexes, 16 functions and zero policies. Existing A2.0 eight-table
+counts/privilege queries must exclude ai_quality_schema_migrations and verify
+its three columns, PK, RLS and owner-only ACL separately. Never loosen an
+assertion by silently including/excluding an unexpected object.
+
+Each artifact already COMMITs. Ledger attestation AFTER read-only verification
+is deliberately a separate transaction, not falsely described as atomic with
+the artifact. A disconnect between commit and ledger row is an uncertain apply:
+STOP; no blind rerun and no automatic history repair. See resume rules below.
+The ledger can attest an approved execution, not cryptographically prove which
+SQL ran solely from its stored hash. File/payload identity AND object checks
+provide that evidence; never record a row solely because its filename is known.
+
+### Exact A2.1 Run Plan: Prepared, Not Executed
+
+Approval must explicitly cover the four immutable files, the separate ledger
+bootstrap/attestations above, this non-atomic ledger boundary, and the disclosed
+lack of a verified backup. It does not authorize flags, runtime smoke writes,
+cleanup, aggregate, deployment or unrelated global privilege changes.
+
+1. Recheck target jgmgniftiwngvljdeytt / main Production / postgres / PG17.6.
+   Require Healthy/connectivity, no conflicting permissions writer, and
+   owner-confirmed Quality flags OFF/unset. This turn did not read env values.
+2. Repeat the read-only dependency/collision/default-ACL/role checks. Both
+   permission keys must still be absent (or separately reviewed exact matches).
+   No Quality object, including a ledger, is silently reusable.
+3. Recompute the four checksums below, verify committed bytes and explicit
+   order; do not stage/run any unrelated file. Capture a fresh core baseline
+   with the exact snapshot SELECT below and preserve its safe result.
+4. In the authenticated Dashboard SQL Editor's Database connection, verify
+   postgres again. Use a bounded statement timeout (10s) and lock timeout (2s)
+   as separately authorized A2.1 session settings. Recheck the settings on
+   each new editor connection; do not assume a pooled session keeps them.
+   These settings were NOT applied to Production in A2.0.1.
+5. Execute ONLY the entire approved ledger-bootstrap block. Verify three
+   columns, PK(filename), owner postgres, RLS=true, zero rows and no privileges
+   for PUBLIC/anon/authenticated/service_role. Any failure: STOP.
+6. Replace the complete editor buffer (Ctrl+A); load the exact entire Phase
+   1A file, not a selected fragment and not any prior saved query. Verify the
+   submitted text is identical to the SHA-checked UTF-8/LF source; no added
+   commentary or line-ending/content rewrite. Execute its BEGIN...COMMIT once.
+7. Run read-only prefix verification and compare the core baseline. Only
+   after complete PASS, insert one ledger attestation using the exact 1A
+   filename/SHA from the manifest. Read it back and require exactly one row.
+8. Repeat full-buffer/full-file execution for 1B, then prefix/core verification,
+   then its sole ledger attestation. Ledger ordered by approved manifest: A/B.
+9. Repeat for 1C. Additionally verify the two exact permission seeds and that
+   permission count changed only as expected. Ledger prefix: A/B/C.
+10. Verify Quality evidence still empty. Execute the entire hardening file,
+    then verify final eight-table contract, maintenance seed, all 16 function
+    signatures/paths/body hashes, 35 indexes/102 columns, all ACLs and core
+    metadata unchanged. Only then attest hardening; ledger has exactly 4 rows.
+11. Final read-only ledger, ACL, identity/health and core-baseline comparison.
+    Report schema-only outcome and leave all flags OFF. Do not test write RPCs,
+    enable customer feedback, register cron or start Observer Canary here.
+
+The four migrations each have their own BEGIN/COMMIT; no chain-wide atomicity
+is claimed. UI/client timeout does not tell whether the server committed.
+An artifact executes only once; no automatic retry. Existing scripts do not
+apply migrations at Vercel build/deploy time, and no such behavior is added.
+
+#### Local Checksum Command
+
+This command only reads the exact local artifacts. It is not a DB command.
+
+~~~powershell
+$ErrorActionPreference = 'Stop'
+Set-Location -LiteralPath 'E:\mumbao\newCode\mumbao-universe'
+$manifest = @(
+  @('2026-09-09-ai-quality-foundation.sql', 'f1ef296f6b77addb0461a82c19ea13c4ef2f41d783c7290fb70dfadfd5e5e637'),
+  @('2026-09-09-ai-quality-runtime-observer.sql', 'f18a1fbc61eeefc5bd15e4a741cfd88c5e374e464eea3d89e99193493fcd59c1'),
+  @('2026-09-10-ai-quality-feedback-admin.sql', '3a05655b38c180bae1529383662005bf5297e8ecb9b0c0ba35f371b71477ee94'),
+  @('2026-09-10-ai-quality-activation-hardening.sql', '5d00895e62c6da599aa4a4beb3a38c7f6d8e32f522aed61653ebde194dddbd34')
+)
+foreach ($entry in $manifest) {
+  $path = Join-Path 'client\supabase\migrations' $entry[0]
+  $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($actual -cne $entry[1]) { throw "CHECKSUM_MISMATCH: $($entry[0])" }
+  [pscustomobject]@{ File = $entry[0]; SHA256 = $actual; Result = 'PASS' }
+}
+~~~
+
+Never hash a normalized/rewritten substitute and call it the original file.
+The local native proof also compared raw committed bytes, not just the
+working file against another working-file hash. Recheck immediately before
+submission; the manifest is not permission to accept future edits.
+
+#### Prefix Verification Matrix
+
+All figures EXCLUDE the dedicated ledger, which is owner-only and verified
+separately. The counts were measured on fresh PostgreSQL 17.6, not guessed.
+
+| Verified prefix | Runtime tables | Columns | Indexes | Functions | Evidence rows | Maintenance |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1A | 7 | 85 | 29 | 8 | All zero | Absent |
+| 1A + 1B | 7 | 89 | 31 | 9 | All zero | Absent |
+| 1A + 1B + 1C | 7 | 94 | 34 | 14 | All zero | Absent |
+| Full chain | 8 | 102 | 35 | 16 | All zero | Exactly one critical/null/zero seed |
+
+Each prefix requires RLS=true, no policies, complete expected columns/types/
+defaults/constraints/index definitions/signatures, trusted ownership/fixed
+paths, all eight browser privileges denied and all browser/PUBLIC function
+EXECUTE denied. Counts alone do not pass a prefix. service_role permissions
+are narrow as documented; use the A2.0 SELECT-only blocks below against only
+the tables/functions expected at that prefix. Exclude the dedicated ledger
+from prefix-based catalog scans and verify its owner-only contract separately.
+
+Read-only ledger verification, after the future bootstrap exists:
+
+~~~sql
+select filename,sha256,applied_at
+from public.ai_quality_schema_migrations order by applied_at,filename;
+select c.relname,c.relrowsecurity,pg_get_userbyid(c.relowner) as owner,
+       r,priv,has_table_privilege(r,c.oid,priv) as allowed
+from pg_class c
+cross join unnest(array['anon','authenticated','service_role']) r
+cross join unnest(array['SELECT','INSERT','UPDATE','DELETE',
+                       'TRUNCATE','REFERENCES','TRIGGER','MAINTAIN']) priv
+where c.oid='public.ai_quality_schema_migrations'::regclass;
+select a.privilege_type
+from pg_class c
+cross join lateral aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a
+where c.oid='public.ai_quality_schema_migrations'::regclass and a.grantee=0;
+~~~
+
+The future attestation is one owner-executed INSERT of the verified filename/
+SHA, with no ON CONFLICT UPDATE and no automatic overwrite. A duplicate is a
+STOP requiring prefix inspection. No ledger or permission INSERT occurred here.
+
+#### Partial Failure And Resume
+
+- 1A succeeded / 1B failed: preserve A; do not replay A. Confirm failed B's
+  transaction outcome, A's unchanged schema/hash/ledger and no B residue.
+- A/B succeeded / C failed: preserve A/B; verify permission-seed transaction
+  outcome and C object absence before requesting a C-only resume.
+- A/B/C succeeded / hardening failed: preserve A/B/C, leave flags OFF, verify
+  old expiry column/index and missing hardening objects as appropriate.
+- Artifact committed but ledger missing, timeout/disconnect, or any ambiguous
+  state: STOP. Reconstruct exact objects/definitions from the native committed
+  prefix and core snapshot. Do not rerun or insert a guessed ledger entry.
+  An explicit, separately approved reconciliation may attest a proven prefix;
+  otherwise remain blocked. Timestamps alone are not proof.
+- Never DROP successful new schema, delete permission keys, downgrade a
+  newer validator/RPC, touch core rows or repair a global ledger automatically.
+
+### Production Safe Metadata Baseline
+
+Captured at 2026-09-10T09:30:59.77732Z on the confirmed Production project.
+45 core public tables, 18 relevant column signatures, 39 function signatures;
+combined core table metadata MD5: **3935941ec1519c46048c3d569b1026db**.
+MD5 here detects catalog drift, not secret identity or artifact authenticity;
+artifact integrity uses SHA256. No row data, default literals, function bodies,
+tokens or credentials are stored in this snapshot. A fresh baseline is still
+required immediately before A2.1 because live schema may change independently.
+
+Existing core table names:
+
+~~~text
+admin_activity_logs, admin_permissions, admin_profiles, admin_role_permissions,
+admin_roles, ai_chat_usage_events, booking_availability_alerts,
+booking_availability_blocks, booking_cancellation_audit_logs,
+booking_cancellation_requests, booking_external_reservations,
+booking_lookup_rate_limits, booking_management_sessions, booking_package_rates,
+booking_payment_admin_audit_logs, booking_payment_records,
+booking_payment_report_rate_limits, booking_price_rule_sets, booking_requests,
+booking_settings, booking_special_dates, chat_messages, chat_sessions,
+member_diamond_profiles, member_points_ledger, member_points_redemption_requests,
+shop_customer_profiles, shop_furniture_assets, shop_housekeeping_records,
+shop_inventory_movements, shop_order_items, shop_order_shipments, shop_orders,
+shop_product_images, shop_product_variants, shop_products,
+shop_social_platform_credentials, shop_social_posts, shop_supply_items,
+shop_warehouse_locations, shop_warehouse_media, site_content_revisions,
+site_media, site_pages, site_sections
+~~~
+
+These are schema identifiers, never credential/customer row contents.
+
+Column signatures below are name:type:NOT-NULL, in ordinal order. They
+contain schema field names only, not any stored booking/token/payment values.
+
+~~~text
+admin_permissions
+code:text:true|module:text:true|action:text:true|description:text:false|created_at:timestamp with time zone:true
+booking_availability_alerts
+id:uuid:true|severity:text:true|alert_type:text:true|title:text:true|description:text:false|check_in:date:false|check_out:date:false|source:text:false|status:text:true|handled_at:timestamp with time zone:false|handled_by:uuid:false|notes:text:false|raw_payload:jsonb:true|created_at:timestamp with time zone:true|updated_at:timestamp with time zone:true
+booking_availability_blocks
+id:uuid:true|block_type:text:true|source:text:true|check_in:date:true|check_out:date:true|status:text:true|title:text:false|notes:text:false|ical_uid:text:false|raw_payload:jsonb:true|created_at:timestamp with time zone:true|updated_at:timestamp with time zone:true|external_reservation_id:uuid:false
+booking_cancellation_audit_logs
+id:uuid:true|booking_request_id:uuid:true|booking_reference:text:true|cancellation_request_id:uuid:false|actor_type:text:true|admin_profile_id:uuid:false|admin_auth_user_id:uuid:false|action:text:true|previous_booking_status:text:false|new_booking_status:text:false|previous_payment_status:text:false|new_payment_status:text:false|reason:text:false|action_at:timestamp with time zone:true|created_at:timestamp with time zone:true
+booking_cancellation_requests
+id:uuid:true|booking_request_id:uuid:true|requested_by:text:true|status:text:true|reason_code:text:true|reason_text:text:false|requested_at:timestamp with time zone:true|reviewed_at:timestamp with time zone:false|reviewed_by_admin_id:uuid:false|admin_note:text:false|public_note:text:false|created_at:timestamp with time zone:true|updated_at:timestamp with time zone:true
+booking_external_reservations
+id:uuid:true|source:text:true|reference_number:text:false|check_in:date:true|check_out:date:true|guest_name:text:false|guest_count:integer:false|amount:numeric(12,2):false|status:text:true|accommodation_name:text:false|confidence:integer:false|raw_payload:jsonb:true|notes:text:false|created_at:timestamp with time zone:true|updated_at:timestamp with time zone:true
+booking_lookup_rate_limits
+key_hash:text:true|window_started_at:timestamp with time zone:true|attempt_count:integer:true|expires_at:timestamp with time zone:true|created_at:timestamp with time zone:true|updated_at:timestamp with time zone:true
+booking_management_sessions
+id:uuid:true|booking_request_id:uuid:true|token_hash:text:true|created_ip_hash:text:false|user_agent:text:false|expires_at:timestamp with time zone:true|created_at:timestamp with time zone:true
+booking_package_rates
+id:uuid:true|rule_set_id:uuid:true|guest_count:integer:true|day_type:text:true|nightly_price:integer:true|is_active:boolean:true|created_at:timestamp with time zone:true|updated_at:timestamp with time zone:true
+booking_payment_admin_audit_logs
+id:uuid:true|booking_request_id:uuid:true|booking_reference:text:true|payment_id:uuid:true|admin_profile_id:uuid:true|admin_auth_user_id:uuid:true|action:text:true|previous_booking_status:text:true|new_booking_status:text:true|previous_payment_status:text:true|new_payment_status:text:true|reason:text:false|action_at:timestamp with time zone:true|created_at:timestamp with time zone:true
+booking_payment_records
+id:uuid:true|booking_request_id:uuid:true|payment_method:text:true|expected_amount:integer:true|currency:text:true|status:text:true|bank_last5:text:false|payer_name:text:false|report_notes:text:false|reported_at:timestamp with time zone:false|verified_at:timestamp with time zone:false|verified_by_admin_id:uuid:false|created_at:timestamp with time zone:true|updated_at:timestamp with time zone:true
+booking_payment_report_rate_limits
+key_hash:text:true|window_started_at:timestamp with time zone:true|attempt_count:integer:true|expires_at:timestamp with time zone:true|updated_at:timestamp with time zone:true
+booking_price_rule_sets
+id:uuid:true|name:text:true|effective_from:date:true|effective_to:date:true|deposit_rate:numeric(5,4):true|is_active:boolean:true|notes:text:false|created_at:timestamp with time zone:true|updated_at:timestamp with time zone:true
+booking_requests
+id:uuid:true|guest_name:text:true|guest_email:text:false|guest_phone:text:false|check_in:date:true|check_out:date:true|guest_count:integer:false|notes:text:false|status:text:true|stay_type:text:true|adults:integer:true|children:integer:true|room_count:integer:false|has_pets:boolean:true|pet_count:integer:false|pet_type:text:false|pet_notes:text:false|source:text:true|raw_payload:jsonb:true|created_at:timestamp with time zone:true|updated_at:timestamp with time zone:true|customer_profile_id:uuid:false|final_lodging_amount:integer:false|completed_at:timestamp with time zone:false|completed_by_admin_id:uuid:false|partner_points_awarded_at:timestamp with time zone:false|partner_points_awarded_to_profile_id:uuid:false|partner_points_ledger_id:uuid:false|selected_package_type:text:false|pricing_rule_set_id:uuid:false|quoted_total:integer:false|deposit_rate:numeric(5,4):false|deposit_amount:integer:false|balance_amount:integer:false|pricing_breakdown:jsonb:false|quoted_at:timestamp with time zone:false|hold_expires_at:timestamp with time zone:false|recovery_token_hash:text:false|submitted_snapshot:jsonb:false|booking_reference:text:true|payment_reported_at:timestamp with time zone:false|review_expires_at:timestamp with time zone:false
+booking_settings
+id:integer:true|booking_window_months:integer:true|allow_villa_booking:boolean:true|allow_room_booking:boolean:true|total_room_count:integer:true|allow_pets:boolean:true|created_at:timestamp with time zone:true|updated_at:timestamp with time zone:true
+booking_special_dates
+id:uuid:true|rule_set_id:uuid:true|date:date:true|day_type:text:true|label:text:false|is_active:boolean:true|created_at:timestamp with time zone:true|updated_at:timestamp with time zone:true
+chat_messages
+id:uuid:true|session_id:uuid:false|sender:text:true|message:text:true|provider_used:text:false|created_at:timestamp with time zone:false|read_by_admin:boolean:false|metadata:jsonb:false|role:text:false|content:text:false|deleted_at:timestamp with time zone:false
+chat_sessions
+id:uuid:true|visitor_id:text:true|visitor_name:text:false|source:text:false|created_at:timestamp with time zone:false|updated_at:timestamp with time zone:false|line_user_id:text:false|line_display_name:text:false|line_picture_url:text:false|status:text:false|should_ai_reply:boolean:false|unread_count:integer:false|last_message:text:false|latest_message_at:timestamp with time zone:false|auth_user_id:uuid:false|customer_profile_id:uuid:false|customer_email:text:false|linked_at:timestamp with time zone:false|deleted_at:timestamp with time zone:false|last_message_at:timestamp with time zone:false|title:text:false|summary:text:false|support_status:text:false|support_status_updated_at:timestamp with time zone:false|handled_at:timestamp with time zone:false|handled_by_admin_id:uuid:false|handled_by_name:text:false|handled_by_email:text:false|handled_by_role:text:false|closed_at:timestamp with time zone:false|closed_by_admin_id:uuid:false|closed_by_name:text:false|closed_by_email:text:false|closed_by_role:text:false|ai_paused_until:timestamp with time zone:false|conversation_context:jsonb:true
+~~~
+
+Existing public function signatures / definition MD5 (all owner postgres):
+
+~~~text
+acquire_villa_booking_hold(jsonb) d612f7ccd56483245038ee1b3c17012e
+adjust_member_points_with_redemption_reserve(uuid,integer,text,uuid,uuid) 4559096ab1ad2ca55ed7da816698cd60
+adjust_shop_inventory(jsonb) ff7351aba1ca4ac9a1d7e321dcfb22be
+adjust_shop_supply_quantity(uuid,integer) a1d5b77bfb8b070d4cdbfb501930bb67
+admin_cancel_confirmed_booking(uuid,uuid,text) 67d2468d03184f4003c95a5738554df5
+assign_booking_reference() fb16134459fe14e7756c2dbbf83b28c1
+complete_booking_stay_with_partner_points(uuid,integer,uuid) a52c6e3348e1941ca81191165b1184d9
+complete_member_points_redemption_request(uuid,uuid) e8a9a8d0967a3b4d893dc690830fed2e
+consume_booking_lookup_rate_limit(text,integer,integer) 898f718252a763cb31b4d0f53045578b
+consume_booking_payment_report_rate_limit(text,integer,integer) 3467ba823a5523854b494f95db40a4b2
+create_booking_management_session(uuid,text,text,text) be194cc0fe9e6a33d3985558f6cb1764
+create_manual_sale_order(jsonb) 7e126aafb23f6e4bf846c88a1f428c43
+create_member_points_redemption_request(uuid,integer,text,text,text) c626d9177cdf637e716d144e45ce534d
+create_shop_order(jsonb) 97062bf2a7428e9eb0b073bb046ec01b
+create_shop_order_shipment(jsonb) 5ef770a9aa9aaaa1dcc8b8b1f53eaa9b
+customer_cancel_payment_hold_booking(uuid,text,text,text) 4c25ec91d2491ef6a02655b9549e9746
+customer_request_booking_cancellation(uuid,text,text,text) 62424a934ef614f0a5a6bdbd15d54188
+generate_booking_reference() b499e6016c3d392e3bb1483fb39ec430
+get_booking_management_session(text) 6170b602deb634549afe3732634e4721
+get_public_booking_unavailable_ranges(date,date) 6bbf68609e5f9058cc4392bfcf9e64a1
+guard_availability_block_inventory_write() b34d307eedc298040da018beacaec3b8
+guard_booking_request_inventory_write() d44e03928c08ca854cfcf30ab41bcf51
+guard_external_reservation_inventory_write() d54d8e47bc5b7c790af8454dad544fc2
+lock_villa_inventory_nights(date,date) 5b133fd4b4cc06588c5089a9befaab62
+prevent_booking_cancellation_audit_mutation() 17549f6f21acfb672f9bd215a88b1c25
+prevent_booking_payment_admin_audit_mutation() 979a27545b4f2f4a45dd52d533c390ba
+protect_booking_submission_snapshot() 18a3ffcec4720a438406e816dbc0bc12
+recover_booking_hold(text) 3b4e6e1b6e5c03e714cefb6631a5f334
+reject_member_points_redemption_request(uuid,uuid,text) 7afe910c79e1612268d11246ab3b09f3
+report_booking_bank_transfer(text,text,text,text,integer) 096d35b375e6410497d54d767a604760
+report_booking_bank_transfer_from_management_session(uuid,text,text,text,text,integer) b8af96fb7842d299e629f72c79805bfd
+review_booking_bank_transfer(uuid,uuid,text) ad009ee0a5d38305dd778eeab5ffa550
+review_booking_cancellation_request(uuid,uuid,text,text,text) 95885d49098fdf60836197cdcfe154f0
+rls_auto_enable() 6998ea6b4c2480f5d2e34b5dcf3f8d36
+set_admin_updated_at() 9787773e699d6e25d78adc47104513d3
+set_booking_updated_at() 3be3c0e39d8893fd267cbfc06fb55de5
+set_shop_order_shipments_updated_at() 02d95f54bae79eebb33c831b7e64e989
+set_shop_warehouse_updated_at() fd970384ecf8016aa7275f73b238295e
+set_site_cms_updated_at() d709237f3cc59d7147366e5f6a4390b7
+~~~
+
+Production has seven enabled DDL event triggers. Six are supabase_admin-owned
+extension-access/GraphQL-placeholder/PostgREST DDL notification hooks. The
+postgres-owned ensure_rls hook invokes rls_auto_enable() for CREATE TABLE,
+CREATE TABLE AS and SELECT INTO only. Its inspected definition has fixed
+pg_catalog search_path, iterates the current pg_event_trigger_ddl_commands,
+restricts to newly created public tables/partitioned tables, and enables RLS
+using the server-reported object identity. It neither scans/rewrites all
+existing tables nor grants browser access. Failures are logged, so the explicit
+RLS assertions remain mandatory rather than trusting the hook.
+
+These platform hooks were not recreated in the local ACL simulation. Their
+existence is disclosed; recheck their identity before A2.1 and STOP on change.
+No extension is created/dropped by the Quality chain. Expected PostgREST schema
+cache notification is not an extra application migration or runtime activation.
+
+#### Exact Core Fingerprint SELECT
+
+This reproduces the recorded hash algorithm. It reads catalog definitions but
+returns only the aggregate hash, not default/trigger literals or customer data.
+The previously prepared A2.0 fingerprint used a different representation:
+do NOT compare hashes across the two algorithms.
+
+~~~sql
+with core as (
+ select c.* from pg_class c join pg_namespace n on n.oid=c.relnamespace
+ where n.nspname='public' and c.relkind in ('r','p')
+   and c.relname !~ '^ai_(quality|review|owner|eval|daily)_'
+), objects as (
+ select c.relname,pg_get_userbyid(c.relowner) as owner,c.relrowsecurity,
+   c.relforcerowsecurity,c.relacl::text as acl,
+   (select string_agg(a.attname||':'||format_type(a.atttypid,a.atttypmod)||':'||
+     a.attnotnull::text||':'||coalesce(pg_get_expr(d.adbin,d.adrelid),''),
+     '|' order by a.attnum)
+    from pg_attribute a left join pg_attrdef d
+      on d.adrelid=a.attrelid and d.adnum=a.attnum
+    where a.attrelid=c.oid and a.attnum>0 and not a.attisdropped) as columns,
+   (select string_agg(k.conname||':'||pg_get_constraintdef(k.oid),'|' order by k.conname)
+    from pg_constraint k where k.conrelid=c.oid) as constraints,
+   (select string_agg(i.indexname||':'||i.indexdef,'|' order by i.indexname)
+    from pg_indexes i where i.schemaname='public' and i.tablename=c.relname) as indexes,
+   (select string_agg(t.tgname||':'||pg_get_triggerdef(t.oid),'|' order by t.tgname)
+    from pg_trigger t where t.tgrelid=c.oid and not t.tgisinternal) as triggers,
+   (select jsonb_agg(to_jsonb(p) order by p.policyname)
+    from pg_policies p where p.schemaname='public' and p.tablename=c.relname) as policies
+ from core c
+)
+select md5(jsonb_agg(to_jsonb(o) order by relname)::text) as core_table_metadata_hash
+from objects o;
+~~~
+
+### A2.0.1 Verification And Remaining Boundaries
+
+Quality / Admin Quality: **795/795 PASS**, including 136 migration tests
+(foundation 61, observer 20, feedback 14, activation hardening 41), RLS/RPC
+tests, privacy and integration boundaries. Full repository: **2708/2710**;
+only the same two About copy assertions fail. About source/tests are untouched;
+no new runtime regression, no assertion changes.
+
+FAQ regression 98/98 PASS. check with incremental=false PASS; build PASS;
+git diff --check PASS (only the existing LF-to-CRLF advisory).
+Initial test-cache and build output writes hit sandbox EPERM, not test/code
+failures. Tests passed with --no-cache; the authorized build passed with output
+directory permission. Existing Vite chunk warning is unchanged.
+
+A proposed new local test/helper file addition was rejected by the execution
+safety review because only this runbook was allowed dirty. Those files were
+NOT created by another route. The permitted isolated native simulation ran
+in memory instead, and existing tests were reused. No repository source,
+test, migration, package or lockfile changed; only this runbook is dirty.
+
+The broad default-grant finding alone no longer blocks under the owner's
+A2.0.1 acceptance rule after the proven final denials. Continue to STOP on:
+changed target/creator/checksum; conflicting objects/permission semantics;
+untrusted CREATE/inheritance; unexpected effective ACL/policy; nonempty evidence
+tables; unhealthy DB/resource/lock pressure; core schema drift; changed DDL
+hooks; unclear commit/ledger prefix; or inability to submit an exact full file.
+
+Production CREATE/ALTER/DROP/INSERT/UPDATE/DELETE/GRANT/REVOKE=0;
+Production env changes=0; flags unmodified; runtime activation=0;
+DeepSeek/LLM calls=0; commit/push/deploy/Promote=0.
+
+### A2.0.1 Final Verdict
+
+**A2.0.1 GATE PASS for schema-only readiness. Recommend requesting explicit
+A2.1 approval: YES**, limited to the exact four artifacts plus the designed
+owner-only Quality ledger and its four attestations. No A2.1 authorization is
+inferred or exercised. The owner must accept the documented no-verified-backup
+risk and separate artifact/ledger transaction boundaries in that approval.
+
+Closed: final ACL/EXECUTE risk by fresh same-version proof; trusted definer
+ownership/path; permission collision and small-table lock assessment; current
+Healthy status; honest backup capability; isolated new Quality-only history/
+checksum method instead of pretending old history is repaired; safe baseline;
+exact ordered verification/resume plan. Unknown historical operator and the
+prior transient Unhealthy cause are disclosed, not invented.
+
+The ledger is design-only as requested; no local/Production ledger was created.
+The documented method's unchanged four-file execution and ACLs were rehearsed
+locally, not by unapproved Production DDL. A2.1 must repeat the time-sensitive
+prechecks and stop on any mismatch. Runtime activation remains separately gated.
+
+## A2.0 Production Preflight: STOP / FAIL
+
+Audit date: 2026-09-10. Local preflight: main, HEAD
+`7052205d8eb88f201bf40f3baac38e63b05dc22e`, clean, approved checkpoint is an
+ancestor. The four exact-byte SHA256 values in the A1.1 manifest below were
+rechecked without changing migrations. This section supersedes earlier
+Production execution recommendations, not the completed local A1/A1.1 tests.
+
+**A2.0 FAIL. A2.1 is NOT approved or recommended.** Dangerous Production
+default privileges triggered the owner's absolute STOP. No further Production
+queries were run after that result. All SQL newly prepared below is unexecuted.
+Do not execute any older migration, scheduler, cleanup, aggregate or canary SQL
+elsewhere in this document under this authorization.
+
+### Observed Evidence And Limits
+
+- Production identity confirmed before the catalog query: project
+  mumbao-ai-chat, reference jgmgniftiwngvljdeytt, dashboard branch
+  main / Production. The public www.mumbao.tw page returned HTTP 200;
+  its public same-origin application asset referenced the same project.
+  Only the project reference was extracted, not keys or asset contents.
+- Connection: authenticated Supabase Dashboard SQL Editor, Database connection;
+  current/session role postgres, database postgres, PostgreSQL 17.6.
+  postgres is not superuser but has BYPASSRLS. service_role has BYPASSRLS;
+  anon and authenticated do not. No credentials were read or recorded.
+- Exactly one metadata-only SELECT returned catalog information. No application
+  data rows, RPC executions, schema changes, permission writes, cleanup,
+  aggregate calls, environment reads/writes or model calls occurred.
+- Dashboard migration history showed no recorded migrations. The catalog
+  returned no relations in supabase_migrations; no usable ledger was found.
+  Existing Booking/Payment/chat/member/shop tables are present. Their manual
+  apply history cannot be reconstructed from object existence or saved SQL
+  snippet titles. This is unresolved history/drift risk, not proof that the
+  four Quality migrations were never executed at any time.
+- Quality relations, functions/overloads, types (including row/array types),
+  constraints, triggers and policies: all collision result sets empty. The
+  relation check included indexes, sequences and views as well as tables.
+  The hardening maintenance table was included. Current schema contains none
+  of the four migrations' Quality objects; history remains unverified.
+- public.admin_permissions exists, owner postgres, RLS enabled. Required
+  columns: code, module, action are NOT NULL text; description nullable
+  text; created_at NOT NULL timestamptz. PRIMARY KEY (code) is compatible
+  with Phase C's conflict target. Table/column/PK compatibility PASS.
+  Existing permission naming patterns/keys, timestamp default and additional
+  trigger behavior were not checked after STOP. Complete dependency gate is
+  therefore NOT CLEARED. Its reltuples = -1 is UNKNOWN, not zero/small.
+- Target schema is explicitly public for created tables/functions/index
+  targets. Function search paths in all four artifacts are explicitly
+  public, pg_temp; they do not rely on the editor session search path.
+  Public schema owner is pg_database_owner. Its observed ACL gives PUBLIC,
+  anon/authenticated/service_role USAGE, not CREATE; effective inherited
+  CREATE and the future executor's role chain still need verification.
+- Extensions already present include pgcrypto 1.3 and uuid-ossp 1.1 in
+  extensions. Both pg_catalog.gen_random_uuid() and
+  extensions.gen_random_uuid() return uuid and are executable by the inspected
+  role. UUID availability PASS. None of these four migrations installs an
+  extension. No function was called to test it.
+- Definer ownership would follow the separately chosen future executor;
+  the observed role is postgres, not proof of future object ownership.
+  Fixed paths, service-role-only grants and trusted BYPASSRLS ownership must
+  be checked on the actual result. Local PG18 tests do not certify PG17.6
+  default ACLs or version-specific catalog constraint counts.
+- Dashboard overview displayed Unhealthy; no cause or outage was inferred.
+  Backups page stated the Free plan does not include project backups. No
+  usable backup/PITR/off-platform recovery point was verified. No backup was
+  created, deleted or exported. Recovery readiness is NOT established.
+
+### Default Privileges: Blocking Finding
+
+Observed explicit defaults in public, grouped by object creator and grantee:
+
+| Creator | New objects | Each grantee | Default privileges |
+| --- | --- | --- | --- |
+| postgres | tables | anon, authenticated | TRUNCATE, REFERENCES, TRIGGER, MAINTAIN |
+| supabase_admin | tables | anon, authenticated | SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN |
+| supabase_admin | sequences | anon, authenticated | SELECT, UPDATE, USAGE |
+| supabase_admin | functions | anon, authenticated | EXECUTE |
+
+All listed entries have grant option false. Defaults are creator-specific;
+the supabase_admin defaults must not be attributed to postgres. No explicit
+PUBLIC default entry was returned; this does NOT disprove built-in default
+PUBLIC EXECUTE on functions. Effective ACL checks must include acldefault.
+
+RLS alone does not cover table-wide TRUNCATE or REFERENCES operations.
+See [PostgreSQL 17 row security](https://www.postgresql.org/docs/17/ddl-rowsecurity.html).
+Importantly, foundation and hardening ALREADY explicitly REVOKE ALL table
+privileges from PUBLIC/anon/authenticated/service_role before narrow regrants;
+function ACLs are also reset. This finding does not prove that those approved
+artifacts would leave these grants in place, or expose nonexistent Quality
+rows. Nevertheless the owner's dangerous-default-grant STOP applies even with
+that defense. Do not change global ACLs or historical migrations here. A
+separate owner-approved resolution and target-engine ACL verification are
+required before reopening A2.0.
+
+### Exact Chain And Existing-Object Impact
+
+Use the four filenames and SHA256 values in the A1.1 manifest below, strictly
+1A -> 1B -> 1C -> hardening, never filename alphabetic order:
+
+| Phase | Objects introduced or changed |
+| --- | --- |
+| 1A | Seven Quality tables, validators, updated-at trigger function and three triggers, indexes, aggregate/cleanup/storage RPCs, RLS and narrow ACLs. |
+| 1B | Quality metadata validator replacement; observer counter, turn hash/execution metadata columns; two idempotency indexes; atomic record RPC. |
+| 1C | Quality feedback columns and three indexes; feedback RPC and four Admin RPCs; two Admin permission seeds. |
+| Hardening | Replaces cleanup/record/feedback; message retention/generated expiry and index rebuild; eighth maintenance-state table and seed; bounded-excerpt helper and maintenance RPC. |
+
+No ALTER targets existing Booking, Payment, chat, scenario/pending, member or
+shop tables. The only pre-existing application-table DML is Phase C's two
+admin_permissions seeds (ai_quality.view, ai_quality.review) with
+ON CONFLICT (code) DO NOTHING. That is idempotent for an identical key, not
+proof that an existing conflicting module/action would be safe. Key collision
+checks remain UNVERIFIED after STOP. Foundation also grants schema USAGE on
+the pre-existing public schema to service_role; this is an existing-schema
+ACL touch, not a core-table ALTER.
+
+### Correct Post-Migration Contract
+
+The requested seven empty tables describe A/B/C, not the approved hardening:
+
+- Seven domain/evidence tables: zero rows each.
+- ai_quality_maintenance_state: eighth RLS table, exactly one seed row with
+  singleton=true, last_completed_at=NULL, capture_mode=critical, and all four
+  counters zero. This is initialization, not Observer evidence collection.
+- Two correct admin_permissions keys with module ai_quality and actions
+  view / review. Expected new rows are two only if both keys are absent.
+- Final inventory: 8 tables, 102 columns, 35 indexes, 16 functions, three
+  user triggers, zero Quality policies. 79 non-NOT-NULL constraints; do not
+  require PG18's separately reported NOT NULL count on PG17.
+- Browser/PUBLIC table privileges and function EXECUTE denied; service_role
+  CRUD on the seven domain tables, SELECT only on maintenance state, EXECUTE
+  on the 16 functions. Owner administration is necessarily trusted.
+- Observer/Feedback/Admin flags false or unset, customer feedback UI OFF;
+  HMAC need not be activated; no new evidence writes or model calls. These
+  are future required states, NOT observed Production env values in A2.0.
+- Booking/Payment schema and data unchanged. Seed writes are not zero total
+  migration writes; do not describe the singleton/permission seeds as absent.
+
+### Canonical Apply And Recovery Plan: BLOCKED
+
+No repo migration npm script, tracked Supabase CLI config or ledger-aware
+apply workflow was found. Supabase CLI is not installed in this execution
+environment. The existing hyphenated date filenames do not match the CLI's
+<timestamp>_<name>.sql convention and share dates; alphabetical order would
+place hardening before Phase C. Dashboard SQL snippets do not prove a canonical
+workflow. Do not rename committed files, blindly run db push, invent ledger
+versions, repair history, or paste fragments into the editor.
+See [Supabase migration workflow and ledger](https://supabase.com/docs/guides/deployment/database-migrations).
+
+Before A2.1 approval: resolve dangerous defaults, reconcile actual prior
+history, establish backup/recovery evidence, resolve the health indicator,
+complete stopped dependency/key/lock checks, and approve a canonical ordered
+apply method plus one-to-one ledger identities for these exact artifacts.
+If no existing method can be demonstrated, its preparation is a separately
+approved task, not an action authorized by this preflight. No safe ready-to-run
+Production apply command is claimed here.
+
+Proposed sequence AFTER these prerequisites and explicit authorization:
+fresh target/SHA/flags/collision checks -> core metadata baseline -> exact 1A
+file -> verify prefix and ledger -> exact 1B -> verify -> exact 1C -> verify
+-> exact hardening -> full read-only verification. Each artifact already has
+its own BEGIN/COMMIT; do not assume the four-file chain is one transaction or
+wrap it without checking the eventual tool's transaction/ledger behavior.
+No Quality RPC is needed for empty-schema verification.
+
+On 1B failure preserve successful 1A; on 1C failure preserve successful A/B;
+on hardening failure preserve successful A/B/C. STOP, leave flags OFF, reconcile
+transaction outcome, exact schema prefix and ledger before any separately
+approved resume. A client error does not alone prove rollback or commit.
+Never automatically DROP successful schema, replay an earlier validator over
+hardening, advance the ledger, or continue with later files. Flags OFF prevent
+runtime activation; they do not undo DDL or replace a recovery plan.
+
+Lock assessment remains incomplete: new Quality objects are absent; hardening
+rewrites only the expected empty Quality messages table. Phase C's existing
+permission insert can wait on uniqueness/row locks, triggers or concurrent
+writers. Its unknown estimate cannot justify a low lock-risk certification.
+Before execution approve bounded lock/statement timeouts and safe failure
+handling in the chosen canonical tool, without altering artifact bytes.
+
+### A2.1 Read-Only Verification Preparation
+
+The following SELECT-only blocks are prepared locally, NOT executed. They
+supplement and supersede the old seven-table-only final checks below. Do not
+run post-migration blocks against absent tables. Gate H is deliberately
+incomplete until canonical ledger identities are approved. Counts, ACLs and
+metadata only; never select customer transcripts, credentials or RPC results.
+
+#### Reopened Precheck: Default ACLs And Permission Dependency
+
+Only after a separate authorization to resume the stopped preflight:
+
+~~~sql
+select current_database(), current_user, session_user,
+       current_setting('server_version'), current_setting('search_path');
+
+select pg_get_userbyid(d.defaclrole) as creator,
+       case when d.defaclnamespace=0 then 'GLOBAL' else n.nspname end as schema,
+       d.defaclobjtype,
+       case when a.grantee=0 then 'PUBLIC'
+            else pg_get_userbyid(a.grantee) end as grantee,
+       a.privilege_type, a.is_grantable
+from pg_default_acl d
+left join pg_namespace n on n.oid=d.defaclnamespace
+cross join lateral aclexplode(d.defaclacl) a
+where (d.defaclnamespace=0 or n.nspname='public')
+  and (a.grantee=0 or pg_get_userbyid(a.grantee) in ('anon','authenticated'))
+order by creator,schema,d.defaclobjtype,grantee,a.privilege_type;
+
+select r, has_schema_privilege(r,'public','CREATE') as can_create
+from unnest(array[current_user::text,'anon','authenticated','service_role']) r;
+
+select column_name,data_type,is_nullable,column_default
+from information_schema.columns
+where table_schema='public' and table_name='admin_permissions'
+order by ordinal_position;
+select conname,pg_get_constraintdef(oid) as definition
+from pg_constraint where conrelid=to_regclass('public.admin_permissions');
+select tgname,md5(pg_get_triggerdef(oid)) as definition_hash
+from pg_trigger
+where tgrelid=to_regclass('public.admin_permissions') and not tgisinternal;
+select code,module,action from public.admin_permissions
+where code in ('ai_quality.view','ai_quality.review') order by code;
+select count(*) as permission_rows,
+       count(*) filter (where code=module||'.'||action) as dot_pattern_rows
+from public.admin_permissions;
+~~~
+
+Do not interpret an empty pg_default_acl result as no default PUBLIC function
+EXECUTE. Any existing target permission key requires semantic comparison,
+not automatic acceptance of ON CONFLICT. Unexpected dependency triggers need
+separate safe review before assuming a permission insert has no side effects.
+
+#### A / C: Eight Tables, Columns And RLS
+
+~~~sql
+with expected(name) as (values
+ ('ai_quality_conversations'),('ai_quality_messages'),('ai_quality_events'),
+ ('ai_review_items'),('ai_owner_decisions'),('ai_eval_cases'),
+ ('ai_daily_metrics'),('ai_quality_maintenance_state'))
+select e.name,c.oid is not null as present,c.relkind,
+       pg_get_userbyid(c.relowner) as owner,c.relrowsecurity,c.relforcerowsecurity
+from expected e left join pg_class c on c.oid=to_regclass('public.'||e.name)
+order by e.name;
+
+select table_name,column_name,data_type,is_nullable,column_default,
+       is_generated,generation_expression
+from information_schema.columns
+where table_schema='public'
+  and table_name ~ '^ai_(quality|review|owner|eval|daily)_'
+order by table_name,ordinal_position;
+select c.relname,k.conname,k.contype,pg_get_constraintdef(k.oid) as definition
+from pg_constraint k join pg_class c on c.oid=k.conrelid
+join pg_namespace n on n.oid=c.relnamespace
+where n.nspname='public' and c.relname ~ '^ai_(quality|review|owner|eval|daily)_'
+order by c.relname,k.conname;
+select tablename,policyname,roles,cmd
+from pg_policies where schemaname='public'
+  and tablename ~ '^ai_(quality|review|owner|eval|daily)_'
+order by tablename,policyname;
+select c.relname,t.tgname,pg_get_triggerdef(t.oid) as definition
+from pg_trigger t join pg_class c on c.oid=t.tgrelid
+join pg_namespace n on n.oid=c.relnamespace
+where not t.tgisinternal and n.nspname='public'
+  and c.relname ~ '^ai_(quality|review|owner|eval|daily)_'
+order by c.relname,t.tgname;
+~~~
+
+Compare complete definitions with the approved final contract, not counts
+alone. Expect 8 ordinary tables, all RLS=true, 102 columns, 79 non-NOT-NULL
+constraints, zero policies, three updated-at triggers on conversations,
+review items and eval cases. Stop on missing/extra objects or mismatched
+definitions. Prefix queries deliberately expose unexpected extra Quality
+objects for review. PG17 does not share PG18's NOT NULL constraint inventory.
+
+#### B: Zero Evidence Rows And One Maintenance Seed
+
+~~~sql
+select 'ai_quality_conversations' as table_name,count(*) as rows from public.ai_quality_conversations
+union all select 'ai_quality_messages',count(*) from public.ai_quality_messages
+union all select 'ai_quality_events',count(*) from public.ai_quality_events
+union all select 'ai_review_items',count(*) from public.ai_review_items
+union all select 'ai_owner_decisions',count(*) from public.ai_owner_decisions
+union all select 'ai_eval_cases',count(*) from public.ai_eval_cases
+union all select 'ai_daily_metrics',count(*) from public.ai_daily_metrics
+union all select 'ai_quality_maintenance_state',count(*) from public.ai_quality_maintenance_state;
+
+select count(*)=1 and coalesce(bool_and(
+  singleton and last_completed_at is null and capture_mode='critical'
+  and conversation_rows=0 and message_rows=0 and event_rows=0
+  and cleanup_due_count=0),false) as seed_matches
+from public.ai_quality_maintenance_state;
+~~~
+
+Expect seven zeros, one maintenance row, seed_matches=true. Do not call
+storage-metrics, cleanup, record, feedback or aggregate RPCs as verification.
+
+#### D: Effective Browser Denials, PUBLIC ACL And Service Role
+
+~~~sql
+with t as (
+ select c.oid,c.relname,c.relowner,c.relacl
+ from pg_class c join pg_namespace n on n.oid=c.relnamespace
+ where n.nspname='public' and c.relkind in ('r','p')
+   and c.relname ~ '^ai_(quality|review|owner|eval|daily)_')
+select t.relname,r,priv,has_table_privilege(r,t.oid,priv) as allowed,
+       case when r='service_role' then
+         priv='SELECT' or (t.relname<>'ai_quality_maintenance_state'
+                           and priv in ('INSERT','UPDATE','DELETE'))
+         else false end as expected_allowed
+from t cross join unnest(array['anon','authenticated','service_role']) r
+cross join unnest(array['SELECT','INSERT','UPDATE','DELETE',
+                       'TRUNCATE','REFERENCES','TRIGGER','MAINTAIN']) priv
+order by t.relname,r,priv;
+
+select c.relname,a.privilege_type,a.is_grantable
+from pg_class c join pg_namespace n on n.oid=c.relnamespace
+cross join lateral aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a
+where n.nspname='public' and c.relkind in ('r','p') and a.grantee=0
+  and c.relname ~ '^ai_(quality|review|owner|eval|daily)_'
+order by c.relname,a.privilege_type;
+~~~
+
+All allowed values must equal expected_allowed; PUBLIC result empty. This
+checks inherited/effective privileges and non-CRUD privileges, including
+PG17 MAINTAIN, not just RLS. Missing tables must already fail A.
+
+#### E / F: Exact Function Signatures, ACLs, Definer And Paths
+
+~~~sql
+with expected(signature,definer) as (values
+ ('ai_quality_valid_capability_id(text)',false),
+ ('ai_quality_valid_response_kind(text)',false),
+ ('ai_quality_valid_metadata(jsonb)',false),
+ ('ai_quality_valid_context(jsonb)',false),
+ ('set_ai_quality_updated_at()',false),
+ ('aggregate_ai_daily_metrics(date)',true),
+ ('delete_expired_ai_quality_data(integer)',true),
+ ('get_ai_quality_storage_metrics()',true),
+ ('record_ai_quality_turn(jsonb)',true),
+ ('submit_ai_quality_feedback(text,text,text,text)',true),
+ ('read_ai_quality_overview(integer)',true),
+ ('list_ai_quality_events(integer,text,text,text,timestamptz,uuid)',true),
+ ('read_ai_quality_detail(uuid)',true),
+ ('review_ai_quality_event(uuid)',true),
+ ('ai_quality_bounded_excerpt(text)',false),
+ ('run_ai_quality_maintenance(integer,integer)',true))
+select e.signature,p.oid is not null as present,
+       pg_get_userbyid(p.proowner) as owner,
+       p.prosecdef,e.definer as expected_definer,p.proconfig,
+       md5(pg_get_functiondef(p.oid)) as definition_hash,
+       has_function_privilege('anon',p.oid,'EXECUTE') as anon_execute,
+       has_function_privilege('authenticated',p.oid,'EXECUTE') as authenticated_execute,
+       has_function_privilege('service_role',p.oid,'EXECUTE') as service_execute,
+       exists(select 1 from aclexplode(coalesce(
+         p.proacl,acldefault('f',p.proowner))) a
+         where a.grantee=0 and a.privilege_type='EXECUTE') as public_execute
+from expected e
+left join pg_proc p on p.oid=to_regprocedure('public.'||e.signature)
+order by e.signature;
+
+select p.proname,pg_get_function_identity_arguments(p.oid) as arguments
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public'
+  and (p.proname like '%ai_quality%' or p.proname='aggregate_ai_daily_metrics')
+order by p.proname,arguments;
+~~~
+
+Expect exactly 16 names/signatures, six invoker/ten definer functions, trusted
+approved executor ownership, fixed public,pg_temp paths, approved per-function
+timeouts, browser/PUBLIC EXECUTE=false, service_role EXECUTE=true. Compare
+definition hashes to an approved same-engine local contract before declaring
+body integrity; hashes were not collected on Production in A2.0. Do not dump
+function bodies or invoke these functions to check permissions.
+
+#### G: Exact Index Set And Definitions
+
+~~~sql
+with expected(name) as (values
+ ('ai_daily_metrics_pkey'),('ai_eval_cases_pkey'),('ai_eval_cases_review_idx'),
+ ('ai_owner_decisions_pkey'),('ai_owner_decisions_review_created_idx'),
+ ('ai_quality_conversations_activity_idx'),
+ ('ai_quality_conversations_conversation_key_hash_key'),
+ ('ai_quality_conversations_pkey'),('ai_quality_conversations_retention_idx'),
+ ('ai_quality_conversations_started_idx'),('ai_quality_active_feedback_idx'),
+ ('ai_quality_events_conversation_idx'),('ai_quality_events_created_idx'),
+ ('ai_quality_events_idempotency_idx'),('ai_quality_events_message_idx'),
+ ('ai_quality_events_page_idx'),('ai_quality_events_pkey'),
+ ('ai_quality_events_retention_idx'),('ai_quality_events_review_idx'),
+ ('ai_quality_events_type_created_idx'),('ai_quality_events_unresolved_idx'),
+ ('ai_quality_messages_created_idx'),('ai_quality_messages_id_conversation_key'),
+ ('ai_quality_messages_idempotency_idx'),('ai_quality_messages_pkey'),
+ ('ai_quality_messages_retention_idx'),('ai_quality_messages_turn_role_key'),
+ ('ai_review_items_classification_seen_idx'),('ai_review_items_cluster_idx'),
+ ('ai_review_items_first_seen_idx'),('ai_review_items_last_seen_idx'),
+ ('ai_review_items_owner_seen_idx'),('ai_review_items_pkey'),
+ ('ai_review_items_status_seen_idx'),('ai_quality_maintenance_state_pkey')),
+actual as (
+ select i.indexname,i.tablename,i.indexdef,x.indisvalid,x.indisready
+ from pg_indexes i
+ join pg_index x on x.indexrelid=to_regclass('public.'||quote_ident(i.indexname))
+ where i.schemaname='public'
+   and i.tablename ~ '^ai_(quality|review|owner|eval|daily)_')
+select coalesce(e.name,a.indexname) as index_name,e.name is not null as expected,
+       a.indexname is not null as present,a.tablename,a.indisvalid,a.indisready,a.indexdef
+from expected e full join actual a on a.indexname=e.name
+order by index_name;
+~~~
+
+Expect exactly 35 rows, all expected/present/valid/ready=true. Compare full
+definitions with the 34-index A/B/C inventory below plus the maintenance
+singleton PK. The rebuilt message retention index keeps its name and columns;
+its generated expiry column must reflect the hardening contract.
+
+#### H: Ledger Contract And Four Approved Identities (BLOCKED)
+
+~~~sql
+select to_regclass('supabase_migrations.schema_migrations') as possible_ledger;
+select column_name,data_type from information_schema.columns
+where table_schema='supabase_migrations' and table_name='schema_migrations'
+order by ordinal_position;
+~~~
+
+Only if a separately approved canonical workflow actually uses this table
+with version/name columns, the following reads non-secret identity fields:
+
+~~~sql
+select version,name from supabase_migrations.schema_migrations order by version;
+~~~
+
+Never select ledger statement bodies. A2.0 found no ledger relations. Four
+one-to-one version/name/artifact-hash mappings have NOT been established, so
+no executable four-version assertion or apply command can yet be finalized.
+A raw row-count increase of four is insufficient. Future verification must
+compare the exact approved identities in order against pre-apply history
+and the local exact-byte SHA256 manifest, with no unrelated entries changed.
+If another canonical ledger is approved, prepare its identity-only equivalent
+before execution. Do not create/repair a ledger during this read-only gate.
+
+#### I: Existing Core Metadata Fingerprint, Before And After
+
+Prepared only; no Production baseline fingerprint was captured before STOP.
+Run the identical query before the future chain, after each successful phase,
+and finally, on the same engine/session settings. It covers all existing public
+non-Quality ordinary/partitioned tables, including admin_permissions metadata.
+It emits only counts/hashes, not application data or default/trigger literals.
+
+~~~sql
+with t as (
+ select c.* from pg_class c join pg_namespace n on n.oid=c.relnamespace
+ where n.nspname='public' and c.relkind in ('r','p')
+   and c.relname !~ '^ai_(quality|review|owner|eval|daily)_'),
+objects(kind,object_key,definition) as (
+ select 'table',t.relname::text,jsonb_build_object(
+   'kind',t.relkind,'owner',pg_get_userbyid(t.relowner),
+   'rls',t.relrowsecurity,'force_rls',t.relforcerowsecurity,
+   'options',t.reloptions,'partition',pg_get_partkeydef(t.oid),
+   'partition_bound',pg_get_expr(t.relpartbound,t.oid),
+   'acl',(select jsonb_agg(jsonb_build_array(
+       pg_get_userbyid(a.grantor),
+       case when a.grantee=0 then 'PUBLIC' else pg_get_userbyid(a.grantee) end,
+       a.privilege_type,a.is_grantable)
+       order by a.grantor,a.grantee,a.privilege_type,a.is_grantable)
+     from aclexplode(coalesce(t.relacl,acldefault('r',t.relowner))) a))
+ from t
+ union all
+ select 'column',t.relname||'.'||a.attname,jsonb_build_object(
+   'position',a.attnum,'type',format_type(a.atttypid,a.atttypmod),
+   'not_null',a.attnotnull,'identity',a.attidentity,
+   'generated',a.attgenerated,'default',pg_get_expr(d.adbin,d.adrelid),
+   'collation',co.collname,'collation_schema',cn.nspname)
+ from t join pg_attribute a on a.attrelid=t.oid
+ left join pg_attrdef d on d.adrelid=t.oid and d.adnum=a.attnum
+ left join pg_collation co on co.oid=a.attcollation
+ left join pg_namespace cn on cn.oid=co.collnamespace
+ where a.attnum>0 and not a.attisdropped
+ union all
+ select 'constraint',t.relname||'.'||k.conname,
+        jsonb_build_object('type',k.contype,'definition',pg_get_constraintdef(k.oid),
+                           'validated',k.convalidated)
+ from t join pg_constraint k on k.conrelid=t.oid
+ union all
+ select 'index',t.relname||'.'||i.relname,jsonb_build_object(
+   'definition',pg_get_indexdef(i.oid),'valid',x.indisvalid,'ready',x.indisready)
+ from t join pg_index x on x.indrelid=t.oid
+ join pg_class i on i.oid=x.indexrelid
+ union all
+ select 'trigger',t.relname||'.'||g.tgname,jsonb_build_object(
+   'definition',pg_get_triggerdef(g.oid),'enabled',g.tgenabled)
+ from t join pg_trigger g on g.tgrelid=t.oid where not g.tgisinternal
+ union all
+ select 'policy',p.tablename||'.'||p.policyname,to_jsonb(p)
+ from pg_policies p join t on t.relname=p.tablename where p.schemaname='public')
+select count(*) as metadata_records,
+       md5(coalesce(jsonb_agg(jsonb_build_array(kind,object_key,md5(definition::text))
+         order by kind,object_key)::text,'[]')) as core_table_metadata_hash
+from objects;
+
+select count(*) as core_function_count,
+       md5(coalesce(jsonb_agg(jsonb_build_array(
+         p.proname,pg_get_function_identity_arguments(p.oid),
+         md5(pg_get_functiondef(p.oid)),pg_get_userbyid(p.proowner),p.proacl::text)
+         order by p.proname,pg_get_function_identity_arguments(p.oid))::text,'[]'))
+         as core_function_metadata_hash
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public' and p.prokind in ('f','p')
+  and not (p.proname like '%ai_quality%' or p.proname='aggregate_ai_daily_metrics');
+~~~
+
+Expect hashes and record counts unchanged. This verifies catalog definitions,
+not private row contents or concurrent business transactions. public schema
+USAGE is a separately reviewed existing-schema ACL touch and deliberately not
+part of the table fingerprint. Any unexpected core metadata change is STOP,
+not automatic blame or rollback of a concurrent unrelated change.
+
+#### J: Exact Permission Seeds
+
+~~~sql
+with expected(code,module,action,description) as (values
+ ('ai_quality.view','ai_quality','view','View sanitized AI quality evidence'),
+ ('ai_quality.review','ai_quality','review','Mark AI quality evidence as reviewed'))
+select e.code,p.code is not null as present,
+       p.module is not distinct from e.module as module_matches,
+       p.action is not distinct from e.action as action_matches,
+       p.description is not distinct from e.description as description_matches
+from expected e left join public.admin_permissions p on p.code=e.code
+order by e.code;
+~~~
+
+Expect two rows and all booleans true. Compare the pre-apply count with the
+expected two inserts only after target-key absence has been verified and
+concurrent Admin permission changes ruled out. No permission row was read or
+written in A2.0 after the default-privilege STOP.
+
+### A2.0 Closeout
+
+Local verification: historical runbook content preserved; static security
+audit PASS; 10 new SQL blocks contain 26 SELECT-only statements and no Quality
+RPC invocation. The expected index set matches all 34 historical indexes plus
+the maintenance PK; 16 exact function signatures include ten definers. These
+are static checks, not live SQL execution or a substitute for blocked gate H.
+git diff --check PASS. Four migration SHA256 values and HEAD remain unchanged.
+
+Only this runbook was edited locally. Four migrations, runtime, FAQ/MD,
+Booking, About and Facilities remain unchanged. No A2.1 action was attempted.
+Production writes=0; Production environment changes=0; Quality activation=0;
+DeepSeek/other model calls=0; commit/push/deploy/Promote=0. A1 local gate remains
+PASS; A2.0 Production preflight is FAIL; recommend A2.1 approval: NO.
+
 ## A1.1 Current Verdict
 
 Local hardening completed 2026-09-10 against main checkpoint

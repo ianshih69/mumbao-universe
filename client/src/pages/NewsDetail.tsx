@@ -12,6 +12,7 @@ const newsArticleSlugs = new Set([
   "mumbao-line-stickers-coming-soon",
   "mumbao-goods-coming-soon",
   "stime-villa-website-updates",
+  "mumbao-universe-starry-fashion-exhibition-2026",
 ]);
 
 function setMetaContent(selector: string, content: string) {
@@ -198,13 +199,25 @@ export default function NewsDetail() {
     );
   }
 
+  const imageFirst = news.detailLayout === "image-first";
+  const cover = (
+    <div className={`mx-auto flex aspect-[4/3] w-full max-w-[900px] items-center justify-center overflow-hidden rounded-[14px] bg-[#fbf7f1] p-2 shadow-[0_16px_44px_rgba(90,70,50,0.08)] ${imageFirst ? "" : "mt-14 md:mt-16"}`}>
+      <img
+        src={news.image}
+        alt={news.alt}
+        className="block h-full w-full rounded-[10px] object-contain"
+      />
+    </div>
+  );
+
   return (
     <div className="min-h-screen-safe bg-[#fbf8f2] font-serif text-[#3d332b] selection:bg-[#c58a54] selection:text-white">
       <Header />
 
       <main className="pt-28 md:pt-36">
         <article className="px-5 pb-20 pt-14 md:px-8 md:pb-28 md:pt-20">
-          <header className="mx-auto flex max-w-5xl flex-col items-center text-center">
+          {imageFirst && cover}
+          <header className={`mx-auto flex flex-col items-center text-center ${imageFirst ? "mt-10 max-w-3xl md:mt-14" : "max-w-5xl"}`}>
             <span className="block text-xs font-medium uppercase tracking-[0.32em] text-[#a57652]">
               LATEST NEWS
             </span>
@@ -213,28 +226,40 @@ export default function NewsDetail() {
               <span className="h-px w-8 bg-[#ded1c1]" />
               <span>{news.date}</span>
             </div>
-            <h1 className="mx-auto mt-6 max-w-[940px] text-center text-[32px] font-light leading-[1.42] tracking-wide text-[#3d332b] md:text-5xl md:leading-[1.4]">
+            <h1 className={`mx-auto mt-6 text-center font-light text-[#3d332b] ${imageFirst ? "max-w-3xl text-[28px] leading-[1.6] tracking-normal md:text-4xl md:leading-[1.55]" : "max-w-[940px] text-[32px] leading-[1.42] tracking-wide md:text-5xl md:leading-[1.4]"}`}>
               {news.title}
             </h1>
           </header>
 
-          <div className="mx-auto mt-14 flex aspect-[4/3] w-full max-w-[900px] items-center justify-center overflow-hidden rounded-[14px] bg-[#fbf7f1] p-2 shadow-[0_16px_44px_rgba(90,70,50,0.08)] md:mt-16">
-            <img
-              src={news.image}
-              alt={news.alt}
-              className="block h-full w-full rounded-[10px] object-contain"
-            />
-          </div>
+          {!imageFirst && cover}
 
-          <div className="mx-auto mt-14 max-w-3xl space-y-8 md:mt-16">
-            <h2 className="text-2xl font-light leading-relaxed text-[#3d332b] md:text-3xl">
-              {news.detailTitle}
-            </h2>
+          <div className={`mx-auto space-y-8 ${imageFirst ? "mt-10 max-w-2xl md:mt-12" : "mt-14 max-w-3xl md:mt-16"}`}>
+            {imageFirst ? (
+              <p className="text-xl font-light leading-[1.9] text-[#a57652] md:text-2xl">
+                {news.detailTitle}
+              </p>
+            ) : (
+              <h2 className="text-2xl font-light leading-relaxed text-[#3d332b] md:text-3xl">
+                {news.detailTitle}
+              </h2>
+            )}
             <div className="space-y-6 text-base leading-[2.05] text-[#75685d] md:text-lg md:leading-[2.15]">
               {news.content.map((paragraph) => (
                 <p key={paragraph}>{paragraph}</p>
               ))}
             </div>
+            {news.highlights && (
+              <section className="pt-4 md:pt-6" aria-labelledby="news-highlights">
+                <h2 id="news-highlights" className="text-xl font-light leading-relaxed text-[#3d332b] md:text-2xl">
+                  {news.highlights.title}
+                </h2>
+                <ul className="mt-5 list-disc space-y-4 pl-5 text-base leading-[2.05] text-[#75685d] marker:text-[#c78f9e] md:mt-6 md:text-lg md:leading-[2.15]">
+                  {news.highlights.items.map((item) => (
+                    <li key={item} className="pl-1">{item}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
             <Link
               href="/news"
               className="inline-flex items-center gap-2 pt-4 text-sm font-medium tracking-[0.08em] text-[#a57652] transition hover:text-[#c58a54] md:pt-6"

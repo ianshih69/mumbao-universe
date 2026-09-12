@@ -9,9 +9,40 @@ export type NewsItem = {
   content: string[];
   image: string;
   alt: string;
+  detailLayout?: "image-first";
+  highlights?: {
+    title: string;
+    items: string[];
+  };
 };
 
 export const newsItems: NewsItem[] = [
+  {
+    id: 5,
+    slug: "mumbao-universe-starry-fashion-exhibition-2026",
+    category: "Exhibition",
+    date: "2026.11",
+    title: "【慢寶宇宙・首部曲】2026 宜蘭最治癒的「星晴時尚展」，這次我們住進去！",
+    excerpt:
+      "2026 年 11 月，我們以「慢寶宇宙・星晴時尚」為題，將美學展覽搬進了員山鄉的獨棟villa中。",
+    detailTitle: "奢華，是懂得把時間浪費在美好的事物上。",
+    content: [
+      "慢慢蒔光【星晴時尚】首部曲開展正文：當原創藝術IP 遇上極致空間美學 —— 慢慢蒔光 STime Villa 顛覆您對宜蘭包棟的想像。",
+      "2026 年 11 月，我們以「慢寶宇宙・星晴時尚」為題，將美學展覽搬進了員山鄉的獨棟villa中。",
+      "精心設計的十二星座主題房型，將時尚軟裝與光影美學完美融合，為您的家族聚會、好友慶生或品牌活動，打造前所未有的「策展級住宿體驗」。",
+    ],
+    image: "/images/News/News-5.JPG",
+    alt: "慢寶宇宙・首部曲：2026 星晴時尚展",
+    detailLayout: "image-first",
+    highlights: {
+      title: "【展出亮點】",
+      items: [
+        "空間即展品： 沉浸式體驗慢寶原創 IP 的療癒美學。",
+        "高規格包棟： 專屬奢華空間，兼顧寵物友善的精緻細節。",
+        "專屬您的度假儀式感。",
+      ],
+    },
+  },
   {
     id: 1,
     slug: "mumbao-line-stickers-coming-soon",

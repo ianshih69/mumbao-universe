@@ -1,6 +1,6 @@
-import { isAiQualityFeedbackEnabled, verifyAiQualityFeedbackToken } from "../server/aiQuality/feedbackToken.js";
-import { isAiQualityObserverEnabled } from "../server/aiQuality/observer.js";
-import { exactKeys, feedbackCategories, qualityError, qualityRpc, readQualityBody, sendQualityJson } from "../server/aiQuality/http.js";
+import { isAiQualityFeedbackEnabled, verifyAiQualityFeedbackToken } from "./feedbackToken.js";
+import { isAiQualityObserverEnabled } from "./observer.js";
+import { exactKeys, feedbackCategories, qualityError, qualityRpc, readQualityBody, sendQualityJson } from "./http.js";
 
 export default async function handler(req, res) {
   try {

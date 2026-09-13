@@ -1,7 +1,7 @@
-import { requirePermission } from "../server/adminShop/core.js";
-import { isAiQualityAdminEnabled } from "../server/aiQuality/feedbackToken.js";
+import { requirePermission } from "../adminShop/core.js";
+import { isAiQualityAdminEnabled } from "./feedbackToken.js";
 import { exactKeys, qualityError, qualityEventId, qualityRpc, readQualityBody, sendQualityJson,
-  publicQualityEvent, publicQualityDetail, publicQualityOverview, publicQualityHealth, safeQualityDate } from "../server/aiQuality/http.js";
+  publicQualityEvent, publicQualityDetail, publicQualityOverview, publicQualityHealth, safeQualityDate } from "./http.js";
 
 export default async function handler(req, res) {
   try {

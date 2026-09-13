@@ -9,6 +9,14 @@
   },
   "rewrites": [
     {
+      "source": "/api/admin-ai-quality",
+      "destination": "/api/ai-quality"
+    },
+    {
+      "source": "/api/ai-quality-feedback",
+      "destination": "/api/ai-quality"
+    },
+    {
       "source": "/((?!api(?:/|$)).*)",
       "destination": "/index.html"
     }

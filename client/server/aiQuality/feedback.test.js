@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildAiQualityTurnSnapshot } from "./snapshot.js";
 import { createAiQualityFeedbackToken, verifyAiQualityFeedbackToken, isAiQualityFeedbackEnabled, isAiQualityAdminEnabled, feedbackLifetimeSeconds } from "./feedbackToken.js";
-import handler from "../../api/ai-quality-feedback.js";
+import handler from "../../api/ai-quality.js";
 import { publicQualityDetail, publicQualityHealth, publicQualityOverview } from "./http.js";
 
 const snapshot = () => buildAiQualityTurnSnapshot({ conversationId:"synthetic-conversation",turnId:"synthetic-turn",
@@ -22,11 +22,11 @@ beforeEach(() => {
 });
 afterEach(()=>{vi.unstubAllEnvs();vi.unstubAllGlobals();vi.restoreAllMocks();});
 async function post(body, extra={}) {
-  const res=response();await handler({method:"POST",body,headers:{},...extra},res);return res;
+  const res=response();await handler({url:"/api/ai-quality-feedback",method:"POST",body,headers:{},...extra},res);return res;
 }
 describe("Phase 1C signed feedback",()=>{
   it("new server surfaces have no model, file persistence, transcript logging or environment dumps",()=>{
-    for(const name of ["feedbackToken.js","http.js","../../api/ai-quality-feedback.js","../../api/admin-ai-quality.js"]){
+    for(const name of ["feedbackToken.js","http.js","feedbackHandler.js","adminHandler.js","../../api/ai-quality.js"]){
       const source=readFileSync(new URL(name,import.meta.url),"utf8");
       expect(source).not.toMatch(/DEEPSEEK|deepSeek|api\.deepseek|writeFile|appendFile|console\.|JSON\.stringify\(process\.env/);
       expect(source).not.toMatch(/from ["'].*(?:aiChat\/(?:message|deepSeek|semantic)|node:fs)/);
@@ -79,7 +79,7 @@ describe("Phase 1C signed feedback",()=>{
   });
   it("bounds streamed and parsed body before lookup",async()=>{
     expect((await post("x".repeat(3000))).statusCode).toBeGreaterThanOrEqual(400);
-    const res=response();await handler({method:"POST",headers:{},async *[Symbol.asyncIterator](){yield "x".repeat(3000);}},res);
+    const res=response();await handler({url:"/api/ai-quality-feedback",method:"POST",headers:{},async *[Symbol.asyncIterator](){yield "x".repeat(3000);}},res);
     expect(res.statusCode).toBe(413);expect(transport).not.toHaveBeenCalled();
   });
   it("unknown turn is the same generic rejection as bad token",async()=>{

@@ -5,7 +5,7 @@ import { afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi } from "v
 import { prepareAiQualityTurn } from "./observer.js";
 import { buildAiQualityTurnSnapshot } from "./snapshot.js";
 import { createAiQualityFeedbackToken } from "./feedbackToken.js";
-import feedbackHandler from "../../api/ai-quality-feedback.js";
+import feedbackHandler from "../../api/ai-quality.js";
 let db;
 const query=async(sql,args=[])=>(await db.query(sql,args)).rows;
 const rpc=async(name,args=[]) => (await query("select "+name+"("+args.map((_,i)=>"$"+(i+1)).join(",")+") as result",args))[0].result;
@@ -35,6 +35,23 @@ beforeEach(async()=>{
 });
 afterEach(async()=>{await db.exec("rollback");vi.unstubAllEnvs();vi.unstubAllGlobals();});
 describe("Phase 1C executed local migration",()=>{
+  it("gateway preserves signed feedback idempotency and switching through the real SQL RPC",async()=>{
+    const {snapshot}=await record();const token=createAiQualityFeedbackToken(snapshot);
+    const transport=vi.fn(async(url,options)=>{
+      expect(url).toBe("https://quality.test/rest/v1/rpc/submit_ai_quality_feedback");
+      const b=JSON.parse(options.body);
+      return new Response(JSON.stringify(await rpc("submit_ai_quality_feedback",[b.p_conversation,b.p_turn,b.p_polarity,b.p_category])));
+    });vi.stubGlobal("fetch",transport);
+    for(const [polarity,category] of [["positive",null],["positive",null],["negative","other"],["negative","incorrect_answer"],["positive",null]]){
+      const res={statusCode:0,setHeader(){},end(body){this.data=JSON.parse(body);}};
+      await feedbackHandler({url:"/api/ai-quality-feedback",method:"POST",headers:{},body:{token,polarity,...(category?{category}:{})}},res);
+      expect(res.statusCode).toBe(200);expect(res.data).toEqual({ok:true});
+      const rows=await query("select event_type,feedback_category from ai_quality_events where event_type like '%feedback'");
+      expect(rows).toEqual([{event_type:polarity+"_feedback",feedback_category:category}]);
+      expect(await rpc("read_ai_quality_overview",[7])).toMatchObject({positive:polarity==="positive"?1:0,negative:polarity==="negative"?1:0});
+    }
+    expect(transport).toHaveBeenCalledTimes(5);
+  });
   it("one positive active record, repeat idempotency and accurate counters",async()=>{
     const {p}=await record();await vote(p);await vote(p);
     expect(await query("select * from ai_quality_events where event_type='positive_feedback'")).toHaveLength(1);
@@ -64,7 +81,7 @@ describe("Phase 1C executed local migration",()=>{
     const statuses=[];
     for(let i=0;i<100;i++){
       const res={statusCode:0,setHeader(){},end(){}};
-      await feedbackHandler({method:"POST",headers:{},body:{token,polarity:"negative",category:"other"}},res);
+      await feedbackHandler({url:"/api/ai-quality-feedback",method:"POST",headers:{},body:{token,polarity:"negative",category:"other"}},res);
       statuses.push(res.statusCode);
     }
     expect(statuses.filter(s=>s===200)).toHaveLength(12);expect(statuses.filter(s=>s===429)).toHaveLength(88);

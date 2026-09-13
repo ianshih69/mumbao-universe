@@ -37,14 +37,13 @@ describe("Quality sidecar integration boundary", () => {
     expect(calls.filter(([, call]) => /^(?:fetch|fetchImpl)$/.test(call))).toEqual([["persistence.js", "fetchImpl"]]);
     expect(calls.filter(([, call]) => /writeFile|appendFile|createClient|applyScenarioTransition|matchSemantic|console\.(log|info|error)/.test(call))).toEqual([]);
   });
-  it("allows only the completed-turn hook and the two approved server quality APIs", () => {
+  it("allows only the completed-turn hook and the approved Quality gateway outside internal modules", () => {
     const forbidden = /\b(?:aiQuality|sanitizeAiQualityText|hashAiQualityConversationKey|ai_quality_(?:conversations|messages|events)|aggregate_ai_daily_metrics|delete_expired_ai_quality_data)\b/;
     const offenders = ["api","server","src"].flatMap((folder) => sources(path.join(client,folder)))
       .filter((file) => forbidden.test(readFileSync(file,"utf8")))
       .map((file) => path.relative(client,file));
     expect(offenders.sort()).toEqual([
-      path.join("api", "admin-ai-quality.js"),
-      path.join("api", "ai-quality-feedback.js"),
+      path.join("api", "ai-quality.js"),
       path.join("server", "aiChat", "message.js"),
     ].sort());
   });

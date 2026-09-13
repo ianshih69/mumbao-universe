@@ -13,7 +13,7 @@ vi.mock("../../server/shopShared.js", async importOriginal=>{
     },
   };
 });
-import handler from "../../api/admin-ai-quality.js";
+import handler from "../../api/ai-quality.js";
 let transport;
 beforeEach(()=>{
   state.role="super_admin";state.active=true;state.permissions=[];state.rpcStatus=200;
@@ -33,7 +33,7 @@ beforeEach(()=>{
 afterEach(()=>{vi.unstubAllEnvs();vi.unstubAllGlobals();});
 async function request(action="list",token="synthetic",query={},body){
   const res={statusCode:0,setHeader:vi.fn(),end(value){this.data=JSON.parse(value);}};
-  await handler({method:action==="review"?"POST":"GET",headers:token?{authorization:"Bearer "+token}:{},
+  await handler({url:"/api/admin-ai-quality",method:action==="review"?"POST":"GET",headers:token?{authorization:"Bearer "+token}:{},
     query:{action,...query},body},res);return res;
 }
 describe("Phase 1C actual Admin permission framework",()=>{

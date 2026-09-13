@@ -1,4 +1,4 @@
-import { analyzeDialogueReferences } from "./dialogueReferenceSemantics.js";
+import { analyzeDialogueReferences, analyzeEntityAttributeAssertion } from "./dialogueReferenceSemantics.js";
 
 const petId = /^pet_[1-9]\d{0,8}$/;
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -76,6 +76,8 @@ export function resolveTypedEntityReference({ context, message, spans = [], enti
   const state = normalizeEntityReferences(context?.entity_references, context || {});
   const entities = entity === "pet" ? state.pets : [];
   const reference = analyzeDialogueReferences(message, spans);
+  const assertion = context?.pending_interaction?.type === "slot_fill" ? null
+    : analyzeEntityAttributeAssertion(message, spans);
   const cues = spans.filter((span) => ["reference_cue", "scope_cue", "entity_ordinal", "reference_rejection"].includes(span.normalized_type));
   const classifiers = reference.classifierEntities;
   const entityCompatible = reference.entities.every((item) => item === entity) &&
@@ -89,7 +91,7 @@ export function resolveTypedEntityReference({ context, message, spans = [], enti
     span_ids: cues.map((span) => span.span_id),
     clarification_code: status === "ambiguous" ? "missing_target_reference" : null,
   });
-  if (!entityCompatible || reference.rejected) return reply("ambiguous", [], "rejected");
+  if (!entityCompatible || reference.rejected && !assertion?.contrast) return reply("ambiguous", [], "rejected");
   const hasEntityScope = reference.classifierEntities.includes(entity) || reference.entities.includes(entity) ||
     context?.pending_interaction?.entity === entity || base >= 0;
   if (!hasEntityScope && !spans.some((span) => ["pet_weight", "entity_ordinal"].includes(span.normalized_type))) {
@@ -106,14 +108,16 @@ export function resolveTypedEntityReference({ context, message, spans = [], enti
   const weights = spans.filter((span) => span.normalized_type === "pet_weight");
   const targetWeights = weights.filter((weight) => spans.some((span) =>
     span.normalized_type === "operation_cue" && span.normalized_value === "replace" && span.start >= weight.end));
-  const attributes = targetWeights.length ? targetWeights : reference.operations.length ? [] : weights;
+  const attributes = assertion ? spans.filter((span) => assertion.target_span_ids.includes(span.span_id))
+    : targetWeights.length ? targetWeights : reference.operations.length ? [] : weights;
   if (attributes.length) {
     const matches = attributes.length === 1 ? entities.filter((item) => item.weight_kg === attributes[0].normalized_value) : [];
     const ordinalTarget = ordinals.length ? entities[ordinals[0].normalized_value - 1] : null;
     const compatibleOrdinal = !ordinals.length || ordinalTarget?.id === matches[0]?.id;
     const compatibleAlternate = !categories.includes("alternate") || base >= 0 &&
       entities.filter((item) => item.id !== anchorId).length === 1 && matches[0]?.id !== anchorId;
-    const resolved = matches.length === 1 && compatibleOrdinal && compatibleAlternate;
+    const compatiblePronoun = !assertion?.requires_anchor || base >= 0 && matches[0]?.id === anchorId;
+    const resolved = matches.length === 1 && compatibleOrdinal && compatibleAlternate && compatiblePronoun;
     return { ...reply(resolved ? "unique" : "ambiguous", resolved ? [matches[0].id] : [], "attribute"),
       span_ids: [...new Set([...cues, ...attributes].map((span) => span.span_id))] };
   }
@@ -137,8 +141,14 @@ export function resolveTypedEntityReference({ context, message, spans = [], enti
     return target ? reply("unique", [target.id], category) : reply("ambiguous", [], category);
   }
   if (["same", "previous"].includes(category)) {
-    const target = base >= 0 ? entities[base] : entities.length === 1 ? entities[0] : null;
+    const hasRemovedEntities = state.next_pet_id - 1 > entities.length;
+    const target = base >= 0 ? entities[base] :
+      !assertion?.requires_anchor && !hasRemovedEntities && entities.length === 1 ? entities[0] : null;
     return target ? reply("unique", [target.id], category) : reply("ambiguous", [], category);
+  }
+  if (assertion) {
+    const target = base >= 0 ? entities[base] : entities.length === 1 ? entities[0] : null;
+    return target ? reply("unique", [target.id], "attribute_subject") : reply("ambiguous", [], "attribute_subject");
   }
   return reply("absent");
 }

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { normalizeConversationContext } from "./conversationContext.js";
 import { matchSemanticDialogueCapabilities } from "./dialogueCapabilities.js";
-import { analyzeDialogueReferences } from "./dialogueReferenceSemantics.js";
+import { analyzeDialogueReferences, analyzeEntityAttributeAssertion } from "./dialogueReferenceSemantics.js";
 import { resolveTypedEntityReference } from "./typedEntityReferences.js";
 
 export const semanticTurnKinds = Object.freeze([
@@ -84,6 +84,8 @@ function isPendingCurrent(context) {
 
 function operationBinding(operation, spans) {
   const evidence = String(operation.evidence || "");
+  const attributeAssertion = operation.entity === "pet" && operation.operation === "replace"
+    ? analyzeEntityAttributeAssertion(evidence, spans) : null;
   const entitySpans = (spans || []).filter(
     (span) =>
       span.entity_hints?.includes(operation.entity) &&
@@ -104,7 +106,7 @@ function operationBinding(operation, spans) {
       [
         ...(entitySpans.length ? entitySpans : fallbackSpans),
         ...operationSpans,
-      ].map((span) => span.span_id),
+      ].map((span) => span.span_id).concat(attributeAssertion?.value_span_ids || []),
     ),
     context_bindings: (() => {
       if (!["add", "replace", "remove", "clear"].includes(operation.operation)) {
@@ -146,6 +148,7 @@ function isBarePetWeight(message, operations) {
       (operation) =>
         operation.entity === "pet" && operation.weights_kg?.length,
     ) &&
+      !operations.some((operation) => ["replace", "remove", "add", "clear"].includes(operation.operation)) &&
       !mutationForm.test(text) &&
       !quoteForm.test(text)
   );

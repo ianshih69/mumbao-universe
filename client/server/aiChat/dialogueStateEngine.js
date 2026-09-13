@@ -377,7 +377,8 @@ export function applyScenarioTransition({
   }
 
   if (ast.turn_kind !== "transactional") {
-    if (ast.turn_kind === "informational" && plan.entity_reference?.status === "unique") {
+    if (ast.turn_kind === "informational" && plan.entity_reference?.status === "unique" &&
+        plan.spans?.some((span) => ["reference_cue", "entity_ordinal"].includes(span.normalized_type))) {
       const next = getConversationContextForStorage(setDiscourseAnchor(previous, plan.entity_reference.target_ids, turnId));
       return { ...unchanged(previous, validatedResult, "read_only_entity_reference"), context: next,
         changed: JSON.stringify(previous) !== JSON.stringify(next) };

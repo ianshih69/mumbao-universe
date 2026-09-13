@@ -1,6 +1,6 @@
 import { normalizeConversationContext } from "./conversationContext.js";
 import { hasCompleteQuoteCore, isPendingInteractionCurrent } from "./quoteDialogueState.js";
-import { analyzeDialogueReferences } from "./dialogueReferenceSemantics.js";
+import { analyzeDialogueReferences, analyzeEntityAttributeAssertion } from "./dialogueReferenceSemantics.js";
 import { resolveTypedEntityReference } from "./typedEntityReferences.js";
 
 const countEntities = new Set(["adult", "child", "infant", "pet", "breakfast"]);
@@ -357,21 +357,26 @@ function createInitialPartial({ message, spans, result, context }) {
     (ambiguity) => ambiguity.code === "missing_entity",
   );
   const target = resolveTypedEntityReference({ context: state, message, spans, allowAll: true });
+  const petOperation = result.operations.find((operation) => operation.entity === "pet");
+  if (petOperation?.operation === "replace" && petOperation.target_entity_id &&
+      state.entity_references.pets[petOperation.target_pet]?.id === petOperation.target_entity_id) {
+    return finalizePartial({ ...petOperation, candidate_entities: ["pet"], candidate_operations: ["replace"] }, state);
+  }
   if (reference.complete && ["replace", "remove"].includes(operationCue) &&
       reference.entities.every((entity) => entity === "pet") &&
       (reference.classifierEntities.includes("pet") || inferredEntity === "pet" || target.anchor_id) &&
       !result.operations.some((operation) => operation.entity === "pet" && operation.operation === "clear") &&
       Number(state.pet_count) > 0 && target.status !== "absent") {
     const id = target.status === "unique" ? target.target_ids[0] : null;
-    return finalizePartial({ operation: operationCue, entity: "pet", count: id ? 1 : genericCount,
+    const attributeAssertion = analyzeEntityAttributeAssertion(message, spans);
+    return finalizePartial({ operation: operationCue, entity: "pet", count: id || attributeAssertion ? 1 : genericCount,
       candidate_entities: ["pet"], candidate_operations: [operationCue],
-      weights_kg: weights.length ? [weights.at(-1)] : [], pet_type: state.pet_type,
+      weights_kg: attributeAssertion ? [attributeAssertion.value] : weights.length ? [weights.at(-1)] : [], pet_type: state.pet_type,
       target_entity_id: id, target_pet: id ? state.entity_references.pets.findIndex((pet) => pet.id === id) : null,
       target_scope: target.status === "all" ? "all" : null,
     }, state);
   }
 
-  const petOperation = result.operations.find((operation) => operation.entity === "pet");
   if (
     petOperation &&
     ["replace", "remove"].includes(petOperation.operation) &&

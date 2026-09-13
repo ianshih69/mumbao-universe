@@ -29,6 +29,7 @@ import { planDialogueGoals } from "./dialogueGoalPlanner.js";
 import { resolveSemanticTurn } from "./semanticTurnResolver.js";
 import { applyScenarioTransition } from "./dialogueStateEngine.js";
 import { referenceContextForProvider, resolveTypedEntityReference } from "./typedEntityReferences.js";
+import { analyzeEntityAttributeAssertion } from "./dialogueReferenceSemantics.js";
 
 export const bookingSpanTypes = Object.freeze([
   "date",
@@ -55,6 +56,11 @@ export const bookingSpanTypes = Object.freeze([
   "entity_ordinal",
   "reference_quantity",
   "reference_rejection",
+  "attribute_name",
+  "scalar_value",
+  "assertion_cue",
+  "conditional_cue",
+  "limit_cue",
 ]);
 
 export const bookingRequestedActions = Object.freeze([
@@ -124,6 +130,7 @@ export const bookingTurnCandidateSchema = z
     evidence_span_ids: z.array(z.string().regex(/^span-\d{3}$/)).min(1).max(30),
     context_refs: z.array(z.string().regex(/^(?:(?:stay|party|pets|addons)\.[a-z_]+|pets\.pet_[1-9]\d{0,8}|pending\.partial_operation)$/)).max(24),
     pending_resolution: z.boolean().optional(),
+    attribute_resolution: z.boolean().optional(),
   })
   .strict();
 
@@ -444,6 +451,7 @@ export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
   }
 
   const referenceLexemes = [
+    [/牠|它/gu, "reference_cue", "same"],
     [/原本|原先|剛才|剛剛|先前|上一/gu, "reference_cue", "previous"],
     [/另外一?|另一/gu, "reference_cue", "other"],
     [/那(?=一?[隻只個位份])|這(?=一?[隻只個位份])/gu, "reference_cue", "same"],
@@ -454,13 +462,20 @@ export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
     [/全部|所有|通通|都/gu, "scope_cue", "all"],
     [/一樣|相同|不變|照舊/gu, "continuation_cue", "same"],
     [/跟|照|沿用/gu, "continuation_cue", "follow"],
-    [/隻|只/gu, "reference_classifier", "pet"],
+    [/隻|只(?!有)/gu, "reference_classifier", "pet"],
     [/個|位/gu, "reference_classifier", "party"],
     [/份/gu, "reference_classifier", "breakfast"],
   ];
   for (const [pattern, type, value] of referenceLexemes) {
     scan(pattern, () => ({ normalized_type: type, normalized_value: value, entity_hints: [] }));
   }
+  scan(/體重|重量/gu, () => ({ normalized_type: "attribute_name", normalized_value: "weight_kg", entity_hints: ["pet"] }));
+  scan(/其實|實際上?|才對/gu, () => ({ normalized_type: "assertion_cue", normalized_value: "correction", entity_hints: [] }));
+  scan(/(?<!不)是/gu, () => ({ normalized_type: "assertion_cue", normalized_value: "copula", entity_hints: [] }));
+  scan(/如果|假如|假設/gu, () => ({ normalized_type: "conditional_cue", normalized_value: "hypothetical", entity_hints: [] }));
+  scan(/只有|僅有?|才(?=\d)/gu, () => ({ normalized_type: "limit_cue", normalized_value: "restrictive", entity_hints: [] }));
+  scan(new RegExp(`(?:不是|是|體重|重量|改成|改為|改)\\s*(${numberToken})`, "gu"),
+    (match) => ({ normalized_type: "scalar_value", normalized_value: parseNumber(match[1]), entity_hints: [] }), 1);
   scan(new RegExp(`第(${numberToken})[隻只個位份]`, "gu"), (match) => ({
     normalized_type: "entity_ordinal", normalized_value: parseNumber(match[1]), entity_hints: [],
   }));
@@ -819,6 +834,28 @@ export function compileBookingTurnCandidates({
       ? deterministic.result.missing_fields.filter((field) => field !== "pet_weights_kg")
       : deterministic.result.missing_fields,
   };
+  const prior = normalizeConversationContext(context);
+  const attributeAssertion = prior.pending_interaction?.type === "slot_fill" ? null
+    : analyzeEntityAttributeAssertion(sanitizedMessage, spans);
+  const activeScenario = Boolean(prior.quote_scenario || prior.active_intent === "pricing" || prior.current_topic === "booking_price");
+  if (attributeAssertion && (activeScenario || attributeAssertion.has_reference)) {
+    const id = entityReference.status === "unique" ? entityReference.target_ids[0] : null;
+    preliminaryResult = {
+      ...preliminaryResult,
+      intents: id ? ["request_quote", "update_pet"] : [],
+      operations: id ? [{
+        operation: "replace", entity: "pet", count: 1,
+        ...(prior.pet_type ? { pet_type: prior.pet_type } : {}),
+        weights_kg: [attributeAssertion.value], target_entity_id: id,
+        target_pet: prior.entity_references.pets.findIndex((pet) => pet.id === id),
+        evidence: sanitizedMessage,
+      }] : [],
+      missing_fields: [],
+      ambiguities: id ? [] : [{ code: "missing_target_reference", evidence: sanitizedMessage,
+        question: "請指定要調整哪一隻狗狗，或明確說明全部狗狗。" }],
+      confidence: id ? 1 : 0,
+    };
+  }
   const yearlessDate = getYearlessDateClarification(sanitizedMessage);
   if (
     yearlessDate &&
@@ -1028,6 +1065,19 @@ export function compileBookingTurnCandidates({
     candidates.push(...compileMissingEntityCandidates(spans, candidates.length));
   }
 
+  // Retain a provenance-bound candidate for provider-only certification; routing stays local.
+  if (attributeAssertion && slotFillTransaction.status === "direct_operation" &&
+      entityReference.status === "unique") {
+    candidates.push(bookingTurnCandidateSchema.parse({
+      candidate_id: "cand-001-pet-replace-attribute", selection_group: "group-001",
+      operation: "replace", entity: "pet", attribute_resolution: true,
+      bindings: [{ field: "weights_kg", source_kind: "span",
+        span_ids: attributeAssertion.value_span_ids, projection: "values" }],
+      evidence_span_ids: [...new Set([...attributeAssertion.value_span_ids, ...entityReference.span_ids])],
+      context_refs: entityReference.target_ids.map((id) => `pets.${id}`),
+    }));
+  }
+
   const initialPending = normalizeConversationContext(context).pending_interaction;
   const referencePending = initialPending?.type === "slot_fill" && initialPending.entity === "pet" &&
     initialPending.missing_slots.includes("target_pet") &&
@@ -1133,6 +1183,7 @@ export function compileBookingTurnCandidates({
     current_state: currentState,
     reference_context: referenceContext,
     entity_reference: entityReference,
+    entity_attribute_assertion: attributeAssertion,
     reference_contract: referenceContract,
     reference_pending: referencePending,
     pending_missing_fields: getPendingFields(context),
@@ -1219,6 +1270,26 @@ function valueFromBinding(binding, spansById, currentState) {
 
 export function materializeBookingTurnCandidate(candidate, plan) {
   const parsed = bookingTurnCandidateSchema.parse(candidate);
+  if (parsed.attribute_resolution) {
+    const expected = plan.candidates.find((item) => item.candidate_id === parsed.candidate_id);
+    const operation = plan.slot_fill_transaction?.result?.operations?.[0];
+    const assertion = analyzeEntityAttributeAssertion(plan.sanitized_message, plan.spans);
+    const entities = plan.reference_context.entities;
+    const target = resolveTypedEntityReference({ context: {
+      pet_count: entities.length, pet_weights_kg: entities.map((pet) => pet.weight_kg),
+      entity_references: { pets: entities, anchor: plan.reference_context.discourse_anchor },
+    },
+      message: plan.sanitized_message, spans: plan.spans });
+    if (JSON.stringify(expected) !== JSON.stringify(parsed) || !assertion ||
+        plan.slot_fill_transaction.status !== "direct_operation" || target.status !== "unique" ||
+        operation?.operation !== "replace" || operation.entity !== "pet" ||
+        operation.target_entity_id !== target.target_ids[0] ||
+        plan.reference_context.entities[operation.target_pet]?.id !== operation.target_entity_id ||
+        operation.weights_kg?.length !== 1 || operation.weights_kg[0] !== assertion.value) {
+      throw new Error("structured_candidate_invalid_attribute_reference");
+    }
+    return JSON.parse(JSON.stringify(operation));
+  }
   if (parsed.pending_resolution) {
     const expected = plan.candidates.find((item) => item.candidate_id === parsed.candidate_id);
     const operation = plan.slot_fill_transaction?.result?.operations?.[0];

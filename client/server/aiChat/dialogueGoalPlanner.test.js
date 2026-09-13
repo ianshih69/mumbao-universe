@@ -224,6 +224,14 @@ describe("unified dialogue goal planner", () => {
 
     for (const { category, message } of cases) {
       const plan = compile(message);
+      if (message === "後天入住") {
+        expect(plan.dialogue_goal_plan.lane).toBe("transactional");
+        expect(plan.deterministic_result.operations).toEqual([
+          expect.objectContaining({ entity: "stay", operation: "set", check_in: expect.any(String) }),
+        ]);
+        expect(plan.deterministic_result.operations[0].nights).toBeUndefined();
+        continue;
+      }
       expect(["informational", "partial"], `${category}: ${message}`).toContain(
         plan.dialogue_goal_plan.lane
       );
@@ -438,7 +446,13 @@ describe("dialogue context matrix", () => {
       "pending-add-answer"
     );
 
-    expect(pending.plan.slot_fill_transaction.status).toBe("created");
+    expect(pending.context.pending_interaction).toMatchObject({
+      action: "complete_quote_slots", candidate_references: ["pets.pet_2"],
+      partial_operation: { target_entity_id: "pet_2", missing_slots: ["weights_kg"] },
+    });
+    expect(pending.context.entity_references.pets).toEqual([
+      { id: "pet_1", type: "pet", weight_kg: 22 }, { id: "pet_2", type: "pet", weight_kg: null },
+    ]);
     expect(completed.plan.slot_fill_transaction.status).toBe("completed");
     expect(completed.plan.dialogue_goal_plan.lane).toBe("transactional");
     expect(completed.context.pet_weights_kg).toEqual([22, 20]);

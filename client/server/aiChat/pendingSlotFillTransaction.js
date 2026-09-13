@@ -1,7 +1,8 @@
-import { normalizeConversationContext } from "./conversationContext.js";
+import { normalizeConversationContext, getMissingBookingContextFields } from "./conversationContext.js";
 import { hasCompleteQuoteCore, isPendingInteractionCurrent } from "./quoteDialogueState.js";
 import { analyzeDialogueReferences, analyzeEntityAttributeAssertion } from "./dialogueReferenceSemantics.js";
 import { resolveTypedEntityReference } from "./typedEntityReferences.js";
+import { isSemanticQuestion } from "./semanticTurnResolver.js";
 
 const countEntities = new Set(["adult", "child", "infant", "pet", "breakfast"]);
 const entityCandidates = Object.freeze(["adult", "child", "pet"]);
@@ -345,6 +346,79 @@ function resultForOperation(operation, resumeAction) {
   };
 }
 
+// Bind missing quote fields only after the reducer has allocated stable entities.
+export function synchronizeQuoteMissingSlots(context, { conversationId = "", sourceTurnId, nowIso }) {
+  const state = normalizeConversationContext(context);
+  const old = state.pending_interaction;
+  if (!state.quote_scenario || (old && old.action !== "complete_quote_slots")) return state;
+  const missing = getMissingBookingContextFields(state);
+  const pets = missing.includes("dog_weights")
+    ? state.entity_references.pets.filter((pet) => pet.weight_kg === null) : [];
+  const nights = missing.includes("stay_nights");
+  if (!pets.length && !nights) return { ...state, pending_interaction: null };
+  const target = pets.length === 1 ? pets[0] : null;
+  const partial = finalizePartial({
+    operation: pets.length ? "replace" : "set", entity: pets.length ? "pet" : "stay",
+    count: pets.length ? 1 : null, pet_type: pets.length ? state.pet_type : null,
+    weights_kg: [], target_entity_id: target?.id,
+    target_pet: target ? state.entity_references.pets.findIndex((pet) => pet.id === target.id) : null,
+    candidate_entities: [pets.length ? "pet" : "stay"],
+    candidate_operations: [pets.length ? "replace" : "set"],
+  }, state);
+  partial.missing_slots = [...(pets.length ? ["weights_kg"] : []), ...(nights ? ["nights"] : [])];
+  const pending = pendingFromPartial({ partial, scenario: state.quote_scenario, conversationId,
+    sourceTurnId, nowIso, provenance: [], resumeAction: "request_quote" });
+  return normalizeConversationContext({ ...state, pending_interaction: {
+    ...pending, action: "complete_quote_slots",
+    candidate_references: pets.map((pet) => `pets.${pet.id}`),
+    required_fields: [...(pets.length ? ["pet_weights_kg"] : []), ...(nights ? ["stay_nights"] : [])],
+    ...(old ? { created_at: old.created_at, expires_at: old.expires_at } : {}),
+  } });
+}
+
+function fillQuoteMissingSlots({ state, pending, spans, message, result, sourceTurnId }) {
+  const targets = pending.candidate_references.map((ref) =>
+    state.entity_references.pets.find((pet) => `pets.${pet.id}` === ref));
+  if (targets.some((pet) => !pet || pet.weight_kg !== null)) return staleTransactionResult();
+  const reference = analyzeDialogueReferences(message, spans);
+  if (result.intents.includes("policy_question") || isSemanticQuestion(message) || reference.operations.length) {
+    return { status: "continue_quote", pending };
+  }
+  const weights = spansOfType(spans, "pet_weight");
+  const durations = spansOfType(spans, "nights");
+  const operations = [];
+  const bindings = [];
+  if (weights.length && targets.length) {
+    const ordinals = spansOfType(spans, "entity_ordinal");
+    const explicitTarget = ordinals.length === 1 ? state.entity_references.pets[ordinals[0].normalized_value - 1] : null;
+    const selected = explicitTarget ? targets.filter((pet) => pet.id === explicitTarget.id) : targets;
+    if (ordinals.length > 1 || (ordinals.length === 1 && !explicitTarget) ||
+        !selected.length || weights.length !== selected.length) {
+      return { status: "updated", pending, ambiguity: { code: "missing_target_reference",
+        evidence: message, question: "請指定是哪一隻狗狗，或分別提供每隻狗狗的體重。" } };
+    }
+    selected.forEach((pet, index) => {
+      operations.push({ operation: "replace", entity: "pet", count: 1,
+        target_entity_id: pet.id, target_pet: state.entity_references.pets.findIndex((entry) => entry.id === pet.id),
+        weights_kg: [weights[index].normalized_value], evidence: weights[index].text });
+      bindings.push({ operation: "replace", entity: "pet", span_bindings: [weights[index].span_id],
+        context_bindings: ["pending.partial_operation", `pets.${pet.id}`] });
+    });
+  }
+  if (pending.missing_slots.includes("nights") && durations.length === 1) {
+    operations.push({ operation: "set", entity: "stay", nights: durations[0].normalized_value, evidence: durations[0].text });
+    bindings.push({ operation: "set", entity: "stay", span_bindings: [durations[0].span_id],
+      context_bindings: ["pending.partial_operation"] });
+  }
+  if (!operations.length) return { status: "continue_quote", pending };
+  return { status: "completed", pending: null, transaction_id: pending.transaction_id,
+    partial_operation: pending.partial_operation, operation_bindings: bindings,
+    evidence_message: message, provenance: [provenanceEntry(sourceTurnId, message,
+      [...(weights.length ? ["weights_kg"] : []), ...(durations.length ? ["nights"] : [])])],
+    result: { intents: unique(["request_quote", ...operations.map((operation) => operationIntent(operation.entity))]),
+      operations, missing_fields: [], ambiguities: [], confidence: 1 } };
+}
+
 function createInitialPartial({ message, spans, result, context }) {
   const state = normalizeConversationContext(context);
   const reference = analyzeDialogueReferences(message, spans);
@@ -422,19 +496,6 @@ function createInitialPartial({ message, spans, result, context }) {
       count: genericCount,
       pet_type: null,
       weights_kg: [],
-      target_pet: null,
-    }, state);
-  }
-
-  if (
-    petOperation?.operation === "add" &&
-    Number.isInteger(petOperation.count) &&
-    (petOperation.weights_kg || []).length < petOperation.count
-  ) {
-    return finalizePartial({
-      ...petOperation,
-      candidate_entities: ["pet"],
-      candidate_operations: ["add"],
       target_pet: null,
     }, state);
   }
@@ -541,6 +602,9 @@ export function planPendingSlotFillTransaction({
   if (pending?.type === "slot_fill") {
     if (!isPendingInteractionCurrent(state, pending) || isExpired(pending, nowIso)) {
       return staleTransactionResult();
+    }
+    if (pending.action === "complete_quote_slots") {
+      return fillQuoteMissingSlots({ state, pending, spans, message, result, sourceTurnId });
     }
     if (state.quote_scenario?.last_applied_transaction_id === pending.transaction_id) {
       return {

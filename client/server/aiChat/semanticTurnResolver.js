@@ -35,7 +35,7 @@ export const semanticTurnAstSchema = z
   })
   .strict();
 
-const questionForm = /[？?嗎呢]$|^(?:請問|想問|想知道|可否|能否|是否)|怎麼|如何|何時|幾點|幾間|多少|有沒有|有無|最晚|規定|政策|會不會/;
+const questionForm = /[？?嗎呢]$|^(?:請問|想問|想知道|可否|能否|是否)|怎麼|如何|何時|幾點|幾間|多少|有沒有|有無|最晚|時間|時段|規定|政策|會不會/;
 const mutationForm = /再加|加上|增加|追加|另(?:外|[一二兩两三四五六七八九十\d])|改成|改為|改掉|換成|換|變成|調整|移除|拿掉|扣掉|減少|不要|取消|清除|少[一二兩两三四五六七八九十\d]/;
 const continuationForm = /^(?:那|再|改|換|少|多|不要|取消|清除)|同樣|一樣|照(?:剛才|原本)|其他不變|原本/;
 const contextualTimingForm = /^(?:那)?(?:最晚|最早|幾點|時間)(?:呢|[？?])?$/;
@@ -55,6 +55,10 @@ function compact(value) {
 
 export function isContextualTimingFragment(message) {
   return contextualTimingForm.test(compact(message));
+}
+
+export function isSemanticQuestion(message) {
+  return questionForm.test(compact(message));
 }
 
 function unique(values) {
@@ -233,6 +237,8 @@ export function resolveSemanticTurn({
   );
   const explicitQuote = quoteForm.test(text) && !policyPriceForm.test(text);
   const completeSnapshot = hasCompleteSnapshot(rawOperations, intents);
+  const datedStayStatement = Boolean(!questionForm.test(text) && /住|退房/.test(text) &&
+    rawOperations.some((operation) => operation.entity === "stay" && operation.check_in));
   const valueBearingContinuation = Boolean(
     activeScenario &&
       rawOperations.length &&
@@ -250,7 +256,8 @@ export function resolveSemanticTurn({
       ),
   );
   const policyQuestion = Boolean(
-    (capabilities.primary && !valueBearingContinuation) ||
+    (capabilities.primary && !valueBearingContinuation && !datedStayStatement) ||
+      (isBarePetWeight(message, rawOperations) && questionForm.test(text) && !explicitMutation) ||
       (intents.includes("policy_question") && !explicitMutation && !completeSnapshot),
   );
   const barePetWeight = isBarePetWeight(message, rawOperations);
@@ -287,7 +294,7 @@ export function resolveSemanticTurn({
     clarificationCode = minimalClarification(ambiguities);
   } else if (dayTypeQuote) {
     turnKind = "informational";
-  } else if (explicitQuote && rawOperations.length && !activeScenario) {
+  } else if ((explicitQuote || datedStayStatement) && rawOperations.length && !activeScenario) {
     turnKind = "transactional";
     scenarioAction = "new";
     selectedOperations = rawOperations.map((operation) => ({

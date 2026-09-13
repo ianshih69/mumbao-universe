@@ -127,18 +127,17 @@ describe("pending slot-fill transactions", () => {
     });
   });
 
-  it("waits for a pet weight before atomically applying an add", async () => {
+  it("allocates the added pet before binding its missing weight", async () => {
     const before = baseContext();
     const pending = await runTurn(before, "再加一隻狗", "add-dog");
     expect(pending.context).toMatchObject({
-      pet_count: 1,
+      pet_count: 2,
       pet_weights_kg: [22],
       pending_interaction: {
+        candidate_references: ["pets.pet_2"],
         partial_operation: {
-          operation: "add",
-          entity: "pet",
-          count: 1,
-          missing_slots: ["weights_kg"],
+          operation: "replace", entity: "pet", count: 1,
+          target_entity_id: "pet_2", missing_slots: ["weights_kg"],
         },
       },
     });
@@ -178,7 +177,7 @@ describe("pending slot-fill transactions", () => {
     expect(completed.context).toMatchObject(expected);
   });
 
-  it("cancels the pending transaction for a complete new snapshot", async () => {
+  it("replaces the old operation pending with missing nights for a new dated snapshot", async () => {
     const pending = await createGenericPending(baseContext(), "再加一個", "old-add");
     const snapshot = await runTurn(
       pending.context,
@@ -191,11 +190,12 @@ describe("pending slot-fill transactions", () => {
     );
     expect(snapshot.context).toMatchObject({
       check_in: "2026-11-07",
-      check_out: "2026-11-08",
+      check_out: null,
+      stay_nights: null,
       adult_count: 12,
       pet_count: 0,
       pet_weights_kg: [],
-      pending_interaction: null,
+      pending_interaction: { action: "complete_quote_slots", missing_slots: ["nights"] },
     });
   });
 

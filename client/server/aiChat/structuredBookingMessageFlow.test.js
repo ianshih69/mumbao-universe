@@ -183,13 +183,14 @@ async function runMessageTurn(message, previousContext = {}, mode = "active") {
     previousContext,
     recentMessages: [],
     freshnessGuard,
+    nowIso,
     pricingOptions: {
       supabaseRequest: createPricingReader(),
       referenceDate: "2026-09-06",
     },
   });
   const { conversationContextPatch, ...routeWithoutPatch } = finalRoute || {};
-  const finalContext = conversationContextPatch &&
+  const finalContext = mode !== "active" && conversationContextPatch &&
     typeof conversationContextPatch === "object"
     ? {
         ...context,
@@ -384,7 +385,7 @@ describe("bounded structured message runtime", () => {
   it.each([
     ["再加一位成人", { adult_count: 11, pet_count: 0 }],
     ["人數改成11位成人", { adult_count: 11, pet_count: 0 }],
-    ["再加一隻狗", { adult_count: 10, pet_count: 0 }],
+    ["再加一隻狗", { adult_count: 10, pet_count: 1 }],
     ["10位成人加2位兒童", { adult_count: null, child_count: null, pet_count: null }],
     ["明天1位成人帶1隻22公斤狗包棟多少", { adult_count: 1, pet_count: 1 }],
   ])("keeps party and pet entities isolated for %s", async (message, expected) => {
@@ -402,20 +403,22 @@ describe("bounded structured message runtime", () => {
     }
     if (message === "再加一隻狗") {
       expect(flow.resolution.result.missing_fields).toContain("pet_weights_kg");
-      expect(flow.resolution.reduction.applied).toBe(false);
+      expect(flow.resolution.reduction.applied).toBe(true);
       expect(flow.context.pending_interaction).toMatchObject({
         type: "slot_fill",
         partial_operation: {
-          operation: "add",
+          operation: "replace",
           entity: "pet",
           count: 1,
+          target_entity_id: "pet_1",
           missing_slots: ["weights_kg"],
         },
       });
       expect(flow.finalRoute).toMatchObject({
-        route: "faq_collect_info",
+        route: "partial_grounded_reply",
       });
-      expect(flow.finalRoute.answer).toBe("請問狗狗大約幾公斤？");
+      expect(flow.finalRoute.answer).toBe("10位成人包棟一晚 TWD 25,000。另有 1 隻狗狗，請提供每隻體重後才能計算狗狗住宿費。");
+      expect(flow.finalRoute.answer).not.toMatch(/合計|總計/);
       expect(flow.finalRoute.answer).not.toContain("狗狗住宿費為");
     }
   });

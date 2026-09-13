@@ -110,8 +110,14 @@ function normalizeInteger(value) {
   return integer >= 0 ? integer : null;
 }
 
-function normalizeNumberArray(value, { min = 0, max = 200, limit = 30 } = {}) {
+function normalizeNumberArray(value, { min = 0, max = 200, limit = 30, preserveGaps = false } = {}) {
   if (!Array.isArray(value)) return [];
+  if (preserveGaps) {
+    const entries = value.slice(0, limit).map((entry) => entry !== null &&
+      Number.isFinite(Number(entry)) && Number(entry) >= min && Number(entry) <= max ? Number(entry) : null);
+    while (entries.at(-1) === null) entries.pop();
+    return entries;
+  }
   return value
     .map(Number)
     .filter((entry) => Number.isFinite(entry) && entry >= min && entry <= max)
@@ -184,7 +190,7 @@ function daysBetween(checkIn, checkOut) {
   return nights > 0 ? nights : null;
 }
 
-function inferYear(month, day, baseDateText) {
+export function inferYear(month, day, baseDateText) {
   const baseDate = parseDateOnly(baseDateText) || new Date();
   let year = baseDate.getUTCFullYear();
   let candidate = makeUtcDate(year, month, day);
@@ -204,7 +210,7 @@ function inferYear(month, day, baseDateText) {
   return candidate ? year : null;
 }
 
-function resolveDateRange({ startYear, startMonth, startDay, endYear, endMonth, endDay, baseDateText }) {
+export function resolveDateRange({ startYear, startMonth, startDay, endYear, endMonth, endDay, baseDateText }) {
   const inferredStartYear = startYear || inferYear(startMonth, startDay, baseDateText);
   if (!inferredStartYear) return null;
 
@@ -1107,6 +1113,7 @@ export function normalizeConversationContext(value) {
     min: Number.EPSILON,
     max: 200,
     limit: 20,
+    preserveGaps: true,
   });
   context.dog_under_10kg_count = normalizeInteger(source.dog_under_10kg_count);
   context.dog_10_to_20kg_count = normalizeInteger(source.dog_10_to_20kg_count);

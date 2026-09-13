@@ -309,7 +309,8 @@ export function planDialogueGoals({
     ["set", "add", "remove", "replace", "clear"].includes(operation)
   );
   const transactionStatus = slotFillTransaction?.status || "none";
-  const hasActivePending = state.pending_interaction?.type === "slot_fill";
+  const hasActivePending = state.pending_interaction?.type === "slot_fill" &&
+    !["continue_quote", "cancelled_by_snapshot"].includes(transactionStatus);
   const intents = structuredResult?.intents || [];
   const requestQuote = intents.includes("request_quote");
   const currentRequestQuote = slots.action_cues.includes("request_quote");

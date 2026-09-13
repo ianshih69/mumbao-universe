@@ -11,6 +11,7 @@ import {
   isStructuredTransactionalResult,
   reduceBookingContext,
   sanitizeStructuredTurnUtterance,
+  extractShortStayDates,
   structuredTurnEntities,
   structuredTurnOperations,
   toTypedBookingContext,
@@ -24,7 +25,7 @@ import {
   getYearlessDateClarification,
   normalizeQuoteSnapshotOperations,
 } from "./quoteDialogueState.js";
-import { planPendingSlotFillTransaction } from "./pendingSlotFillTransaction.js";
+import { planPendingSlotFillTransaction, synchronizeQuoteMissingSlots } from "./pendingSlotFillTransaction.js";
 import { planDialogueGoals } from "./dialogueGoalPlanner.js";
 import { resolveSemanticTurn } from "./semanticTurnResolver.js";
 import { applyScenarioTransition } from "./dialogueStateEngine.js";
@@ -299,6 +300,11 @@ export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
       entity_hints: ["stay"],
     };
   });
+  for (const date of extractShortStayDates(view.text, currentDate)) {
+    addMatch({ 0: date.text, index: date.start }, {
+      normalized_type: "date", normalized_value: date.value, unit: "date", entity_hints: ["stay"],
+    });
+  }
   scan(/大後天|後天|明天|今天/gu, (match) => {
     const offset = {
       今天: 0,
@@ -995,6 +1001,7 @@ export function compileBookingTurnCandidates({
         ...semanticTurn.ast,
         turn_kind: "transactional",
         scenario_action: currentScenario ? "continue" : "new",
+        ...(slotFillTransaction.operation_bindings ? { operations: slotFillTransaction.operation_bindings } : {}),
         clarification_code: null,
         confidence: 1,
       },
@@ -1215,25 +1222,7 @@ export function compileBookingTurnCandidates({
       (operation) =>
         operation.entity === "stay" &&
         Boolean(operation.check_in && operation.nights && !operation.check_out),
-    ) || (
-      dialogueState.quote_scope === "snapshot" &&
-      deterministicResult.intents.includes("request_quote") &&
-      deterministicResult.operations.some(
-        (operation) =>
-          operation.entity === "stay" &&
-          Boolean(operation.check_in && !operation.check_out && !operation.nights),
-      ) &&
-      spans.filter((span) => span.normalized_type === "date").length === 1
     ),
-    single_date_one_night_default_used:
-      dialogueState.quote_scope === "snapshot" &&
-      deterministicResult.intents.includes("request_quote") &&
-      deterministicResult.operations.some(
-        (operation) =>
-          operation.entity === "stay" &&
-          Boolean(operation.check_in && !operation.check_out && !operation.nights),
-      ) &&
-      spans.filter((span) => span.normalized_type === "date").length === 1,
     inherited_optional_addons_count: countInheritedOptionalAddons(
       context,
       dialogueState,
@@ -1413,26 +1402,18 @@ export function reduceBookingContextFromCandidates(
     plan.dialogue_state,
     sourceTurnId,
   );
+  if (scopeBaseContext.pending_interaction?.action === "complete_quote_slots") {
+    scopeBaseContext.pending_interaction = null;
+  }
   const reduction = reduceBookingContext(scopeBaseContext, result, {
     message: plan.sanitized_message,
     nowIso,
     sourceMessageId: sourceTurnId,
     currentDate: plan.current_date,
   });
-  const reducedContext =
-    plan.single_date_one_night_default_used &&
-    reduction.context.check_in &&
-    !reduction.context.check_out &&
-    !reduction.context.stay_nights
-      ? normalizeConversationContext({
-          ...reduction.context,
-          check_out: addIsoDays(reduction.context.check_in, 1),
-          stay_nights: 1,
-        })
-      : reduction.context;
   const context = finalizeQuoteScenarioContext({
     previousContext: currentContext,
-    context: reducedContext,
+    context: reduction.context,
     dialogueState: plan.dialogue_state,
     sourceTurnId,
     changed: reduction.changed,
@@ -1456,7 +1437,9 @@ export function reduceBookingContextFromCandidates(
       };
     }
   }
-  const stored = getConversationContextForStorage(context);
+  const stored = getConversationContextForStorage(synchronizeQuoteMissingSlots(context, {
+    conversationId: plan.conversation_id, sourceTurnId, nowIso,
+  }));
   const changed =
     JSON.stringify(getConversationContextForStorage(currentContext)) !==
     JSON.stringify(stored);
@@ -1611,7 +1594,9 @@ function completedSlotFillReduction({
       },
     });
   }
-  const stored = getConversationContextForStorage(nextContext);
+  const stored = getConversationContextForStorage(synchronizeQuoteMissingSlots(nextContext, {
+    conversationId: plan.conversation_id, sourceTurnId: sourceMessageId, nowIso,
+  }));
   const changed =
     JSON.stringify(getConversationContextForStorage(context)) !==
     JSON.stringify(stored);

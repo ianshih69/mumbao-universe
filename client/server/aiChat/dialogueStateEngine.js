@@ -12,13 +12,7 @@ import {
   finalizeQuoteScenarioContext,
 } from "./quoteDialogueState.js";
 import { setDiscourseAnchor } from "./typedEntityReferences.js";
-
-function addIsoDays(dateText, days) {
-  const date = new Date(`${dateText}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return "";
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
+import { synchronizeQuoteMissingSlots } from "./pendingSlotFillTransaction.js";
 
 function eventTypeFor(operation) {
   if (operation.entity === "stay") {
@@ -409,7 +403,7 @@ export function applyScenarioTransition({
     ? buildQuoteScopeBaseContext(previous, dialogueState, turnId)
     : previous;
   const beforeScenario = previous.quote_scenario;
-  if (pendingStatus === "completed") {
+  if (pendingStatus === "completed" || base.pending_interaction?.action === "complete_quote_slots") {
     base = getConversationContextForStorage({
       ...base,
       pending_interaction: null,
@@ -421,22 +415,9 @@ export function applyScenarioTransition({
     sourceMessageId: turnId,
     currentDate: plan.current_date,
   });
-  let reducedContext = reduction.context;
-  if (
-    plan.single_date_one_night_default_used &&
-    reducedContext.check_in &&
-    !reducedContext.check_out &&
-    !reducedContext.stay_nights
-  ) {
-    reducedContext = getConversationContextForStorage({
-      ...reducedContext,
-      check_out: addIsoDays(reducedContext.check_in, 1),
-      stay_nights: 1,
-    });
-  }
   let next = finalizeQuoteScenarioContext({
     previousContext: previous,
-    context: reducedContext,
+    context: reduction.context,
     dialogueState,
     sourceTurnId: turnId,
     changed: reduction.changed || ast.scenario_action === "new",
@@ -532,6 +513,7 @@ export function applyScenarioTransition({
     events,
     turnId,
   );
+  next = synchronizeQuoteMissingSlots(next, { conversationId, sourceTurnId: turnId, nowIso });
   const changed =
     JSON.stringify(getConversationContextForStorage(previous)) !==
     JSON.stringify(getConversationContextForStorage(next));

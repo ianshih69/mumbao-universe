@@ -442,6 +442,180 @@ describe("production AI chat structured authority", () => {
     vi.restoreAllMocks();
   });
 
+  it("retains a newly supplied pet weight across an incomplete twelve-guest quote", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-13T10:00:00Z"));
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    vi.stubEnv("AI_CONTEXT_SEMANTIC_RESOLVER_ENABLED", "true");
+    vi.stubEnv("AI_QUALITY_FEEDBACK_ENABLED", "false");
+    vi.stubEnv("AI_QUALITY_ADMIN_ENABLED", "false");
+    const pipeline = vi.spyOn(candidatePipeline, "resolveStructuredBookingTurnCandidatePipeline");
+    const harness = createHandlerHarness();
+    vi.stubGlobal("fetch", harness.fetchMock);
+    const turns = ["後天12人住 帶1隻狗 多少錢", "20公斤", "12人包棟"];
+    const trace = [];
+    for (const [index, text] of turns.entries()) {
+      const pipelineStart = pipeline.mock.results.length;
+      const reply = await harness.send(text, `missing-pet-weight-${index + 1}`);
+      const context = structuredClone(harness.getSession().conversation_context);
+      const resolutions = await Promise.all(pipeline.mock.results.slice(pipelineStart)
+        .map(async (result) => {
+          const resolved = await result.value;
+          return structuredClone({ plan: resolved.plan, intent_ast: resolved.intent_ast,
+            turn_delta: resolved.turn_delta, slot_fill_transaction: resolved.slot_fill_transaction });
+        }));
+      trace.push({ input: text, status: reply.statusCode, answer: reply.payload.answer,
+        context, metadata: reply.payload.metadata, resolutions });
+      expect.soft(reply.statusCode).toBe(200);
+      expect.soft(reply.payload.metadata.total_provider_calls).toBeLessThanOrEqual(1);
+      expect.soft(context.check_in).toBe("2026-09-15");
+      expect.soft(context.adult_count).toBe(12);
+      expect.soft(context.pet_count).toBe(1);
+      expect.soft(context.stay_nights ?? null).toBeNull();
+      expect.soft(context.check_out ?? null).toBeNull();
+      if (index === 0) {
+        expect.soft(context.pet_weights_kg).toEqual([]);
+        expect.soft(context.entity_references.pets).toEqual([{ id: "pet_1", type: "pet", weight_kg: null }]);
+        expect.soft(context.pending_interaction).toMatchObject({
+          action: "complete_quote_slots", candidate_references: ["pets.pet_1"],
+          partial_operation: { entity: "pet", target_entity_id: "pet_1" },
+          missing_slots: ["weights_kg", "nights"],
+        });
+      } else {
+        expect.soft(context.pet_weights_kg).toEqual([20]);
+        expect.soft(context.entity_references?.pets).toEqual([
+          { id: "pet_1", type: "pet", weight_kg: 20 },
+        ]);
+        expect.soft(context.active_intent).toBe("pricing");
+        expect.soft(reply.payload.metadata.final_missing_fields || [])
+          .not.toContain("dog_weights");
+        expect.soft(context.pending_interaction.missing_slots).toEqual(["nights"]);
+        expect.soft(reply.payload.metadata.total_price_amount ?? null).toBeNull();
+        expect.soft(reply.payload.metadata.pricing_called).toBe(false);
+        if (index === 1) {
+          expect.soft(reply.payload.metadata.total_provider_calls).toBe(0);
+          expect.soft(context.slot_meta.pet_weights_kg).toMatchObject({
+            source_turn_id: "missing-pet-weight-2", context_refs: ["pending.partial_operation", "pets.pet_1"],
+          });
+          expect.soft(context.quote_scenario.context_version).toBe(trace[0].context.quote_scenario.context_version + 1);
+          expect.soft(context.dialogue_events.filter((event) => event.type === "PetWeightChanged" &&
+            event.turn_id === "missing-pet-weight-2")).toHaveLength(1);
+        }
+      }
+    }
+    console.log("PET_MISSING_WEIGHT_ACTUAL_HANDLER_TRACE " + JSON.stringify({
+      fixture_clock_utc: "2026-09-13T10:00:00Z", initial_context: {}, trace,
+      mocked_provider_calls: harness.getStructuredProviderCalls(),
+      non_fixture_calls: harness.getNonFixtureCalls(), quality_writes: harness.getQualityTurns().length,
+    }));
+    expect(harness.getNonFixtureCalls()).toBe(0);
+    expect(harness.getQualityTurns()).toEqual([]);
+  });
+
+  describe("missing quote field persistence", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-09-13T10:00:00Z"));
+      vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+      vi.stubEnv("AI_CONTEXT_SEMANTIC_RESOLVER_ENABLED", "true");
+    });
+
+    it.each([["8公斤", 8], ["20公斤", 20], ["22公斤", 22], ["大概15公斤", 15]]
+      .flatMap(([phrase, weight]) => [null, "狗狗多重？", "早餐可以代訂嗎？"]
+        .map((policy) => ({ phrase, weight, policy }))))
+    ("persists $phrase after $policy without inventing quote duration", async ({ phrase, weight, policy }) => {
+      const harness = createHandlerHarness();
+      vi.stubGlobal("fetch", harness.fetchMock);
+      const first = await harness.send("2026年11月1日，12位成人，帶1隻狗包棟多少錢？", "missing-initial");
+      expect(first.statusCode).toBe(200);
+      expect(first.payload.metadata.total_provider_calls).toBeLessThanOrEqual(1);
+      const initial = structuredClone(harness.getSession().conversation_context);
+      expect(initial).toMatchObject({ stay_nights: null, check_out: null, pet_count: 1,
+        pending_interaction: { candidate_references: ["pets.pet_1"], missing_slots: ["weights_kg", "nights"] } });
+      if (policy) {
+        const reply = await harness.send(policy, "missing-policy");
+        expect(reply.statusCode).toBe(200);
+        expect(reply.payload.metadata.total_provider_calls).toBeLessThanOrEqual(1);
+        const current = harness.getSession().conversation_context;
+        expect(current.pending_interaction).toEqual(initial.pending_interaction);
+        expect(current.quote_scenario).toEqual(initial.quote_scenario);
+        expect(current.entity_references).toEqual(initial.entity_references);
+      }
+      const filled = await harness.send(phrase, "missing-weight");
+      const context = harness.getSession().conversation_context;
+      expect(filled.payload.metadata).toMatchObject({ total_provider_calls: 0, pricing_called: false });
+      expect(filled.payload.metadata.total_price_amount ?? null).toBeNull();
+      expect(context).toMatchObject({ adult_count: 12, stay_nights: null, check_out: null,
+        pet_count: 1, pet_weights_kg: [weight], pending_interaction: { missing_slots: ["nights"] } });
+      expect(context.entity_references.pets).toEqual([{ id: "pet_1", type: "pet", weight_kg: weight }]);
+      expect(context.slot_meta.pet_weights_kg.source_turn_id).toBe("missing-weight");
+      expect(context.quote_scenario.context_version).toBe(initial.quote_scenario.context_version + 1);
+      expect(context.dialogue_events.filter((event) => event.type === "PetWeightChanged" && event.turn_id === "missing-weight")).toHaveLength(1);
+      expect(harness.getNonFixtureCalls()).toBe(0);
+      expect(harness.getQualityTurns()).toEqual([]);
+    });
+
+    it.each([
+      ["後天住", null], ["後天12人住", null], ["後天住一晚", 1], ["後天住兩晚", 2],
+      ["9/15入住 9/17退房", 2], ["9/15住", null],
+    ])("persists only evidenced nights in the actual handler: %s", async (input, nights) => {
+      const harness = createHandlerHarness();
+      vi.stubGlobal("fetch", harness.fetchMock);
+      const reply = await harness.send(input, "nights-matrix");
+      expect(reply.statusCode).toBe(200);
+      expect(harness.getSession().conversation_context).toMatchObject({ check_in: "2026-09-15", stay_nights: nights });
+      expect(reply.payload.metadata.total_provider_calls).toBeLessThanOrEqual(1);
+      expect(reply.payload.metadata.total_price_amount ?? null).toBeNull();
+      expect(harness.getNonFixtureCalls()).toBe(0);
+    });
+
+    it("does not price an incomplete quote and resumes after explicit nights", async () => {
+      const harness = createHandlerHarness();
+      vi.stubGlobal("fetch", harness.fetchMock);
+      await harness.send("2026年11月1日，10位成人，帶1隻狗包棟多少錢？", "ready-initial");
+      const filled = await harness.send("20公斤", "ready-weight");
+      expect(filled.payload.metadata.pricing_called).toBe(false);
+      expect(filled.payload.metadata.total_price_amount ?? null).toBeNull();
+      const complete = await harness.send("住兩晚", "ready-nights");
+      expect(complete.payload.metadata.total_provider_calls).toBe(0);
+      expect(complete.payload.metadata.total_price_amount).toBe(releasePetQuoteAmount([20]));
+      expect(harness.getSession().conversation_context).toMatchObject({ check_in: "2026-11-01",
+        check_out: "2026-11-03", adult_count: 10, stay_nights: 2, pet_weights_kg: [20], pending_interaction: null });
+      expect(harness.getNonFixtureCalls()).toBe(0);
+    });
+
+    it("clarifies multiple unknown pet targets, then saves explicitly ordered weights", async () => {
+      const harness = createHandlerHarness();
+      vi.stubGlobal("fetch", harness.fetchMock);
+      await harness.send("2026年11月1日，12位成人，帶兩隻狗包棟多少錢？", "multi-missing-initial");
+      const before = structuredClone(harness.getSession().conversation_context);
+      const ambiguous = await harness.send("20公斤", "multi-missing-ambiguous");
+      expect(ambiguous.payload.metadata.total_provider_calls).toBe(0);
+      expect(harness.getSession().conversation_context.entity_references).toEqual(before.entity_references);
+      expect(harness.getSession().conversation_context.quote_scenario).toEqual(before.quote_scenario);
+      expect(ambiguous.payload.answer).toMatch(/哪一隻|每隻/);
+      const filled = await harness.send("一隻8公斤，一隻20公斤", "multi-missing-fill");
+      expect(filled.payload.metadata.total_provider_calls).toBe(0);
+      expect(harness.getSession().conversation_context.entity_references.pets).toEqual([
+        { id: "pet_1", type: "pet", weight_kg: 8 }, { id: "pet_2", type: "pet", weight_kg: 20 },
+      ]);
+      expect(harness.getNonFixtureCalls()).toBe(0);
+    });
+
+    it("does not inherit another session's missing-weight pending", async () => {
+      const first = createHandlerHarness();
+      vi.stubGlobal("fetch", first.fetchMock);
+      await first.send("後天12人住 帶1隻狗 多少錢", "isolation-initial");
+      const second = createHandlerHarness();
+      vi.stubGlobal("fetch", second.fetchMock);
+      const reply = await second.send("20公斤", "isolation-fragment");
+      expect(reply.payload.metadata.total_provider_calls).toBe(0);
+      expect(second.getSession().conversation_context).toEqual({});
+      expect(first.getSession().conversation_context.pending_interaction.candidate_references).toEqual(["pets.pet_1"]);
+    });
+  });
+
+
   it("preserves an anchored pet correction after a read-only policy through persistence and repricing", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-13T10:00:00Z"));
@@ -777,7 +951,7 @@ describe("production AI chat structured authority", () => {
     vi.stubGlobal("fetch", harness.fetchMock);
 
     const first = await harness.send(
-      "明天1人包棟多少錢",
+      "明天1人住一晚包棟多少錢",
       "slot-fill-turn-1",
     );
     expect(first.payload.answer).toBe("1位成人包棟一晚 TWD 25,000。");

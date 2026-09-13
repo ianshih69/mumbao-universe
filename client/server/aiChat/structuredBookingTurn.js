@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   getConversationContextForStorage,
   normalizeConversationContext,
+  inferYear,
+  resolveDateRange,
 } from "./conversationContext.js";
 import { updatePetEntityReferences } from "./typedEntityReferences.js";
 
@@ -596,6 +598,20 @@ function collectBreakfastOperations(text) {
   return operations;
 }
 
+export function extractShortStayDates(text, baseDateText) {
+  if (!isIsoDate(baseDateText) || !/住|退房/.test(text)) return [];
+  const matches = [...text.matchAll(/(?<![\d/.-])(\d{1,2})\/(\d{1,2})(?![\d/.-])/g)];
+  if (!matches.length || matches.length > 2) return [];
+  const range = matches.length === 2 ? resolveDateRange({
+    startMonth: Number(matches[0][1]), startDay: Number(matches[0][2]),
+    endMonth: Number(matches[1][1]), endDay: Number(matches[1][2]), baseDateText,
+  }) : null;
+  return matches.map((match, index) => ({ text: match[0], start: match.index,
+      value: matches.length === 2 ? range?.[index ? "check_out" : "check_in"]
+        : formatIsoDate(inferYear(Number(match[1]), Number(match[2]), baseDateText), Number(match[1]), Number(match[2])) }))
+    .filter((entry) => entry.value);
+}
+
 function extractStayOperation(text, { baseDateText = "" } = {}) {
   const clearMatch = text.match(/清除日期|取消日期條件|先不看日期/);
   if (clearMatch) {
@@ -636,6 +652,20 @@ function extractStayOperation(text, { baseDateText = "" } = {}) {
         Number(match[3]),
       );
       evidence = match[0];
+    }
+  }
+
+  if (!checkIn) {
+    const dates = extractShortStayDates(text, baseDateText);
+    if (dates.length === 1) {
+      checkIn = dates[0].value;
+      evidence = dates[0].text;
+    } else if (dates.length === 2 &&
+        /入住/.test(text.slice(dates[0].start, dates[1].start)) &&
+        /退房/.test(text.slice(dates[1].start))) {
+      checkIn = dates[0].value;
+      checkOut = dates[1].value;
+      evidence = text.slice(dates[0].start, dates[1].start + dates[1].text.length);
     }
   }
 
@@ -905,8 +935,11 @@ function getOperationEvidenceFailure(operation, message, { currentDate = "" } = 
   const checkInSupportedByRelativeDate =
     operation.check_in &&
     relativeDateFromEvidence(operation.evidence, currentDate) === operation.check_in;
+  const shortDates = extractShortStayDates(compactMessage, currentDate)
+    .filter((date) => compactText(operation.evidence).includes(date.text));
   if (
     !checkInSupportedByRelativeDate &&
+    shortDates[0]?.value !== operation.check_in &&
     dateNumbers(operation.check_in).some(
       (number) => !evidenceNumbers.includes(number),
     )
@@ -914,6 +947,7 @@ function getOperationEvidenceFailure(operation, message, { currentDate = "" } = 
     return "check_in_not_supported";
   }
   if (
+    shortDates[1]?.value !== operation.check_out &&
     dateNumbers(operation.check_out).some(
       (number) => !evidenceNumbers.includes(number),
     )
@@ -1021,6 +1055,7 @@ export function validateStructuredTurnResult(
 function dogTierCounts(weights) {
   return (weights || []).reduce(
     (counts, weight) => {
+      if (!Number.isFinite(weight) || weight <= 0) return counts;
       if (weight <= 10) counts.dog_under_10kg_count += 1;
       else if (weight <= 20) counts.dog_10_to_20kg_count += 1;
       else counts.dog_over_20kg_count += 1;
@@ -1139,7 +1174,7 @@ function applyPetOperation(context, operation) {
     };
   }
 
-  const existingWeights = currentPetWeights(context);
+  const existingWeights = context.entity_references.pets.map((pet) => pet.weight_kg);
   let weights = existingWeights;
   if (
     operation.operation === "replace" &&
@@ -1231,7 +1266,7 @@ function applyPetOperation(context, operation) {
   };
   const nextTierCounts =
     operation.operation === "add" &&
-    existingWeights.length === 0 &&
+    currentPetWeights(context).length === 0 &&
     knownPetWeightCount(context) > 0
       ? Object.fromEntries(
           Object.entries(dogTierCounts(operation.weights_kg || [])).map(

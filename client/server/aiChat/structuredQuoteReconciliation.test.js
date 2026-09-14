@@ -10,7 +10,8 @@ async function resolve(message, context = {}, sourceMessageId = "range-case") {
     dateInfo, nowIso: "2026-09-14T04:00:00.000Z", sourceMessageId,
     conversationId: "synthetic-range-test", contextResolverEnabled: true, resolveCandidates: provider,
   });
-  expect(provider).not.toHaveBeenCalled();
+  expect(provider).toHaveBeenCalledTimes(Number(result.plan.complexity_gate.triggered));
+  if (result.plan.complexity_gate.triggered) expect(result.provider.contextual_fallback).toBe(true);
   return result;
 }
 

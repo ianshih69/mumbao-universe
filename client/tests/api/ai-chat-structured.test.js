@@ -75,6 +75,16 @@ function createHandlerHarness(initialContext = {}, { qualityResponse, providerRe
       const request = JSON.parse(options.body || "{}");
       const resolverInput = JSON.parse(request.messages?.[1]?.content || "{}");
       const candidate = resolverInput.operation_candidates?.[0] || null;
+      if (resolverInput.interpretation_contract) return jsonResponse({
+        choices: [{ message: { content: JSON.stringify({
+          intent: resolverInput.interpretation_contract.intent,
+          scenario_action: resolverInput.allowed_scenario_actions[0],
+          selected_candidate_ids: resolverInput.operation_candidates.map(item => item.candidate_id),
+          evidence_span_ids: resolverInput.deterministic_spans.map(item => item.span_id),
+          clarification_code: resolverInput.reference_contract && !resolverInput.operation_candidates.length
+            ? "missing_target_reference" : null, confidence: 0.99,
+        }) }, finish_reason: "stop" }],
+      });
       return jsonResponse({
         choices: [{
           message: {
@@ -442,6 +452,105 @@ describe("production AI chat structured authority", () => {
     vi.restoreAllMocks();
   });
 
+  it("contextual gate resolves the complete three-turn reconciliation without a second model call", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-14T04:00:00.000Z"));
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    vi.stubEnv("AI_CONTEXT_SEMANTIC_RESOLVER_ENABLED", "true");
+    vi.stubEnv("AI_QUALITY_FEEDBACK_ENABLED", "false");
+    const harness = createHandlerHarness();
+    vi.stubGlobal("fetch", harness.fetchMock);
+    const first = await harness.send("14人入住12/25-12/26這樣2天多少錢5大1個6歲兒童1小狗12KG", "complex-first");
+    expect(first.statusCode).toBe(200);
+    expect(first.payload.metadata.total_provider_calls).toBe(1);
+    const initial = structuredClone(harness.getSession().conversation_context);
+    expect(initial.pending_interaction.asked_turn_id).toBe("complex-first");
+    const second = await harness.send("14人裡有1個6歲一個五歲", "complex-second");
+    expect(second.statusCode).toBe(200);
+    expect(second.payload.metadata.total_provider_calls).toBe(1);
+    expect(second.payload.metadata.dialogue_primary_goal).not.toBe("child_policy_lookup");
+    const updated = harness.getSession().conversation_context;
+    expect(updated).toMatchObject({ check_in: "2026-12-25", check_out: "2026-12-26", stay_nights: 1,
+      guest_count: 14, adult_count: 12, child_count: 2, child_ages_years: [6, 5], pet_count: 1, pet_weights_kg: [12] });
+    expect(updated.entity_references.pets[0].id).toBe(initial.entity_references.pets[0].id);
+    expect(updated.pending_interaction).toBeNull();
+    const third = await harness.send("費用多少", "complex-third");
+    expect(third.statusCode).toBe(200);
+    expect(third.payload.metadata.pricing_called).toBe(true);
+    expect(third.payload.metadata.total_provider_calls).toBe(0);
+    expect(third.payload.answer).not.toMatch(/確認已失效|請提供入住日期/);
+    const replay = await harness.send("14人裡有1個6歲一個五歲", "complex-second");
+    expect(replay.statusCode).toBe(200);
+    expect(harness.getStructuredProviderCalls()).toBe(2);
+  });
+
+  describe("contextual gate actual-handler boundaries", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-09-14T04:00:00.000Z"));
+      vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+      vi.stubEnv("AI_CONTEXT_SEMANTIC_RESOLVER_ENABLED", "true");
+      vi.stubEnv("AI_QUALITY_FEEDBACK_ENABLED", "false");
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+    it.each(["有停車場嗎", "幾點退房", "有 KTV 嗎", "可以帶狗嗎", "早餐多少錢", "有麻將嗎"])
+    ("keeps simple FAQ at zero external calls: %s", async input => {
+      const harness = createHandlerHarness();
+      vi.stubGlobal("fetch", harness.fetchMock);
+      const reply = await harness.send(input, "complexity-simple-faq");
+      expect(reply.statusCode).toBe(200);
+      expect(reply.payload.answer).toBeTruthy();
+      expect(reply.payload.metadata).toMatchObject({ complexity_gate_triggered: false,
+        contextual_interpreter_called: false, total_provider_calls: 0 });
+      expect(harness.getStructuredProviderCalls()).toBe(0);
+      expect(harness.getNonFixtureCalls()).toBe(0);
+    });
+    it.each(["timeout", "provider_error", "invalid_json", "schema_failure"])
+    ("preserves partial state and a policy-interleaved pending after %s", async failure => {
+      const harness = createHandlerHarness({}, { providerResponse: async () => {
+        if (failure === "timeout") throw Object.assign(new Error("synthetic timeout"), { name: "AbortError" });
+        if (failure === "provider_error") return jsonResponse({ error: "synthetic failure" }, 503);
+        return jsonResponse({ choices: [{ message: { content: failure === "invalid_json" ? "{broken" : "{}" }, finish_reason: "stop" }] });
+      } });
+      vi.stubGlobal("fetch", harness.fetchMock);
+      const first = await harness.send("14人入住12/25-12/26這樣2天多少錢5大1個6歲兒童1小狗12KG", "failure-initial");
+      const before = structuredClone(harness.getSession().conversation_context);
+      expect(first.statusCode).toBe(200);
+      expect(first.payload.metadata).toMatchObject({ contextual_interpreter_fallback: true,
+        contextual_interpreter_provider_calls: 1, total_provider_calls: 1, faq_selector_called: false });
+      expect(before).toMatchObject({ check_in: "2026-12-25", check_out: "2026-12-26", stay_nights: 1,
+        pet_weights_kg: [12], pending_interaction: { action: "reconcile_headcount" } });
+      const policy = await harness.send("小孩怎麼收費？", "failure-policy");
+      expect(policy.statusCode).toBe(200);
+      expect(policy.payload.metadata).toMatchObject({ contextual_interpreter_fallback: true, total_provider_calls: 1 });
+      expect(harness.getSession().conversation_context).toEqual(before);
+      expect(harness.getStructuredProviderCalls()).toBe(2);
+      expect(harness.getNonFixtureCalls()).toBe(0);
+      expect(harness.getQualityTurns()).toEqual([]);
+    });
+    it("answers a real policy interleave and then resolves the same pending", async () => {
+      const harness = createHandlerHarness();
+      vi.stubGlobal("fetch", harness.fetchMock);
+      await harness.send("14人入住12/25-12/26這樣2天多少錢5大1個6歲兒童1小狗12KG", "policy-first");
+      const before = structuredClone(harness.getSession().conversation_context);
+      const policy = await harness.send("小孩怎麼收費？", "policy-middle");
+      expect(policy.statusCode).toBe(200);
+      expect(policy.payload.metadata).toMatchObject({ contextual_interpreter_result_kind: "policy_lookup",
+        contextual_interpreter_provider_calls: 1, total_provider_calls: 1, faq_selector_called: false });
+      expect(policy.payload.answer).toMatch(/兒童|小孩/);
+      expect(harness.getSession().conversation_context).toEqual(before);
+      const answer = await harness.send("14人裡有1個6歲一個五歲", "policy-resolved");
+      expect(answer.statusCode).toBe(200);
+      expect(answer.payload.metadata.contextual_interpreter_result_kind).toBe("clarification_answer");
+      expect(harness.getSession().conversation_context).toMatchObject({
+        guest_count: 14, child_ages_years: [6, 5], pending_interaction: null,
+        check_in: before.check_in, stay_nights: 1, pet_weights_kg: [12] });
+      expect(harness.getStructuredProviderCalls()).toBe(3);
+      expect(harness.getNonFixtureCalls()).toBe(0);
+    });
+  });
+
   it("persists dates and pet evidence while reconciling conflicting headcounts", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-14T04:00:00.000Z"));
@@ -462,9 +571,9 @@ describe("production AI chat structured authority", () => {
     expect(reply.payload.answer).toMatch(/5/);
     expect(reply.payload.answer).toMatch(/人數/);
     expect(reply.payload.answer).not.toMatch(/請提供入住日期|請提供.*晚數|12隻/);
-    expect(reply.payload.metadata.total_provider_calls).toBe(0);
+    expect(reply.payload.metadata.total_provider_calls).toBe(1);
     expect(reply.payload.metadata.total_price_amount ?? null).toBeNull();
-    expect(harness.getStructuredProviderCalls()).toBe(0);
+    expect(harness.getStructuredProviderCalls()).toBe(1);
     expect(harness.getNonFixtureCalls()).toBe(0);
     expect(harness.getQualityTurns()).toEqual([]);
   });
@@ -487,7 +596,7 @@ describe("production AI chat structured authority", () => {
       const reply = await harness.send(input, `reconciliation-followup-${index}`);
       const state = harness.getSession().conversation_context;
       expect(reply.statusCode).toBe(200);
-      expect(reply.payload.metadata.total_provider_calls).toBe(0);
+      expect(reply.payload.metadata.total_provider_calls).toBe(1);
       expect(state).toMatchObject({ check_in: "2026-12-25", check_out: "2026-12-26", stay_nights: 1,
         pet_count: 1, pet_weights_kg: [12] });
       if (index === 0) { petId = state.entity_references.pets[0].id; scenarioId = state.quote_scenario.scenario_id; }
@@ -502,7 +611,7 @@ describe("production AI chat structured authority", () => {
       }
     }
     expect(harness.getNonFixtureCalls()).toBe(0);
-    expect(harness.getStructuredProviderCalls()).toBe(0);
+    expect(harness.getStructuredProviderCalls()).toBe(5);
   });
 
   it.each([
@@ -519,7 +628,7 @@ describe("production AI chat structured authority", () => {
     expect(reply.statusCode).toBe(200);
     expect(harness.getSession().conversation_context).toMatchObject({ check_in: checkIn, check_out: checkOut,
       stay_nights: 1, adult_count: null, pet_count: 1, pet_weights_kg: [12] });
-    expect(reply.payload.metadata.total_provider_calls).toBe(0);
+    expect(reply.payload.metadata.total_provider_calls).toBe(1);
     expect(reply.payload.metadata.total_price_amount ?? null).toBeNull();
     expect(reply.payload.answer).not.toMatch(/請提供入住日期|請提供.*晚數|每隻狗狗體重/);
     expect(harness.getNonFixtureCalls()).toBe(0);
@@ -576,7 +685,7 @@ describe("production AI chat structured authority", () => {
         expect.soft(reply.payload.metadata.total_price_amount ?? null).toBeNull();
         expect.soft(reply.payload.metadata.pricing_called).toBe(false);
         if (index === 1) {
-          expect.soft(reply.payload.metadata.total_provider_calls).toBe(0);
+          expect.soft(reply.payload.metadata.total_provider_calls).toBe(1);
           expect.soft(context.slot_meta.pet_weights_kg).toMatchObject({
             source_turn_id: "missing-pet-weight-2", context_refs: ["pending.partial_operation", "pets.pet_1"],
           });
@@ -626,7 +735,7 @@ describe("production AI chat structured authority", () => {
       }
       const filled = await harness.send(phrase, "missing-weight");
       const context = harness.getSession().conversation_context;
-      expect(filled.payload.metadata).toMatchObject({ total_provider_calls: 0, pricing_called: false });
+      expect(filled.payload.metadata).toMatchObject({ total_provider_calls: 1, pricing_called: false });
       expect(filled.payload.metadata.total_price_amount ?? null).toBeNull();
       expect(context).toMatchObject({ adult_count: 12, stay_nights: null, check_out: null,
         pet_count: 1, pet_weights_kg: [weight], pending_interaction: { missing_slots: ["nights"] } });
@@ -660,7 +769,7 @@ describe("production AI chat structured authority", () => {
       expect(filled.payload.metadata.pricing_called).toBe(false);
       expect(filled.payload.metadata.total_price_amount ?? null).toBeNull();
       const complete = await harness.send("住兩晚", "ready-nights");
-      expect(complete.payload.metadata.total_provider_calls).toBe(0);
+      expect(complete.payload.metadata.total_provider_calls).toBe(1);
       expect(complete.payload.metadata.total_price_amount).toBe(releasePetQuoteAmount([20]));
       expect(harness.getSession().conversation_context).toMatchObject({ check_in: "2026-11-01",
         check_out: "2026-11-03", adult_count: 10, stay_nights: 2, pet_weights_kg: [20], pending_interaction: null });
@@ -673,12 +782,12 @@ describe("production AI chat structured authority", () => {
       await harness.send("2026年11月1日，12位成人，帶兩隻狗包棟多少錢？", "multi-missing-initial");
       const before = structuredClone(harness.getSession().conversation_context);
       const ambiguous = await harness.send("20公斤", "multi-missing-ambiguous");
-      expect(ambiguous.payload.metadata.total_provider_calls).toBe(0);
+      expect(ambiguous.payload.metadata.total_provider_calls).toBe(1);
       expect(harness.getSession().conversation_context.entity_references).toEqual(before.entity_references);
       expect(harness.getSession().conversation_context.quote_scenario).toEqual(before.quote_scenario);
       expect(ambiguous.payload.answer).toMatch(/哪一隻|每隻/);
       const filled = await harness.send("一隻8公斤，一隻20公斤", "multi-missing-fill");
-      expect(filled.payload.metadata.total_provider_calls).toBe(0);
+      expect(filled.payload.metadata.total_provider_calls).toBe(1);
       expect(harness.getSession().conversation_context.entity_references.pets).toEqual([
         { id: "pet_1", type: "pet", weight_kg: 8 }, { id: "pet_2", type: "pet", weight_kg: 20 },
       ]);
@@ -692,7 +801,7 @@ describe("production AI chat structured authority", () => {
       const second = createHandlerHarness();
       vi.stubGlobal("fetch", second.fetchMock);
       const reply = await second.send("20公斤", "isolation-fragment");
-      expect(reply.payload.metadata.total_provider_calls).toBe(0);
+      expect(reply.payload.metadata.total_provider_calls).toBe(1);
       expect(second.getSession().conversation_context).toEqual({});
       expect(first.getSession().conversation_context.pending_interaction.candidate_references).toEqual(["pets.pet_1"]);
     });
@@ -731,7 +840,7 @@ describe("production AI chat structured authority", () => {
       operation: "replace", entity: "pet", target_entity_id: "pet_1", weights_kg: [20],
     })]);
     expect(replies[4].payload.metadata).toMatchObject({
-      total_provider_calls: 0, semantic_resolver_called: false, faq_selector_called: false,
+      total_provider_calls: 1, semantic_resolver_called: true, faq_selector_called: false,
       legacy_context_mutation_invoked: false, total_price_amount: 50310,
     });
     expect(states[3].entity_references).toEqual(states[2].entity_references);
@@ -755,7 +864,7 @@ describe("production AI chat structured authority", () => {
     ["牠其實只有10公斤", 10], ["牠其實只有10.1公斤", 10.1], ["牠其實只有20.1公斤", 20.1],
   ].flatMap(([phrase, weight]) => ["退房可以晚一小時嗎？", "狗可以上沙發嗎？", "早餐幾點供應？"]
     .map((policy) => ({ phrase, weight, policy }))))
-  ("persists and reprices $phrase after $policy with zero semantic calls", async ({ phrase, weight, policy }) => {
+  ("persists and reprices $phrase after $policy within the contextual single-call budget", async ({ phrase, weight, policy }) => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-13T10:00:00Z"));
     vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
@@ -776,10 +885,10 @@ describe("production AI chat structured authority", () => {
     });
     expect(next.entity_references.pets).toEqual([{ id: "pet_1", type: "pet", weight_kg: weight }]);
     const amount = releasePetQuoteAmount([weight]);
-    expect(result.payload.metadata).toMatchObject({ total_price_amount: amount, total_provider_calls: 0,
-      semantic_resolver_called: false, faq_selector_called: false, legacy_context_mutation_invoked: false });
+    expect(result.payload.metadata).toMatchObject({ total_price_amount: amount, total_provider_calls: Number(result.payload.metadata.complexity_gate_triggered),
+      semantic_resolver_called: result.payload.metadata.complexity_gate_triggered, faq_selector_called: false, legacy_context_mutation_invoked: false });
     expect(result.payload.answer).toContain(`TWD ${amount.toLocaleString("en-US")}`);
-    expect(harness.getStructuredProviderCalls()).toBe(0);
+    expect(harness.getStructuredProviderCalls()).toBe(Number(result.payload.metadata.complexity_gate_triggered));
     expect(harness.getNonFixtureCalls()).toBe(0);
   });
 
@@ -808,8 +917,8 @@ describe("production AI chat structured authority", () => {
     expect(harness.getSession().conversation_context.pet_weights_kg).toEqual(expected);
     expect(harness.getSession().conversation_context.entity_references.pets.map((pet) => pet.id))
       .toEqual(initial.entity_references.pets.map((pet) => pet.id));
-    expect(result.payload.metadata.total_provider_calls).toBe(0);
-    expect(harness.getStructuredProviderCalls()).toBe(0);
+    expect(result.payload.metadata.total_provider_calls).toBe(Number(result.payload.metadata.complexity_gate_triggered));
+    expect(harness.getStructuredProviderCalls()).toBe(Number(result.payload.metadata.complexity_gate_triggered));
     expect(harness.getNonFixtureCalls()).toBe(0);
   });
 
@@ -827,7 +936,7 @@ describe("production AI chat structured authority", () => {
     const correction = await harness.send("牠其實只有18公斤", "pet-fee-correction");
     expect(harness.getSession().conversation_context.pet_weights_kg).toEqual([18, 20]);
     expect(correction.payload.metadata.total_price_amount).toBe(releasePetQuoteAmount([18, 20]));
-    expect(harness.getStructuredProviderCalls()).toBe(0);
+    expect(harness.getStructuredProviderCalls()).toBe(1);
     expect(harness.getNonFixtureCalls()).toBe(0);
   });
 
@@ -872,7 +981,7 @@ describe("production AI chat structured authority", () => {
       expect(response.payload.answer).toContain(`TWD ${amount.toLocaleString("en-US")}`);
       expect(state.pending_interaction).toBeNull();
     }
-    expect(harness.getStructuredProviderCalls()).toBe(0);
+    expect(harness.getStructuredProviderCalls()).toBe(1);
     expect(harness.getNonFixtureCalls()).toBe(0);
   });
 
@@ -949,13 +1058,13 @@ describe("production AI chat structured authority", () => {
     expect(rateRequests.every((url) => url.searchParams.get("day_type") === "eq.weekday")).toBe(true);
     expect(actual.payload.metadata).toMatchObject({
       final_result_category: "grounded_reply", total_price_amount: amount,
-      structured_provider_call_count: 0, total_provider_calls: 0,
+      structured_provider_call_count: 1, total_provider_calls: 1,
     });
     expect(actual.payload.answer).toContain(`TWD ${amount.toLocaleString("en-US")}`);
     expect(state).toMatchObject({ check_in: "2026-11-01", check_out: "2026-11-02",
       stay_nights: 1, adult_count: adults, child_count: 0, infant_count: 0,
       pet_count: 0, pet_weights_kg: [], breakfast_count: 0, pending_interaction: null });
-    expect(harness.getStructuredProviderCalls()).toBe(0);
+    expect(harness.getStructuredProviderCalls()).toBe(1);
     expect(harness.getNonFixtureCalls()).toBe(0);
   });
 
@@ -1571,7 +1680,7 @@ describe("production AI chat structured authority", () => {
         context_version: 3,
       },
     });
-    expect(harness.getStructuredProviderCalls()).toBe(1);
+    expect(harness.getStructuredProviderCalls()).toBe(2);
 
     const beforePolicy = structuredClone(
       harness.getSession().conversation_context,
@@ -1603,7 +1712,7 @@ describe("production AI chat structured authority", () => {
         context_version: 4,
       },
     });
-    expect(harness.getStructuredProviderCalls()).toBe(1);
+    expect(harness.getStructuredProviderCalls()).toBe(2);
     expect(harness.getNonFixtureCalls()).toBe(0);
   });
 

@@ -12,7 +12,8 @@ async function turn(message, context = {}, id = "fill", requireLocal = false) {
     conversationId: "synthetic-missing-slots", sourceMessageId: id, nowIso, dateInfo,
     contextResolverEnabled: requireLocal, resolveCandidates: requireLocal ? provider : null,
   });
-  expect(provider).not.toHaveBeenCalled();
+  expect(provider).toHaveBeenCalledTimes(Number(requireLocal && result.plan.complexity_gate.triggered));
+  if (provider.mock.calls.length) expect(result.provider.contextual_fallback).toBe(true);
   expect(fetch).not.toHaveBeenCalled();
   return result;
 }

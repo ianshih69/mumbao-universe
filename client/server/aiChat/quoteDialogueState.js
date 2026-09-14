@@ -60,10 +60,14 @@ export function getQuoteScenario(context) {
   return state.quote_scenario || null;
 }
 
-export function isPendingInteractionCurrent(context, pendingInteraction) {
+export function isPendingInteractionCurrent(context, pendingInteraction, nowIso = new Date().toISOString()) {
   const state = normalizeConversationContext(context);
   const pending = state.pending_interaction;
   if (!pending || !pendingInteraction) return false;
+  if (pending.expires_at) {
+    const expiresAt = Date.parse(pending.expires_at);
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.parse(nowIso)) return false;
+  }
 
   const hasBinding = Boolean(
     pending.scenario_id ||
@@ -77,7 +81,8 @@ export function isPendingInteractionCurrent(context, pendingInteraction) {
       pending.scenario_id === scenario.scenario_id &&
       Number.isInteger(pending.context_version) &&
       pending.context_version === scenario.context_version &&
-      pending.asked_turn_id,
+      (pending.asked_turn_id || (pending.type === "clarification" &&
+        ["reconcile_headcount", "reconcile_stay"].includes(pending.action) && pending.created_turn_id)),
   );
 }
 
@@ -119,7 +124,7 @@ function hasCorrectionSemantics(result) {
   );
 }
 
-export function classifyQuoteDialogueTurn({ message, context, result } = {}) {
+export function classifyQuoteDialogueTurn({ message, context, result, nowIso } = {}) {
   const state = normalizeConversationContext(context);
   const pending = state.pending_interaction;
   const confirmation = classifyConfirmationProtocol(message);
@@ -133,7 +138,7 @@ export function classifyQuoteDialogueTurn({ message, context, result } = {}) {
       ),
       pending_confirmation_current: Boolean(
         pending?.required_response_type === "confirmation" &&
-          isPendingInteractionCurrent(state, pending),
+          isPendingInteractionCurrent(state, pending, nowIso),
       ),
     };
   }

@@ -25,7 +25,8 @@ async function turn(message, context, turnId = "attribute-correction") {
     sourceMessageId: turnId, dateInfo, nowIso, contextResolverEnabled: true,
     resolveCandidates: provider,
   });
-  expect(provider).not.toHaveBeenCalled();
+  expect(provider).toHaveBeenCalledTimes(Number(result.plan.complexity_gate.triggered));
+  if (result.plan.complexity_gate.triggered) expect(result.provider.contextual_fallback).toBe(true);
   expect(fetch).not.toHaveBeenCalled();
   return result;
 }

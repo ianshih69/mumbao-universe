@@ -453,9 +453,18 @@ export function extractHeadcountEvidence(message) {
     ...(counts.infant !== undefined ? { infant_count: counts.infant } : {}),
     child_ages_years: ages.operations.flatMap((op) => op.ages_years),
   };
+  const includesMembers = /人(?:裡|裏|當中|中)|其中(?:有)?/.test(text) &&
+    !/至少|部分|還不(?:知道|確定)|不確定|還有其他|另外還有/.test(text);
+  const includedCount = (counts.child || 0) + (counts.infant || 0);
+  const remainder = includesMembers && counts.adult === undefined && includedCount > 0 &&
+    proposed.guest_count >= includedCount ? proposed.guest_count - includedCount : null;
+  if (remainder !== null) proposed.adult_count = remainder;
   return { proposed_values: proposed, total_evidence: totals[0].evidence,
     breakdown_evidence: breakdown.map((op) => op.evidence).join("、"),
-    conflict: counts.adult === undefined || proposed.guest_count !== Object.values(counts).reduce((sum, count) => sum + count, 0) };
+    relation: remainder !== null ? "total_includes_members" : "breakdown",
+    derived_adult_count: remainder,
+    conflict: remainder === null && (counts.adult === undefined ||
+      proposed.guest_count !== Object.values(counts).reduce((sum, count) => sum + count, 0)) };
 }
 
 function collectPetOperations(text) {
@@ -958,7 +967,11 @@ function getOperationEvidenceFailure(operation, message, { currentDate = "" } = 
     containsNumberMultiset(evidenceNumbers, repeatedValues);
   const countIsSupportedByTarget = operation.count === 1 && operation.target_entity_id &&
     Number.isInteger(operation.target_pet) && ["replace", "remove"].includes(operation.operation);
-  if (!countIsExplicit && !countIsSupportedByMembers && !countIsSupportedByTarget) {
+  const includedParty = operation.entity === "adult" && operation.operation === "set"
+    ? extractHeadcountEvidence(operation.evidence) : null;
+  const countIsRemainder = includedParty?.relation === "total_includes_members" &&
+    includedParty.derived_adult_count === operation.count;
+  if (!countIsExplicit && !countIsSupportedByMembers && !countIsSupportedByTarget && !countIsRemainder) {
     return "count_not_supported";
   }
 
@@ -1607,6 +1620,10 @@ export function interpretBookingTurnDeterministically({
     dateInfo.currentDate,
   );
   const headcount = extractHeadcountEvidence(message);
+  if (headcount?.relation === "total_includes_members") {
+    operations.push({ operation: "set", entity: "adult", count: headcount.derived_adult_count,
+      evidence: message });
+  }
   if (headcount?.conflict) {
     ambiguities.push({ code: "headcount_conflict", evidence: `${headcount.total_evidence}、${headcount.breakdown_evidence}`,
       question: `人數有兩組資訊：${headcount.total_evidence}，以及${headcount.breakdown_evidence}；請確認實際入住人數與成人、兒童組成。` });

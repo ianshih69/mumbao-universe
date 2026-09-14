@@ -39,7 +39,8 @@ describe("runtime/provider certification separation (synthetic transport only)",
       previousContext: context, legacyContext: context, contextResolverEnabled: true,
       nowIso: "2026-09-08T04:00:00.000Z", sourceMessageId: id,
       dateInfo: { currentDate: "2026-09-08" }, resolveCandidates: provider });
-    expect(provider).not.toHaveBeenCalled();
+    expect(provider).toHaveBeenCalledTimes(Number(result.plan.complexity_gate.triggered));
+    if (result.plan.complexity_gate.triggered) expect(result.provider.contextual_fallback).toBe(true);
     return result;
   }
 

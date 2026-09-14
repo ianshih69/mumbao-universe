@@ -600,7 +600,7 @@ export function planPendingSlotFillTransaction({
   }
 
   if (pending?.type === "slot_fill") {
-    if (!isPendingInteractionCurrent(state, pending) || isExpired(pending, nowIso)) {
+    if (!isPendingInteractionCurrent(state, pending, nowIso) || isExpired(pending, nowIso)) {
       return staleTransactionResult();
     }
     if (pending.action === "complete_quote_slots") {

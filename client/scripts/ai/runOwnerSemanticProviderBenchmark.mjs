@@ -169,6 +169,8 @@ export async function fixtureContext(name, runtime) {
   let attempted = false;
   const resolution = await runtime.resolveStructuredBookingTurnCandidatePipeline({
     ...options(context, message, `fixture-${name}`),
+    // Fixture construction is offline; it must not spend the certification call budget.
+    contextResolverEnabled: false,
     resolveCandidates: async () => { attempted = true; fail("FIXTURE_PROVIDER_FORBIDDEN"); },
   });
   const pending = resolution.context.pending_interaction;
@@ -204,6 +206,8 @@ export async function deterministicControls(runtime) {
     try {
       const r = await runtime.resolveStructuredBookingTurnCandidatePipeline({
         ...options(context, phrase, `control-${id}`),
+        // These controls certify the deterministic fallback, independently of the enabled complexity gate.
+        contextResolverEnabled: false,
         resolveCandidates: async () => { attempted += 1; fail("CONTROL_PROVIDER_FORBIDDEN"); },
       });
       resolution = r;

@@ -674,7 +674,7 @@ function resolveTurnState({
   const normalizedPending = normalizePendingInteraction(pendingInteraction);
   const stalePendingInteraction = Boolean(
     normalizedPending &&
-      !isPendingInteractionCurrent(context, normalizedPending),
+      !isPendingInteractionCurrent(context, normalizedPending, nowIso),
   );
   const pending = stalePendingInteraction ? null : normalizedPending;
   const hasSemanticSignal = Boolean(
@@ -1167,19 +1167,6 @@ export async function executeTurnAction({
     pending_transaction_id: slotFillCompletion?.transaction_id || null,
   };
 
-  if (resolvedTurnState.stalePendingInteraction) {
-    return buildCollectInfoRoute(routeResult, {
-      answer: "剛才的確認已失效，請重新提供要確認的資料。",
-      reason: "pending_interaction_scenario_stale",
-      metadata: {
-        ...metadata,
-        pending_resolution: "stale",
-        action_executor_result: "pending_stale_cleared",
-      },
-      contextPatch: clearPendingPatch(),
-    });
-  }
-
   if (!normalizeTurnAction(action)) {
     return addExecutorMetadata(routeResult, {
       ...metadata,
@@ -1211,6 +1198,22 @@ export async function executeTurnAction({
         action_executor_result: "pending_quote_interrupted_by_faq_route",
       }
     );
+  }
+
+  if (resolvedTurnState.stalePendingInteraction) {
+    const expired = isPendingExpired(pendingInteraction, nowIso);
+    return buildCollectInfoRoute(routeResult, {
+      answer: expired
+        ? "剛才的確認已過期，請重新提供要確認的資料。"
+        : "剛才的確認已失效，請重新提供要確認的資料。",
+      reason: expired ? "pending_interaction_expired" : "pending_interaction_scenario_stale",
+      metadata: {
+        ...metadata,
+        pending_resolution: expired ? "expired" : "stale",
+        action_executor_result: expired ? "pending_expired" : "pending_stale_cleared",
+      },
+      contextPatch: clearPendingPatch(),
+    });
   }
 
   if (

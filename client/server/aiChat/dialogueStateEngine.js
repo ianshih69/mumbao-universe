@@ -514,6 +514,9 @@ export function applyScenarioTransition({
     turnId,
   );
   next = synchronizeQuoteMissingSlots(next, { conversationId, sourceTurnId: turnId, nowIso });
+  if (plan.reconciliation_resolved && plan.headcount_evidence && !plan.headcount_evidence.conflict) {
+    next = getConversationContextForStorage({ ...next, guest_count: plan.headcount_evidence.proposed_values.guest_count });
+  }
   if (plan.reconciliation) next = getConversationContextForStorage({ ...next,
     pending_interaction: { type: "clarification", action: plan.reconciliation.action,
       required_response_type: "fields", resume_action: "request_quote",
@@ -521,7 +524,8 @@ export function applyScenarioTransition({
       provenance: [{ source_turn_id: turnId, evidence: plan.reconciliation.evidence,
         filled_slots: [plan.reconciliation.action === "reconcile_headcount" ? "count" : "nights"] }],
       conversation_id: conversationId, scenario_id: next.quote_scenario?.scenario_id,
-      context_version: next.quote_scenario?.context_version, created_turn_id: turnId, created_at: nowIso },
+      context_version: next.quote_scenario?.context_version, asked_turn_id: turnId,
+      created_turn_id: turnId, created_at: nowIso },
   });
   const changed =
     JSON.stringify(getConversationContextForStorage(previous)) !==

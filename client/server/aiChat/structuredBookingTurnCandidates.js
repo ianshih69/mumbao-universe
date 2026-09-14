@@ -33,6 +33,8 @@ import { resolveSemanticTurn } from "./semanticTurnResolver.js";
 import { applyScenarioTransition } from "./dialogueStateEngine.js";
 import { referenceContextForProvider, resolveTypedEntityReference } from "./typedEntityReferences.js";
 import { analyzeEntityAttributeAssertion } from "./dialogueReferenceSemantics.js";
+import { evaluateBookingComplexity, isExplicitBookingPolicyQuestion } from "./bookingComplexityGate.js";
+import { isPendingInteractionCurrent } from "./quoteDialogueState.js";
 
 export const bookingSpanTypes = Object.freeze([
   "date",
@@ -112,7 +114,7 @@ const candidateBindingSchema = z
     source_kind: z.enum(["span", "context"]),
     span_ids: z.array(z.string().regex(/^span-\d{3}$/)).max(30).optional(),
     context_ref: z.string().regex(/^(?:stay|party|pets|addons)\.[a-z_]+$/).optional(),
-    projection: z.enum(["value", "values", "sum", "cardinality"]),
+    projection: z.enum(["value", "values", "sum", "cardinality", "party_remainder"]),
   })
   .strict()
   .superRefine((binding, context) => {
@@ -607,6 +609,13 @@ function bindingForOperationField(operation, field, spans, currentState) {
   };
   const rawValue = operation[field];
   if (rawValue === undefined) return null;
+  if (field === "count" && operation.entity === "adult") {
+    const included = extractHeadcountEvidence(operation.evidence);
+    if (included?.relation === "total_includes_members" && included.derived_adult_count === rawValue) {
+      const evidence = spans.filter(span => ["total_guest_count", "age", "child_count", "infant_count"].includes(span.normalized_type));
+      return { field, source_kind: "span", span_ids: evidence.map(span => span.span_id), projection: "party_remainder" };
+    }
+  }
   let matches = selectValueSpans(spans, typeMap[field], rawValue);
   let projection = Array.isArray(rawValue) ? "values" : "value";
 
@@ -858,10 +867,11 @@ export function compileBookingTurnCandidates({
     ["headcount_conflict", "date_night_conflict", "invalid_date_range"].includes(entry.code));
   const prior = normalizeConversationContext(context);
   const priorReconciliation = ["reconcile_headcount", "reconcile_stay"].includes(prior.pending_interaction?.action)
-    ? prior.pending_interaction : null;
+    && isPendingInteractionCurrent(prior, prior.pending_interaction, nowIso) ? prior.pending_interaction : null;
   const setOperations = preliminaryResult.operations.filter((op) => ["set", "replace"].includes(op.operation));
   const partyResolved = !currentConflicts.some((entry) => entry.code === "headcount_conflict") &&
-    setOperations.some((op) => op.entity === "adult" && /大人|成人|大/.test(op.evidence)) &&
+    setOperations.some((op) => op.entity === "adult" &&
+      (/大人|成人|大/.test(op.evidence) || deterministic.headcount?.relation === "total_includes_members")) &&
     (!(priorReconciliation?.proposed_values?.child_count > 0) ||
       setOperations.some((op) => ["child", "infant"].includes(op.entity)));
   const stayResolved = !currentConflicts.some((entry) => entry.code !== "headcount_conflict") &&
@@ -996,6 +1006,7 @@ export function compileBookingTurnCandidates({
     message: sanitizedMessage,
     context,
     result: preliminaryResult,
+    nowIso,
   });
   const currentScenario = normalizeConversationContext(context).quote_scenario;
   const pendingScenario = currentScenario || {
@@ -1071,7 +1082,20 @@ export function compileBookingTurnCandidates({
       scenario_action: "none", goal_ids: [], operations: [], references: [],
       clarification_code: "missing_target_reference" } };
   }
-  if (semanticTurn.ast.turn_kind === "informational" || preliminaryResult.ambiguities.length) reconciliation = null;
+  const reconciliationAnswer = Boolean(priorReconciliation && !isExplicitBookingPolicyQuestion(sanitizedMessage) &&
+    (deterministic.headcount || deterministic.result.operations.some(op => ["adult", "child", "infant"].includes(op.entity))));
+  if (prior.pending_interaction && isExplicitBookingPolicyQuestion(sanitizedMessage)) {
+    semanticTurn = { ...semanticTurn, ast: { ...semanticTurn.ast, turn_kind: "informational",
+      scenario_action: "none", goal_ids: [], operations: [], clarification_code: null } };
+  }
+  if (reconciliationAnswer && !preliminaryResult.ambiguities.length) {
+    semanticTurn = { ...semanticTurn, ast: { ...semanticTurn.ast, turn_kind: "transactional",
+      scenario_action: "continue", goal_ids: ["request_quote"], clarification_code: null } };
+  }
+  const unresolvedQuote = priorReconciliation && !isExplicitBookingPolicyQuestion(sanitizedMessage) &&
+    preliminaryResult.intents.includes("request_quote");
+  if ((!reconciliationAnswer && !unresolvedQuote && semanticTurn.ast.turn_kind === "informational") ||
+      preliminaryResult.ambiguities.length) reconciliation = null;
   const reconciliationResolved = Boolean(priorReconciliation && semanticTurn.ast.turn_kind === "transactional" &&
     !preliminaryResult.ambiguities.length && (partyResolved || stayResolved));
   const dialogueGoalPlan = planDialogueGoals({
@@ -1229,8 +1253,17 @@ export function compileBookingTurnCandidates({
     classification = "DETERMINISTIC_EXPECTED";
   }
 
+  const complexityGate = evaluateBookingComplexity({ message: sanitizedMessage, spans, context: prior,
+    ambiguities: [...deterministic.result.ambiguities, ...inheritedConflicts],
+    compilerFailures, headcount: deterministic.headcount, nowIso });
   return {
     conversation_id: String(conversationId || "").slice(0, 120),
+    complexity_gate: complexityGate,
+    contextual_interpreter_enabled: contextResolverEnabled,
+    headcount_evidence: deterministic.headcount,
+    reconciliation_pending: priorReconciliation,
+    contextual_pending: isPendingInteractionCurrent(prior, prior.pending_interaction, nowIso)
+      ? prior.pending_interaction : null,
     source_turn_id: String(sourceTurnId || "").slice(0, 120),
     sanitized_message: sanitizedMessage,
     current_date: /^\d{4}-\d{2}-\d{2}$/.test(String(dateInfo.currentDate || ""))
@@ -1363,6 +1396,14 @@ export function materializeBookingTurnCandidate(candidate, plan) {
     entity: parsed.entity,
   };
   for (const binding of parsed.bindings) {
+    if (binding.projection === "party_remainder") {
+      const included = extractHeadcountEvidence(plan.sanitized_message);
+      if (parsed.entity !== "adult" || binding.field !== "count" || included?.relation !== "total_includes_members") {
+        throw new Error("structured_candidate_invalid_party_remainder");
+      }
+      operation.count = included.derived_adult_count;
+      continue;
+    }
     operation[binding.field] = valueFromBinding(
       binding,
       spansById,
@@ -1374,6 +1415,7 @@ export function materializeBookingTurnCandidate(candidate, plan) {
     .filter(Boolean)
     .join("、")
     .slice(0, 280);
+  if (parsed.bindings.some(binding => binding.projection === "party_remainder")) operation.evidence = plan.sanitized_message;
   return operation;
 }
 
@@ -1728,6 +1770,28 @@ async function resolveActiveDialoguePlan({
   let selectedCandidates = [];
   let operations = [];
   let resolvedAst = plan.intent_ast;
+  const contextual = plan.complexity_gate?.triggered && plan.contextual_interpreter_enabled;
+  let contextualResponse = null;
+  if (contextual && typeof resolveCandidates === "function") {
+    try {
+      contextualResponse = await resolveCandidates({ plan: { ...plan, provider_protocol: "contextual_evidence",
+        requires_model: true, classification: "LLM_CANDIDATE_SELECTION" } });
+      provider = contextualResponse.metadata;
+      if (!["INFORMATIONAL", "SAFE_CLARIFICATION"].includes(plan.classification) &&
+          !["completed", "direct_operation"].includes(plan.slot_fill_transaction.status)) {
+        plan = { ...plan, classification: "LLM_CANDIDATE_SELECTION" };
+      }
+    } catch (error) {
+      provider = { called: error?.structuredTurnProviderCalled === true, validation_outcome: "rejected",
+        failure_code: error?.structuredTurnFailureCode || error?.providerErrorCode || "contextual_validation_failed",
+        contextual_fallback: true, latency_ms: Number(error?.structuredTurnLatencyMs || 0) };
+      if (plan.classification === "LLM_CANDIDATE_SELECTION") {
+        const groups = plan.candidates.map(candidate => candidate.selection_group);
+        plan = { ...plan, classification: new Set(groups).size === groups.length
+          ? (plan.candidates.length ? "DETERMINISTIC_EXPECTED" : "CONTEXT_ACTION_ONLY") : "SAFE_CLARIFICATION" };
+      }
+    }
+  }
 
   if (plan.classification === "INFORMATIONAL") {
     result = plan.deterministic_result;
@@ -1763,7 +1827,7 @@ async function resolveActiveDialoguePlan({
       source = "semantic_deterministic_bindings";
     } else if (typeof resolveCandidates === "function") {
       try {
-        const response = await resolveCandidates({ plan });
+        const response = contextualResponse || await resolveCandidates({ plan });
         selectedCandidateIds = response?.result?.selected_candidate_ids || [];
         intentIds = response?.result?.intent_ids || [];
         confidence = response?.result?.confidence ?? 0;
@@ -1876,7 +1940,7 @@ async function resolveActiveDialoguePlan({
   return {
     mode: "active",
     source,
-    requiresModel: plan.requires_model,
+    requiresModel: Boolean(plan.requires_model || contextual),
     classification: plan.classification,
     plan: {
       ...plan,

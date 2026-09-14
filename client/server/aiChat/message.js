@@ -2110,6 +2110,15 @@ export function buildRuntimeAuthorityMetadata({
   const slotFillStatus = slotFillTransaction?.status || "none";
   return {
     structured_mode: conversationAuthority?.mode || "legacy",
+    complexity_gate_triggered: structuredTurnResolution?.plan?.complexity_gate?.triggered === true,
+    complexity_gate_score: structuredTurnResolution?.plan?.complexity_gate?.score || 0,
+    complexity_gate_reasons: structuredTurnResolution?.plan?.complexity_gate?.reasons || [],
+    contextual_interpreter_called: Boolean(structuredTurnResolution?.plan?.complexity_gate?.triggered &&
+      structuredTurnResolution?.provider?.called),
+    contextual_interpreter_result_kind: structuredTurnResolution?.provider?.contextual_result_kind || null,
+    contextual_interpreter_fallback: structuredTurnResolution?.provider?.contextual_fallback === true,
+    contextual_interpreter_provider_calls: structuredTurnResolution?.plan?.complexity_gate?.triggered &&
+      structuredTurnResolution?.provider?.called ? 1 : 0,
     authority_path: conversationAuthority?.authorityPath || "legacy",
     structured_candidate_count:
       structuredTurnResolution?.plan?.candidates?.length || 0,

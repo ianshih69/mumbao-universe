@@ -123,14 +123,14 @@ describe("deterministic booking span extraction", () => {
 });
 
 describe("booking candidate compiler and reducer", () => {
-  it("keeps clear self-contained turns on the deterministic zero-call path", async () => {
+  it("gates complex self-contained turns while preserving deterministic fallback", async () => {
     const cases = [
-      ["2026年11月1日，10位成人住一晚多少", {}],
-      ["再加一隻22公斤狗", baseContext],
-      ["早餐三份", baseContext],
+      ["2026年11月1日，10位成人住一晚多少", {}, 1],
+      ["再加一隻22公斤狗", baseContext, 0],
+      ["早餐三份", baseContext, 0],
     ];
-    for (const [message, context] of cases) {
-      const resolveCandidates = vi.fn();
+    for (const [message, context, calls] of cases) {
+      const resolveCandidates = vi.fn(() => { throw new Error("SYNTHETIC_PROVIDER_UNAVAILABLE"); });
       const resolution = await resolveStructuredBookingTurnCandidatePipeline({
         mode: "active",
         message,
@@ -141,8 +141,8 @@ describe("booking candidate compiler and reducer", () => {
         sourceMessageId: `fast-path-${message.length}`,
         dateInfo: { currentDate: "2026-09-06" },
       });
-      expect(resolution.requiresModel, message).toBe(false);
-      expect(resolveCandidates, message).not.toHaveBeenCalled();
+      expect(resolution.requiresModel, message).toBe(Boolean(calls));
+      expect(resolveCandidates, message).toHaveBeenCalledTimes(calls);
     }
   });
 

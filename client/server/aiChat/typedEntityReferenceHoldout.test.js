@@ -78,7 +78,8 @@ describe("post-implementation reference holdout (no provider)", () => {
       expect(result.context.pending_interaction).toMatchObject({ operation: entry.operation, entity: "pet", missing_slots: ["target_pet"] });
       expect(result.context.quote_scenario.context_version).toBe(before.quote_scenario.context_version);
     }
-    expect(provider).not.toHaveBeenCalled();
+    expect(provider).toHaveBeenCalledTimes(Number(result.plan.complexity_gate.triggered));
+    if (result.plan.complexity_gate.triggered) expect(result.provider.contextual_fallback).toBe(true);
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 });

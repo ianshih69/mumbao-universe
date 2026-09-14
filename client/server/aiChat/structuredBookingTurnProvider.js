@@ -70,6 +70,16 @@ export const structuredTurnCandidateResolverSchema = z
   })
   .strict();
 
+// Values remain server-owned: the interpreter returns intent and provenance IDs, never prices or state.
+export const contextualEvidenceSchema = z.object({
+  intent: z.enum(["quote", "clarification_answer", "policy_lookup", "other"]),
+  scenario_action: z.enum(["new", "continue", "read_only"]),
+  selected_candidate_ids: z.array(z.string().regex(/^cand-\d{3}-[a-z0-9-]+$/)).max(30),
+  evidence_span_ids: z.array(z.string().regex(/^span-\d{3}$/)).max(30),
+  clarification_code: z.enum(clarificationCodes).nullable(),
+  confidence: z.number().min(0).max(1),
+}).strict();
+
 export function sanitizedStructuredTurnSchemaDiagnostics(error) {
   const fields = new Set(Object.keys(structuredTurnCandidateResolverSchema.shape));
   const codes = new Set(["invalid_type", "invalid_value", "unrecognized_keys",
@@ -95,6 +105,7 @@ const outboundInputKeys = new Set([
   "allowed_scenario_actions",
   "reference_context",
   "reference_contract",
+  "interpretation_contract",
 ]);
 const bookingContextKeys = new Set(["stay", "party", "pets", "addons"]);
 const nestedContextKeys = Object.freeze({
@@ -112,6 +123,9 @@ const pendingSummaryKeys = new Set([
   "candidate_targets",
   "pending_version",
   "scenario_version",
+  "action",
+  "required_fields",
+  "proposed_values",
 ]);
 const deterministicSpanKeys = new Set([
   "span_id",
@@ -184,7 +198,8 @@ function inspectKeys(value) {
 
 function resolverInputFromPlan(plan) {
   const state = plan.current_state;
-  const pending = plan.reference_pending || plan.slot_fill_transaction?.pending || null;
+  const pending = (plan.provider_protocol === "contextual_evidence" ? plan.contextual_pending : null) ||
+    plan.reference_pending || plan.slot_fill_transaction?.pending || plan.reconciliation_pending || null;
   const scenarioAction = plan.intent_ast?.scenario_action === "new"
     ? "new"
     : plan.intent_ast?.scenario_action === "continue"
@@ -203,6 +218,13 @@ function resolverInputFromPlan(plan) {
     pending_summary: pending
       ? {
           type: pending.type,
+          ...(plan.provider_protocol === "contextual_evidence" ? {
+            action: pending.action || null,
+            required_fields: pending.required_fields || [],
+            proposed_values: Object.fromEntries(["guest_count", "adult_count", "child_count", "child_ages_years",
+              "check_in", "check_out", "stay_nights"].filter(key => pending.proposed_values?.[key] !== undefined)
+              .map(key => [key, pending.proposed_values[key]])),
+          } : {}),
           operation: pending.operation,
           entity: pending.entity,
           filled_slots: pending.filled_slots || [],
@@ -230,7 +252,71 @@ function resolverInputFromPlan(plan) {
       ? [...new Set(plan.reference_contract.candidates.map((item) => item.scenario_action))] : [scenarioAction],
     reference_context: plan.reference_context,
     reference_contract: plan.reference_contract,
+    ...(plan.provider_protocol === "contextual_evidence" ? { interpretation_contract: {
+      intent: expectedContextualIntent(plan),
+      conflict_codes: plan.reconciliation?.conflicts?.map(item => item.code) ||
+        plan.deterministic_result.ambiguities.map(item => item.code),
+      required_candidate_ids: plan.candidates.map(item => item.candidate_id),
+    } } : {}),
   };
+}
+
+function expectedContextualIntent(plan) {
+  if (plan.dialogue_goal_plan.lane === "informational") return "policy_lookup";
+  if (plan.contextual_pending && plan.intent_ast.turn_kind === "transactional") return "clarification_answer";
+  return plan.requested_actions.includes("request_quote") || plan.reconciliation ? "quote" : "other";
+}
+
+export function validateContextualEvidence(rawValue, plan) {
+  let result;
+  try {
+    result = contextualEvidenceSchema.parse(typeof rawValue === "string" ? parseStrictJson(rawValue) : rawValue);
+  } catch (cause) {
+    const error = new Error("contextual_evidence_invalid_schema");
+    error.structuredTurnFailureCode = "contextual_evidence_invalid_schema";
+    error.cause = cause;
+    throw error;
+  }
+  const reject = () => { const error = new Error("contextual_evidence_contract_violation");
+    error.structuredTurnFailureCode = "contextual_evidence_contract_violation"; throw error; };
+  const expectedAction = plan.intent_ast.scenario_action === "none" ? "read_only" : plan.intent_ast.scenario_action;
+  const knownSpans = new Set(plan.spans.map(span => span.span_id));
+  const knownCandidates = new Map(plan.candidates.map(candidate => [candidate.candidate_id, candidate]));
+  if (result.intent !== expectedContextualIntent(plan) || result.scenario_action !== expectedAction ||
+      result.evidence_span_ids.some(id => !knownSpans.has(id)) ||
+      new Set(result.evidence_span_ids).size !== result.evidence_span_ids.length ||
+      new Set(result.selected_candidate_ids).size !== result.selected_candidate_ids.length ||
+      result.selected_candidate_ids.some(id => !knownCandidates.has(id)) ||
+      (result.selected_candidate_ids.length && result.confidence < 0.7)) reject();
+  const selected = result.selected_candidate_ids.map(id => knownCandidates.get(id));
+  if (selected.some(candidate => candidate.evidence_span_ids.some(id => !result.evidence_span_ids.includes(id)))) reject();
+  const groups = selected.map(candidate => candidate.selection_group);
+  if (new Set(groups).size !== groups.length) reject();
+  // A provider cannot silently drop an unambiguous deterministic fact.
+  const mandatory = plan.candidates.filter(candidate =>
+    plan.candidates.filter(other => other.selection_group === candidate.selection_group).length === 1);
+  if (!result.clarification_code && mandatory.some(candidate => !result.selected_candidate_ids.includes(candidate.candidate_id))) reject();
+  if (result.clarification_code && selected.length) reject();
+  if (plan.reference_contract) {
+    const choice = plan.reference_contract.candidates.find(candidate =>
+      candidate.scenario_action === result.scenario_action && candidate.clarification_code === result.clarification_code &&
+      (candidate.operation === "none" ? selected.length === 0 :
+        selected.length === 1 && candidate.candidate_id === selected[0].candidate_id));
+    if (!choice) reject();
+    const { candidate_id: _candidateId, ...ast } = choice;
+    validateStructuredTurnCandidateResolverResult({ ...ast, confidence: result.confidence }, plan);
+  }
+  const semanticOperations = selected.map(candidate => {
+    const summary = summarizeBookingTurnCandidate(candidate);
+    return { operation: summary.operation, entity: summary.entity,
+      span_bindings: summary.span_ids, context_bindings: summary.context_reference_ids };
+  });
+  return { ...result, intent_ids: plan.requested_actions,
+    semantic_ast: { ...plan.intent_ast, operations: semanticOperations,
+      confidence: result.confidence,
+      ...(result.clarification_code ? { turn_kind: "clarification", scenario_action: "none", operations: [],
+        clarification_code: result.clarification_code } : {}),
+    } };
 }
 
 export function buildStructuredTurnCandidateMessages(plan) {
@@ -257,7 +343,17 @@ reference_context 使用 scenario 內穩定 entity ID；體重不是 identity。
 
 若選擇 mutation，operation/entity/field/span_ids/context_reference_ids 必須完整複製同一個 operation candidate，不能混合 candidates，不能自行產生值。goal_id 與 scenario_action 也只能從各自 allowlist 選擇。若訊息不足以安全選擇，operation/entity/field 使用 none、兩個 ID arrays 使用空陣列，並設定一個 clarification_code。只共享名詞不足以視為同一意圖；必須同時符合核心對象、核心動作與時間、位置或限制。不得把 current_booking_context 的既有值重送成本輪修改。`;
   return [
-    { role: "system", content: system },
+    { role: "system", content: plan.provider_protocol === "contextual_evidence"
+      ? `你是住宿語意解析器。辨識本輪是詢價、補充既有 clarification、政策插問或其他。
+使用 current_booking_context、pending_summary、本輪文字與 deterministic_spans；不要回答客人或計算價格。
+只能輸出 strict JSON：{"intent":"quote|clarification_answer|policy_lookup|other","scenario_action":"new|continue|read_only","selected_candidate_ids":[],"evidence_span_ids":[],"clarification_code":null,"confidence":0.0}。
+只選 server 的 candidate ID 與 span ID；可選多個不同 selection 的候選，不能編造任何數值、日期、價格或 state。
+只有真正在補人數才是 clarification_answer；插問兒童怎麼收費是 policy_lookup，不能 consume pending。
+總數包含部分成員和互相矛盾的完整人數是不同關係。日數不是晚數，日期差與正式計價由 server 決定。
+interpretation_contract 列出 server 可驗證的意圖及未解衝突。不能用模型猜測消除 conflict。
+有足夠語意依據時選擇本輪所有合法且互不衝突的候選，提供其全部 evidence_span_ids。
+不能解釋時不選 mutation，clarification_code 使用 low_confidence。`
+      : system },
     { role: "user", content: JSON.stringify(resolverInputFromPlan(plan)) },
   ];
 }
@@ -292,6 +388,10 @@ export function assertStructuredTurnOutboundPayload(
   assertExactKeys(input, outboundInputKeys, "input");
   referenceContextSchema.parse(input.reference_context);
   if (input.reference_contract !== null) referenceContractSchema.parse(input.reference_contract);
+  if (input.interpretation_contract) {
+    z.object({ intent: contextualEvidenceSchema.shape.intent, conflict_codes: z.array(z.string().max(80)),
+      required_candidate_ids: contextualEvidenceSchema.shape.selected_candidate_ids }).strict().parse(input.interpretation_contract);
+  }
   assertExactKeys(
     input.current_booking_context,
     bookingContextKeys,
@@ -352,7 +452,7 @@ export function buildStructuredTurnProviderPayload({
     model,
     messages,
     temperature: 0,
-    maxTokens: 300,
+    maxTokens: plan.provider_protocol === "contextual_evidence" ? 700 : 300,
   });
   const privacy = assertStructuredTurnOutboundPayload(payload, {
     forbiddenValues,
@@ -575,7 +675,7 @@ export async function callStructuredBookingTurnInterpreter({
       status: response.status,
       body,
     });
-    const result = validateStructuredTurnCandidateResolverResult(
+    const result = (plan.provider_protocol === "contextual_evidence" ? validateContextualEvidence : validateStructuredTurnCandidateResolverResult)(
       parseStrictJson(providerResult.answer),
       plan,
     );
@@ -600,6 +700,7 @@ export async function callStructuredBookingTurnInterpreter({
       selected_candidate_count: result.selected_candidate_ids.length,
       intent_ids: result.intent_ids,
       clarification_code: result.clarification_code,
+      ...(plan.provider_protocol === "contextual_evidence" ? { contextual_result_kind: result.intent } : {}),
       prompt_tokens: Number(providerResult.usage?.prompt_tokens || 0),
       completion_tokens: Number(providerResult.usage?.completion_tokens || 0),
       estimated_cost_usd: null,

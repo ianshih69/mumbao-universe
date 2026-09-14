@@ -38,7 +38,8 @@ export async function referenceTurn(message, context, turnId = "reference-answer
   const result = await resolveStructuredBookingTurnCandidatePipeline({ mode: "active", message,
     previousContext: context, legacyContext: context, contextResolverEnabled: true,
     dateInfo: { currentDate: "2026-09-08" }, sourceMessageId: turnId, nowIso: NOW, resolveCandidates: provider });
-  expect(provider).not.toHaveBeenCalled();
+  expect(provider).toHaveBeenCalledTimes(Number(result.plan.complexity_gate.triggered));
+  if (result.plan.complexity_gate.triggered) expect(result.provider.contextual_fallback).toBe(true);
   return result;
 }
 

@@ -23,7 +23,7 @@ describe("News exhibition article", () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
   it("adds exactly one article with unique IDs and slugs", () => {
-    expect(newsItems).toHaveLength(5);
+    expect(newsItems).toHaveLength(6);
     expect(newsItems.filter((item) => item.slug === slug)).toHaveLength(1);
     expect(new Set(newsItems.map((item) => item.id)).size).toBe(newsItems.length);
     expect(new Set(newsItems.map((item) => item.slug)).size).toBe(newsItems.length);
@@ -80,11 +80,11 @@ describe("News exhibition article", () => {
     expect(html).toContain(title);
     expect(html).toContain(article.excerpt);
     expect(html).toContain(`src="${article.image}"`);
-    expect(html.match(/<article\b/g)).toHaveLength(5);
-    expect(html.indexOf(title)).toBeLessThan(html.indexOf(newsItems[1].title));
+    expect(html.match(/<article\b/g)).toHaveLength(6);
+    expect(html.indexOf(title)).toBeLessThan(html.indexOf(newsItems.find((item) => item.id === 1)!.title));
   });
 
-  it.each(newsItems.filter((item) => item.id !== 5))(
+  it.each(newsItems.filter((item) => item.id < 5))(
     "preserves the existing title-first rendering for $slug",
     (item) => {
       const html = renderDetail(item.slug);
@@ -103,5 +103,68 @@ describe("News exhibition article", () => {
     expect(html).toContain("找不到這篇最新消息");
     expect(html).toContain('href="/news"');
     expect(html).not.toContain("<img");
+  });
+});
+
+describe("News original IP article", () => {
+  const ipSlug = "mumbao-ip-copyright";
+  const ipArticle = getNewsBySlug(ipSlug)!;
+  const paragraphs = [
+    "很高興向喜愛慢慢蒔光的旅人分享這個好消息！",
+    "為了守護這隻從第七維度降落的慢靈魂，我們的原創 IP「慢寶 MUMBAO」已經正式取得多國智慧財產權與著作權保護囉！",
+    "這意味著，無論在台灣還是海外，慢寶與他的白雲基地，都是全宇宙獨一無二的合法存在。",
+    "未來不論是民宿內的十二星座主題房，或是即將上架的文創周邊，我們都會持續用最高的規格，為大家保護這塊純淨的療癒空間。",
+    "謝謝大家陪著慢寶一起長大。",
+    "接下來，也請期待我們的全新周邊登場吧！",
+  ];
+
+  beforeEach(() => { vi.stubGlobal("React", React); });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("preserves the approved title, excerpt, date and all six paragraphs verbatim", () => {
+    expect(ipArticle.id).toBe(6);
+    expect(ipArticle.title).toBe("慢寶宇宙的奇幻旅程：我們拿到身分證啦！");
+    expect(ipArticle.excerpt).toBe("原創 IP「慢寶 MUMBAO」正式取得多國智慧財產權與著作權保護，慢寶宇宙的奇幻旅程，也正式迎來新的里程碑。");
+    expect(ipArticle.date).toBe("2026.09.14");
+    expect([ipArticle.detailTitle, ...ipArticle.content]).toEqual(paragraphs);
+    expect(newsItems.filter((item) => item.slug === ipSlug)).toHaveLength(1);
+  });
+
+  it("uses the supplied JPEG without cropping or adding article-specific layout", () => {
+    expect(ipArticle.image).toBe("/images/News/News-6.JPG");
+    const image = readFileSync(new URL("../../public/images/News/News-6.JPG", import.meta.url));
+    expect(Array.from(image.subarray(0, 3))).toEqual([0xff, 0xd8, 0xff]);
+    const html = renderDetail(ipSlug);
+    expect(html).toContain(`src="${ipArticle.image}"`);
+    expect(html).toContain("object-contain");
+    expect(html).toContain("aspect-[4/3]");
+    expect(html).toContain("max-w-2xl");
+    expect(html).toContain("space-y-6");
+    expect(html).toContain("md:leading-[2.15]");
+    expect(html.indexOf("<img")).toBeLessThan(html.indexOf("<h1"));
+  });
+
+  it("renders each paragraph exactly once, in order, with a return link", () => {
+    const html = renderDetail(ipSlug);
+    let previous = html.indexOf(ipArticle.title);
+    for (const text of paragraphs) {
+      const position = html.indexOf(text);
+      expect(position).toBeGreaterThan(previous);
+      expect(html.split(text)).toHaveLength(2);
+      previous = position;
+    }
+    expect(html.match(/<p\b/g)).toHaveLength(6);
+    expect(html).toContain('href="/news"');
+    expect(html).not.toContain("<br");
+    expect(html).not.toContain("<strong");
+  });
+
+  it("provides the approved metadata without changing existing article SEO defaults", () => {
+    expect(ipArticle.seoTitle).toBe("慢寶宇宙的奇幻旅程：我們拿到身分證啦！｜慢慢蒔光 STime Villa");
+    expect(ipArticle.seoDescription).toBe("原創 IP「慢寶 MUMBAO」正式取得多國智慧財產權與著作權保護，從十二星座主題房到文創周邊，慢寶宇宙持續守護屬於旅人的療癒空間。");
+    for (const item of newsItems.filter((item) => item.id !== 6)) {
+      expect(item.seoTitle).toBeUndefined();
+      expect(item.seoDescription).toBeUndefined();
+    }
   });
 });

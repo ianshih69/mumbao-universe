@@ -9,6 +9,8 @@ export type NewsItem = {
   content: string[];
   image: string;
   alt: string;
+  seoTitle?: string;
+  seoDescription?: string;
   detailLayout?: "image-first";
   highlights?: {
     title: string;
@@ -17,6 +19,29 @@ export type NewsItem = {
 };
 
 export const newsItems: NewsItem[] = [
+  {
+    id: 6,
+    slug: "mumbao-ip-copyright",
+    category: "News",
+    date: "2026.09.14",
+    title: "慢寶宇宙的奇幻旅程：我們拿到身分證啦！",
+    excerpt:
+      "原創 IP「慢寶 MUMBAO」正式取得多國智慧財產權與著作權保護，慢寶宇宙的奇幻旅程，也正式迎來新的里程碑。",
+    detailTitle: "很高興向喜愛慢慢蒔光的旅人分享這個好消息！",
+    content: [
+      "為了守護這隻從第七維度降落的慢靈魂，我們的原創 IP「慢寶 MUMBAO」已經正式取得多國智慧財產權與著作權保護囉！",
+      "這意味著，無論在台灣還是海外，慢寶與他的白雲基地，都是全宇宙獨一無二的合法存在。",
+      "未來不論是民宿內的十二星座主題房，或是即將上架的文創周邊，我們都會持續用最高的規格，為大家保護這塊純淨的療癒空間。",
+      "謝謝大家陪著慢寶一起長大。",
+      "接下來，也請期待我們的全新周邊登場吧！",
+    ],
+    image: "/images/News/News-6.JPG",
+    alt: "慢寶 MUMBAO 手持護照，慶祝原創 IP 取得多國智慧財產權與著作權保護",
+    detailLayout: "image-first",
+    seoTitle: "慢寶宇宙的奇幻旅程：我們拿到身分證啦！｜慢慢蒔光 STime Villa",
+    seoDescription:
+      "原創 IP「慢寶 MUMBAO」正式取得多國智慧財產權與著作權保護，從十二星座主題房到文創周邊，慢寶宇宙持續守護屬於旅人的療癒空間。",
+  },
   {
     id: 5,
     slug: "mumbao-universe-starry-fashion-exhibition-2026",

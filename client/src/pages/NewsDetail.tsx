@@ -9,6 +9,7 @@ const siteOrigin = "https://www.mumbao.tw";
 const noindexNewsSlugs = new Set(["stime-villa-summer-preview-preparation"]);
 const newsArticleJsonLdId = "news-article-json-ld";
 const newsArticleSlugs = new Set([
+  "mumbao-ip-copyright",
   "mumbao-line-stickers-coming-soon",
   "mumbao-goods-coming-soon",
   "stime-villa-website-updates",
@@ -102,7 +103,7 @@ function upsertNewsArticleJsonLd(news: NewsItem, canonicalUrl: string) {
     "@context": "https://schema.org",
     "@type": "NewsArticle",
     headline: news.title,
-    description: news.excerpt,
+    description: news.seoDescription ?? news.excerpt,
     image: getAbsoluteUrl(news.image),
     mainEntityOfPage: {
       "@type": "WebPage",
@@ -146,17 +147,18 @@ export default function NewsDetail() {
       return;
     }
 
-    const pageTitle = `${news.title}｜最新消息｜慢慢蒔光 STime Villa`;
+    const pageTitle = news.seoTitle ?? `${news.title}｜最新消息｜慢慢蒔光 STime Villa`;
+    const pageDescription = news.seoDescription ?? news.excerpt;
     const canonicalUrl = `${siteOrigin}/news/${news.slug}`;
 
     document.title = pageTitle;
-    setMetaContent("meta[name=\"description\"]", news.excerpt);
+    setMetaContent("meta[name=\"description\"]", pageDescription);
     setMetaContent("meta[property=\"og:url\"]", canonicalUrl);
     setMetaContent("meta[property=\"og:title\"]", pageTitle);
-    setMetaContent("meta[property=\"og:description\"]", news.excerpt);
+    setMetaContent("meta[property=\"og:description\"]", pageDescription);
     setMetaContent("meta[property=\"twitter:url\"]", canonicalUrl);
     setMetaContent("meta[property=\"twitter:title\"]", pageTitle);
-    setMetaContent("meta[property=\"twitter:description\"]", news.excerpt);
+    setMetaContent("meta[property=\"twitter:description\"]", pageDescription);
     setCanonicalUrl(canonicalUrl);
 
     if (noindexNewsSlugs.has(news.slug)) {

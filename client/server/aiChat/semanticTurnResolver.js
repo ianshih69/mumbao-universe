@@ -154,6 +154,7 @@ function isBarePetWeight(message, operations) {
     ) &&
       !operations.some((operation) => ["replace", "remove", "add", "clear"].includes(operation.operation)) &&
       !mutationForm.test(text) &&
+      !/帶/.test(text) &&
       !quoteForm.test(text)
   );
 }
@@ -209,6 +210,7 @@ export function resolveSemanticTurn({
   spans = [],
   deterministicResult,
   previousTopic = "",
+  reconciliation = null,
 } = {}) {
   const text = compact(message);
   const state = normalizeConversationContext(context);
@@ -236,6 +238,8 @@ export function resolveSemanticTurn({
       ),
   );
   const explicitQuote = quoteForm.test(text) && !policyPriceForm.test(text);
+  const explicitStayQuote = explicitQuote && (reconciliation ||
+    rawOperations.some((operation) => operation.entity === "stay" && operation.check_in));
   const completeSnapshot = hasCompleteSnapshot(rawOperations, intents);
   const datedStayStatement = Boolean(!questionForm.test(text) && /住|退房/.test(text) &&
     rawOperations.some((operation) => operation.entity === "stay" && operation.check_in));
@@ -272,12 +276,12 @@ export function resolveSemanticTurn({
   let selectedOperations = [];
   let clarificationCode = null;
 
-  if (completeSnapshot) {
+  if (completeSnapshot || (explicitStayQuote && !ambiguities.length)) {
     turnKind = "transactional";
-    scenarioAction = "new";
+    scenarioAction = completeSnapshot || !activeScenario ? "new" : "continue";
     selectedOperations = rawOperations.map((operation) => ({
       ...operation,
-      operation: operation.operation === "clear" ? "clear" : "set",
+      operation: scenarioAction === "continue" || operation.operation === "clear" ? operation.operation : "set",
     }));
   } else if (activeScenario && reference.complete &&
     reference.operations.includes("replace") && !rawOperations.length &&

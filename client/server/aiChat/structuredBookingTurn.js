@@ -92,6 +92,9 @@ const ambiguitySchema = z
       "missing_party_count",
       "missing_exact_year",
       "ambiguous_stay_days",
+      "invalid_date_range",
+      "date_night_conflict",
+      "headcount_conflict",
       "missing_reference",
       "pending_slot_fill",
       "missing_target_reference",
@@ -355,7 +358,7 @@ function collectAgeOperations(text) {
 
 function collectPartyOperations(text, occupiedSpans) {
   const definitions = [
-    ["adult", String.raw`(${numberTokenSource})(?:位|個)?(?:大人|成人)`],
+    ["adult", String.raw`(${numberTokenSource})(?:位|個)?(?:大人|成人|大(?!型|概|約))`],
     ["child", String.raw`(${numberTokenSource})(?:位|個)?(?:小孩|兒童|孩童)`],
     ["infant", String.raw`(${numberTokenSource})(?:位|個)?(?:嬰兒|嬰幼兒|幼兒)`],
   ];
@@ -381,7 +384,8 @@ function collectPartyOperations(text, occupiedSpans) {
     }
   }
 
-  if (!operations.some((operation) => operation.entity === "adult")) {
+  if (!operations.some((operation) => operation.entity === "adult") && !occupiedSpans.length &&
+      !operations.some((operation) => ["child", "infant"].includes(operation.entity))) {
     const genericPeoplePattern = new RegExp(
       String.raw`(${numberTokenSource})(?:位)?人(?!數|房)`,
       "g",
@@ -428,6 +432,30 @@ function collectPartyOperations(text, occupiedSpans) {
   }
 
   return { operations, spans };
+}
+
+export function extractHeadcountEvidence(message) {
+  const text = compactText(message);
+  const totals = matchEntries(text, new RegExp(String.raw`(${numberTokenSource})(?:位)?人(?!數|房)`, "g"));
+  const ages = collectAgeOperations(text);
+  const party = collectPartyOperations(text, ages.spans);
+  const breakdown = [...ages.operations, ...party.operations].filter((operation) =>
+    !new RegExp(String.raw`^${numberTokenSource}(?:位)?人$`).test(operation.evidence));
+  if (totals.length !== 1 || !breakdown.length || breakdown.some((op) => op.operation !== "set")) return null;
+  // Reconcile declared people, not the billable age categories used later by the reducer.
+  const counts = Object.fromEntries(party.operations.map((op) => [op.entity, op.count]));
+  if (ages.operations.length && counts.child === undefined && counts.infant === undefined) {
+    counts.child = ages.operations.reduce((sum, op) => sum + op.count, 0);
+  }
+  const proposed = { guest_count: parseNumberToken(totals[0].match[1]),
+    ...(counts.adult !== undefined ? { adult_count: counts.adult } : {}),
+    ...(counts.child !== undefined ? { child_count: counts.child } : {}),
+    ...(counts.infant !== undefined ? { infant_count: counts.infant } : {}),
+    child_ages_years: ages.operations.flatMap((op) => op.ages_years),
+  };
+  return { proposed_values: proposed, total_evidence: totals[0].evidence,
+    breakdown_evidence: breakdown.map((op) => op.evidence).join("、"),
+    conflict: counts.adult === undefined || proposed.guest_count !== Object.values(counts).reduce((sum, count) => sum + count, 0) };
 }
 
 function collectPetOperations(text) {
@@ -612,6 +640,29 @@ export function extractShortStayDates(text, baseDateText) {
     .filter((entry) => entry.value);
 }
 
+// Share range endpoints with candidate provenance; year inference stays in the existing calendar helper.
+export function extractStayDateRanges(text, baseDateText) {
+  const patterns = [
+    /(?<![\d/.-])((?:(\d{4})[/.\-])?(\d{1,2})[/.\-](\d{1,2}))\s*(?:到|至|~|-|～)\s*((?:(\d{4})[/.\-])?(\d{1,2})[/.\-](\d{1,2}))(?![\d/.-])/g,
+    /((?:(\d{4})年)?(\d{1,2})月(\d{1,2})(?:日|號)?)\s*(?:到|至|~|-|～)\s*((?:(\d{4})年)?(\d{1,2})月(\d{1,2})(?:日|號)?)/g,
+  ];
+  const ranges = [];
+  for (const pattern of patterns) for (const match of text.matchAll(pattern)) {
+    const [startYear, startMonth, startDay, endYear, endMonth, endDay] = [2, 3, 4, 6, 7, 8].map((index) => Number(match[index]) || undefined);
+    let value = startYear || isIsoDate(baseDateText)
+      ? resolveDateRange({ startYear, startMonth, startDay, endYear, endMonth, endDay, baseDateText }) : null;
+    // An explicit end year must never be silently rolled forward by range inference.
+    if (endYear && value?.check_out !== formatIsoDate(endYear, endMonth, endDay)) value = null;
+    if (value && (!dayDifference(value.check_in, value.check_out) || dayDifference(value.check_in, value.check_out) > 60)) value = null;
+    ranges.push({ text: match[0], start: match.index, end: match.index + match[0].length, value,
+      endpoints: [
+        { text: match[1], start: match.index, value: value?.check_in },
+        { text: match[5], start: match.index + match[0].lastIndexOf(match[5]), value: value?.check_out },
+      ] });
+  }
+  return ranges.sort((a, b) => a.start - b.start);
+}
+
 function extractStayOperation(text, { baseDateText = "" } = {}) {
   const clearMatch = text.match(/清除日期|取消日期條件|先不看日期/);
   if (clearMatch) {
@@ -624,23 +675,13 @@ function extractStayOperation(text, { baseDateText = "" } = {}) {
   let checkIn = null;
   let checkOut = null;
   let evidence = "";
-  const rangePatterns = [
-    /(\d{4})年(\d{1,2})月(\d{1,2})(?:日|號)?(?:到|至|~|-)(?:(\d{4})年)?(\d{1,2})月(\d{1,2})(?:日|號)?/,
-    /(\d{4})[/.\-](\d{1,2})[/.\-](\d{1,2})(?:到|至|~|-)(?:(\d{4})[/.\-])?(\d{1,2})[/.\-](\d{1,2})/,
-  ];
-  for (const pattern of rangePatterns) {
-    const match = text.match(pattern);
-    if (!match) continue;
-    checkIn = formatIsoDate(Number(match[1]), Number(match[2]), Number(match[3]));
-    checkOut = formatIsoDate(
-      Number(match[4] || match[1]),
-      Number(match[5]),
-      Number(match[6]),
-    );
-    evidence = match[0];
-    break;
+  const ranges = extractStayDateRanges(text, baseDateText);
+  if (ranges.some((range) => !range.value) || ranges.length > 1) return null;
+  if (ranges.length === 1) {
+    checkIn = ranges[0].value.check_in;
+    checkOut = ranges[0].value.check_out;
+    evidence = ranges[0].text;
   }
-
   if (!checkIn) {
     const match =
       text.match(/(\d{4})年(\d{1,2})月(\d{1,2})(?:日|號)?/) ||
@@ -747,7 +788,7 @@ function hasPendingDogWeightContext(context) {
   );
 }
 
-function detectAmbiguities(text, context, operations, petResult) {
+function detectAmbiguities(text, context, operations, petResult, currentDate = "") {
   const ambiguities = [];
   const hasEntityOperation = operations.some((operation) =>
     ["adult", "child", "infant", "pet", "breakfast"].includes(
@@ -773,7 +814,18 @@ function detectAmbiguities(text, context, operations, petResult) {
   const dayDuration = text.match(
     new RegExp(String.raw`(${numberTokenSource})天(?:[？?。！!]|$)`),
   );
-  if (dayDuration && !explicitNightDuration) {
+  const stay = operations.find((operation) => operation.entity === "stay");
+  const rangeNights = stay && dayDifference(stay.check_in, stay.check_out);
+  const ranges = extractStayDateRanges(text, currentDate);
+  if (ranges.some((range) => !range.value) || ranges.length > 1) {
+    ambiguities.push({ code: "invalid_date_range", evidence: ranges.map((range) => range.text).join("、").slice(0, 280),
+      question: "入住與退房日期範圍無效，請確認正確的入住日與退房日。" });
+  }
+  if (rangeNights && stay.nights && rangeNights !== stay.nights) {
+    ambiguities.push({ code: "date_night_conflict", evidence: stay.evidence,
+      question: `日期範圍是${rangeNights}晚，但另有${stay.nights}晚的資訊，請確認入住、退房日期或住宿晚數。` });
+  }
+  if (dayDuration && !explicitNightDuration && !rangeNights) {
     const days = parseNumberToken(dayDuration[1]);
     if (Number.isInteger(days) && days > 0) {
       ambiguities.push({
@@ -937,9 +989,13 @@ function getOperationEvidenceFailure(operation, message, { currentDate = "" } = 
     relativeDateFromEvidence(operation.evidence, currentDate) === operation.check_in;
   const shortDates = extractShortStayDates(compactMessage, currentDate)
     .filter((date) => compactText(operation.evidence).includes(date.text));
+  const rangeDates = extractStayDateRanges(compactMessage, currentDate)
+    .flatMap((range) => range.value ? range.endpoints : [])
+    .filter((date) => compactText(operation.evidence).includes(date.text));
   if (
     !checkInSupportedByRelativeDate &&
     shortDates[0]?.value !== operation.check_in &&
+    !rangeDates.some((date) => date.value === operation.check_in) &&
     dateNumbers(operation.check_in).some(
       (number) => !evidenceNumbers.includes(number),
     )
@@ -948,6 +1004,7 @@ function getOperationEvidenceFailure(operation, message, { currentDate = "" } = 
   }
   if (
     shortDates[1]?.value !== operation.check_out &&
+    !rangeDates.some((date) => date.value === operation.check_out) &&
     dateNumbers(operation.check_out).some(
       (number) => !evidenceNumbers.includes(number),
     )
@@ -1547,7 +1604,13 @@ export function interpretBookingTurnDeterministically({
     context,
     operations,
     petResult,
+    dateInfo.currentDate,
   );
+  const headcount = extractHeadcountEvidence(message);
+  if (headcount?.conflict) {
+    ambiguities.push({ code: "headcount_conflict", evidence: `${headcount.total_evidence}、${headcount.breakdown_evidence}`,
+      question: `人數有兩組資訊：${headcount.total_evidence}，以及${headcount.breakdown_evidence}；請確認實際入住人數與成人、兒童組成。` });
+  }
   const intents = [];
   if (operations.some((entry) => ["adult", "child", "infant"].includes(entry.entity))) {
     pushUnique(intents, "update_party");
@@ -1611,6 +1674,7 @@ export function interpretBookingTurnDeterministically({
   return {
     result,
     source: "deterministic",
+    headcount,
     requiresModel:
       looksTransactional &&
       result.operations.length === 0 &&

@@ -403,7 +403,7 @@ export function applyScenarioTransition({
     ? buildQuoteScopeBaseContext(previous, dialogueState, turnId)
     : previous;
   const beforeScenario = previous.quote_scenario;
-  if (pendingStatus === "completed" || base.pending_interaction?.action === "complete_quote_slots") {
+  if (pendingStatus === "completed" || base.pending_interaction?.action === "complete_quote_slots" || plan.reconciliation_resolved) {
     base = getConversationContextForStorage({
       ...base,
       pending_interaction: null,
@@ -514,6 +514,15 @@ export function applyScenarioTransition({
     turnId,
   );
   next = synchronizeQuoteMissingSlots(next, { conversationId, sourceTurnId: turnId, nowIso });
+  if (plan.reconciliation) next = getConversationContextForStorage({ ...next,
+    pending_interaction: { type: "clarification", action: plan.reconciliation.action,
+      required_response_type: "fields", resume_action: "request_quote",
+      required_fields: plan.reconciliation.required_fields, proposed_values: plan.reconciliation.proposed_values,
+      provenance: [{ source_turn_id: turnId, evidence: plan.reconciliation.evidence,
+        filled_slots: [plan.reconciliation.action === "reconcile_headcount" ? "count" : "nights"] }],
+      conversation_id: conversationId, scenario_id: next.quote_scenario?.scenario_id,
+      context_version: next.quote_scenario?.context_version, created_turn_id: turnId, created_at: nowIso },
+  });
   const changed =
     JSON.stringify(getConversationContextForStorage(previous)) !==
     JSON.stringify(getConversationContextForStorage(next));

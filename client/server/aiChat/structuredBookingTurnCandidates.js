@@ -12,6 +12,8 @@ import {
   reduceBookingContext,
   sanitizeStructuredTurnUtterance,
   extractShortStayDates,
+  extractStayDateRanges,
+  extractHeadcountEvidence,
   structuredTurnEntities,
   structuredTurnOperations,
   toTypedBookingContext,
@@ -36,6 +38,7 @@ export const bookingSpanTypes = Object.freeze([
   "date",
   "nights",
   "duration_days",
+  "total_guest_count",
   "adult_count",
   "child_count",
   "infant_count",
@@ -242,7 +245,7 @@ function buildNormalizedView(source) {
 
 function entityForLabel(value) {
   const text = String(value || "");
-  if (/成人|大人|成年|^人$/.test(text)) return "adult";
+  if (/成人|大人|成年|^人$|^大$/.test(text)) return "adult";
   if (/兒童|小孩|小朋友/.test(text)) return "child";
   if (/嬰幼兒|幼兒|嬰兒/.test(text)) return "infant";
   if (/狗|犬|毛孩|寵物/.test(text)) return "pet";
@@ -291,7 +294,14 @@ export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
     }
   }
 
+  const ranges = extractStayDateRanges(view.text, currentDate);
+  for (const range of ranges) for (const date of range.value ? range.endpoints : []) {
+    addMatch({ 0: date.text, index: date.start }, {
+      normalized_type: "date", normalized_value: date.value, unit: "date", entity_hints: ["stay"],
+    });
+  }
   scan(/\d{4}[年\/-]\d{1,2}[月\/-]\d{1,2}日?/gu, (match) => {
+    if (ranges.some((range) => match.index >= range.start && match.index < range.end)) return null;
     const parts = match[0].match(/\d+/g) || [];
     return {
       normalized_type: "date",
@@ -301,6 +311,7 @@ export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
     };
   });
   for (const date of extractShortStayDates(view.text, currentDate)) {
+    if (ranges.some((range) => date.start >= range.start && date.start < range.end)) continue;
     addMatch({ 0: date.text, index: date.start }, {
       normalized_type: "date", normalized_value: date.value, unit: "date", entity_hints: ["stay"],
     });
@@ -335,9 +346,10 @@ export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
     entity_hints: ["stay"],
   }));
 
-  const entityLabels = "(?:成人|大人|成年(?:旅客)?|兒童|小孩|小朋友|嬰幼兒|幼兒|嬰兒|狗狗|狗|大型犬|犬|毛孩|寵物)";
+  const entityLabels = "(?:成人|大人|大(?!型|概|約)|成年(?:旅客)?|兒童|小孩|小朋友|嬰幼兒|幼兒|嬰兒|小狗|狗狗|狗|大型犬|犬|毛孩|寵物)";
+  const headcount = extractHeadcountEvidence(view.text);
   scan(new RegExp(`(${numberToken})人(?!數|房)`, "gu"), (match) => ({
-    normalized_type: "adult_count",
+    normalized_type: headcount ? "total_guest_count" : "adult_count",
     normalized_value: parseNumber(match[1]),
     classifier: "人",
     unit: "person",
@@ -357,7 +369,7 @@ export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
     },
   );
   scan(
-    new RegExp(`(成人|大人|兒童|小孩|小朋友|嬰幼兒|幼兒|嬰兒|人|狗狗|狗|大型犬|犬|毛孩|寵物)(?:數)?(?:共|有|是|改成|改為|換成|變成|調整為)?\\s*(${numberToken})(個|位|人|隻|只)?`, "gu"),
+    new RegExp(`(成人|大人|兒童|小孩|小朋友|嬰幼兒|幼兒|嬰兒|人|狗狗|狗|大型犬|犬|毛孩|寵物)(?:數)?(?:共|有|是|改成|改為|換成|變成|調整為)?\\s*(${numberToken})(個|位|人|隻|只)?(?![\\d./]|kg|公斤|歲|小狗|狗|犬|個|位|人|隻|只)`, "gu"),
     (match) => {
       const entity = entityForLabel(match[1]);
       if (entity !== "pet" && /隻|只/.test(match[3] || "")) return null;
@@ -784,6 +796,7 @@ function enrichPetOperationFromSpans(operations, spans, context) {
     ...(weights.length ? { weights_kg: weights.map((span) => span.normalized_value) } : {}),
     evidence: [
       existing?.evidence || petTypes[0]?.text || petCounts[0]?.text,
+      ...petCounts.map((span) => span.text),
       ...weights.map((span) => span.text),
     ]
       .filter(Boolean)
@@ -840,7 +853,48 @@ export function compileBookingTurnCandidates({
       ? deterministic.result.missing_fields.filter((field) => field !== "pet_weights_kg")
       : deterministic.result.missing_fields,
   };
+  // Quarantine only conflicting fields; validated independent operations still use the reducer.
+  const currentConflicts = preliminaryResult.ambiguities.filter((entry) =>
+    ["headcount_conflict", "date_night_conflict", "invalid_date_range"].includes(entry.code));
   const prior = normalizeConversationContext(context);
+  const priorReconciliation = ["reconcile_headcount", "reconcile_stay"].includes(prior.pending_interaction?.action)
+    ? prior.pending_interaction : null;
+  const setOperations = preliminaryResult.operations.filter((op) => ["set", "replace"].includes(op.operation));
+  const partyResolved = !currentConflicts.some((entry) => entry.code === "headcount_conflict") &&
+    setOperations.some((op) => op.entity === "adult" && /大人|成人|大/.test(op.evidence)) &&
+    (!(priorReconciliation?.proposed_values?.child_count > 0) ||
+      setOperations.some((op) => ["child", "infant"].includes(op.entity)));
+  const stayResolved = !currentConflicts.some((entry) => entry.code !== "headcount_conflict") &&
+    setOperations.some((op) => op.entity === "stay" && op.check_in && (op.check_out || op.nights));
+  const inheritedConflicts = [];
+  if (priorReconciliation?.required_fields.includes("adult_count") && !partyResolved &&
+      !currentConflicts.some((entry) => entry.code === "headcount_conflict")) inheritedConflicts.push({
+    code: "headcount_conflict", evidence: priorReconciliation.provenance.map((entry) => entry.evidence).join("、"),
+    question: "先前的人數資訊仍待確認，請提供實際入住的成人與兒童組成。",
+  });
+  if (priorReconciliation?.required_fields.includes("stay_nights") && !stayResolved &&
+      !currentConflicts.some((entry) => entry.code !== "headcount_conflict")) inheritedConflicts.push({
+    code: "date_night_conflict", evidence: priorReconciliation.provenance.map((entry) => entry.evidence).join("、"),
+    question: "先前的住宿日期與晚數仍待確認，請確認實際入住與退房日期。",
+  });
+  const conflicts = [...currentConflicts, ...inheritedConflicts];
+  const partyConflict = conflicts.some((entry) => entry.code === "headcount_conflict");
+  const stayConflict = conflicts.some((entry) => entry.code !== "headcount_conflict");
+  let reconciliation = conflicts.length ? {
+    conflicts,
+    action: partyConflict ? "reconcile_headcount" : "reconcile_stay",
+    question: conflicts.map((entry) => entry.question).join(" "),
+    evidence: conflicts.map((entry) => entry.evidence).join("、"),
+    proposed_values: partyConflict ? (deterministic.headcount?.proposed_values || priorReconciliation?.proposed_values || {}) : {},
+    required_fields: [...(partyConflict ? ["guest_count", "adult_count", "child_count", "child_ages_years"] : []),
+      ...(stayConflict ? ["check_in", "check_out", "stay_nights"] : [])],
+  } : null;
+  if (reconciliation) preliminaryResult = { ...preliminaryResult,
+    operations: preliminaryResult.operations.filter((operation) =>
+      !(partyConflict && ["adult", "child", "infant"].includes(operation.entity)) &&
+      !(stayConflict && operation.entity === "stay")),
+    ambiguities: preliminaryResult.ambiguities.filter((entry) => !conflicts.includes(entry)),
+  };
   const attributeAssertion = prior.pending_interaction?.type === "slot_fill" ? null
     : analyzeEntityAttributeAssertion(sanitizedMessage, spans);
   const activeScenario = Boolean(prior.quote_scenario || prior.active_intent === "pricing" || prior.current_topic === "booking_price");
@@ -862,7 +916,8 @@ export function compileBookingTurnCandidates({
       confidence: id ? 1 : 0,
     };
   }
-  const yearlessDate = getYearlessDateClarification(sanitizedMessage);
+  const yearlessDate = extractStayDateRanges(sanitizedMessage, dateInfo.currentDate).some((range) => range.value)
+    ? null : getYearlessDateClarification(sanitizedMessage);
   if (
     yearlessDate &&
     preliminaryResult.intents.includes("request_quote") &&
@@ -886,6 +941,7 @@ export function compileBookingTurnCandidates({
     spans,
     deterministicResult: preliminaryResult,
     previousTopic,
+    reconciliation: currentConflicts.length ? reconciliation : null,
   });
   if (
     semanticTurn.ast.turn_kind === "clarification" &&
@@ -993,6 +1049,7 @@ export function compileBookingTurnCandidates({
     spans,
     deterministicResult: preliminaryResult,
     previousTopic,
+    reconciliation: currentConflicts.length ? reconciliation : null,
   });
   if (["completed", "direct_operation"].includes(slotFillTransaction.status)) {
     semanticTurn = {
@@ -1014,6 +1071,9 @@ export function compileBookingTurnCandidates({
       scenario_action: "none", goal_ids: [], operations: [], references: [],
       clarification_code: "missing_target_reference" } };
   }
+  if (semanticTurn.ast.turn_kind === "informational" || preliminaryResult.ambiguities.length) reconciliation = null;
+  const reconciliationResolved = Boolean(priorReconciliation && semanticTurn.ast.turn_kind === "transactional" &&
+    !preliminaryResult.ambiguities.length && (partyResolved || stayResolved));
   const dialogueGoalPlan = planDialogueGoals({
     message: sanitizedMessage,
     spans,
@@ -1022,8 +1082,9 @@ export function compileBookingTurnCandidates({
     semanticAst: semanticTurn.ast,
     context,
     slotFillTransaction,
+    reconciliation,
   });
-  if (["informational", "partial"].includes(dialogueGoalPlan.lane)) {
+  if (["informational", "partial"].includes(dialogueGoalPlan.lane) && !dialogueGoalPlan.mutates_context) {
     preliminaryResult = validateStructuredTurnResult({
       ...preliminaryResult,
       intents: [],
@@ -1049,7 +1110,7 @@ export function compileBookingTurnCandidates({
     : preliminaryResult;
   const bypassCandidateCompilation = ["completed", "direct_operation"].includes(
     slotFillTransaction.status,
-  ) || ["informational", "partial"].includes(dialogueGoalPlan.lane);
+  ) || (["informational", "partial"].includes(dialogueGoalPlan.lane) && !dialogueGoalPlan.mutates_context);
   const candidates = (bypassCandidateCompilation ? [] : deterministicResult.operations)
     .map((operation, index) =>
       compileOperationCandidate(operation, index, spans, currentState),
@@ -1131,7 +1192,7 @@ export function compileBookingTurnCandidates({
     (candidate) => candidate.entity === "stay",
   );
   const contextualResolverRequired = Boolean(
-    contextResolverEnabled &&
+    contextResolverEnabled && !reconciliation && !reconciliationResolved &&
       semanticTurn.ast.turn_kind === "transactional" &&
       semanticTurn.ast.scenario_action === "continue" &&
       (
@@ -1141,7 +1202,7 @@ export function compileBookingTurnCandidates({
       ),
   );
   let classification;
-  if (["informational", "partial"].includes(dialogueGoalPlan.lane)) {
+  if (["informational", "partial"].includes(dialogueGoalPlan.lane) && !dialogueGoalPlan.mutates_context) {
     classification = "INFORMATIONAL";
   } else if (hasAmbiguity || compilerFailures > 0) {
     classification = "SAFE_CLARIFICATION";
@@ -1204,6 +1265,8 @@ export function compileBookingTurnCandidates({
     pending_scenario: pendingScenario,
     slot_fill_transaction: slotFillTransaction,
     dialogue_goal_plan: dialogueGoalPlan,
+    reconciliation,
+    reconciliation_resolved: reconciliationResolved,
     intent_ast: semanticTurn.ast,
     semantic_capabilities: semanticTurn.capabilities.matches.map((entry) => ({
       capability_id: entry.capability_id,
@@ -1797,6 +1860,8 @@ async function resolveActiveDialoguePlan({
     sourceTurnId: sourceMessageId,
   });
   result = reduction.result || result;
+  if (plan.reconciliation) result = { ...result,
+    ambiguities: [...result.ambiguities, ...plan.reconciliation.conflicts] };
   reduction.turn_delta = {
     selected_candidate_ids: selectedCandidateIds,
     candidates: selectedCandidates,

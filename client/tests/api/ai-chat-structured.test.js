@@ -442,6 +442,89 @@ describe("production AI chat structured authority", () => {
     vi.restoreAllMocks();
   });
 
+  it("persists dates and pet evidence while reconciling conflicting headcounts", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-14T04:00:00.000Z"));
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    vi.stubEnv("AI_CONTEXT_SEMANTIC_RESOLVER_ENABLED", "true");
+    vi.stubEnv("AI_QUALITY_FEEDBACK_ENABLED", "false");
+    const harness = createHandlerHarness();
+    vi.stubGlobal("fetch", harness.fetchMock);
+    const reply = await harness.send("14人入住12/25-12/26這樣2天多少錢5大1個6歲兒童1小狗12KG", "range-headcount-conflict");
+    expect(reply.statusCode).toBe(200);
+    const context = harness.getSession().conversation_context;
+    expect(context).toMatchObject({ check_in: "2026-12-25", check_out: "2026-12-26", stay_nights: 1, pet_count: 1, pet_weights_kg: [12] });
+    expect(context.adult_count).toBeNull();
+    expect(context.pending_interaction).toMatchObject({ action: "reconcile_headcount",
+      proposed_values: { guest_count: 14, adult_count: 5, child_count: 1, child_ages_years: [6] } });
+    expect(context.entity_references.pets).toEqual([{ id: "pet_1", type: "pet", weight_kg: 12 }]);
+    expect(reply.payload.answer).toMatch(/14/);
+    expect(reply.payload.answer).toMatch(/5/);
+    expect(reply.payload.answer).toMatch(/人數/);
+    expect(reply.payload.answer).not.toMatch(/請提供入住日期|請提供.*晚數|12隻/);
+    expect(reply.payload.metadata.total_provider_calls).toBe(0);
+    expect(reply.payload.metadata.total_price_amount ?? null).toBeNull();
+    expect(harness.getStructuredProviderCalls()).toBe(0);
+    expect(harness.getNonFixtureCalls()).toBe(0);
+    expect(harness.getQualityTurns()).toEqual([]);
+  });
+
+  it("persists a reconciliation through policy and quote follow-ups without quoting stale party counts", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-14T04:00:00.000Z"));
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    vi.stubEnv("AI_CONTEXT_SEMANTIC_RESOLVER_ENABLED", "true");
+    const harness = createHandlerHarness();
+    vi.stubGlobal("fetch", harness.fetchMock);
+    await harness.send("10位大人入住12/25-12/26多少錢", "reconciliation-base");
+    const inputs = [
+      "14人入住12/25-12/26這樣2天多少錢5大1個6歲兒童1小狗12KG",
+      "退房時間是幾點？", "多少錢？", "5位大人1個6歲兒童",
+    ];
+    let petId;
+    let scenarioId;
+    for (const [index, input] of inputs.entries()) {
+      const reply = await harness.send(input, `reconciliation-followup-${index}`);
+      const state = harness.getSession().conversation_context;
+      expect(reply.statusCode).toBe(200);
+      expect(reply.payload.metadata.total_provider_calls).toBe(0);
+      expect(state).toMatchObject({ check_in: "2026-12-25", check_out: "2026-12-26", stay_nights: 1,
+        pet_count: 1, pet_weights_kg: [12] });
+      if (index === 0) { petId = state.entity_references.pets[0].id; scenarioId = state.quote_scenario.scenario_id; }
+      expect(state.entity_references.pets[0].id).toBe(petId);
+      expect(state.quote_scenario.scenario_id).toBe(scenarioId);
+      if (index < 3) {
+        expect(state.pending_interaction.action).toBe("reconcile_headcount");
+        expect(reply.payload.metadata.total_price_amount ?? null).toBeNull();
+      } else {
+        expect(state).toMatchObject({ adult_count: 5, child_count: 1, child_ages_years: [6] });
+        expect(state.pending_interaction?.action).not.toBe("reconcile_headcount");
+      }
+    }
+    expect(harness.getNonFixtureCalls()).toBe(0);
+    expect(harness.getStructuredProviderCalls()).toBe(0);
+  });
+
+  it.each([
+    ["入住12/25-12/26帶1隻12公斤狗多少錢", "2026-12-25", "2026-12-26"],
+    ["入住12/31-1/1帶1隻12公斤狗多少錢", "2026-12-31", "2027-01-01"],
+  ])("persists the actual handler's dated partial quote: %s", async (input, checkIn, checkOut) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-14T04:00:00.000Z"));
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    vi.stubEnv("AI_CONTEXT_SEMANTIC_RESOLVER_ENABLED", "true");
+    const harness = createHandlerHarness();
+    vi.stubGlobal("fetch", harness.fetchMock);
+    const reply = await harness.send(input, "partial-range");
+    expect(reply.statusCode).toBe(200);
+    expect(harness.getSession().conversation_context).toMatchObject({ check_in: checkIn, check_out: checkOut,
+      stay_nights: 1, adult_count: null, pet_count: 1, pet_weights_kg: [12] });
+    expect(reply.payload.metadata.total_provider_calls).toBe(0);
+    expect(reply.payload.metadata.total_price_amount ?? null).toBeNull();
+    expect(reply.payload.answer).not.toMatch(/請提供入住日期|請提供.*晚數|每隻狗狗體重/);
+    expect(harness.getNonFixtureCalls()).toBe(0);
+  });
+
   it("retains a newly supplied pet weight across an incomplete twelve-guest quote", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-13T10:00:00Z"));

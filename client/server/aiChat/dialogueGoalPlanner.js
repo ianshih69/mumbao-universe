@@ -301,6 +301,7 @@ export function planDialogueGoals({
   semanticAst = null,
   context = null,
   slotFillTransaction = null,
+  reconciliation = null,
 } = {}) {
   const state = normalizeConversationContext(context);
   const slots = extractGoalSlots(spans);
@@ -326,6 +327,10 @@ export function planDialogueGoals({
       operation => operation.entity === "adult"
     );
 
+  if (reconciliation) return { ...buildGoalPlan({
+    lane: "partial", goalIds: ["request_quote"], responseKind: "partial_answer",
+    mutatesContext: true, reason: "quote_field_reconciliation", slots,
+  }), reconciliation };
   if (completeSnapshot) {
     return buildGoalPlan({
       lane: "transactional",
@@ -764,6 +769,16 @@ async function handleLodgingInformation(goalPlan, options) {
 }
 
 async function handlePartialQuote(goalPlan) {
+  if (goalPlan.reconciliation) {
+    const facts = [];
+    const [checkIn, checkOut] = goalPlan.slots.dates;
+    if (checkIn && checkOut && !goalPlan.reconciliation.required_fields.includes("check_in")) {
+      const nights = (Date.parse(checkOut) - Date.parse(checkIn)) / 86400000;
+      facts.push(`${checkIn} 入住、${checkOut} 退房，共 ${nights} 晚 ${nights + 1} 天`);
+    }
+    if (goalPlan.slots.pet_weights_kg.length) facts.push(`狗狗 ${goalPlan.slots.pet_count || goalPlan.slots.pet_weights_kg.length} 隻，體重 ${goalPlan.slots.pet_weights_kg.join("、")} 公斤`);
+    return `${facts.length ? `先記下${facts.join("；")}。` : ""}${goalPlan.reconciliation.question}`;
+  }
   const hasPet = goalPlan.goal_ids.includes("pet_fee_lookup");
   const missing = [];
   if (!(goalPlan.slots.dates.length || goalPlan.slots.date_type)) {
@@ -960,7 +975,7 @@ function buildCapabilityRoute(goalPlan, answer, { collectInfo = false } = {}) {
       dialogue_primary_goal: goalPlan.primary_goal_id,
       response_authority: "dialogue_goal_planner",
       answerability: goalPlan.lane === "partial" ? "partial" : "complete",
-      context_mutation_allowed: false,
+      context_mutation_allowed: Boolean(goalPlan.mutates_context),
       authoritative_sources: goalPlan.capabilities.map(
         capabilityEntry => capabilityEntry.authoritative_source
       ),
@@ -1047,7 +1062,7 @@ export function selectDialogueResponseAuthority({
     return {
       authority: "dialogue_goal_planner",
       execute_transaction: false,
-      allow_context_mutation: false,
+      allow_context_mutation: Boolean(goalPlan.mutates_context),
     };
   }
   if (

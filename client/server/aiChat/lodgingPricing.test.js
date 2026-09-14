@@ -178,8 +178,8 @@ describe("shared Booking pricing for AI answers", () => {
   });
 
   it.each([
-    [8, 2, 1000, 26000],
-    [8, 3, 1500, 26500],
+    [8, 2, 0, 25000],
+    [8, 3, 500, 25500],
     [10, 3, 1500, 26500],
     [11, 2, 1000, 27250],
   ])("prices %i adults and %i children", async (adults, children, childFee, total) => {
@@ -191,19 +191,13 @@ describe("shared Booking pricing for AI answers", () => {
     expect(result.total_amount).toBe(total);
   });
 
-  it.each([1, 2])("keeps %i non-bed infants free within the approved limit", async (infants) => {
+  it.each([1, 5])("keeps %i non-bed infants free without a free-count cap", async (infants) => {
     const result = await buildOfficialPricingResolution(
       baseContext({ infant_count: infants }),
       pricingOptions
     );
-    expect(result.infant_fee).toMatchObject({ amount: 0, infant_count: infants, free_count_limit: 2 });
+    expect(result.infant_fee).toMatchObject({ amount: 0, infant_count: infants, free_count_limit: null });
     expect(result.total_amount).toBe(25000);
-  });
-
-  it.each([3, 5])("requires confirmation instead of quoting %i infants", async (infants) => {
-    const result = await buildOfficialPricingResolution(baseContext({ infant_count: infants }), pricingOptions);
-    expect(result.lodging_price).toMatchObject({ status: "unresolved", amount: null, reason: "infant_count_requires_confirmation" });
-    expect(result.total_amount).toBeNull();
   });
 
   it.each([

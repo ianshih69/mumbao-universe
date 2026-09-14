@@ -2,8 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { buildOfficialPricingResolution } from "./lodgingPricing.js";
 import { executeTurnAction } from "./turnActionExecutor.js";
-import { getConversationContextForStorage } from "./conversationContext.js";
-import { compileBookingTurnCandidates, reduceBookingContextFromCandidates } from "./structuredBookingTurnCandidates.js";
 import {
   buildStructuredClarificationRoute,
   buildStructuredTurnOutboundInput,
@@ -85,10 +83,7 @@ function canaryContext(name) {
   return variants[name] || {};
 }
 
-const ageTestTurnIds = new Map();
-
-function interpret(message, context = baseContext, sourceMessageId) {
-  if (!ageTestTurnIds.has(message)) ageTestTurnIds.set(message, `test-message-${ageTestTurnIds.size}`);
+function interpret(message, context = baseContext) {
   const interpreted = interpretBookingTurnDeterministically({
     message,
     context,
@@ -96,7 +91,7 @@ function interpret(message, context = baseContext, sourceMessageId) {
   const reduced = reduceBookingContext(context, interpreted.result, {
     message,
     nowIso,
-    sourceMessageId: sourceMessageId ?? ageTestTurnIds.get(message),
+    sourceMessageId: "test-message",
   });
   return { ...interpreted, reduced };
 }
@@ -115,125 +110,6 @@ function expectSingleLargeDog(result, { adults = 10 } = {}) {
 }
 
 describe("structured booking turn deterministic interpreter", () => {
-  it.each(["8位大人，1位4歲小孩，1位6歲小孩", "8位成人，4歲1位、6歲1位"])("adds adult-classified children to the existing adult party: %s", (message) => {
-    const result = interpret(message, {});
-    expect(result.result.ambiguities).toEqual([]);
-    expect(result.reduced.context).toMatchObject({ adult_count: 9, child_count: 1 });
-  });
-
-  it("reclassifies supplied ages without double counting a repeated age declaration", () => {
-    const initial = { ...baseContext, adult_count: 8, child_count: 2 };
-    const first = interpret("小孩一個4歲、一個6歲", initial);
-    expect(first.reduced.context).toMatchObject({ adult_count: 9, child_count: 1, child_ages_years: [4, 6] });
-    const repeated = interpret("小孩一個4歲、一個6歲", first.reduced.context);
-    expect(repeated.reduced.context).toMatchObject({ adult_count: 9, child_count: 1, child_ages_years: [4, 6] });
-  });
-
-  it("keeps 2 years 11 months in the existing whole-year infant model", () => {
-    expect(interpret("一位2歲11個月幼兒", {}).reduced.context).toMatchObject({ infant_count: 1 });
-  });
-
-  it.each([
-    ["4歲、6歲", 9, 1, [4, 6]],
-    ["6歲、4歲", 9, 1, [4, 6]],
-    ["4歲、5歲", 8, 2, [4, 5]],
-  ])("recomputes the declared child cohort: %s", (message, adults, children, ages) => {
-    let context = { ...baseContext, adult_count: 8, child_count: 2 };
-    for (let replay = 0; replay < 3; replay += 1) {
-      const result = interpret(message, context, `age-declaration-replay-${replay}`);
-      expect(result.result.ambiguities).toEqual([]);
-      expect(result.reduced.context).toMatchObject({ adult_count: adults, child_count: children, child_ages_years: ages });
-      context = getConversationContextForStorage(JSON.parse(JSON.stringify(result.reduced.context)));
-    }
-  });
-
-  it.each([
-    ["4歲、6歲", "不是6歲，是5歲", 8, 2, [4, 5]],
-    ["4歲、5歲", "不是5歲，是6歲", 9, 1, [4, 6]],
-    ["4歲、5歲", "其中一個其實6歲", 9, 1, [6]],
-    ["4歲、6歲", "不是6歲，是2歲", 8, 1, [2, 4]],
-  ])("reverses classification using age provenance: %s -> %s", (initial, correction, adults, children, ages) => {
-    let context = interpret(initial, { ...baseContext, adult_count: 8, child_count: 2 }).reduced.context;
-    for (let replay = 0; replay < 2; replay += 1) {
-      const result = interpret(correction, getConversationContextForStorage(context));
-      expect(result.result.ambiguities).toEqual([]);
-      expect(result.reduced.context).toMatchObject({ adult_count: adults, child_count: children, child_ages_years: ages });
-      context = result.reduced.context;
-    }
-  });
-
-  it("keeps explicit counts separate and does not invent unmentioned adults", () => {
-    const adults = interpret("8位大人", {}).reduced.context;
-    const children = interpret("2位小孩", adults).reduced.context;
-    expect(children).toMatchObject({ adult_count: 8, child_count: 2 });
-    expect(interpret("4歲、6歲", children).reduced.context).toMatchObject({ adult_count: 9, child_count: 1 });
-    expect(interpret("一個4歲、一個6歲", {}).reduced.context).toMatchObject({ adult_count: 1, child_count: 1 });
-  });
-
-  it("does not guess a correction target across different existing age classes", () => {
-    const context = interpret("4歲、6歲", { ...baseContext, adult_count: 8, child_count: 2 }).reduced.context;
-    const result = interpret("其中一個其實2歲", context);
-    expect(result.result.ambiguities).toContainEqual(expect.objectContaining({ code: "missing_reference" }));
-    expect(result.reduced.changed).toBe(false);
-    expect(result.reduced.context).toMatchObject({ adult_count: 9, child_count: 1, child_ages_years: [4, 6] });
-  });
-
-  it("preserves age provenance through candidate materialization and storage replay", () => {
-    let context = { ...baseContext, adult_count: 8, child_count: 2 };
-    for (const [index, message] of ["4歲、6歲", "4歲、6歲", "不是6歲，是5歲"].entries()) {
-      const plan = compileBookingTurnCandidates({ message, context, sourceTurnId: `age-candidate-${index}` });
-      expect(plan.compiler_failures).toBe(0);
-      const result = reduceBookingContextFromCandidates(context, plan, plan.candidates.map((candidate) => candidate.candidate_id));
-      context = getConversationContextForStorage(JSON.parse(JSON.stringify(result.context)));
-      expect(context).toMatchObject({ adult_count: index < 2 ? 9 : 8, child_count: index < 2 ? 1 : 2 });
-      expect(context.slot_meta.child_ages_years.source).toBe("guest_age_classification");
-    }
-  });
-
-  it("does not consume unaged children when an additional aged child is added", () => {
-    const first = interpret("再加一位4歲小孩", { ...baseContext, adult_count: 8, child_count: 2 });
-    expect(first.reduced.context).toMatchObject({ adult_count: 8, child_count: 3 });
-    expect(interpret("再加一位4歲小孩", first.reduced.context).reduced.context)
-      .toMatchObject({ adult_count: 8, child_count: 3 });
-  });
-
-  it("honors an explicit adult total after age classification without re-adding derived adults", () => {
-    const classified = interpret("4歲、6歲", { ...baseContext, adult_count: 8, child_count: 2 }).reduced.context;
-    const explicit = interpret("9位大人", classified).reduced.context;
-    expect(explicit.adult_count).toBe(9);
-    expect(interpret("4歲、6歲", explicit).reduced.context).toMatchObject({ adult_count: 9, child_count: 1 });
-    expect(interpret("不是6歲，是5歲", explicit).reduced.context).toMatchObject({ adult_count: 8, child_count: 2 });
-  });
-
-  it("does not correct a second same-age child when the same correction turn is replayed", () => {
-    const initial = interpret("6歲、6歲", { ...baseContext, adult_count: 8, child_count: 2 }).reduced.context;
-    const first = interpret("不是6歲，是5歲", initial, "duplicate-age-correction");
-    expect(first.reduced.context).toMatchObject({ adult_count: 9, child_count: 1, child_ages_years: [5, 6] });
-    const replay = interpret("不是6歲，是5歲", getConversationContextForStorage(first.reduced.context), "duplicate-age-correction");
-    expect(replay.reduced.context).toEqual(first.reduced.context);
-    expect(replay.reduced.reason).toBe("duplicate_age_turn");
-  });
-
-  it("recomputes repeated full age evidence even without a message ID", () => {
-    let context = { ...baseContext, adult_count: 8, child_count: 2 };
-    for (let index = 0; index < 3; index += 1) {
-      context = interpret("4歲、6歲", context, "").reduced.context;
-      expect(context).toMatchObject({ adult_count: 9, child_count: 1 });
-    }
-  });
-
-  it("does not apply stale age provenance to a reset age slot", () => {
-    const classified = interpret("4歲、6歲", { ...baseContext, adult_count: 8, child_count: 2 }).reduced.context;
-    const reset = { ...classified, adult_count: 10, child_count: 2, child_ages_years: [] };
-    expect(interpret("4歲、6歲", reset).reduced.context).toMatchObject({ adult_count: 11, child_count: 1 });
-  });
-
-  it("rejects a model age classification that contradicts the shared guest policy", () => {
-    expect(() => validateStructuredTurnResult({ intents: ["update_party"],
-      operations: [{ entity: "child", operation: "set", count: 1, ages_years: [6], evidence: "6歲" }],
-      missing_fields: [], ambiguities: [], confidence: 1,
-    }, { message: "小孩6歲" })).toThrow("invalid_shape");
-  });
   it.each([
     ["2026/11/1 10人住一晚多少", "2026-11-01", 10, 1],
     ["2026/11/1 1人住一晚多少", "2026-11-01", 1, 1],
@@ -323,9 +199,9 @@ describe("structured booking turn deterministic interpreter", () => {
 
   it.each([
     ["加兩個小孩", { child_count: 2, infant_count: 0, adult_count: 10 }],
-    ["一位4歲、一位12歲", { child_count: 1, infant_count: 0, adult_count: 11 }],
-    ["一個3歲幼兒", { child_count: 1, infant_count: 0, adult_count: 10 }],
-    ["小朋友剛滿13歲", { child_count: 0, infant_count: 0, adult_count: 11 }],
+    ["一位4歲、一位12歲", { child_count: 2, infant_count: 0, adult_count: 10 }],
+    ["一個3歲幼兒", { child_count: 0, infant_count: 1, adult_count: 10 }],
+    ["小朋友剛滿13歲", { child_count: 0, infant_count: 0, adult_count: 1 }],
   ])("classifies child and infant ages by pricing boundary: %s", (message, expected) => {
     const result = interpret(message);
     expect(result.result.ambiguities).toEqual([]);

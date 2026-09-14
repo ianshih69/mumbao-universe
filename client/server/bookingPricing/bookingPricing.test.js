@@ -306,20 +306,15 @@ describe("bookingPricing", () => {
       guestCount: 7,
       pricingGuestCount: 10,
       pricing: {
-        total: 26000,
-        chargeableChildCount: 2,
-        childFeeTotal: 1000,
+        total: 25000,
+        chargeableChildCount: 0,
+        childFeeTotal: 0,
         roomCountMin: 3,
         roomCountMax: 3,
         selectedRoomOptionId: "2q1d",
       },
     });
     expect(fiveAdultsTwoChildren.pricing.roomOptions).toHaveLength(1);
-  });
-
-  it.each([3, 5])("does not invent a price for %i infants", async (infants) => {
-    const result = await quote({ adults: 8, infants, packageType: "villa_10" });
-    expect(result).toMatchObject({ status: "unavailable", pricing: { status: "unavailable", reason: "infant_count_requires_confirmation", total: null } });
   });
 
   it("calculates non-bed child fees without changing adult pricing rows or room plans", async () => {
@@ -329,14 +324,14 @@ describe("bookingPricing", () => {
       guestCount: 10,
       pricingGuestCount: 10,
       pricing: {
-        chargeableChildCount: 2,
-        childFeeTotal: 1000,
+        chargeableChildCount: 0,
+        childFeeTotal: 0,
         roomPlanHeadcount: 10,
         doubleBedCount: 5,
         roomCountMin: 3,
         roomCountMax: 4,
         selectedRoomOptionId: "2q1d",
-        total: 26000,
+        total: 25000,
       },
     });
     expect(caseA.pricing.roomOptions.map((option) => option.id)).toEqual(["2q1d", "1q3d"]);
@@ -347,33 +342,33 @@ describe("bookingPricing", () => {
       guestCount: 11,
       pricingGuestCount: 10,
       pricing: {
-        chargeableChildCount: 3,
+        chargeableChildCount: 1,
         childFeeUnitPrice: 500,
-        childFeeTotal: 1500,
+        childFeeTotal: 500,
         roomPlanHeadcount: 10,
         doubleBedCount: 5,
         roomCountMin: 3,
         roomCountMax: 4,
         selectedRoomOptionId: "2q1d",
-        total: 26500,
+        total: 25500,
       },
     });
     expect(caseB.pricing.roomOptions.map((option) => option.id)).toEqual(["2q1d", "1q3d"]);
     expect(caseB.pricing.breakdown[0]).toMatchObject({
       baseGuestCount: 10,
       basePrice: 25000,
-      chargeableChildCount: 3,
+      chargeableChildCount: 1,
       childFeeUnitPrice: 500,
-      childFeeAmount: 1500,
+      childFeeAmount: 500,
       roomPlanHeadcount: 10,
       doubleBedCount: 5,
       roomCountMin: 3,
       roomCountMax: 4,
-      price: 26500,
+      price: 25500,
     });
 
     const caseC = await quote({ adults: 8, children: 3, packageType: "villa_10", checkIn: "2026-11-05", checkOut: "2026-11-07" });
-    expect(caseC.pricing.childFeeTotal).toBe(2925);
+    expect(caseC.pricing.childFeeTotal).toBe(975);
 
     const caseD = await quote({ adults: 10, children: 3, packageType: "villa_10", checkIn: "2026-11-05", checkOut: "2026-11-07" });
     expect(caseD).toMatchObject({
@@ -496,7 +491,7 @@ describe("bookingPricing", () => {
     expect(thirteenAdults.roomOptions.some((option) => option.id === "2q2d")).toBe(false);
   });
 
-  it("does not charge an approved infant and prices 19/20 adults from the 18 adult base rate", async () => {
+  it("allows infants beyond pricing caps and prices 19/20 adults from the 18 adult base rate", async () => {
     await expect(quote({ adults: 18, children: 2, packageType: "villa_18" })).resolves.toMatchObject({
       status: "resolved",
       guestCount: 20,
@@ -890,19 +885,19 @@ describe("bookingPricing", () => {
       status: "resolved",
       pricingGuestCount: 10,
       pricing: {
-        total: 26500,
+        total: 25500,
         regularExtraAdultCount: 0,
         regularExtraAdultFeeTotal: 0,
-        chargeableChildCount: 3,
-        childFeeTotal: 1500,
+        chargeableChildCount: 1,
+        childFeeTotal: 500,
       },
     });
     expect(childOnlyExtra.pricing.breakdown[0]).toMatchObject({
       base10GuestRate: 25000,
       regularExtraAdultCount: 0,
       regularExtraAdultFeeAmount: 0,
-      childFeeAmount: 1500,
-      price: 26500,
+      childFeeAmount: 500,
+      price: 25500,
     });
   });
 
@@ -1025,34 +1020,34 @@ describe("bookingPricing", () => {
         dayType: "weekday",
         baseGuestCount: 10,
         basePrice: 25000,
-        chargeableChildCount: 3,
+        chargeableChildCount: 1,
         childFeeUnitPrice: 500,
-        childFeeAmount: 1500,
-        preDiscountPrice: 26500,
+        childFeeAmount: 500,
+        preDiscountPrice: 25500,
         discountType: null,
         discountRate: 1,
         discountAmount: 0,
-        price: 26500,
+        price: 25500,
       }),
       expect.objectContaining({
         date: "2026-11-03",
         dayType: "weekday",
         baseGuestCount: 10,
         basePrice: 25000,
-        chargeableChildCount: 3,
+        chargeableChildCount: 1,
         childFeeUnitPrice: 500,
-        childFeeAmount: 1425,
-        preDiscountPrice: 26500,
+        childFeeAmount: 475,
+        preDiscountPrice: 25500,
         discountType: "consecutive_stay_95",
         discountRate: 0.95,
         discountAmount: 1250,
-        price: 25175,
+        price: 24225,
       }),
     ]);
-    expect(result.pricing.childFeeTotal).toBe(2925);
-    expect(result.pricing.total).toBe(51675);
-    expect(result.pricing.depositAmount).toBe(15503);
-    expect(result.pricing.balanceAmount).toBe(36172);
+    expect(result.pricing.childFeeTotal).toBe(975);
+    expect(result.pricing.total).toBe(49725);
+    expect(result.pricing.depositAmount).toBe(14918);
+    expect(result.pricing.balanceAmount).toBe(34807);
     expect(result.pricing.depositAmount + result.pricing.balanceAmount).toBe(result.pricing.total);
   });
 

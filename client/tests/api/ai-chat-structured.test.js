@@ -1697,12 +1697,12 @@ describe("production AI chat structured authority", () => {
   });
 
   it.each([
-    ["12人多少？", ["入住日期", "晚數"], ["成人與3歲至未滿6歲兒童各有幾位"]],
+    ["12人多少？", ["入住日期", "晚數"], ["成人與4～12歲兒童各有幾位"]],
     ["11月1日，10人多少？", ["請問是幾年的11月1日"], ["住宿晚數"]],
     [
       "10人一隻狗包棟多少？",
       ["入住日期或日期類型", "住宿晚數", "每隻狗狗體重"],
-      ["想包棟或訂單間", "成人與3歲至未滿6歲兒童各有幾位"],
+      ["想包棟或訂單間", "成人與4～12歲兒童各有幾位"],
     ],
     ["再加一個", ["增加一位成人、一位兒童，還是一隻狗狗"], []],
   ])(
@@ -1720,99 +1720,6 @@ describe("production AI chat structured authority", () => {
       expect(harness.getNonFixtureCalls()).toBe(0);
     },
   );
-
-  it.each(["4歲小孩怎麼算？", "6歲小孩怎麼算？", "未滿3歲要收費嗎？"])("answers the approved child policy without mutation: %s", async (message) => {
-    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
-    const harness = createHandlerHarness();
-    vi.stubGlobal("fetch", harness.fetchMock);
-    const result = await harness.send(message, `child-policy-${message}`);
-    expect(result.payload.answer).toContain("未滿3歲不佔床免費，每次最多2位");
-    expect(result.payload.answer).toContain("3歲至未滿6歲不佔床每位每晚500元");
-    expect(result.payload.answer).toContain("滿6歲視同成人");
-    expect(result.payload.metadata.structured_provider_call_count).toBe(0);
-    expect(harness.getSession().conversation_context).toEqual({});
-    expect(harness.getNonFixtureCalls()).toBe(0);
-  });
-
-  it("prices the approved mixed child ages through the actual handler", async () => {
-    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
-    const harness = createHandlerHarness();
-    vi.stubGlobal("fetch", harness.fetchMock);
-    await harness.send("2026年11月1日，8位大人、2位小孩，住一晚包棟多少？", "child-ages-initial");
-    const result = await harness.send("小孩一個4歲、一個6歲", "child-ages-details");
-    expect(harness.getSession().conversation_context).toMatchObject({ check_in: "2026-11-01", stay_nights: 1, adult_count: 9, child_count: 1, child_ages_years: [4, 6] });
-    expect(result.payload.metadata.child_fee_amount).toBe(500);
-    expect(result.payload.answer).toContain("TWD 25,500");
-    expect(harness.getNonFixtureCalls()).toBe(0);
-  });
-
-  it("does not price an undefined third infant through the actual handler", async () => {
-    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
-    const harness = createHandlerHarness();
-    vi.stubGlobal("fetch", harness.fetchMock);
-    const result = await harness.send("2026年11月1日，8位成人、3位嬰幼兒，住一晚包棟多少？", "infant-limit");
-    expect(harness.getSession().conversation_context.infant_count).toBe(3);
-    expect(result.payload.answer).toContain("超過2位");
-    expect(result.payload.answer).toContain("館方");
-    expect(result.payload.metadata.total_price_amount).toBeNull();
-    expect(result.payload.metadata.structured_provider_call_count).toBe(0);
-    expect(harness.getNonFixtureCalls()).toBe(0);
-  });
-
-  it("keeps the exact three-turn age reclassification in one persisted scenario", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-09-13T10:00:00.000Z"));
-    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
-    const harness = createHandlerHarness();
-    vi.stubGlobal("fetch", harness.fetchMock);
-    const messages = [
-      "我想訂 11/10 住一晚",
-      "8位大人，2位小孩",
-      "小孩一個4歲、一個6歲，另外有1隻12公斤的狗狗",
-    ];
-    const states = [];
-    for (const [index, message] of messages.entries()) {
-      const result = await harness.send(message, `age-three-turn-${index + 1}`);
-      states.push(JSON.parse(JSON.stringify(harness.getSession().conversation_context)));
-      expect(result.payload.metadata.structured_provider_call_count).toBe(0);
-      expect(states[index]).toMatchObject({ check_in: "2026-11-10", check_out: "2026-11-11", stay_nights: 1 });
-      expect(states[index].quote_scenario.context_version).toBe(index + 1);
-    }
-    expect(states[1]).toMatchObject({ adult_count: 8, child_count: 2 });
-    expect(states[2]).toMatchObject({ adult_count: 9, child_count: 1, child_ages_years: [4, 6],
-      pet_count: 1, pet_weights_kg: [12], entity_references: { pets: [{ id: "pet_1", weight_kg: 12 }] } });
-    expect(new Set(states.map((state) => state.quote_scenario.scenario_id)).size).toBe(1);
-    expect(states[2].slot_meta.child_ages_years).toMatchObject({ source: "guest_age_classification", value: [4, 6] });
-    expect(harness.getStructuredProviderCalls()).toBe(0);
-    expect(harness.getNonFixtureCalls()).toBe(0);
-  });
-
-  it.each([
-    ["4歲、6歲", "不是6歲，是5歲", 8, 2],
-    ["4歲、5歲", "不是5歲，是6歲", 9, 1],
-    ["4歲、5歲", "其中一個其實6歲", 9, 1],
-    ["4歲、5歲", "不是5歲，是4歲", 8, 2],
-  ])("persists reversible age corrections through policy and replay: %s -> %s", async (ages, correction, adults, children) => {
-    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
-    const harness = createHandlerHarness();
-    vi.stubGlobal("fetch", harness.fetchMock);
-    await harness.send("2026年11月10日，8位大人、2位小孩，住一晚包棟多少？", "age-replay-base");
-    await harness.send(ages, "age-replay-ages");
-    const beforePolicy = JSON.parse(JSON.stringify(harness.getSession().conversation_context));
-    await harness.send("退房時間是幾點？", "age-replay-policy");
-    expect(harness.getSession().conversation_context.child_ages_years).toEqual(beforePolicy.child_ages_years);
-    expect(harness.getSession().conversation_context.slot_meta.child_ages_years).toEqual(beforePolicy.slot_meta.child_ages_years);
-    for (const [index, message] of [ages, correction, correction].entries()) {
-      await harness.send(message, `age-replay-followup-${index}`);
-      const state = harness.getSession().conversation_context;
-      expect(state).toMatchObject({ check_in: "2026-11-10", check_out: "2026-11-11", stay_nights: 1 });
-      expect(state.quote_scenario.scenario_id).toBe(beforePolicy.quote_scenario.scenario_id);
-      expect(state.adult_count).toBe(index === 0 ? beforePolicy.adult_count : adults);
-      expect(state.child_count).toBe(index === 0 ? beforePolicy.child_count : children);
-    }
-    expect(harness.getStructuredProviderCalls()).toBe(0);
-    expect(harness.getNonFixtureCalls()).toBe(0);
-  });
 
   it.each(["不對", "不是這天"])(
     "rejects a current pending date proposal without applying it for %s",

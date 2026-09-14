@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { classifyBookingGuestAge, bookingGuestRules } from "../../src/lib/bookings/bookingGuestRules.js";
 import {
   getConversationContextForStorage,
   normalizeConversationContext,
@@ -294,45 +293,39 @@ function normalizeCountOperation(operation, count) {
   return count;
 }
 
-const classifyAge = classifyBookingGuestAge;
-export const guestAgeClassificationSource = "guest_age_classification";
+function classifyAge(age) {
+  if (!Number.isFinite(age) || age < 0) return null;
+  if (age < 4) return "infant";
+  if (age < 13) return "child";
+  return "adult";
+}
 
-function collectAgeOperations(text, context = {}) {
+function collectAgeOperations(text) {
   const agePattern = new RegExp(
-    String.raw`(?:(${numberTokenSource})(?:位|個))?(${numberTokenSource})歲(?:(${numberTokenSource})(?:位|個)(?!月))?`,
+    String.raw`(?:(${numberTokenSource})(?:位|個))?(${numberTokenSource})歲`,
     "g",
   );
   const groups = new Map();
   const spans = [];
-  const replacedAges = [];
-  const hasAgeContext = context?.child_count > 0 || context?.child_ages_years?.length > 0;
 
   for (const entry of matchEntries(text, agePattern)) {
     const nearby = text.slice(
       Math.max(0, entry.start - 8),
       Math.min(text.length, entry.end + 8),
     );
-    const hasPersonUnit = Boolean(entry.match[1] || entry.match[3]);
+    const hasPersonUnit = Boolean(entry.match[1]);
     const hasAgeSubject = /小孩|兒童|孩童|幼兒|嬰兒|嬰幼兒|小朋友/.test(
       nearby,
     );
-    if (!hasPersonUnit && !hasAgeSubject && !hasAgeContext) continue;
+    if (!hasPersonUnit && !hasAgeSubject) continue;
 
-    const count = entry.match[1] || entry.match[3]
-      ? parseNumberToken(entry.match[1] || entry.match[3])
+    const count = entry.match[1]
+      ? parseNumberToken(entry.match[1])
       : 1;
     const age = parseNumberToken(entry.match[2]);
     const entity = classifyAge(age);
     if (!Number.isInteger(count) || count < 1 || !entity) continue;
-    spans.push({ start: entry.start, end: entry.end });
-    const prefix = text.slice(0, entry.start);
-    if (/(?:不是|並非)\s*$/.test(prefix)) {
-      replacedAges.push(...Array.from({ length: count }, () => age));
-      continue;
-    }
-    const operation = replacedAges.length || /(?:其實|改成|改為|更正為)\s*$/.test(prefix)
-      ? "replace"
-      : inferOperation(text, entry.start, entry.end);
+    const operation = inferOperation(text, entry.start, entry.end);
     const key = `${entity}:${operation}`;
     const current = groups.get(key) || {
       entity,
@@ -345,6 +338,7 @@ function collectAgeOperations(text, context = {}) {
     current.ages_years.push(...Array.from({ length: count }, () => age));
     current.evidence.push(entry.evidence);
     groups.set(key, current);
+    spans.push({ start: entry.start, end: entry.end });
   }
 
   return {
@@ -356,7 +350,6 @@ function collectAgeOperations(text, context = {}) {
       evidence: group.evidence.join("、"),
     })),
     spans,
-    replacedAges,
   };
 }
 
@@ -797,7 +790,7 @@ function detectAmbiguities(text, context, operations, petResult) {
     ambiguities.push({
       code: "missing_party_count",
       evidence: text,
-      question: "請問調整後有幾位成人、幾位兒童及幾位未滿 3 歲幼兒呢？",
+      question: "請問調整後有幾位成人、幾位兒童及幾位未滿 4 歲幼兒呢？",
     });
   }
 
@@ -832,7 +825,6 @@ function detectAmbiguities(text, context, operations, petResult) {
 
   const entities = new Map();
   for (const operation of operations) {
-    if (operation.ages_years?.length) continue;
     const prior = entities.get(operation.entity);
     if (prior && prior !== operation.operation) {
       ambiguities.push({
@@ -966,9 +958,6 @@ function getOperationEvidenceFailure(operation, message, { currentDate = "" } = 
 }
 
 function validateOperationShape(operation) {
-  if (operation.ages_years?.length &&
-      (operation.count !== operation.ages_years.length ||
-       operation.ages_years.some((age) => classifyAge(age) !== operation.entity))) return false;
   if (operation.target_entity_id && (operation.entity !== "pet" ||
       !["replace", "remove"].includes(operation.operation) || !Number.isInteger(operation.target_pet))) return false;
   if (operation.operation === "clear") return true;
@@ -1170,96 +1159,6 @@ function applyPartyOperation(context, operation) {
         : [...operation.ages_years];
   }
   return next;
-}
-
-function ageClass(value) {
-  return typeof value === "number" ? classifyAge(value) : value;
-}
-
-function appliedAgeEvidence(context) {
-  const meta = context.slot_meta?.child_ages_years;
-  if (meta?.source !== guestAgeClassificationSource || !Array.isArray(meta.value)) return [];
-  if (JSON.stringify(meta.value.filter((value) => typeof value === "number")) !==
-      JSON.stringify(context.child_ages_years)) return [];
-  return meta.value.filter((value) =>
-    typeof value === "number" ? classifyAge(value) !== null : ["adult", "child", "infant"].includes(value),
-  );
-}
-
-function resolveAgeEvidence(context, operations, message) {
-  const previous = appliedAgeEvidence(context);
-  const ages = operations.flatMap((operation) => operation.ages_years);
-  const modes = new Set(operations.map((operation) => operation.operation));
-  let next;
-  if (modes.size !== 1) return null;
-  if (modes.has("replace")) {
-    const { replacedAges } = collectAgeOperations(compactText(message), context);
-    next = [...previous];
-    if (replacedAges.length) {
-      if (replacedAges.length !== ages.length) return null;
-      for (let index = 0; index < replacedAges.length; index += 1) {
-        const target = next.indexOf(replacedAges[index]);
-        if (target < 0) {
-          if (next.includes(ages[index])) continue;
-          return null;
-        }
-        next[target] = ages[index];
-      }
-    } else if (ages.length === 1 && next.length) {
-      if (next.includes(ages[0])) return next;
-      const classes = new Set(next.map(ageClass));
-      if (classes.size !== 1) return null;
-      // An unnamed member can change class without inventing which known age they had.
-      const uniqueAges = new Set(next);
-      next = [ages[0], ...next.slice(1).map((value) => uniqueAges.size === 1 ? value : ageClass(value))];
-    } else {
-      return null;
-    }
-  } else if (modes.has("add")) {
-    next = [...previous, ...ages];
-  } else if (modes.has("remove")) {
-    next = [...previous];
-    for (const age of ages) {
-      const index = next.indexOf(age);
-      if (index < 0) return null;
-      next.splice(index, 1);
-    }
-  } else {
-    next = ages;
-  }
-  return next.sort((a, b) => String(a).localeCompare(String(b), "en", { numeric: true }));
-}
-
-function applyGuestAgeOperations(context, operations, explicitOperations, message, sourceMessageId) {
-  const previous = appliedAgeEvidence(context);
-  const next = resolveAgeEvidence(context, operations, message);
-  if (!next || next.length > 30) return null;
-  const absoluteCount = (entity) => explicitOperations.some((operation) =>
-    operation.entity === entity && ["set", "replace", "clear"].includes(operation.operation),
-  );
-  const countClass = (values, entity) => values.filter((value) => ageClass(value) === entity).length;
-  const result = { ...context, guest_count: null };
-  for (const entity of ["adult", "child", "infant"]) {
-    const field = `${entity}_count`;
-    const current = entity === "adult" ? context.adult_count ?? context.guest_count : context[field];
-    let base = (current ?? 0) - (absoluteCount(entity) ? 0 : countClass(previous, entity));
-    if (entity === "child" && (absoluteCount(entity) ||
-        (!previous.length && !operations.every((operation) => operation.operation === "add")))) {
-      base = (current ?? 0) - next.length;
-    }
-    result[field] = Math.max(0, base) + countClass(next, entity);
-  }
-  result.child_ages_years = next.filter((value) => typeof value === "number");
-  result.slot_meta = {
-    ...context.slot_meta,
-    child_ages_years: {
-      source: guestAgeClassificationSource,
-      ...(sourceMessageId ? { source_message_id: sourceMessageId } : {}),
-      // The applied age footprint permits recomputation without a second guest state.
-      value: next,
-    },
-  };
-  return result;
 }
 
 function applyPetOperation(context, operation) {
@@ -1503,17 +1402,6 @@ export function reduceBookingContext(
   const result = validateStructuredTurnResult(rawResult, { message, currentDate });
   const original = normalizeConversationContext(currentContext);
   const before = toTypedBookingContext(original);
-  const ageOperations = result.operations.filter((operation) => operation.ages_years?.length);
-  const ageMeta = original.slot_meta?.child_ages_years;
-  if (ageOperations.length && sourceMessageId &&
-      ageMeta?.source === guestAgeClassificationSource &&
-      ageMeta.source_message_id === String(sourceMessageId).slice(0, 80) &&
-      Array.isArray(ageMeta.value) &&
-      JSON.stringify(ageMeta.value?.filter((value) => typeof value === "number")) ===
-        JSON.stringify(original.child_ages_years)) {
-    return { before, operations: [], after: before, context: original,
-      changed: false, applied: false, reason: "duplicate_age_turn" };
-  }
   if (result.ambiguities.length) {
     return {
       before,
@@ -1528,9 +1416,6 @@ export function reduceBookingContext(
 
   let context = { ...original };
   const touchedFields = new Set();
-  const explicitPartyOperations = result.operations.filter((operation) =>
-    ["adult", "child", "infant"].includes(operation.entity) && !operation.ages_years?.length,
-  );
   for (const operation of result.operations) {
     if (operation.entity === "stay") {
       context = applyStayOperation(context, operation);
@@ -1542,7 +1427,6 @@ export function reduceBookingContext(
         "pricing_day_type",
       ].forEach((field) => touchedFields.add(field));
     } else if (["adult", "child", "infant"].includes(operation.entity)) {
-      if (operation.ages_years?.length) continue;
       context = applyPartyOperation(context, operation);
       touchedFields.add(`${operation.entity}_count`);
       touchedFields.add("guest_count");
@@ -1568,17 +1452,6 @@ export function reduceBookingContext(
       );
       touchedFields.add("breakfast_count");
     }
-  }
-
-  if (ageOperations.length) {
-    const classified = applyGuestAgeOperations(context, ageOperations, explicitPartyOperations, message, sourceMessageId);
-    if (!classified) {
-      return { before, operations: [], after: before, context: original,
-        changed: false, applied: false, reason: "age_reference_ambiguous" };
-    }
-    context = classified;
-    ["adult_count", "child_count", "infant_count", "child_ages_years", "guest_count"]
-      .forEach((field) => touchedFields.add(field));
   }
 
   if (result.intents.includes("request_quote")) {
@@ -1608,8 +1481,6 @@ export function reduceBookingContext(
         ...(sourceMessageId ? { source_message_id: sourceMessageId } : {}),
         updated_at: nowIso,
         confidence: result.confidence,
-        ...(field === "child_ages_years" && context.slot_meta?.child_ages_years?.source === guestAgeClassificationSource
-          ? context.slot_meta.child_ages_years : {}),
       };
     }
   }
@@ -1658,7 +1529,7 @@ export function interpretBookingTurnDeterministically({
   dateInfo = {},
 } = {}) {
   const text = compactText(message);
-  const ageResult = collectAgeOperations(text, context);
+  const ageResult = collectAgeOperations(text);
   const partyResult = collectPartyOperations(text, ageResult.spans);
   const petResult = collectPetOperations(text);
   const stayOperation = extractStayOperation(text, {
@@ -1677,10 +1548,6 @@ export function interpretBookingTurnDeterministically({
     operations,
     petResult,
   );
-  if (ageResult.operations.length && !resolveAgeEvidence(normalizeConversationContext(context), ageResult.operations, text)) {
-    ambiguities.push({ code: "missing_reference", evidence: text,
-      question: "請問要更正哪一位小朋友的年齡？" });
-  }
   const intents = [];
   if (operations.some((entry) => ["adult", "child", "infant"].includes(entry.entity))) {
     pushUnique(intents, "update_party");
@@ -1830,7 +1697,7 @@ operation variants；每筆只能使用所屬 variant 列出的 keys：
 - evidence 必須逐字取自 latest_user_message 的連續片段，且要包含 operation 使用的所有數字；需要兩段 evidence 時以「、」連接兩段原文。
 - 不得輸出由日曆或算術推導的欄位：只明示入住日與晚數時，stay operation 僅輸出 check_in + nights，不可自行補 check_out；只有原句明示日期範圍時才輸出 check_out。精確日期已提供時也不可自行補 date_type。例如「2026年12月3日住兩晚」只能輸出 check_in=2026-12-03、nights=2，不能輸出推算的退房日或星期分類。
 - 只提到「再加一個」時不得猜實體。若 current_booking_context.pets 已有 species 與 count，且 individual_weights_kg 數量不足，或 pending_missing_fields 是 pet_weights_kg／任一 dog weight tier，裸體重就是該既有寵物的體重更新，不得回 missing_pet_context；完全沒有上述寵物 context 時才回 missing_pet_context。
-- 年齡未滿 ${bookingGuestRules.childMinAge} 歲歸 infant，${bookingGuestRules.childMinAge} 歲至未滿 ${bookingGuestRules.adultMinAge} 歲歸 child，滿 ${bookingGuestRules.adultMinAge} 歲歸 adult；ages_years 必須保留原句明示年齡。
+- 年齡未滿 4 歲歸 infant，4 歲至未滿 13 歲歸 child，滿 13 歲歸 adult；ages_years 必須保留原句明示年齡。
 - date_type 僅在原句明示時使用：平日為 weekday、週五為 friday、週六日或國定假日為 holiday。
 - 新增狗狗但未提供每隻體重時，將 pet_weights_kg 放入 missing_fields，不可猜體重。
 - 未提及的既有值不輸出 operation；不可把 context 中的數字當成本輪 evidence。

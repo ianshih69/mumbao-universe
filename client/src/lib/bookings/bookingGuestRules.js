@@ -4,9 +4,6 @@ export const bookingGuestRules = {
   minimumRoomCountBelowPackageHeadcount: 3,
   maxAdultCount: 20,
   maxChildCount: 9,
-  childMinAge: 3,
-  adultMinAge: 6,
-  maxFreeInfantCount: 2,
   childFeeUnitPrice: 500,
   extraAdultUnitPrice: 800,
   petDepositAmount: 3000,
@@ -114,16 +111,6 @@ export const bookingGuestRules = {
     },
   },
 };
-
-export function classifyBookingGuestAge(age) {
-  if (!Number.isFinite(age) || age < 0) return null;
-  if (age < bookingGuestRules.childMinAge) return "infant";
-  if (age < bookingGuestRules.adultMinAge) return "child";
-  return "adult";
-}
-
-export const bookingChildPolicyDescription = `未滿${bookingGuestRules.childMinAge}歲不佔床免費，每次最多${bookingGuestRules.maxFreeInfantCount}位；${bookingGuestRules.childMinAge}歲至未滿${bookingGuestRules.adultMinAge}歲不佔床每位每晚${bookingGuestRules.childFeeUnitPrice}元；滿${bookingGuestRules.adultMinAge}歲視同成人。`;
-export const bookingInfantLimitNotice = `未滿${bookingGuestRules.childMinAge}歲不佔床免費，每次最多${bookingGuestRules.maxFreeInfantCount}位；超過${bookingGuestRules.maxFreeInfantCount}位的安排與費用尚待確認，請聯絡館方，暫不提供自動報價。`;
 
 function parseGuestCount(value, fallback = 0) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -238,7 +225,11 @@ export function calculateActualGuestCount(input = {}) {
 }
 
 export function calculateChargeableChildCount(input = {}) {
-  const { children } = normalizeGuestRuleCounts(input);
+  const { adults, children } = normalizeGuestRuleCounts(input);
+  if (children <= 0) return 0;
+  if (adults <= bookingGuestRules.basePackageGuestCount) {
+    return Math.max(0, adults + children - bookingGuestRules.basePackageGuestCount);
+  }
   return children;
 }
 
@@ -336,15 +327,12 @@ export function resolveBookingGuestPlan(input = {}) {
   const extraAdultFeeTotal = extraAdultCount * bookingGuestRules.extraAdultUnitPrice * counts.nights;
   const isAdultCountSupported = counts.adults >= 1 && counts.adults <= bookingGuestRules.maxAdultCount;
   const isChildCountSupported = counts.children <= bookingGuestRules.maxChildCount;
-  const isInfantCountSupported = counts.infants <= bookingGuestRules.maxFreeInfantCount;
   const isActualGuestCountSupported = true;
   const unsupportedReason = !isAdultCountSupported
     ? "adult_count_exceeds_capacity"
     : !isChildCountSupported
       ? "child_count_exceeds_capacity"
-      : !isInfantCountSupported
-        ? "infant_count_requires_confirmation"
-        : "";
+      : "";
 
   return {
     ...counts,
@@ -370,7 +358,6 @@ export function resolveBookingGuestPlan(input = {}) {
     defaultRoomOption,
     isAdultCountSupported,
     isChildCountSupported,
-    isInfantCountSupported,
     isActualGuestCountSupported,
     unsupportedReason,
   };
@@ -398,7 +385,7 @@ export function resolveRoomOptionSelection(guestPlan, roomOptionId = "") {
 
 export function resolvePackageAvailability(input = {}, packageType = "villa_10") {
   const plan = resolveBookingGuestPlan(input);
-  if (!plan.isAdultCountSupported || !plan.isChildCountSupported || !plan.isInfantCountSupported) {
+  if (!plan.isAdultCountSupported || !plan.isChildCountSupported) {
     return { ok: false, reason: plan.unsupportedReason || "unsupported_guest_count", plan };
   }
 

@@ -4,7 +4,7 @@ import {
   calculateBookingQuote,
   calculateBookingQuoteForDayTypes,
 } from "../bookingPricing/index.js";
-import { bookingGuestRules, bookingInfantLimitNotice, resolveBookingPetPlan } from "../../src/lib/bookings/bookingGuestRules.js";
+import { resolveBookingPetPlan } from "../../src/lib/bookings/bookingGuestRules.js";
 import { supabaseRequest as defaultSupabaseRequest } from "../shopShared.js";
 import {
   isDeterministicPricingRequest,
@@ -190,7 +190,7 @@ function mapBookingQuoteToResolution(state, quote, periodType, requestedDayTypes
       status: "resolved",
       amount: 0,
       infant_count: nonNegativeInteger(state.infant_count),
-      free_count_limit: bookingGuestRules.maxFreeInfantCount,
+      free_count_limit: null,
     },
     pet_fee: petWeightsComplete
       ? {
@@ -273,15 +273,18 @@ function formatPeriod(state, pricingResolution) {
 
 function formatGuestSummary(state) {
   const parts = [`${getAdultCount(state)} 位成人`];
-  if (state.child_count) parts.push(`${state.child_count} 位滿 3 歲至未滿 6 歲不佔床兒童`);
-  if (state.infant_count) parts.push(`${state.infant_count} 位未滿 3 歲不佔床幼兒`);
+  if (state.child_count) parts.push(`${state.child_count} 位滿 4 歲至未滿 13 歲不佔床兒童`);
+  if (state.infant_count) parts.push(`${state.infant_count} 位未滿 4 歲不佔床幼兒`);
   return parts.join("、");
 }
 
 function buildChildExplanation(pricingResolution) {
   const child = pricingResolution.child_fee;
   if (!child?.child_count) return "";
-  return `${child.chargeable_child_count} 位不佔床兒童每位每晚 TWD ${child.unit_price}，依住宿晚數與既有連住優惠計算的兒童費為 ${formatMoney(
+  if (child.chargeable_child_count === 0) {
+    return `基本 10 位計價名額已涵蓋這 ${child.child_count} 位兒童，因此沒有另外加收兒童費。`;
+  }
+  return `其中 ${child.chargeable_child_count} 位兒童超出基本 10 位計價名額，兒童費為 ${formatMoney(
     child.amount
   )}。`;
 }
@@ -289,7 +292,7 @@ function buildChildExplanation(pricingResolution) {
 function buildInfantExplanation(pricingResolution) {
   const count = pricingResolution.infant_fee?.infant_count || 0;
   return count
-    ? `${count} 位未滿 3 歲幼兒不佔床免費，每次最多 ${bookingGuestRules.maxFreeInfantCount} 位。`
+    ? `${count} 位未滿 4 歲幼兒不佔床免費，免費名額不設上限；仍須如實填寫並受整體安全容量限制。`
     : "";
 }
 
@@ -807,14 +810,6 @@ export async function buildOfficialPricingRouteOverride(context, routeResult, op
   if (!hasCompletePricingDetails(context)) return null;
 
   const pricingResolution = await buildOfficialPricingResolution(context, options);
-  if (pricingResolution.lodging_price.reason === "infant_count_requires_confirmation") {
-    return buildAddonRoute(routeResult, {
-      answer: bookingInfantLimitNotice,
-      reason: "infant_count_requires_confirmation",
-      answerMode: "collect_info",
-      metadata: buildOfficialPricingMetadata(pricingResolution),
-    });
-  }
   if (pricingResolution.lodging_price.status !== "resolved") return null;
   const hasUnresolvedItems = pricingResolution.unresolved_price_items.length > 0;
   const finalRoute =

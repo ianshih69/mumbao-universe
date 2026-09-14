@@ -322,7 +322,7 @@ describe("AI chat conversation context", () => {
     expect(reply).toContain("2026年9月26日入住");
     expect(reply).toContain("2026年9月27日退房");
     expect(reply).toContain("包棟");
-    expect(reply).toContain("成人與3歲至未滿6歲兒童人數");
+    expect(reply).toContain("成人與4～12歲兒童人數");
     expect(reply).not.toContain("是否攜帶寵物");
     expect(reply).not.toContain("入住日期");
   });
@@ -389,7 +389,7 @@ describe("AI chat conversation context", () => {
     expect(override.answer).toContain("2027年7月27日退房");
     expect(override.answer).toContain("包棟");
     expect(override.answer).toContain("攜帶3隻狗");
-    expect(override.answer).toContain("成人與3歲至未滿6歲兒童各有幾位");
+    expect(override.answer).toContain("成人與4～12歲兒童各有幾位");
     expect(override.answer).toContain("每隻狗狗的體重");
     expect(override.answer).not.toContain("入住日期");
     expect(override.answer).not.toContain("是否攜帶寵物");

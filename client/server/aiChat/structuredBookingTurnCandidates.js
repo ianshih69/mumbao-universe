@@ -1,12 +1,10 @@
 import { z } from "zod";
-import { classifyBookingGuestAge } from "../../src/lib/bookings/bookingGuestRules.js";
 import {
   getConversationContextForStorage,
   normalizeConversationContext,
 } from "./conversationContext.js";
 import {
   compareStructuredAndLegacyContext,
-  guestAgeClassificationSource,
   getStructuredTurnInterpreterMode,
   hasMeaningfulBookingContext,
   interpretBookingTurnDeterministically,
@@ -255,7 +253,11 @@ function countTypeForEntity(entity) {
   return `${entity}_count`;
 }
 
-const ageEntity = classifyBookingGuestAge;
+function ageEntity(age) {
+  if (age < 4) return "infant";
+  if (age < 13) return "child";
+  return "adult";
+}
 
 export function extractBookingTurnSpans(message, { currentDate = "" } = {}) {
   const source = String(message || "");
@@ -614,9 +616,7 @@ function bindingForOperationField(operation, field, spans, currentState) {
       matches = countSpans;
       projection = "sum";
     } else {
-      const ageSpans = operation.ages_years?.length
-        ? selectValueSpans(spans, "age", operation.ages_years)
-        : spans.filter((span) =>
+      const ageSpans = spans.filter((span) =>
         span.normalized_type === "age" &&
         span.entity_hints.includes(operation.entity),
       );
@@ -1332,9 +1332,6 @@ function legacyIntentsFor(plan, selectedCandidates, intentIds) {
 }
 
 function candidateTouchedFields(candidate) {
-  if (candidate.bindings.some((binding) => binding.field === "ages_years")) {
-    return ["adult_count", "child_count", "infant_count", "child_ages_years", "guest_count"];
-  }
   const fields = {
     stay: ["stay_type", "check_in", "check_out", "stay_nights", "pricing_day_type"],
     adult: ["adult_count", "guest_count"],
@@ -1424,9 +1421,6 @@ export function reduceBookingContextFromCandidates(
   context.slot_meta = { ...(context.slot_meta || {}) };
   for (const candidate of selectedCandidates) {
     for (const field of candidateTouchedFields(candidate)) {
-      const ageMeta = field === "child_ages_years" &&
-        context.slot_meta[field]?.source === guestAgeClassificationSource
-        ? context.slot_meta[field] : null;
       context.slot_meta[field] = {
         source: "structured_candidate",
         ...(sourceTurnId
@@ -1440,7 +1434,6 @@ export function reduceBookingContextFromCandidates(
         value: storedSlotValue(context, field),
         evidence_span_ids: [...candidate.evidence_span_ids],
         context_refs: [...candidate.context_refs],
-        ...(ageMeta ? { source: ageMeta.source, value: ageMeta.value } : {}),
       };
     }
   }

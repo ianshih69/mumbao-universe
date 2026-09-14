@@ -101,6 +101,7 @@ export type BookingGuestPlan = {
   defaultRoomOption: BookingRoomOption | null;
   isAdultCountSupported: boolean;
   isChildCountSupported: boolean;
+  isInfantCountSupported: boolean;
   isActualGuestCountSupported: boolean;
   unsupportedReason: string;
 };
@@ -111,6 +112,9 @@ export const bookingGuestRules: {
   minimumRoomCountBelowPackageHeadcount: 3;
   maxAdultCount: 20;
   maxChildCount: 9;
+  childMinAge: 3;
+  adultMinAge: 6;
+  maxFreeInfantCount: 2;
   childFeeUnitPrice: 500;
   extraAdultUnitPrice: 800;
   petDepositAmount: 3000;
@@ -123,6 +127,9 @@ export const bookingGuestRules: {
   roomPlans: Record<number, BookingRoomPlan>;
 };
 
+export function classifyBookingGuestAge(age: number): "infant" | "child" | "adult" | null;
+export const bookingChildPolicyDescription: string;
+export const bookingInfantLimitNotice: string;
 export function normalizeGuestRuleCounts(input?: BookingGuestCountsInput): {
   adults: number;
   children: number;

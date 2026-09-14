@@ -78,7 +78,7 @@ async function runFormalPriceFlow(message) {
 describe("Price Answer Release Gate formal flow", () => {
   it("answers the finalized 8-adult 2-child case through lexical route and turn action", async () => {
     const result = await runFormalPriceFlow(
-      "2026年11月1日，8個大人2個4到12歲小孩，住一晚多少？"
+      "2026年11月1日，8個大人2個3至未滿6歲小孩，住一晚多少？"
     );
 
     expect(result.update.context).toMatchObject({
@@ -95,16 +95,16 @@ describe("Price Answer Release Gate formal flow", () => {
       shouldCallDeepSeek: false,
       knowledgeGap: false,
     });
-    expect(result.finalRoute.answer).toContain("TWD 25,000");
-    expect(result.finalRoute.answer).toContain("基本 10 位計價名額已涵蓋這 2 位兒童");
-    expect(result.finalRoute.answer).toContain("沒有另外加收兒童費");
+    expect(result.finalRoute.answer).toContain("TWD 26,000");
+    expect(result.finalRoute.answer).toContain("2 位不佔床兒童每位每晚 TWD 500");
+    expect(result.finalRoute.answer).toContain("兒童費為 TWD 1,000");
     expect(result.finalRoute.answer).not.toContain("missing_date_type_price");
     expect(result.finalRoute.answer).not.toContain("請提供");
     expect(result.finalRoute.semanticMetadata).toMatchObject({
       pricing_called: true,
       price_calculation_route: "booking_pricing_core",
-      total_price_amount: 25000,
-      child_fee_amount: 0,
+      total_price_amount: 26000,
+      child_fee_amount: 1000,
     });
   });
 
@@ -137,16 +137,16 @@ describe("Price Answer Release Gate formal flow", () => {
   });
 
   it.each([
-    ["包棟多少錢？", ["入住日期或日期類型與住宿晚數", "成人與4～12歲兒童各有幾位"]],
+    ["包棟多少錢？", ["入住日期或日期類型與住宿晚數", "成人與3歲至未滿6歲兒童各有幾位"]],
     ["12人多少？", ["入住日期或日期類型與住宿晚數"]],
-    ["2026年11月1日多少？", ["住宿晚數", "成人與4～12歲兒童各有幾位"]],
+    ["2026年11月1日多少？", ["住宿晚數", "成人與3歲至未滿6歲兒童各有幾位"]],
     ["帶3隻狗多少？", ["每隻狗狗體重", "住宿晚數"]],
     ["暑假週六10人一晚多少？", ["確切入住日期與年份"]],
   ])("asks only for missing data for %s", async (message, expectedFragments) => {
     const { finalRoute } = await runFormalPriceFlow(message);
     expect(finalRoute.route).toBe("faq_collect_info");
     for (const fragment of expectedFragments) expect(finalRoute.answer).toContain(fragment);
-    if (message.startsWith("12人")) expect(finalRoute.answer).not.toContain("成人與4～12歲兒童各有幾位");
+    if (message.startsWith("12人")) expect(finalRoute.answer).not.toContain("成人與3歲至未滿6歲兒童各有幾位");
     if (message.startsWith("2026年")) expect(finalRoute.answer).not.toContain("入住日期或日期類型");
   });
 
@@ -160,9 +160,12 @@ describe("Price Answer Release Gate formal flow", () => {
   });
 
   it("classifies the finalized age boundaries", () => {
-    expect(classifyGuestAgeForPricing({ years: 3, months: 11 })).toBe("infant");
+    expect(classifyGuestAgeForPricing({ years: 2, months: 11 })).toBe("infant");
+    expect(classifyGuestAgeForPricing({ years: 3 })).toBe("child");
     expect(classifyGuestAgeForPricing({ years: 4 })).toBe("child");
-    expect(classifyGuestAgeForPricing({ years: 12 })).toBe("child");
+    expect(classifyGuestAgeForPricing({ years: 5 })).toBe("child");
+    expect(classifyGuestAgeForPricing({ years: 6 })).toBe("adult");
+    expect(classifyGuestAgeForPricing({ years: 12 })).toBe("adult");
     expect(classifyGuestAgeForPricing({ years: 13 })).toBe("adult");
   });
 });

@@ -3,6 +3,7 @@ import {
   normalizeConversationContext,
 } from "./conversationContext.js";
 import {
+  guestAgeClassificationSource,
   reduceBookingContext,
   toTypedBookingContext,
   validateStructuredTurnResult,
@@ -172,7 +173,13 @@ function withOperationProvenance(
       span_bindings: [],
       context_bindings: [],
     };
-    for (const field of touchedFields(operation.entity)) {
+    const fields = operation.ages_years?.length
+      ? ["adult_count", "child_count", "infant_count", "child_ages_years", "guest_count"]
+      : touchedFields(operation.entity);
+    for (const field of fields) {
+      const ageMeta = field === "child_ages_years" &&
+        next.slot_meta[field]?.source === guestAgeClassificationSource
+        ? next.slot_meta[field] : null;
       next.slot_meta[field] = {
         source: "structured_candidate",
         source_message_id: turnId,
@@ -184,6 +191,7 @@ function withOperationProvenance(
         context_refs: binding.context_bindings.filter(
           (ref) => ref !== "quote_scenario.context_version",
         ),
+        ...(ageMeta ? { source: ageMeta.source, value: ageMeta.value } : {}),
       };
     }
   });

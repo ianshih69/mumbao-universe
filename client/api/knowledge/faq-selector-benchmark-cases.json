@@ -2,8 +2,8 @@
   "version": "faq-selector-benchmark-v2-current-catalog",
   "source": {
     "faq_items_path": "client/api/knowledge/faq-items.json",
-    "faq_items_sha256": "f9c523f968fbcf0c7620aa652a47778906bb6642d839e755c930926234a0a875",
-    "selector_catalog_sha256": "56b0239836414c8dc01fc31d29220a6b0b53a045fe535455f7ad2bf07f47356a",
+    "faq_items_sha256": "5d643ab23b40b3cb3294d362dc41ae3b588792cc9e899bec475c2804e68b8fc9",
+    "selector_catalog_sha256": "605d91ffbad2c363e39540fdd6d2ebfda52a013adf23c21895695bd62c34bdda",
     "approved_active_count": 310,
     "legacy_benchmark_version": "faq-selector-benchmark-v1",
     "safety_control_count": 10,

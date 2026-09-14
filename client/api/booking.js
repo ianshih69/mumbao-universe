@@ -14,6 +14,7 @@ import {
 } from "../server/bookingPricing/index.js";
 import {
   bookingGuestRules,
+  bookingInfantLimitNotice,
   resolveBookingGuestPlan,
   resolveBookingPetPlan,
 } from "../src/lib/bookings/bookingGuestRules.js";
@@ -390,6 +391,9 @@ function validateStayDetails(body, settings) {
   }
 
   const guestPlan = resolveBookingGuestPlan({ adults, children, infants });
+  if (!guestPlan.isInfantCountSupported) {
+    throw httpError(400, bookingInfantLimitNotice, "infant_count_requires_confirmation");
+  }
   if (adults > bookingGuestRules.maxAdultCount) {
     throw httpError(400, "成人最多 20 位。", "adult_count_exceeds_capacity");
   }

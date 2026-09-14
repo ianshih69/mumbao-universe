@@ -3,9 +3,9 @@ import {
   breakfastAddonUnitPrice,
   calculateBookingBreakfastFees,
   calculateBookingPetFees,
-  childFeeUnitPrice,
 } from "../bookingPricing/index.js";
 import { normalizeConversationContext } from "./conversationContext.js";
+import { bookingChildPolicyDescription } from "../../src/lib/bookings/bookingGuestRules.js";
 import { loadFaqItems } from "./faqRetrieval.js";
 import { buildOfficialPricingResolution } from "./lodgingPricing.js";
 import { matchSemanticDialogueCapabilities } from "./dialogueCapabilities.js";
@@ -726,9 +726,7 @@ async function handleBreakfastInformation(goalPlan) {
 }
 
 async function handleChildPolicy() {
-  return `成人與滿4歲至未滿13歲兒童共用基本${baseBookingGuestCount}位名額，合計超過基本名額後，超額不佔床兒童每位每晚 ${formatMoney(
-    childFeeUnitPrice
-  )}。未滿4歲不佔床免費且不設免費名額上限；滿13歲按成人計價。`;
+  return bookingChildPolicyDescription;
 }
 
 async function handleLodgingInformation(goalPlan, options) {
@@ -871,7 +869,7 @@ export const dialogueCapabilityRegistry = Object.freeze(
         goal_id: "child_policy_lookup",
         handler: handleChildPolicy,
         authoritative_source:
-          "bookingPricing.childFeeUnitPrice + approved FAQ faq-030",
+          "bookingGuestRules.bookingChildPolicyDescription + approved FAQ faq-030",
         mutates_context: false,
         can_answer_partially: false,
         response_profile: "concise_policy",

@@ -23,6 +23,7 @@ import {
 } from "@/lib/bookings/bookingConstants";
 import {
   bookingGuestRules,
+  bookingInfantLimitNotice,
   formatRoomOptionLabel,
   resolveBookingGuestPlan,
   resolveBookingPetPlan,
@@ -521,6 +522,7 @@ function getGuestLimitUnavailableReason(guestPlan: ReturnType<typeof resolveBook
   if (!guestPlan.isChildCountSupported) {
     return "孩童最多 9 位。";
   }
+  if (!guestPlan.isInfantCountSupported) return bookingInfantLimitNotice;
   return "";
 }
 
@@ -763,7 +765,7 @@ export default function Booking() {
   const guestLimitUnavailableReason = getGuestLimitUnavailableReason(guestPlan);
   const capacityUnavailableReason = guestLimitUnavailableReason;
   const canShowOrderSummary = canShowStayOptions && !capacityUnavailableReason;
-  const guestCountExceedsLimit = !guestPlan.isAdultCountSupported || !guestPlan.isChildCountSupported;
+  const guestCountExceedsLimit = !guestPlan.isAdultCountSupported || !guestPlan.isChildCountSupported || !guestPlan.isInfantCountSupported;
   const adultIncrementDisabled = form.adults >= MAX_BOOKING_ADULTS;
   const childIncrementDisabled = form.children >= MAX_BOOKING_CHILDREN;
   const infantIncrementDisabled = false;
@@ -2203,7 +2205,7 @@ export default function Booking() {
                   <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-3 py-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-stone-800">成人</p>
-                      <p className="mt-0.5 text-xs text-stone-500">12 歲以上</p>
+                      <p className="mt-0.5 text-xs text-stone-500">滿 {bookingGuestRules.adultMinAge} 歲以上</p>
                     </div>
                     <div className="grid w-[136px] max-w-full grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-2">
                       <button
@@ -2231,7 +2233,7 @@ export default function Booking() {
                   <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-3 py-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-stone-800">孩童</p>
-                      <p className="mt-0.5 text-xs text-stone-500">4～11 歲・不佔床</p>
+                      <p className="mt-0.5 text-xs text-stone-500">{bookingGuestRules.childMinAge} 歲至未滿 {bookingGuestRules.adultMinAge} 歲・不佔床</p>
                     </div>
                     <div className="grid w-[136px] max-w-full grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-2">
                       <button
@@ -2259,7 +2261,7 @@ export default function Booking() {
                   <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[12px] border border-[#eadfce] bg-[#fffdf9] px-3 py-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-stone-800">嬰幼兒</p>
-                      <p className="mt-0.5 text-xs text-stone-500">0～3 歲・不佔床免費</p>
+                      <p className="mt-0.5 text-xs text-stone-500">未滿 {bookingGuestRules.childMinAge} 歲・不佔床免費，每次最多 {bookingGuestRules.maxFreeInfantCount} 位</p>
                     </div>
                     <div className="grid w-[136px] max-w-full grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-2">
                       <button
@@ -2342,7 +2344,7 @@ export default function Booking() {
                   )}
                 </div>
                 <p className="mt-3 rounded-[10px] border border-[#eadfce] bg-[#fffaf3] px-3 py-2 text-xs leading-5 text-stone-500">
-                  成人最多 {MAX_BOOKING_ADULTS} 位，孩童最多 {MAX_BOOKING_CHILDREN} 位；嬰幼兒不佔床免費。超過包棟內含人數後，不佔床孩童每位每晚 NT$500。
+                  成人最多 {MAX_BOOKING_ADULTS} 位，孩童最多 {MAX_BOOKING_CHILDREN} 位；未滿 {bookingGuestRules.childMinAge} 歲不佔床免費，每次最多 {bookingGuestRules.maxFreeInfantCount} 位，超過請聯絡館方確認。{bookingGuestRules.childMinAge} 歲至未滿 {bookingGuestRules.adultMinAge} 歲不佔床孩童每位每晚 NT${bookingGuestRules.childFeeUnitPrice}，滿 {bookingGuestRules.adultMinAge} 歲視同成人。
                 </p>
               </section>
             )}

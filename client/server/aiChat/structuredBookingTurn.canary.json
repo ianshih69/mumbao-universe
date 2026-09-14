@@ -24,8 +24,8 @@
   {"id":"child-add-22","message":"加兩個小孩","context":"base","entities":["child"],"child_count":2},
   {"id":"child-set-23","message":"三位兒童","context":"empty","entities":["child"],"child_count":3},
   {"id":"infant-set-24","message":"一位嬰幼兒","context":"empty","entities":["infant"],"infant_count":1},
-  {"id":"child-ages-25","message":"一位4歲、一位12歲","context":"base","entities":["child"],"child_count":2},
-  {"id":"infant-age-26","message":"一個3歲幼兒","context":"base","entities":["infant"],"infant_count":1},
+  {"id":"child-ages-25","message":"一位4歲、一位12歲","context":"base","entities":["child","adult"],"child_count":1,"adult_count":11},
+  {"id":"infant-age-26","message":"一個3歲幼兒","context":"base","entities":["child"],"child_count":1,"infant_count":0},
   {"id":"adult-age-27","message":"小朋友剛滿13歲","context":"empty","entities":["adult"],"adult_count":1},
   {"id":"party-mixed-28","message":"8位成人加2位兒童","context":"empty","entities":["adult","child"],"adult_count":8,"child_count":2},
 
@@ -55,5 +55,5 @@
   {"id":"mixed-availability-49","message":"2026年11月1日10位成人住一晚多少，還有房嗎","context":"empty","intents":["request_quote","availability_request"],"entities":["adult","stay"]},
   {"id":"quote-complete-50","message":"2026年11月1日，10位成人，加1隻22公斤狗狗，住一晚多少","context":"empty","intents":["request_quote"],"entities":["adult","pet","stay"],"adult_count":10,"pet_count":1},
   {"id":"quote-order-51","message":"一隻22kg狗加10成人，2026年11月1日住一晚多少","context":"empty","intents":["request_quote"],"entities":["pet","adult","stay"],"adult_count":10,"pet_count":1},
-  {"id":"mixed-infant-52","message":"10位成人、一個3歲幼兒，2026年11月1日住一晚多少","context":"empty","intents":["request_quote"],"entities":["adult","infant","stay"],"adult_count":10,"infant_count":1}
+  {"id":"mixed-infant-52","message":"10位成人、一個3歲幼兒，2026年11月1日住一晚多少","context":"empty","intents":["request_quote"],"entities":["adult","child","stay"],"adult_count":10,"child_count":1}
 ]

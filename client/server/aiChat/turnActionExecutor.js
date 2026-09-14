@@ -41,7 +41,7 @@ const pricingFieldLabels = {
   guest_count: "共有幾位入住",
   adult_count: "大人人數",
   child_count: "小孩人數",
-  infant_count: "未滿4歲幼兒人數",
+  infant_count: "未滿3歲幼兒人數",
   stay_nights: "住宿晚數",
   pricing_day_type: "日期類型",
   requires_exact_date: "確切入住日期",
@@ -178,7 +178,7 @@ function buildConciseMissingFieldsQuestion(missingFields) {
   }
   if (missing.includes("stay_type")) labels.push("想包棟或訂單間");
   if (missing.includes("guest_count")) {
-    labels.push("成人與4～12歲兒童各有幾位");
+    labels.push("成人與3歲至未滿6歲兒童各有幾位");
   }
   if (missing.includes("dog_weights")) labels.push("每隻狗狗體重");
   return labels.length ? `請問${labels.join("、")}？` : "";

@@ -389,7 +389,7 @@ describe("turn action executor", () => {
     });
 
     expect(result.route).toBe("faq_collect_info");
-    expect(result.answer).toBe("請問想包棟或訂單間、成人與4～12歲兒童各有幾位？");
+    expect(result.answer).toBe("請問想包棟或訂單間、成人與3歲至未滿6歲兒童各有幾位？");
     expect(result.answer).not.toContain("NT$37,500");
     expect(result.semanticMetadata.action_executor_result).toBe(
       "update_quote_without_pricing_session"
@@ -1065,7 +1065,7 @@ describe("turn action executor", () => {
     });
 
     expect(modified.route).toBe("faq_collect_info");
-    expect(modified.answer).toBe("請問成人與4～12歲兒童各有幾位？");
+    expect(modified.answer).toBe("請問成人與3歲至未滿6歲兒童各有幾位？");
     expect(modified.semanticMetadata.resolved_context_summary).toContain(
       "check_in:2026-08-06"
     );

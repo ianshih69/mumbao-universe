@@ -1,5 +1,6 @@
 import { isDeterministicPricingRequest } from "./pricingIntent.js";
 import { normalizeEntityReferences } from "./typedEntityReferences.js";
+import { classifyBookingGuestAge } from "../../src/lib/bookings/bookingGuestRules.js";
 
 const contextFields = [
   "active_intent",
@@ -402,10 +403,7 @@ export function classifyGuestAgeForPricing({ years, months = 0 } = {}) {
   if (!Number.isInteger(wholeYears) || wholeYears < 0) return null;
   if (!Number.isInteger(extraMonths) || extraMonths < 0 || extraMonths > 11) return null;
 
-  const ageInMonths = wholeYears * 12 + extraMonths;
-  if (ageInMonths < 4 * 12) return "infant";
-  if (ageInMonths < 13 * 12) return "child";
-  return "adult";
+  return classifyBookingGuestAge(wholeYears + extraMonths / 12);
 }
 
 function extractDogWeightCounts(message) {
@@ -452,12 +450,12 @@ function extractCounts(message) {
   const adultCount = firstNumber(new RegExp(`(${numericTokenPattern})(?:位|個)?(?:大人|成人)`), compact);
   const childCount = firstNumber(
     new RegExp(
-      `(${numericTokenPattern})(?:位|個)?(?:(?:滿?4(?:歲)?(?:到|至|~|～|-)12歲)|(?:4(?:到|至|~|～|-)12歲))?(?:不佔床)?(?:小孩|兒童|孩童)`
+      `(${numericTokenPattern})(?:位|個)?(?:滿?3(?:歲)?(?:到|至|~|～|-)(?:未滿6|5)歲)?(?:不佔床)?(?:小孩|兒童|孩童)`
     ),
     compact
   );
   const infantCount = firstNumber(
-    new RegExp(`(${numericTokenPattern})(?:位|個)?(?:未滿4歲)?(?:嬰兒|嬰幼兒|幼兒)`),
+    new RegExp(`(${numericTokenPattern})(?:位|個)?(?:未滿3歲)?(?:嬰兒|嬰幼兒|幼兒)`),
     compact
   );
   const guestCount = firstNumber(new RegExp(`(${numericTokenPattern})(?:位|個)?(?:人|位|入住|住客)`), compact);
@@ -1180,7 +1178,7 @@ export function buildConversationRetrievalText(message, context) {
   if (state.guest_count !== null) segments.push(`${state.guest_count}人`);
   if (state.adult_count !== null) segments.push(`${state.adult_count}位大人`);
   if (state.child_count !== null) segments.push(`${state.child_count}位小孩`);
-  if (state.infant_count !== null) segments.push(`${state.infant_count}位未滿4歲幼兒`);
+  if (state.infant_count !== null) segments.push(`${state.infant_count}位未滿3歲幼兒`);
   if (state.room_count !== null) segments.push(`${state.room_count}間房`);
   if (state.pet_count !== null) {
     if (state.pet_count === 0) {
@@ -1247,8 +1245,8 @@ function buildStaySummary(context) {
   if (state.stay_type === "room") parts.push("單間");
   if (state.guest_count !== null) parts.push(`${state.guest_count}位入住`);
   if (state.adult_count !== null) parts.push(`${state.adult_count}位成人`);
-  if (state.child_count !== null) parts.push(`${state.child_count}位4～12歲不佔床兒童`);
-  if (state.infant_count !== null) parts.push(`${state.infant_count}位未滿4歲幼兒`);
+  if (state.child_count !== null) parts.push(`${state.child_count}位3歲至未滿6歲不佔床兒童`);
+  if (state.infant_count !== null) parts.push(`${state.infant_count}位未滿3歲幼兒`);
   if (state.pet_count !== null) {
     if (state.pet_count === 0) {
       parts.push("不攜帶寵物");
@@ -1280,7 +1278,7 @@ export function buildContextualKnowledgeGapReply(context) {
     missing.push("住宿晚數");
   }
   if (state.guest_count === null && state.adult_count === null) {
-    missing.push("成人與4～12歲兒童人數");
+    missing.push("成人與3歲至未滿6歲兒童人數");
   }
   const dogWeightCount =
     (state.dog_under_10kg_count || 0) +
@@ -1337,7 +1335,7 @@ function missingFieldsToQuestion(missing) {
   if (missing.includes("stay_period")) labels.push("入住日期或日期類型與晚數");
   if (missing.includes("exact_date")) labels.push("確切入住日期與年份");
   if (missing.includes("stay_nights")) labels.push("住宿晚數");
-  if (missing.includes("guest_count")) labels.push("成人與4～12歲兒童各有幾位");
+  if (missing.includes("guest_count")) labels.push("成人與3歲至未滿6歲兒童各有幾位");
   if (missing.includes("dog_weights")) labels.push("每隻狗狗的體重");
   return labels;
 }

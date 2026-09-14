@@ -202,12 +202,13 @@ export default function NewsDetail() {
   }
 
   const imageFirst = news.detailLayout === "image-first";
+  const unframedCover = news.slug === "mumbao-ip-copyright";
   const cover = (
-    <div className={`mx-auto flex aspect-[4/3] w-full max-w-[900px] items-center justify-center overflow-hidden rounded-[14px] bg-[#fbf7f1] p-2 shadow-[0_16px_44px_rgba(90,70,50,0.08)] ${imageFirst ? "" : "mt-14 md:mt-16"}`}>
+    <div className={`mx-auto flex aspect-[4/3] w-full max-w-[900px] items-center justify-center overflow-hidden ${unframedCover ? "" : "rounded-[14px] bg-[#fbf7f1] p-2 shadow-[0_16px_44px_rgba(90,70,50,0.08)]"} ${imageFirst ? "" : "mt-14 md:mt-16"}`}>
       <img
         src={news.image}
         alt={news.alt}
-        className="block h-full w-full rounded-[10px] object-contain"
+        className={`block h-full w-full object-contain ${unframedCover ? "rounded-[4px]" : "rounded-[10px]"}`}
       />
     </div>
   );

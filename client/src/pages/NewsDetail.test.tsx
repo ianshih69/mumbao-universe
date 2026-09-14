@@ -130,7 +130,7 @@ describe("News original IP article", () => {
     expect(newsItems.filter((item) => item.slug === ipSlug)).toHaveLength(1);
   });
 
-  it("uses the supplied JPEG without cropping or adding article-specific layout", () => {
+  it("presents the supplied poster without an outer card while retaining its dimensions", () => {
     expect(ipArticle.image).toBe("/images/News/News-6.JPG");
     const image = readFileSync(new URL("../../public/images/News/News-6.JPG", import.meta.url));
     expect(Array.from(image.subarray(0, 3))).toEqual([0xff, 0xd8, 0xff]);
@@ -138,11 +138,29 @@ describe("News original IP article", () => {
     expect(html).toContain(`src="${ipArticle.image}"`);
     expect(html).toContain("object-contain");
     expect(html).toContain("aspect-[4/3]");
+    expect(html).toContain("max-w-[900px]");
+    expect(html).toContain("rounded-[4px]");
+    expect(html).not.toContain("bg-[#fbf7f1]");
+    expect(html).not.toContain("rounded-[14px]");
+    expect(html).not.toContain("shadow-[0_16px_44px_rgba(90,70,50,0.08)]");
+    expect(html).not.toMatch(/(?:\s|\")p-2(?:\s|\")/);
     expect(html).toContain("max-w-2xl");
     expect(html).toContain("space-y-6");
     expect(html).toContain("md:leading-[2.15]");
     expect(html.indexOf("<img")).toBeLessThan(html.indexOf("<h1"));
   });
+
+  it.each(newsItems.filter((item) => item.id !== 6))(
+    "retains the original cover framing for $slug",
+    (item) => {
+      const html = renderDetail(item.slug);
+      expect(html).toContain("bg-[#fbf7f1]");
+      expect(html).toContain("rounded-[14px]");
+      expect(html).toContain("rounded-[10px]");
+      expect(html).toContain("shadow-[0_16px_44px_rgba(90,70,50,0.08)]");
+      expect(html).toMatch(/(?:\s|\")p-2(?:\s|\")/);
+    },
+  );
 
   it("renders each paragraph exactly once, in order, with a return link", () => {
     const html = renderDetail(ipSlug);

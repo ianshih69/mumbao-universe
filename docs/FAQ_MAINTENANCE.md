@@ -13,7 +13,6 @@
 - `client/api/knowledge/faq-items.json`
 - `client/api/knowledge/faq-regression-cases.json`
 - `client/server/aiChat/*.js`
-- `guesthouse-rules.md` 裡的正式價格、時間、費用與規定
 
 `faq-items.json` 是由工具從 `faq-master.csv` 產生的 runtime 檔案，不要直接改。
 
@@ -144,9 +143,14 @@ npm run faq:audit
 
 一次跑 validate、JSON dry-run 與 regression。
 
-## guesthouse-rules.md 的角色
+## 正式來源與維護邊界
 
-`guesthouse-rules.md` 只放共同規則、角色語氣與整理中的背景。正式會被慢寶回答的價格、時間、費用、設備與禁止事項，仍應整理進 `faq-master.csv`，再由工具產生 `faq-items.json`。
+- 唯一人工維護的 FAQ Source of Truth：`client/api/knowledge/faq-master.csv`。
+- Runtime generated artifact：`client/api/knowledge/faq-items.json`。只能透過正式 build script `client/scripts/faq/buildFaqItems.mjs` 由 CSV 產生，禁止人工編輯。
+- `faq-regression-cases.json` 與 `faq-selector-benchmark-cases.json` 都是測試資料，不是住宿知識 Source of Truth。
+- `guesthouse-rules.md` 已退役，不再維護，也不得再建立第二份住宿規則知識庫。
+- AI 身分、品牌角色、回答風格等行為規則，由 `client/server/aiChat/message.js` 中既有的 system prompt 管理。
+- 實際房價與正式報價仍由 Supabase pricing tables 與 `client/server/bookingPricing` 負責；不得把動態價格搬進 CSV 當 pricing engine。
 
 ## Git 操作
 

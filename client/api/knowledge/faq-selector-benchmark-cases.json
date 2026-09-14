@@ -2,11 +2,11 @@
   "version": "faq-selector-benchmark-v2-current-catalog",
   "source": {
     "faq_items_path": "client/api/knowledge/faq-items.json",
-    "faq_items_sha256": "f9c523f968fbcf0c7620aa652a47778906bb6642d839e755c930926234a0a875",
-    "selector_catalog_sha256": "56b0239836414c8dc01fc31d29220a6b0b53a045fe535455f7ad2bf07f47356a",
-    "approved_active_count": 310,
+    "faq_items_sha256": "817df588dbfe9c05c078605c57b96e8a9deef835be5eb9b137237a5eeb7700cc",
+    "selector_catalog_sha256": "d137c5dcc131e70c91ba96d51320078b95fa979934066a60f9809329c5a9684e",
+    "approved_active_count": 314,
     "legacy_benchmark_version": "faq-selector-benchmark-v1",
-    "safety_control_count": 10,
+    "safety_control_count": 14,
     "legacy_total_cases": 590,
     "legacy_valid_positive_inputs_preserved": 215,
     "legacy_mapping_counts": {
@@ -14463,6 +14463,186 @@
         "faq-363"
       ],
       "query": "可以玩水嗎"
+    },
+    {
+      "case_id": "generated-0962-faq-488",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-488"
+      ],
+      "query": "麻將房可以飲食嗎？"
+    },
+    {
+      "case_id": "generated-0963-faq-488",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-488"
+      ],
+      "query": "請問麻將房可以飲食嗎？"
+    },
+    {
+      "case_id": "generated-0964-faq-488",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-488"
+      ],
+      "query": "麻將房可以喝飲料嗎"
+    },
+    {
+      "case_id": "generated-0965-faq-488",
+      "suite": "positive",
+      "type": "alias",
+      "expected_faq_ids": [
+        "faq-488"
+      ],
+      "query": "麻將房可以吃東西嗎"
+    },
+    {
+      "case_id": "generated-0966-faq-488",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-488"
+      ],
+      "query": "我想了解麻將房可以飲食嗎"
+    },
+    {
+      "case_id": "generated-0967-faq-489",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-489"
+      ],
+      "query": "有近紅外線寵物保養毯嗎？"
+    },
+    {
+      "case_id": "generated-0968-faq-489",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-489"
+      ],
+      "query": "請問有近紅外線寵物保養毯嗎？"
+    },
+    {
+      "case_id": "generated-0969-faq-489",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-489"
+      ],
+      "query": "有寵物保養毯嗎"
+    },
+    {
+      "case_id": "generated-0970-faq-489",
+      "suite": "positive",
+      "type": "alias",
+      "expected_faq_ids": [
+        "faq-489"
+      ],
+      "query": "可以租近紅外線寵物保養毯嗎"
+    },
+    {
+      "case_id": "generated-0971-faq-489",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-489"
+      ],
+      "query": "我想了解有近紅外線寵物保養毯嗎"
+    },
+    {
+      "case_id": "generated-0972-faq-490",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-490"
+      ],
+      "query": "可以砸蛋糕或砸水球嗎？"
+    },
+    {
+      "case_id": "generated-0973-faq-490",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-490"
+      ],
+      "query": "請問可以砸蛋糕或砸水球嗎？"
+    },
+    {
+      "case_id": "generated-0974-faq-490",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-490"
+      ],
+      "query": "生日可以砸蛋糕嗎"
+    },
+    {
+      "case_id": "generated-0975-faq-490",
+      "suite": "positive",
+      "type": "alias",
+      "expected_faq_ids": [
+        "faq-490"
+      ],
+      "query": "可以砸蛋糕嗎"
+    },
+    {
+      "case_id": "generated-0976-faq-490",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-490"
+      ],
+      "query": "我想了解可以砸蛋糕或砸水球嗎"
+    },
+    {
+      "case_id": "generated-0977-faq-491",
+      "suite": "positive",
+      "type": "canonical",
+      "expected_faq_ids": [
+        "faq-491"
+      ],
+      "query": "住宿期間需要節約用水用電嗎？"
+    },
+    {
+      "case_id": "generated-0978-faq-491",
+      "suite": "positive",
+      "type": "polite",
+      "expected_faq_ids": [
+        "faq-491"
+      ],
+      "query": "請問住宿期間需要節約用水用電嗎？"
+    },
+    {
+      "case_id": "generated-0979-faq-491",
+      "suite": "positive",
+      "type": "short",
+      "expected_faq_ids": [
+        "faq-491"
+      ],
+      "query": "需要節約用電嗎"
+    },
+    {
+      "case_id": "generated-0980-faq-491",
+      "suite": "positive",
+      "type": "alias",
+      "expected_faq_ids": [
+        "faq-491"
+      ],
+      "query": "需要節約用水嗎"
+    },
+    {
+      "case_id": "generated-0981-faq-491",
+      "suite": "positive",
+      "type": "paraphrase",
+      "expected_faq_ids": [
+        "faq-491"
+      ],
+      "query": "我想了解住宿期間需要節約用水用電嗎"
     }
   ],
   "negative": [
@@ -14732,6 +14912,46 @@
       "type": "reconciliation_control",
       "expected_faq_ids": [],
       "query": "一般包裹可以先寄到民宿嗎？",
+      "safety_critical": true
+    },
+    {
+      "case_id": "reconcile-new-faq-mahjong-equipment",
+      "suite": "positive",
+      "type": "reconciliation_control",
+      "expected_faq_ids": [
+        "faq-331"
+      ],
+      "query": "有麻將桌嗎？",
+      "safety_critical": true
+    },
+    {
+      "case_id": "reconcile-new-faq-pet-supplies",
+      "suite": "positive",
+      "type": "reconciliation_control",
+      "expected_faq_ids": [
+        "faq-237"
+      ],
+      "query": "有寵物用品嗎？",
+      "safety_critical": true
+    },
+    {
+      "case_id": "reconcile-new-faq-birthday-party",
+      "suite": "positive",
+      "type": "reconciliation_control",
+      "expected_faq_ids": [
+        "faq-338"
+      ],
+      "query": "可以辦生日派對嗎？",
+      "safety_critical": true
+    },
+    {
+      "case_id": "reconcile-new-faq-personal-appliances",
+      "suite": "positive",
+      "type": "reconciliation_control",
+      "expected_faq_ids": [
+        "faq-169"
+      ],
+      "query": "可以帶自己的電器嗎？",
       "safety_critical": true
     }
   ],

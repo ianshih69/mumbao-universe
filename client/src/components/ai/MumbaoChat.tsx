@@ -3743,11 +3743,11 @@ export function MumbaoChat({
               )}
             >
               {!isUserMessage && (
-                <div className="mr-2 -mt-0.5 flex size-9 flex-none items-center justify-center overflow-hidden rounded-full border border-white/90 bg-[#fff4e4] shadow-[0_6px_14px_rgba(111,88,71,0.12)] sm:size-10">
+                <div className="mr-2 -mt-0.5 flex size-11 flex-none items-center justify-center overflow-hidden rounded-full border border-white/90 bg-[#fff4e4] shadow-[0_6px_14px_rgba(111,88,71,0.12)] sm:size-12">
                   <img
-                    src="/images/stand.png"
+                    src="/images/chat-avatar-head.png"
                     alt=""
-                    className="h-full w-full object-cover object-top"
+                    className="h-full w-full object-contain object-center"
                     draggable={false}
                   />
                 </div>
@@ -3818,11 +3818,11 @@ export function MumbaoChat({
 
         {isLoading && !isHumanTakeoverMode && (
           <div className="flex w-full justify-start">
-            <div className="mr-2 -mt-0.5 flex size-9 flex-none items-center justify-center overflow-hidden rounded-full border border-white/90 bg-[#fff4e4] shadow-[0_6px_14px_rgba(111,88,71,0.12)] sm:size-10">
+            <div className="mr-2 -mt-0.5 flex size-11 flex-none items-center justify-center overflow-hidden rounded-full border border-white/90 bg-[#fff4e4] shadow-[0_6px_14px_rgba(111,88,71,0.12)] sm:size-12">
               <img
-                src="/images/stand.png"
+                src="/images/chat-avatar-head.png"
                 alt=""
-                className="h-full w-full object-cover object-top"
+                className="h-full w-full object-contain object-center"
                 draggable={false}
               />
             </div>

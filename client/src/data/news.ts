@@ -15,10 +15,71 @@ export type NewsItem = {
   highlights?: {
     title: string;
     items: string[];
+    layout?: "grid";
+  };
+  postContent?: string[];
+  infoLines?: string[];
+  notice?: string;
+  contact?: {
+    text: string;
+    label: string;
+    href: string;
   };
 };
 
 export const newsItems: NewsItem[] = [
+  {
+    id: 7,
+    slug: "private-event-and-production-venue",
+    category: "News",
+    date: "2026.09.15",
+    title: "慢慢蒔光，不只是一間民宿",
+    excerpt:
+      "一座可以過夜的當代藝術館，也能成為求婚、抓周、婚禮儀式、品牌攝影、商務會議與影像創作等重要時刻的專屬場景。",
+    detailTitle: "一座可以過夜的當代藝術館，也可以成為每個重要時刻的專屬場景。✨",
+    content: [
+      "慢慢蒔光每日僅接待一組旅客，館內融合原創慢寶宇宙、十二星座主題空間與奶油中古美學。從私人旅行、人生紀念，到品牌創作與商務交流，都能在這裡擁有完整而不受打擾的獨立空間。",
+    ],
+    image: "/images/News/News-7.jpg",
+    alt: "慢慢蒔光當代藝術旅宿與多元包棟包場場景",
+    detailLayout: "image-first",
+    seoTitle: "慢慢蒔光，不只是一間民宿｜宜蘭包棟・包場・攝影場地｜STime Villa",
+    seoDescription:
+      "慢慢蒔光是一座可以過夜的當代藝術館，提供宜蘭包棟、求婚、抓周、迎娶、商務會議、品牌攝影、MV 與微電影拍攝等多元包場需求，每日僅接待一組旅客。",
+    highlights: {
+      title: "適合多種包棟與包場需求：",
+      layout: "grid",
+      items: [
+        "💍 浪漫求婚",
+        "👭 閨蜜同遊",
+        "🥂 婚前單身派對",
+        "👶 寶寶抓周",
+        "🩵🩷 寶寶性別揭曉派對",
+        "🎎 迎娶與婚禮儀式",
+        "👨‍👩‍👧‍👦 家族聚會",
+        "🎉 公司尾牙與團隊活動",
+        "💼 包棟商務會議",
+        "📷 人像、商品及品牌形象攝影",
+        "🎬 MV、廣告與微電影拍攝",
+      ],
+    },
+    postContent: [
+      "不論是與重要的人留下回憶，還是為作品尋找一個與眾不同的場景，都能包下整座慢寶宇宙，讓這裡只屬於你們。",
+    ],
+    infoLines: [
+      "📍慢慢蒔光 STime Villa",
+      "宜蘭員山｜沉浸式星座藝術包棟",
+      "每日僅接待一組旅客",
+      "2026.11.01 試營運",
+    ],
+    notice:
+      "活動包場及商業拍攝採預約制，請事先提供活動內容、人數、時間與佈置需求，由館方確認後另行報價。禁止破壞性佈置、膠帶黏貼牆面、危險物品及違法行為，並請遵守館內音量與使用規範。",
+    contact: {
+      text: "歡迎加入官方 LINE 洽詢：",
+      label: "@417rqiuu",
+      href: "https://lin.ee/u3JpTa6",
+    },
+  },
   {
     id: 6,
     slug: "mumbao-ip-copyright",

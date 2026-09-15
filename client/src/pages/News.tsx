@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useSearch } from "wouter";
 import { ArrowRight } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -68,8 +68,8 @@ function getNewsTimeValue(date: string) {
   return year * 100 + month;
 }
 
-function getCurrentPage(pageCount: number, location: string) {
-  const [, query = ""] = location.split("?");
+function getCurrentPage(pageCount: number, searchValue: string) {
+  const query = searchValue.startsWith("?") ? searchValue.slice(1) : searchValue;
   const search = new URLSearchParams(query);
   const page = Number.parseInt(search.get("page") || "1", 10);
   const safePage = Number.isFinite(page) ? page : 1;
@@ -82,7 +82,7 @@ function getNewsPageHref(page: number) {
 }
 
 export default function NewsPage() {
-  const [location] = useLocation();
+  const search = useSearch();
 
   useEffect(() => {
     document.title = newsSeoTitle;
@@ -107,7 +107,7 @@ export default function NewsPage() {
     })
     .map(({ item }) => item);
   const pageCount = Math.max(1, Math.ceil(sortedNewsItems.length / newsItemsPerPage));
-  const currentPage = getCurrentPage(pageCount, location);
+  const currentPage = getCurrentPage(pageCount, search);
   const pageStart = (currentPage - 1) * newsItemsPerPage;
   const paginatedNewsItems = sortedNewsItems.slice(pageStart, pageStart + newsItemsPerPage);
 

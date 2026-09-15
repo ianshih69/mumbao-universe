@@ -9,11 +9,16 @@ const siteOrigin = "https://www.mumbao.tw";
 const noindexNewsSlugs = new Set(["stime-villa-summer-preview-preparation"]);
 const newsArticleJsonLdId = "news-article-json-ld";
 const newsArticleSlugs = new Set([
+  "private-event-and-production-venue",
   "mumbao-ip-copyright",
   "mumbao-line-stickers-coming-soon",
   "mumbao-goods-coming-soon",
   "stime-villa-website-updates",
   "mumbao-universe-starry-fashion-exhibition-2026",
+]);
+const unframedNewsSlugs = new Set([
+  "mumbao-ip-copyright",
+  "private-event-and-production-venue",
 ]);
 
 function setMetaContent(selector: string, content: string) {
@@ -202,7 +207,7 @@ export default function NewsDetail() {
   }
 
   const imageFirst = news.detailLayout === "image-first";
-  const unframedCover = news.slug === "mumbao-ip-copyright";
+  const unframedCover = unframedNewsSlugs.has(news.slug);
   const cover = (
     <div className={`mx-auto flex aspect-[4/3] w-full max-w-[900px] items-center justify-center overflow-hidden ${unframedCover ? "" : "rounded-[14px] bg-[#fbf7f1] p-2 shadow-[0_16px_44px_rgba(90,70,50,0.08)]"} ${imageFirst ? "" : "mt-14 md:mt-16"}`}>
       <img
@@ -256,12 +261,48 @@ export default function NewsDetail() {
                 <h2 id="news-highlights" className="text-xl font-light leading-relaxed text-[#3d332b] md:text-2xl">
                   {news.highlights.title}
                 </h2>
-                <ul className="mt-5 list-disc space-y-4 pl-5 text-base leading-[2.05] text-[#75685d] marker:text-[#c78f9e] md:mt-6 md:text-lg md:leading-[2.15]">
+                <ul className={news.highlights.layout === "grid"
+                  ? "mt-6 grid list-none gap-x-10 gap-y-4 text-base leading-[1.9] text-[#75685d] md:grid-cols-2 md:text-lg md:leading-[2]"
+                  : "mt-5 list-disc space-y-4 pl-5 text-base leading-[2.05] text-[#75685d] marker:text-[#c78f9e] md:mt-6 md:text-lg md:leading-[2.15]"}>
                   {news.highlights.items.map((item) => (
-                    <li key={item} className="pl-1">{item}</li>
+                    <li key={item} className={news.highlights?.layout === "grid" ? "min-w-0" : "pl-1"}>{item}</li>
                   ))}
                 </ul>
               </section>
+            )}
+            {news.postContent && (
+              <div className="space-y-6 text-base leading-[2.05] text-[#75685d] md:text-lg md:leading-[2.15]">
+                {news.postContent.map((paragraph) => (
+                  <p key={paragraph}>{paragraph}</p>
+                ))}
+              </div>
+            )}
+            {news.infoLines && (
+              <section aria-label="場地資訊" className="border-y border-[#ded1c1] py-6 md:py-7">
+                <div className="space-y-2 text-base leading-relaxed text-[#75685d] md:text-lg">
+                  {news.infoLines.map((line, index) => (
+                    <p key={line} className={index === 0 ? "font-medium text-[#a57652]" : undefined}>{line}</p>
+                  ))}
+                </div>
+              </section>
+            )}
+            {news.notice && (
+              <p className="border-l border-[#c78f9e] pl-5 text-[15px] leading-[2] text-[#75685d] md:pl-6 md:text-base">
+                {news.notice}
+              </p>
+            )}
+            {news.contact && (
+              <p className="text-base leading-relaxed text-[#75685d] md:text-lg">
+                {news.contact.text}
+                <a
+                  href={news.contact.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-[#a57652] transition hover:text-[#c58a54]"
+                >
+                  {news.contact.label}
+                </a>
+              </p>
             )}
             <Link
               href="/news"

@@ -23,7 +23,7 @@ describe("News exhibition article", () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
   it("adds exactly one article with unique IDs and slugs", () => {
-    expect(newsItems).toHaveLength(6);
+    expect(newsItems).toHaveLength(7);
     expect(newsItems.filter((item) => item.slug === slug)).toHaveLength(1);
     expect(new Set(newsItems.map((item) => item.id)).size).toBe(newsItems.length);
     expect(new Set(newsItems.map((item) => item.slug)).size).toBe(newsItems.length);
@@ -150,7 +150,7 @@ describe("News original IP article", () => {
     expect(html.indexOf("<img")).toBeLessThan(html.indexOf("<h1"));
   });
 
-  it.each(newsItems.filter((item) => item.id !== 6))(
+  it.each(newsItems.filter((item) => ![6, 7].includes(item.id)))(
     "retains the original cover framing for $slug",
     (item) => {
       const html = renderDetail(item.slug);
@@ -180,9 +180,99 @@ describe("News original IP article", () => {
   it("provides the approved metadata without changing existing article SEO defaults", () => {
     expect(ipArticle.seoTitle).toBe("慢寶宇宙的奇幻旅程：我們拿到身分證啦！｜慢慢蒔光 STime Villa");
     expect(ipArticle.seoDescription).toBe("原創 IP「慢寶 MUMBAO」正式取得多國智慧財產權與著作權保護，從十二星座主題房到文創周邊，慢寶宇宙持續守護屬於旅人的療癒空間。");
-    for (const item of newsItems.filter((item) => item.id !== 6)) {
+    for (const item of newsItems.filter((item) => item.id < 5)) {
       expect(item.seoTitle).toBeUndefined();
       expect(item.seoDescription).toBeUndefined();
     }
+  });
+});
+
+describe("News private event and production venue article", () => {
+  const venueSlug = "private-event-and-production-venue";
+  const venueArticle = getNewsBySlug(venueSlug)!;
+  const activityItems = [
+    "💍 浪漫求婚",
+    "👭 閨蜜同遊",
+    "🥂 婚前單身派對",
+    "👶 寶寶抓周",
+    "🩵🩷 寶寶性別揭曉派對",
+    "🎎 迎娶與婚禮儀式",
+    "👨‍👩‍👧‍👦 家族聚會",
+    "🎉 公司尾牙與團隊活動",
+    "💼 包棟商務會議",
+    "📷 人像、商品及品牌形象攝影",
+    "🎬 MV、廣告與微電影拍攝",
+  ];
+
+  beforeEach(() => { vi.stubGlobal("React", React); });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("uses the approved data, case-sensitive image path and SEO metadata", () => {
+    expect(venueArticle.id).toBe(7);
+    expect(venueArticle.title).toBe("慢慢蒔光，不只是一間民宿");
+    expect(venueArticle.date).toBe("2026.09.15");
+    expect(venueArticle.excerpt).toBe("一座可以過夜的當代藝術館，也能成為求婚、抓周、婚禮儀式、品牌攝影、商務會議與影像創作等重要時刻的專屬場景。");
+    expect(venueArticle.image).toBe("/images/News/News-7.jpg");
+    expect(venueArticle.seoTitle).toBe("慢慢蒔光，不只是一間民宿｜宜蘭包棟・包場・攝影場地｜STime Villa");
+    expect(venueArticle.seoDescription).toBe("慢慢蒔光是一座可以過夜的當代藝術館，提供宜蘭包棟、求婚、抓周、迎娶、商務會議、品牌攝影、MV 與微電影拍攝等多元包場需求，每日僅接待一組旅客。");
+    const image = readFileSync(new URL("../../public/images/News/News-7.jpg", import.meta.url));
+    expect(Array.from(image.subarray(0, 3))).toEqual([0xff, 0xd8, 0xff]);
+  });
+
+  it("renders the lead, editorial copy, activity grid, venue facts, notice and official LINE link", () => {
+    const html = renderDetail(venueSlug);
+    const orderedContent = [
+      venueArticle.detailTitle,
+      ...venueArticle.content,
+      venueArticle.highlights!.title,
+      ...activityItems,
+      ...venueArticle.postContent!,
+      ...venueArticle.infoLines!,
+      venueArticle.notice!,
+      `${venueArticle.contact!.text}<a`,
+      venueArticle.contact!.label,
+    ];
+    let previous = html.indexOf(venueArticle.title);
+    for (const text of orderedContent) {
+      const position = html.indexOf(text, previous + 1);
+      expect(position, text).toBeGreaterThan(previous);
+      previous = position;
+    }
+    expect(venueArticle.highlights!.items).toEqual(activityItems);
+    expect(html.match(/<li\b/g)).toHaveLength(11);
+    expect(html).toContain("md:grid-cols-2");
+    expect(html).toContain('aria-label="場地資訊"');
+    expect(html).toContain('href="https://lin.ee/u3JpTa6"');
+    expect(html).toContain('target="_blank"');
+  });
+
+  it("uses the same unframed cover treatment as News-6 without changing framed articles", () => {
+    const html = renderDetail(venueSlug);
+    expect(html).toContain('src="/images/News/News-7.jpg"');
+    expect(html).toContain("object-contain");
+    expect(html).toContain("max-w-[900px]");
+    expect(html).toContain("rounded-[4px]");
+    expect(html).not.toContain("bg-[#fbf7f1]");
+    expect(html).not.toContain("shadow-[0_16px_44px_rgba(90,70,50,0.08)]");
+  });
+
+  it("appears on the first News page after the 2026.11 article under existing sorting", () => {
+    const html = renderToStaticMarkup(<Router ssrPath="/news"><NewsPage /></Router>);
+    expect(html).toContain(`href="/news/${venueSlug}"`);
+    expect(html).toContain(venueArticle.title);
+    expect(html).toContain(venueArticle.excerpt);
+    expect(html).toContain(`src="${venueArticle.image}"`);
+    expect(html.match(/<article\b/g)).toHaveLength(6);
+    expect(html.indexOf(article.title)).toBeLessThan(html.indexOf(venueArticle.title));
+    expect(html.indexOf(venueArticle.title)).toBeLessThan(html.indexOf(getNewsBySlug("mumbao-ip-copyright")!.title));
+  });
+
+  it("keeps the seventh and oldest article reachable on the existing second page", () => {
+    const html = renderToStaticMarkup(
+      <Router ssrPath="/news" ssrSearch="?page=2"><NewsPage /></Router>,
+    );
+    expect(html.match(/<article\b/g)).toHaveLength(1);
+    expect(html).toContain("慢慢蒔光官網資訊陸續更新");
+    expect(html).toContain("2 / 2");
   });
 });

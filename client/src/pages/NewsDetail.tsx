@@ -6,7 +6,6 @@ import { Footer } from "@/components/layout/Footer";
 import { getNewsBySlug, type NewsItem } from "@/data/news";
 
 const siteOrigin = "https://www.mumbao.tw";
-const noindexNewsSlugs = new Set(["stime-villa-summer-preview-preparation"]);
 const newsArticleJsonLdId = "news-article-json-ld";
 const newsArticleSlugs = new Set([
   "private-event-and-production-venue",
@@ -166,12 +165,7 @@ export default function NewsDetail() {
     setMetaContent("meta[property=\"twitter:description\"]", pageDescription);
     setCanonicalUrl(canonicalUrl);
 
-    if (noindexNewsSlugs.has(news.slug)) {
-      setRobotsNoindex();
-      removeNewsArticleJsonLd();
-    } else {
-      removeMetaElements("meta[name=\"robots\"]");
-    }
+    removeMetaElements("meta[name=\"robots\"]");
 
     if (newsArticleSlugs.has(news.slug)) {
       upsertNewsArticleJsonLd(news, canonicalUrl);

@@ -4,11 +4,13 @@ import { ArrowRight } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { rooms } from "@/data/rooms";
+import { roomsSeo } from "@/lib/publicPageSeo";
 
-const roomsSeoTitle = "房型介紹｜十二星座主題房・宜蘭員山｜慢慢蒔光 STime Villa";
-const roomsSeoDescription =
-  "慢慢蒔光 STime Villa 位於宜蘭員山，五間公開主題房以慢寶宇宙與十二星座為靈感，透過雙星守護、房號與藝術空間，延伸包棟住宿的療癒體驗。";
-const roomsCanonicalUrl = "https://www.mumbao.tw/rooms";
+const {
+  title: roomsSeoTitle,
+  description: roomsSeoDescription,
+  canonical: roomsCanonicalUrl,
+} = roomsSeo;
 
 const zodiacIconScale: Record<string, number> = {
   Gemini: 1.8,

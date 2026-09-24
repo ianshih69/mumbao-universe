@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useClientReady } from "@/hooks/useClientReady";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
@@ -261,6 +262,7 @@ function Router() {
 // - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
 
 function App() {
+  const clientReady = useClientReady();
   const [pathname] = useLocation();
   const isAdminRoute = pathname.startsWith("/admin");
 
@@ -273,10 +275,10 @@ function App() {
       >
         <TooltipProvider>
           <CustomerAuthProvider>
-            <Toaster />
+            {clientReady && <Toaster />}
             <ScrollToTop />
             <Router />
-            {!isAdminRoute && <MumbaoChatLauncher />}
+            {clientReady && !isAdminRoute && <MumbaoChatLauncher />}
           </CustomerAuthProvider>
         </TooltipProvider>
       </ThemeProvider>

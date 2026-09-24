@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
+import { publicPagesPrerender } from "./scripts/prerender.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const localApiRoutes = new Map([
@@ -199,7 +200,7 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-    plugins: [localApiPlugin(), react(), tailwindcss(), vitePluginManusRuntime()],
+    plugins: [localApiPlugin(), react(), tailwindcss(), vitePluginManusRuntime(), publicPagesPrerender()],
     envPrefix: ["VITE_", "NEXT_PUBLIC_"],
     resolve: {
       alias: {

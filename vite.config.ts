@@ -5,8 +5,9 @@ import fs from "node:fs";
 import path from "path";
 import { defineConfig } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
+import { publicPagesPrerender } from "./client/scripts/prerender.mjs";
 
-const plugins = [react(), tailwindcss(), vitePluginManusRuntime()];
+const plugins = [react(), tailwindcss(), vitePluginManusRuntime(), publicPagesPrerender()];
 
 export default defineConfig({
   plugins,

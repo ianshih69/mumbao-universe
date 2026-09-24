@@ -4,26 +4,12 @@ import { ArrowLeft } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { getRoomBySlug } from "@/data/rooms";
+import { getRoomSeo } from "@/lib/publicPageSeo";
 
 const sharedNotice = [
   "房型設備、入住人數、床型與實際配置，請以訂房頁與現場安排為準。",
   "慢慢蒔光每一間房都有不同主題與氛圍，實際開放房型將依訂房狀況與包棟安排為準。",
 ];
-
-const siteOrigin = "https://www.mumbao.tw";
-
-const roomSeoDescriptions: Record<string, string> = {
-  "room-521-yunxin":
-    "雲心 S521 是慢慢蒔光 STime Villa 的雙子 × 水瓶主題房，融合慢寶宇宙與十二星座創作，在宜蘭員山感受屬於雙子與水瓶的自由靈感。",
-  "room-360-senguang":
-    "畫雲 S360 是慢慢蒔光 STime Villa 的天蠍 × 雙魚主題房，融合慢寶宇宙與十二星座創作，在宜蘭員山展開帶有夢境與想像的住宿體驗。",
-  "room-530-nuanjin":
-    "雲間 S530 是慢慢蒔光 STime Villa 的處女 × 射手主題房，融合慢寶宇宙與十二星座創作，在宜蘭員山感受細膩與自由交會的住宿空間。",
-  "room-666-anhe":
-    "牧雲 S666 是慢慢蒔光 STime Villa 的牡羊 × 獅子主題房，融合慢寶宇宙與十二星座創作，在宜蘭員山感受熱情、自信與勇氣交織的住宿氛圍。",
-  "room-888-xinghuo":
-    "雲容 S888 是慢慢蒔光 STime Villa 的天秤 × 金牛主題房，融合慢寶宇宙與十二星座創作，在宜蘭員山感受美感、平衡與慢生活交織的住宿空間。",
-};
 
 const zodiacIconScale: Record<string, number> = {
   Gemini: 1.8,
@@ -126,9 +112,11 @@ export default function RoomDetail() {
       return;
     }
 
-    const pageTitle = `${room.name}｜ROOM ${room.roomNumber}｜慢慢蒔光 STime Villa`;
-    const pageDescription = roomSeoDescriptions[room.slug] || room.subtitle || room.tagline;
-    const canonicalUrl = `${siteOrigin}/rooms/${room.slug}`;
+    const {
+      title: pageTitle,
+      description: pageDescription,
+      canonical: canonicalUrl,
+    } = getRoomSeo(room.slug)!;
 
     document.title = pageTitle;
     setMetaContent("meta[name=\"description\"]", pageDescription);

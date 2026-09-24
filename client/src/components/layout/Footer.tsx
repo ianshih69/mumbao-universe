@@ -1,3 +1,5 @@
+import { Link } from "wouter";
+
 const policyLinks = [
   { href: "/booking/lookup", label: "訂單查詢" },
   { href: "/privacy", label: "隱私權政策" },
@@ -105,6 +107,10 @@ export function Footer() {
           </span>
           <span className="hidden text-[#cdbfad] md:inline">｜</span>
           <nav className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 md:gap-x-2 md:gap-y-1" aria-label="Footer policies">
+            <Link href="/mumbao" className="transition-colors duration-200 hover:text-[#B77C4B]">
+              認識慢寶
+            </Link>
+            <span className="text-[#cdbfad]">｜</span>
             {policyLinks.map((link, index) => (
               <span key={link.href} className="inline-flex items-center gap-x-1.5 md:gap-x-2">
                 {index > 0 && <span className="text-[#cdbfad]">｜</span>}

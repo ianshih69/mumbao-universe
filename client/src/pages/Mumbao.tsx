@@ -4,12 +4,14 @@ import type { Variants } from "framer-motion";
 import { useLocation } from "wouter";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { mumbaoSeo } from "@/lib/publicPageSeo";
+import { useClientReady } from "@/hooks/useClientReady";
 
-const siteOrigin = "https://www.mumbao.tw";
-const mumbaoTitle = "認識慢寶｜MUMBAO";
-const mumbaoDescription =
-  "認識慢寶 MUMBAO，來自宇宙的療癒之光，用慢的哲學陪伴旅人放慢腳步，回到自己。";
-const mumbaoCanonicalUrl = `${siteOrigin}/mumbao`;
+const {
+  title: mumbaoTitle,
+  description: mumbaoDescription,
+  canonical: mumbaoCanonicalUrl,
+} = mumbaoSeo;
 const noindexMumbaoRoutes = new Set([
   "/about-mumbao",
   "/zh-TW/about-mumbao",
@@ -204,10 +206,11 @@ function StoryImage({
   imageClassName?: string;
   loading?: "eager" | "lazy";
 }) {
+  const clientReady = useClientReady();
   return (
     <motion.figure
       className={`overflow-hidden rounded-[28px] border border-white/80 bg-white/70 p-3 shadow-[0_18px_45px_rgba(90,65,45,0.10)] ${className}`}
-      initial="hidden"
+      initial={clientReady ? "hidden" : false}
       whileInView="visible"
       viewport={{ once: true, amount: 0.25 }}
       variants={softReveal}
@@ -231,6 +234,7 @@ function SectionLabel({ children }: { children: string }) {
 }
 
 export default function Mumbao() {
+  const clientReady = useClientReady();
   const [location] = useLocation();
 
   useEffect(() => {
@@ -271,7 +275,7 @@ export default function Mumbao() {
           <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-5 pb-16 md:grid-cols-[1fr_0.9fr] md:gap-12 md:px-8 md:pb-24">
             <motion.div
               className="space-y-7"
-              initial={{ opacity: 0, y: 28 }}
+              initial={clientReady ? { opacity: 0, y: 28 } : false}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, ease: "easeOut" }}
             >
@@ -319,7 +323,7 @@ export default function Mumbao() {
             <div className="space-y-6 md:sticky md:top-28">
               <motion.div
                 className="space-y-4"
-                initial="hidden"
+                initial={clientReady ? "hidden" : false}
                 whileInView="visible"
                 viewport={{ once: true, amount: 0.3 }}
                 variants={fadeInUp}
@@ -345,7 +349,7 @@ export default function Mumbao() {
                 <motion.article
                   key={card.title}
                   className="rounded-[24px] border border-white/80 bg-[rgba(255,255,255,0.78)] p-5 shadow-[0_18px_45px_rgba(90,65,45,0.08)]"
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={clientReady ? { opacity: 0, y: 20 } : false}
                   whileInView={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.55, delay: index * 0.04, ease: "easeOut" }}
                   viewport={{ once: true, amount: 0.2 }}
@@ -366,7 +370,7 @@ export default function Mumbao() {
         <section className="bg-[#FFF9F2] py-16 md:py-24">
           <motion.div
             className="mx-auto max-w-[760px] px-5 text-center md:px-8"
-            initial="hidden"
+            initial={clientReady ? "hidden" : false}
             whileInView="visible"
             viewport={{ once: true, amount: 0.3 }}
             variants={fadeInUp}
@@ -395,7 +399,7 @@ export default function Mumbao() {
 
             <motion.div
               className="space-y-6 md:order-1"
-              initial="hidden"
+              initial={clientReady ? "hidden" : false}
               whileInView="visible"
               viewport={{ once: true, amount: 0.3 }}
               variants={fadeInUp}
@@ -428,7 +432,7 @@ export default function Mumbao() {
           <div className="mx-auto max-w-6xl px-5 md:px-8">
             <motion.div
               className="mx-auto max-w-3xl text-center"
-              initial="hidden"
+              initial={clientReady ? "hidden" : false}
               whileInView="visible"
               viewport={{ once: true, amount: 0.3 }}
               variants={fadeInUp}
@@ -444,7 +448,7 @@ export default function Mumbao() {
                 <motion.article
                   key={quote}
                   className="rounded-[26px] border border-white/80 bg-white/75 px-6 py-8 text-center shadow-[0_18px_45px_rgba(90,65,45,0.08)]"
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={clientReady ? { opacity: 0, y: 20 } : false}
                   whileInView={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.55, delay: index * 0.06, ease: "easeOut" }}
                   viewport={{ once: true, amount: 0.25 }}
@@ -458,7 +462,7 @@ export default function Mumbao() {
 
             <motion.div
               className="mx-auto mt-10 max-w-[780px] space-y-5 text-base leading-[1.9] tracking-[0.03em] text-[#5F5148] md:text-lg"
-              initial="hidden"
+              initial={clientReady ? "hidden" : false}
               whileInView="visible"
               viewport={{ once: true, amount: 0.25 }}
               variants={fadeInUp}
@@ -470,7 +474,7 @@ export default function Mumbao() {
 
             <motion.div
               className="mx-auto mt-12 max-w-3xl rounded-[30px] border border-[#E8B6B6]/45 bg-[rgba(255,255,255,0.78)] px-6 py-8 text-center shadow-[0_18px_45px_rgba(90,65,45,0.10)] md:px-10"
-              initial="hidden"
+              initial={clientReady ? "hidden" : false}
               whileInView="visible"
               viewport={{ once: true, amount: 0.25 }}
               variants={fadeInUp}
@@ -486,7 +490,7 @@ export default function Mumbao() {
 
             <motion.div
               className="mx-auto mt-6 max-w-3xl rounded-[24px] border border-[#E7D9C8]/70 bg-[#F8EFE6]/70 px-5 py-5 text-center text-xs leading-relaxed tracking-[0.03em] text-[#8A7B72] md:text-sm"
-              initial="hidden"
+              initial={clientReady ? "hidden" : false}
               whileInView="visible"
               viewport={{ once: true, amount: 0.25 }}
               variants={fadeInUp}

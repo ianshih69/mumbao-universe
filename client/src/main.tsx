@@ -1,4 +1,4 @@
-import { createRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
@@ -13,4 +13,9 @@ if (analyticsEndpoint && analyticsWebsiteId) {
   document.head.appendChild(script);
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+const root = document.getElementById("root")!;
+if (root.dataset.prerendered === "true") {
+  hydrateRoot(root, <App />);
+} else {
+  createRoot(root).render(<App />);
+}

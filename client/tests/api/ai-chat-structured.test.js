@@ -1085,6 +1085,38 @@ describe("production AI chat structured authority", () => {
     expect(harness.getNonFixtureCalls()).toBe(0);
   });
 
+  it("quotes Booking Gate B Case A through the actual handler with calendar and continuation discounts", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-25T04:00:00Z"));
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    vi.stubEnv("AI_CONTEXT_SEMANTIC_RESOLVER_ENABLED", "true");
+    const harness = createHandlerHarness({}, { calendarDiscounts: {
+      weekday_discount_rate: 0.8, friday_discount_rate: 0.9,
+      saturday_discount_rate: 0.9, holiday_discount_rate: 0.9,
+    } });
+    vi.stubGlobal("fetch", harness.fetchMock);
+    const response = await harness.send(
+      "2026/11/2入住，2026/11/4退房，15位成人，沒有小孩、寵物或早餐，包棟住兩晚多少錢？",
+      "booking-gate-b-case-a",
+    );
+    expect(response.statusCode).toBe(200);
+    expect(response.payload.metadata.total_price_amount).toBe(48750);
+    expect(response.payload.answer).toContain("TWD 48,750");
+    expect(harness.getSession().conversation_context).toMatchObject({
+      check_in: "2026-11-02", check_out: "2026-11-04", stay_nights: 2,
+      adult_count: 15, child_count: 0, infant_count: 0,
+      pet_count: 0, pet_weights_kg: [], breakfast_count: 0,
+      pending_interaction: null,
+    });
+    expect(harness.getNonFixtureCalls()).toBe(0);
+    expect(harness.getStructuredProviderCalls()).toBeLessThanOrEqual(1);
+    expect(harness.getQualityTurns()).toEqual([]);
+    expect(harness.fetchMock.mock.calls.some(([url]) =>
+      String(url).includes("booking_price_rule_sets"))).toBe(true);
+    expect(harness.fetchMock.mock.calls.some(([url]) =>
+      String(url).includes("booking_package_rates"))).toBe(true);
+  });
+
   it("uses structured active as the sole booking authority through the production handler", async () => {
     vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
     const harness = createHandlerHarness(priorTenAdultContext);

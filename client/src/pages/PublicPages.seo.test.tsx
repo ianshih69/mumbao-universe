@@ -109,3 +109,40 @@ it("fails the build rather than silently emitting an app shell", () => {
     "missing required markup"
   );
 });
+
+describe("Vercel nested prerender routing", () => {
+  const config = JSON.parse(
+    readFileSync(new URL("../../vercel.json", import.meta.url), "utf8")
+  );
+  const rewrites: { source: string; destination: string }[] = config.rewrites;
+  const fallbackIndex = rewrites.findIndex(
+    route => route.source === "/((?!api(?:/|$)).*)"
+  );
+
+  it.each(expected.slice(2))(
+    "explicitly serves %s before the SPA fallback",
+    pathname => {
+      const index = rewrites.findIndex(route => route.source === pathname);
+      expect(index).toBeGreaterThanOrEqual(0);
+      expect(index).toBeLessThan(fallbackIndex);
+      expect(rewrites[index].destination).toBe(`${pathname}/index.html`);
+    }
+  );
+
+  it("keeps missing rooms and unrelated pages on the existing SPA fallback", () => {
+    expect(rewrites[fallbackIndex]).toEqual({
+      source: "/((?!api(?:/|$)).*)",
+      destination: "/index.html",
+    });
+    expect(rewrites.filter(route => route.source.startsWith("/rooms"))).toEqual(
+      expected.slice(2).map(([pathname]) => ({
+        source: pathname,
+        destination: `${pathname}/index.html`,
+      }))
+    );
+    expect(rewrites.slice(0, 2)).toEqual([
+      { source: "/api/admin-ai-quality", destination: "/api/ai-quality" },
+      { source: "/api/ai-quality-feedback", destination: "/api/ai-quality" },
+    ]);
+  });
+});

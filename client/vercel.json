@@ -17,6 +17,22 @@
       "destination": "/api/ai-quality"
     },
     {
+      "source": "/rooms/room-360-senguang",
+      "destination": "/rooms/room-360-senguang/index.html"
+    },
+    {
+      "source": "/rooms/room-530-nuanjin",
+      "destination": "/rooms/room-530-nuanjin/index.html"
+    },
+    {
+      "source": "/rooms/room-666-anhe",
+      "destination": "/rooms/room-666-anhe/index.html"
+    },
+    {
+      "source": "/rooms/room-888-xinghuo",
+      "destination": "/rooms/room-888-xinghuo/index.html"
+    },
+    {
       "source": "/((?!api(?:/|$)).*)",
       "destination": "/index.html"
     }

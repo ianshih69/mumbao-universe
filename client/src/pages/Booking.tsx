@@ -1668,6 +1668,12 @@ export default function Booking() {
               </span>
             </div>
           )}
+          {(night.calendarDiscountAmount ?? 0) > 0 && (
+            <div className="grid gap-1 text-[#8b6f5b] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
+              <span>日曆優惠（{Number(((night.calendarDiscountRate ?? 1) * 100).toFixed(2))}%）</span>
+              <span className="shrink-0 whitespace-nowrap font-semibold">-{formatTwd(night.calendarDiscountAmount)}</span>
+            </div>
+          )}
           {hasDiscount && (
             <div className="grid gap-1 text-[#8b6f5b] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
               <span>續住優惠 -5%</span>
@@ -2542,6 +2548,7 @@ export default function Booking() {
                                                   </span>
                                                 </div>
                                               )}
+                                              {(night.calendarDiscountAmount ?? 0) > 0 && <p className="mt-1 text-xs text-[#765d4a]">日曆優惠 {Number(((night.calendarDiscountRate ?? 1) * 100).toFixed(2))}%</p>}
                                             </div>
                                             <span className="shrink-0 whitespace-nowrap font-semibold text-stone-900">
                                               {formatTwd(adultStayAmount)}

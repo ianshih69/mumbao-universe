@@ -172,11 +172,16 @@ export type BookingPlatformSetting = {
 export type BookingPricingDayType = "weekday" | "friday" | "holiday";
 
 export type BookingPriceRuleSet = {
+  weekday_discount_rate?: number;
+  friday_discount_rate?: number;
+  saturday_discount_rate?: number;
+  holiday_discount_rate?: number;
   id: string;
   name: string;
   effective_from: string;
   effective_to: string;
   deposit_rate: number | string;
+  guest_11_18_fee?: number | null;
   is_active: boolean;
   notes?: string | null;
   created_at?: string | null;
@@ -193,11 +198,13 @@ export type BookingPackageRate = {
 };
 
 export type BookingSpecialDate = {
+  calendar_discount_rate_override?: number | null;
   id?: string;
   rule_set_id: string;
   date: string;
   day_type: BookingPricingDayType;
   label?: string | null;
+  base_price_override?: number | null;
   is_active: boolean;
 };
 
@@ -464,6 +471,23 @@ export function fetchBookingPricing(token: string) {
     rates: BookingPackageRate[];
     specialDates: BookingSpecialDate[];
   }>(token, "?action=pricing");
+}
+
+export type BookingPricingCalendarPreview = {
+  month: string;
+  startWeekday: number;
+  days: Array<{ date: string; status: "resolved" | "unavailable"; reason?: string; night?: import("./bookingApi").BookingPricingBreakdownNight }>;
+};
+
+export function previewBookingPricingCalendar(token: string, payload: {
+  month: string;
+  ruleSet: Partial<BookingPriceRuleSet>;
+  rates: Array<Partial<BookingPackageRate>>;
+  specialDates: Array<Partial<BookingSpecialDate>>;
+}) {
+  return adminBookingRequest<BookingPricingCalendarPreview & { ok: true }>(token, "?action=pricing-preview", {
+    method: "POST", body: JSON.stringify(payload),
+  });
 }
 
 export function saveBookingPriceRuleSet(token: string, payload: Partial<BookingPriceRuleSet>) {

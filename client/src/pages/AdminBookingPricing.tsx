@@ -3,8 +3,12 @@ import { CalendarDays, RefreshCw, Save } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { getAdminToken, isAdminAuthError } from "@/lib/shop/adminAuth";
+import { calculateGuestBasePrice, isValidGuestFee, isValidBasePriceOverride } from "@/lib/bookings/guestBasePricing.js";
+import { bookingGuestRules } from "@/lib/bookings/bookingGuestRules.js";
 import {
   fetchBookingPricing,
+  previewBookingPricingCalendar,
+  type BookingPricingCalendarPreview,
   saveBookingPackageRates,
   saveBookingPriceRuleSet,
   saveBookingSpecialDate,
@@ -15,21 +19,25 @@ import {
 } from "@/lib/bookings/adminBookingsApi";
 
 type RuleSetForm = {
+  discounts: Record<DiscountField, string>;
   id: string;
   name: string;
   effective_from: string;
   effective_to: string;
   deposit_rate: string;
+  guest_11_18_fee: string;
   is_active: boolean;
   notes: string;
 };
 
 type SpecialDateForm = {
+  calendar_discount_rate_override: string;
   id: string;
   rule_set_id: string;
   date: string;
   day_type: BookingPricingDayType;
   label: string;
+  base_price_override: string;
   is_active: boolean;
 };
 
@@ -39,29 +47,54 @@ const dayTypeLabels: Record<BookingPricingDayType, string> = {
   holiday: "假日／連假",
 };
 const dayTypeOrder: BookingPricingDayType[] = ["weekday", "friday", "holiday"];
-const defaultGuestCounts = Array.from({ length: 9 }, (_, index) => index + 10);
+const guestCounts = Array.from({ length: 11 }, (_, index) => index + 10);
+const discountLabels = {
+  weekday_discount_rate: "平日（日～四）",
+  friday_discount_rate: "星期五",
+  saturday_discount_rate: "星期六",
+  holiday_discount_rate: "特殊假日／連假",
+} as const;
+type DiscountField = keyof typeof discountLabels;
+const discountFields = Object.keys(discountLabels) as DiscountField[];
+function baseOverrideValue(text: string) {
+  if (text.trim() === "") return null;
+  if (!isValidBasePriceOverride(text)) throw new Error("每日 Base Price 須為大於 0 的整數；留空則繼承預設價格。");
+  return Number(text);
+}
+function percentText(rate: number | null | undefined) {
+  return rate == null ? "" : String(Number((Number(rate) * 100).toFixed(2)));
+}
+function percentRate(text: string) {
+  if (text.trim() === "") return null;
+  if (!/^\d+(?:\.\d{1,2})?$/.test(text) || Number(text) < 1 || Number(text) > 100) throw new Error("折扣百分比須介於 1～100，最多兩位小數。");
+  return Number((Number(text) / 100).toFixed(4));
+}
 
 const emptyRuleSetForm: RuleSetForm = {
+  discounts: { weekday_discount_rate: "", friday_discount_rate: "", saturday_discount_rate: "", holiday_discount_rate: "" },
   id: "",
   name: "",
   effective_from: "",
   effective_to: "",
   deposit_rate: "0.30",
+  guest_11_18_fee: "",
   is_active: true,
   notes: "",
 };
 
 const emptySpecialDateForm: SpecialDateForm = {
+  calendar_discount_rate_override: "",
   id: "",
   rule_set_id: "",
   date: "",
   day_type: "holiday",
   label: "",
+  base_price_override: "",
   is_active: true,
 };
 
 function fieldClassName() {
-  return "h-11 rounded-[8px] border border-[#eadfce] bg-white px-3 text-sm text-stone-900 outline-none transition focus:border-[#b7957c] focus:ring-2 focus:ring-[#eadfce]";
+  return "h-11 min-w-0 max-w-full rounded-[8px] border border-[#eadfce] bg-white px-3 text-sm text-stone-900 outline-none transition focus:border-[#b7957c] focus:ring-2 focus:ring-[#eadfce]";
 }
 
 function textareaClassName() {
@@ -76,10 +109,12 @@ function normalizeRuleSetForm(ruleSet: BookingPriceRuleSet | null): RuleSetForm 
   if (!ruleSet) return emptyRuleSetForm;
   return {
     id: ruleSet.id,
+    discounts: Object.fromEntries(discountFields.map(field => [field, percentText(ruleSet[field])])) as Record<DiscountField, string>,
     name: ruleSet.name || "",
     effective_from: ruleSet.effective_from || "",
     effective_to: ruleSet.effective_to || "",
     deposit_rate: String(ruleSet.deposit_rate ?? "0.30"),
+    guest_11_18_fee: ruleSet.guest_11_18_fee == null ? "" : String(ruleSet.guest_11_18_fee),
     is_active: Boolean(ruleSet.is_active),
     notes: ruleSet.notes || "",
   };
@@ -110,11 +145,14 @@ export default function AdminBookingPricing() {
   const [ruleSetForm, setRuleSetForm] = useState<RuleSetForm>(emptyRuleSetForm);
   const [matrixValues, setMatrixValues] = useState<Record<string, string>>({});
   const [specialDateForm, setSpecialDateForm] = useState<SpecialDateForm>(emptySpecialDateForm);
-  const [guestCounts, setGuestCounts] = useState(defaultGuestCounts);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [calendarMonth, setCalendarMonth] = useState("");
+  const [calendarPreview, setCalendarPreview] = useState<BookingPricingCalendarPreview | null>(null);
+  const [previewError, setPreviewError] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const activeRuleSet = useMemo(
     () => ruleSets.find((ruleSet) => ruleSet.id === activeRuleSetId) || null,
@@ -140,7 +178,6 @@ export default function AdminBookingPricing() {
       setRuleSets(data.ruleSets);
       setRates(data.rates);
       setSpecialDates(data.specialDates);
-      setGuestCounts(data.guestCounts.length ? data.guestCounts : defaultGuestCounts);
       const nextActiveId =
         activeRuleSetId && data.ruleSets.some((ruleSet) => ruleSet.id === activeRuleSetId)
           ? activeRuleSetId
@@ -170,12 +207,42 @@ export default function AdminBookingPricing() {
 
   useEffect(() => {
     setRuleSetForm(normalizeRuleSetForm(activeRuleSet));
+    if (activeRuleSet) setCalendarMonth(activeRuleSet.effective_from.slice(0, 7));
     setMatrixValues(buildMatrixValues(rates, activeRuleSetId));
     setSpecialDateForm((current) => ({
       ...emptySpecialDateForm,
       rule_set_id: activeRuleSetId || current.rule_set_id,
     }));
   }, [activeRuleSet, activeRuleSetId, rates]);
+
+  useEffect(() => {
+    if (!token || !activeRuleSetId || !calendarMonth || isLoading) return;
+    let cancelled = false;
+    setPreviewLoading(true);
+    setCalendarPreview(null);
+    const timeout = window.setTimeout(async () => {
+      try {
+        if (!isValidGuestFee(ruleSetForm.guest_11_18_fee)) throw new Error("請填寫第 11～18 人每人每晚加價。");
+        const draftDates: Array<Partial<BookingSpecialDate>> = specialDates.filter(day => day.rule_set_id === activeRuleSetId && day.date.startsWith(calendarMonth));
+        if (specialDateForm.date.startsWith(calendarMonth)) {
+          const sameDate = draftDates.findIndex(day => day.date === specialDateForm.date && (day.is_active || day.id === specialDateForm.id));
+          const draft = { ...specialDateForm, base_price_override: baseOverrideValue(specialDateForm.base_price_override), calendar_discount_rate_override: percentRate(specialDateForm.calendar_discount_rate_override) };
+          if (sameDate >= 0) draftDates[sameDate] = draft;
+          else draftDates.push(draft);
+        }
+        const result = await previewBookingPricingCalendar(token, {
+          month: calendarMonth,
+          ruleSet: { ...ruleSetForm, deposit_rate: Number(ruleSetForm.deposit_rate), guest_11_18_fee: Number(ruleSetForm.guest_11_18_fee), ...Object.fromEntries(discountFields.map(field => [field, percentRate(ruleSetForm.discounts[field])])) },
+          rates: dayTypeOrder.map(day_type => ({ guest_count: 10, day_type, nightly_price: matrixValues[rateKey(10, day_type)] === "" ? undefined : Number(matrixValues[rateKey(10, day_type)]), is_active: true })),
+          specialDates: draftDates,
+        });
+        if (!cancelled) { setCalendarPreview(result); setPreviewError(""); }
+      } catch (e) {
+        if (!cancelled) setPreviewError(e instanceof Error ? e.message : "無法預覽日曆價格");
+      } finally { if (!cancelled) setPreviewLoading(false); }
+    }, 300);
+    return () => { cancelled = true; window.clearTimeout(timeout); };
+  }, [token, activeRuleSetId, calendarMonth, isLoading, ruleSetForm, matrixValues, specialDates, specialDateForm]);
 
   function updateRuleSetForm<K extends keyof RuleSetForm>(field: K, value: RuleSetForm[K]) {
     setRuleSetForm((form) => ({ ...form, [field]: value }));
@@ -206,12 +273,15 @@ export default function AdminBookingPricing() {
     setMessage("");
     setError("");
     try {
+      if (!isValidGuestFee(ruleSetForm.guest_11_18_fee)) throw new Error("請輸入第 11～18 人每人每晚加價。");
       const result = await saveBookingPriceRuleSet(token, {
         id: ruleSetForm.id || undefined,
         name: ruleSetForm.name.trim(),
         effective_from: ruleSetForm.effective_from,
         effective_to: ruleSetForm.effective_to,
         deposit_rate: Number(ruleSetForm.deposit_rate),
+        guest_11_18_fee: Number(ruleSetForm.guest_11_18_fee),
+        ...Object.fromEntries(discountFields.map(field => [field, percentRate(ruleSetForm.discounts[field])])),
         is_active: ruleSetForm.is_active,
         notes: ruleSetForm.notes.trim() || null,
       });
@@ -231,7 +301,10 @@ export default function AdminBookingPricing() {
     setMessage("");
     setError("");
     try {
-      const payload = guestCounts.flatMap((guestCount) =>
+      if (dayTypeOrder.some(dayType => !isValidGuestFee(matrixValues[rateKey(10, dayType)]))) {
+        throw new Error("請填寫各日期類型的 10 人 Base Price，空白不會視為零元。");
+      }
+      const payload = [10].flatMap((guestCount) =>
         dayTypeOrder.map((dayType) => ({
           rule_set_id: activeRuleSetId,
           guest_count: guestCount,
@@ -247,7 +320,7 @@ export default function AdminBookingPricing() {
         rule_set_id: activeRuleSetId,
         rates: payload,
       });
-      setMessage("房價矩陣已儲存。");
+      setMessage("10 人 Base Price 已儲存。");
       await loadPricing();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "儲存房價矩陣失敗。");
@@ -269,6 +342,8 @@ export default function AdminBookingPricing() {
         date: specialDateForm.date,
         day_type: specialDateForm.day_type,
         label: specialDateForm.label.trim() || null,
+        base_price_override: baseOverrideValue(specialDateForm.base_price_override),
+        calendar_discount_rate_override: percentRate(specialDateForm.calendar_discount_rate_override),
         is_active: specialDateForm.is_active,
       });
       setMessage("特殊日期已儲存。");
@@ -289,14 +364,14 @@ export default function AdminBookingPricing() {
   }
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-1 gap-6 [&>section]:min-w-0">
       <section className="rounded-[20px] border border-[#eadfce] bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">BOOKING PRICING</p>
             <h1 className="mt-2 text-2xl font-semibold text-stone-900">房價管理</h1>
             <p className="mt-1 text-sm leading-6 text-stone-500">
-              管理正式訂房報價使用的期間、包棟矩陣與特殊日期。
+              10 人 Base Price 與加人費
             </p>
           </div>
           <Button type="button" variant="outline" onClick={() => void loadPricing()} disabled={isLoading || isSaving}>
@@ -335,6 +410,14 @@ export default function AdminBookingPricing() {
             <input className={fieldClassName()} type="number" min="0" max="1" step="0.01" value={ruleSetForm.deposit_rate} onChange={(event) => updateRuleSetForm("deposit_rate", event.target.value)} required />
           </label>
           <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+            第 11～18 人每人每晚加價（NT$）
+            <input className={fieldClassName()} type="number" min="0" max="10000000" step="1" value={ruleSetForm.guest_11_18_fee} onChange={event => updateRuleSetForm("guest_11_18_fee", event.target.value)} required />
+          </label>
+          <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+            第 19～20 人每人每晚加價（NT$）
+            <input className={fieldClassName()} value={bookingGuestRules.extraAdultUnitPrice} readOnly />
+          </label>
+          <label className="grid gap-1.5 text-sm font-medium text-stone-700">
             適用開始日
             <input className={fieldClassName()} type="date" value={ruleSetForm.effective_from} onChange={(event) => updateRuleSetForm("effective_from", event.target.value)} required />
           </label>
@@ -350,10 +433,18 @@ export default function AdminBookingPricing() {
             備註
             <textarea className={textareaClassName()} value={ruleSetForm.notes} onChange={(event) => updateRuleSetForm("notes", event.target.value)} />
           </label>
+          <fieldset className="grid min-w-0 gap-4 border-t border-[#eadfce] pt-4 md:col-span-2 md:grid-cols-2">
+            <legend className="pr-3 text-lg font-semibold text-stone-900">預設日曆折扣</legend>
+            {discountFields.map(field => <label key={field} className="grid gap-1.5 text-sm font-medium text-stone-700">
+              {discountLabels[field]}（%）
+              <input className={fieldClassName()} type="number" min="1" max="100" step="0.01" required value={ruleSetForm.discounts[field]}
+                onChange={event => updateRuleSetForm("discounts", { ...ruleSetForm.discounts, [field]: event.target.value })} />
+            </label>)}
+          </fieldset>
           <div className="md:col-span-2">
             <Button type="submit" className="bg-[#8b6f5b] hover:bg-[#765d4a]" disabled={isSaving}>
               <Save className="mr-2 h-4 w-4" />
-              儲存期間
+              儲存期間與定價設定
             </Button>
           </div>
         </form>
@@ -362,12 +453,12 @@ export default function AdminBookingPricing() {
       <section className="rounded-[20px] border border-[#eadfce] bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-semibold text-stone-900">包棟房價矩陣</h2>
-            <p className="mt-1 text-sm text-stone-500">逐格輸入正式房價，不使用加人公式。</p>
+            <h2 className="text-xl font-semibold text-stone-900">10 人 Base Price</h2>
+            <p className="mt-1 text-sm text-stone-500">各人數每晚住宿費・日曆與連住折扣前</p>
           </div>
           <Button type="button" onClick={() => void handleSaveMatrix()} disabled={!activeRuleSetId || isSaving} className="bg-[#8b6f5b] hover:bg-[#765d4a]">
             <Save className="mr-2 h-4 w-4" />
-            儲存矩陣
+            儲存 Base Price
           </Button>
         </div>
         <div className="mt-4 overflow-x-auto">
@@ -386,14 +477,18 @@ export default function AdminBookingPricing() {
                   <th className="border border-[#eadfce] bg-[#fffdf9] px-3 py-2 text-left font-semibold text-stone-800">{guestCount} 人</th>
                   {dayTypeOrder.map((dayType) => (
                     <td key={dayType} className="border border-[#eadfce] px-3 py-2">
+                      {guestCount === 10 ? <>
                       <input
                         className={fieldClassName()}
+                        aria-label={`${dayTypeLabels[dayType]} 10 人 Base Price`}
                         inputMode="numeric"
                         value={matrixValues[rateKey(guestCount, dayType)] || ""}
                         placeholder="0"
                         onChange={(event) => updateMatrixValue(guestCount, dayType, event.target.value)}
                       />
-                      <p className="mt-1 text-xs text-stone-400">{formatTwd(matrixValues[rateKey(guestCount, dayType)])}</p>
+                      <p className="mt-1 text-xs text-stone-400">{matrixValues[rateKey(10, dayType)] === "" ? "—" : formatTwd(matrixValues[rateKey(10, dayType)])}</p>
+                      </> : <span className="tabular-nums">{isValidGuestFee(matrixValues[rateKey(10, dayType)]) && isValidGuestFee(ruleSetForm.guest_11_18_fee)
+                        ? formatTwd(calculateGuestBasePrice(guestCount, Number(matrixValues[rateKey(10, dayType)]), Number(ruleSetForm.guest_11_18_fee))) : "—"}</span>}
                     </td>
                   ))}
                 </tr>
@@ -404,11 +499,33 @@ export default function AdminBookingPricing() {
       </section>
 
       <section className="grid gap-4 rounded-[20px] border border-[#eadfce] bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold text-stone-900">價格日曆 <span className="text-sm font-normal text-stone-500">草稿預覽・10 人／1 晚</span></h2>
+          <input aria-label="價格日曆月份" className={fieldClassName()} type="month" value={calendarMonth} onChange={event => setCalendarMonth(event.target.value)} />
+        </div>
+        {previewLoading && <p role="status" className="text-sm text-stone-500">價格計算中…</p>}
+        {previewError && !previewLoading && <p role="alert" className="text-sm text-red-700">{previewError}</p>}
+        {calendarPreview && <div className="overflow-x-auto">
+          <div className="grid min-w-[700px] grid-cols-7" role="grid" aria-label="每日價格">
+            {["日", "一", "二", "三", "四", "五", "六"].map(day => <div key={day} role="columnheader" className="border-b border-[#eadfce] py-2 text-center text-sm text-stone-500">{day}</div>)}
+            {Array.from({ length: calendarPreview.startWeekday }, (_, index) => <div key={`blank-${index}`} />)}
+            {calendarPreview.days.map(day => <button key={day.date} type="button" role="gridcell" disabled={!day.night} aria-label={`${day.date} 價格`} className="min-h-36 border-b border-r border-[#eadfce] p-2 text-left text-xs leading-5 transition hover:bg-[#fbf7f1] disabled:text-stone-400" onClick={() => {
+              const existing = specialDates.find(row => row.rule_set_id === activeRuleSetId && row.date === day.date && row.is_active);
+              setSpecialDateForm({ ...emptySpecialDateForm, ...existing, id: existing?.id || "", rule_set_id: activeRuleSetId, date: day.date, day_type: existing?.day_type || day.night!.dayType, label: existing?.label || "", base_price_override: existing?.base_price_override == null ? "" : String(existing.base_price_override), calendar_discount_rate_override: percentText(existing?.calendar_discount_rate_override) });
+            }}>
+              <span className="block text-sm font-semibold">{Number(day.date.slice(-2))}</span>
+              {day.night ? <><span className="block">Base {formatTwd(day.night.base10GuestRate)}</span><span className="block">日曆折扣 {percentText(day.night.calendarDiscountRate)}%</span><strong className="block text-sm text-stone-900">{formatTwd(day.night.price)}</strong><span className="block text-stone-500">{day.night.calendarDiscountSource === "daily_override" ? "單日覆寫" : day.night.calendarDiscountSource === "holiday" ? "特殊假日" : "預設折扣"}</span></> : <span>不在適用期間</span>}
+            </button>)}
+          </div>
+        </div>}
+      </section>
+
+      <section className="grid gap-4 rounded-[20px] border border-[#eadfce] bg-white p-5 shadow-sm">
         <div>
           <h2 className="text-xl font-semibold text-stone-900">特殊日期</h2>
-          <p className="mt-1 text-sm text-stone-500">手動指定某一晚使用平日、週五或假日價。</p>
+          <p className="mt-1 text-sm text-stone-500">當日價格類型與 10 人 Base Price 覆寫</p>
         </div>
-        <form className="grid gap-4 md:grid-cols-[1fr_1fr_1fr_1fr_auto]" onSubmit={handleSaveSpecialDate}>
+        <form className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" onSubmit={handleSaveSpecialDate}>
           <label className="grid gap-1.5 text-sm font-medium text-stone-700">
             日期
             <input className={fieldClassName()} type="date" value={specialDateForm.date} onChange={(event) => updateSpecialDateForm("date", event.target.value)} required />
@@ -429,6 +546,14 @@ export default function AdminBookingPricing() {
             <input type="checkbox" checked={specialDateForm.is_active} onChange={(event) => updateSpecialDateForm("is_active", event.target.checked)} />
             啟用
           </label>
+          <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+            當日 10 人 Base Price（留空沿用預設）
+            <input className={fieldClassName()} type="number" min="1" max="10000000" step="1" value={specialDateForm.base_price_override} onChange={event => updateSpecialDateForm("base_price_override", event.target.value)} />
+          </label>
+          <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+            當日日曆折扣（%，留空沿用預設）
+            <input className={fieldClassName()} type="number" min="1" max="100" step="0.01" value={specialDateForm.calendar_discount_rate_override} onChange={event => updateSpecialDateForm("calendar_discount_rate_override", event.target.value)} />
+          </label>
           <Button type="submit" className="self-end bg-[#8b6f5b] hover:bg-[#765d4a]" disabled={!activeRuleSetId || isSaving}>
             <CalendarDays className="mr-2 h-4 w-4" />
             儲存
@@ -442,6 +567,8 @@ export default function AdminBookingPricing() {
                 <th className="border border-[#eadfce] px-3 py-2">日期</th>
                 <th className="border border-[#eadfce] px-3 py-2">分類</th>
                 <th className="border border-[#eadfce] px-3 py-2">名稱</th>
+                <th className="border border-[#eadfce] px-3 py-2">10 人 Base Price</th>
+                <th className="border border-[#eadfce] px-3 py-2">日曆折扣</th>
                 <th className="border border-[#eadfce] px-3 py-2">狀態</th>
                 <th className="border border-[#eadfce] px-3 py-2">操作</th>
               </tr>
@@ -449,7 +576,7 @@ export default function AdminBookingPricing() {
             <tbody>
               {visibleSpecialDates.length === 0 && (
                 <tr>
-                  <td className="border border-[#eadfce] px-3 py-4 text-stone-500" colSpan={5}>目前沒有特殊日期。</td>
+                  <td className="border border-[#eadfce] px-3 py-4 text-stone-500" colSpan={7}>目前沒有特殊日期。</td>
                 </tr>
               )}
               {visibleSpecialDates.map((specialDate) => (
@@ -457,6 +584,8 @@ export default function AdminBookingPricing() {
                   <td className="border border-[#eadfce] px-3 py-2 font-semibold text-stone-900">{specialDate.date}</td>
                   <td className="border border-[#eadfce] px-3 py-2">{dayTypeLabels[specialDate.day_type]}</td>
                   <td className="border border-[#eadfce] px-3 py-2">{specialDate.label || "—"}</td>
+                  <td className="border border-[#eadfce] px-3 py-2">{specialDate.base_price_override == null ? "預設" : formatTwd(specialDate.base_price_override)}</td>
+                  <td className="border border-[#eadfce] px-3 py-2">{specialDate.calendar_discount_rate_override == null ? "預設" : `${percentText(specialDate.calendar_discount_rate_override)}%`}</td>
                   <td className="border border-[#eadfce] px-3 py-2">{specialDate.is_active ? "啟用" : "停用"}</td>
                   <td className="border border-[#eadfce] px-3 py-2">
                     <button
@@ -469,6 +598,8 @@ export default function AdminBookingPricing() {
                           date: specialDate.date,
                           day_type: specialDate.day_type,
                           label: specialDate.label || "",
+                          base_price_override: specialDate.base_price_override == null ? "" : String(specialDate.base_price_override),
+                          calendar_discount_rate_override: percentText(specialDate.calendar_discount_rate_override),
                           is_active: specialDate.is_active,
                         })
                       }

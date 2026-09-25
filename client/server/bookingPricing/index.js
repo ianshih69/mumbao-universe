@@ -5,6 +5,8 @@ import {
   resolveBookingPetPlan,
   resolveRoomOptionSelection,
 } from "../../src/lib/bookings/bookingGuestRules.js";
+import { calculateGuestBasePrice, isValidGuestFee, isValidBasePriceOverride } from "../../src/lib/bookings/guestBasePricing.js";
+import { calendarDiscountFields, resolveCalendarDiscount } from "./calendarDiscount.js";
 
 export { resolveBookingGuestPlan };
 
@@ -351,7 +353,7 @@ async function fetchActiveRuleSetForNight(nightDate, supabaseRequest) {
       nightDate
     )}&effective_to=gte.${encodeFilterValue(
       nightDate
-    )}&select=id,name,effective_from,effective_to,deposit_rate,is_active&order=effective_from.desc&limit=1`
+    )}&select=id,name,effective_from,effective_to,deposit_rate,is_active,guest_11_18_fee,${calendarDiscountFields.join(",")}&order=effective_from.desc&limit=1`
   );
   return Array.isArray(rows) ? rows[0] || null : null;
 }
@@ -360,7 +362,7 @@ async function fetchPublishedRuleSet(referenceDate, supabaseRequest) {
   const rows = await supabaseRequest(
     `/booking_price_rule_sets?is_active=eq.true&effective_to=gte.${encodeFilterValue(
       referenceDate
-    )}&select=id,name,effective_from,effective_to,deposit_rate,is_active&order=effective_from.asc&limit=1`
+    )}&select=id,name,effective_from,effective_to,deposit_rate,is_active,guest_11_18_fee,${calendarDiscountFields.join(",")}&order=effective_from.asc&limit=1`
   );
   return Array.isArray(rows) ? rows[0] || null : null;
 }
@@ -371,7 +373,7 @@ async function fetchSpecialDate(ruleSetId, nightDate, supabaseRequest) {
       ruleSetId
     )}&date=eq.${encodeFilterValue(
       nightDate
-    )}&is_active=eq.true&select=id,rule_set_id,date,day_type,label,is_active&limit=1`
+    )}&is_active=eq.true&select=id,rule_set_id,date,day_type,label,is_active,base_price_override,calendar_discount_rate_override&limit=1`
   );
   return Array.isArray(rows) ? rows[0] || null : null;
 }
@@ -572,7 +574,18 @@ export async function calculateBookingQuote(input, options = {}) {
     const dayType = requestedDayType || specialDate?.day_type || classifyFallbackDayType(date);
     const rateGuestCount =
       pricingGuest.plan.extraAdultCount > 0 ? bookingGuestRules.fullVillaAdultCount : pricingGuest.pricingGuestCount;
-    const rate = await fetchCachedNightlyRate(ruleSet.id, rateGuestCount, dayType);
+    // Old injected rule-set snapshots may still carry the matrix contract. Live DB
+    // reads select the required fee explicitly; null/invalid values fail closed.
+    const configuredGuestFee = Object.hasOwn(ruleSet, "guest_11_18_fee");
+    const storedRate = await fetchCachedNightlyRate(ruleSet.id, configuredGuestFee ? baseBookingGuestCount : rateGuestCount, dayType);
+    const dailyBase = specialDate?.is_active !== false ? specialDate?.base_price_override : null;
+    const resolvedBase = dailyBase ?? storedRate?.nightly_price;
+    if ((dailyBase !== undefined && !isValidBasePriceOverride(dailyBase)) || (configuredGuestFee && (!isValidGuestFee(ruleSet.guest_11_18_fee) || !isValidGuestFee(resolvedBase)))) {
+      return unavailableQuote({ reason: "invalid_guest_base_pricing", checkIn, checkOut, stayType, adults, children, infants, guestCount, packageType, nights, guestPlan, petPlan, details: { missingDate: date } });
+    }
+    const rate = configuredGuestFee
+      ? { nightly_price: calculateGuestBasePrice(rateGuestCount, resolvedBase, ruleSet.guest_11_18_fee) }
+      : storedRate;
 
     if (!rate?.nightly_price && rate?.nightly_price !== 0) {
       return unavailableQuote({
@@ -600,8 +613,12 @@ export async function calculateBookingQuote(input, options = {}) {
     }
 
     const basePrice = Number(rate.nightly_price);
-    const base10Rate = await fetchCachedNightlyRate(ruleSet.id, bookingGuestRules.basePackageGuestCount, dayType);
-    const adult18Rate = await fetchCachedNightlyRate(ruleSet.id, bookingGuestRules.fullVillaAdultCount, dayType);
+    const base10Rate = configuredGuestFee
+      ? { nightly_price: Number(resolvedBase) }
+      : await fetchCachedNightlyRate(ruleSet.id, bookingGuestRules.basePackageGuestCount, dayType);
+    const adult18Rate = configuredGuestFee
+      ? { nightly_price: calculateGuestBasePrice(18, resolvedBase, ruleSet.guest_11_18_fee) }
+      : await fetchCachedNightlyRate(ruleSet.id, bookingGuestRules.fullVillaAdultCount, dayType);
     const base10GuestRate =
       base10Rate?.nightly_price || base10Rate?.nightly_price === 0 ? Number(base10Rate.nightly_price) : null;
     const adult18GuestRate =
@@ -624,11 +641,17 @@ export async function calculateBookingQuote(input, options = {}) {
     const nightlyExtraAdultFeeAmount = pricingGuest.plan.extraAdultCount * bookingGuestRules.extraAdultUnitPrice;
     const nightlyChildFeeOriginalAmount = pricingGuest.plan.chargeableChildCount * bookingGuestRules.childFeeUnitPrice;
     const adultLodgingPreDiscountAmount = basePrice + nightlyExtraAdultFeeAmount;
+    const calendarDiscount = resolveCalendarDiscount({ date, ruleSet, specialDate, requestedDayType });
+    if (!calendarDiscount.ok) {
+      return unavailableQuote({ reason: "invalid_calendar_discount", checkIn, checkOut, stayType, adults, children, infants, guestCount, packageType, nights, guestPlan, petPlan, details: { missingDate: date } });
+    }
+    const priceAfterCalendarDiscount = roundMoney(adultLodgingPreDiscountAmount * calendarDiscount.rate);
+    const calendarDiscountAmount = adultLodgingPreDiscountAmount - priceAfterCalendarDiscount;
     const hasConsecutiveStayDiscount = shouldApplyConsecutiveStayDiscount({ nightIndex: index });
     const discountRate = hasConsecutiveStayDiscount ? consecutiveStayDiscountRate : 1;
     const adultLodgingAmount = hasConsecutiveStayDiscount
-      ? roundMoney(adultLodgingPreDiscountAmount * discountRate)
-      : adultLodgingPreDiscountAmount;
+      ? roundMoney(priceAfterCalendarDiscount * discountRate)
+      : priceAfterCalendarDiscount;
     const nightlyChildFeeAmount = hasConsecutiveStayDiscount
       ? roundMoney(nightlyChildFeeOriginalAmount * discountRate)
       : nightlyChildFeeOriginalAmount;
@@ -638,12 +661,22 @@ export async function calculateBookingQuote(input, options = {}) {
       : nightlyPetOriginalAmount;
     const nightTotal = adultLodgingAmount + nightlyChildFeeAmount + nightlyPetFeeAmount;
     const preDiscountPrice = adultLodgingPreDiscountAmount + nightlyChildFeeOriginalAmount + nightlyPetOriginalAmount;
-    const discountAmount = adultLodgingPreDiscountAmount - adultLodgingAmount;
+    const discountAmount = priceAfterCalendarDiscount - adultLodgingAmount;
     const childFeeDiscountAmount = nightlyChildFeeOriginalAmount - nightlyChildFeeAmount;
     const petFeeDiscountAmount = nightlyPetOriginalAmount - nightlyPetFeeAmount;
 
     breakdown.push({
       date,
+      calendarDiscountRate: calendarDiscount.rate,
+      calendarDiscountSource: calendarDiscount.source,
+      calendarDiscountAmount,
+      priceAfterCalendarDiscount,
+      ...(configuredGuestFee ? {
+        guestPricingSource: "base_plus_configured_fee",
+        guest11To18Fee: Number(ruleSet.guest_11_18_fee),
+        guest19To20Fee: bookingGuestRules.extraAdultUnitPrice,
+        base10GuestPriceOverride: dailyBase != null,
+      } : {}),
       dayType,
       dayTypeLabel: dayTypeLabels[dayType] || dayType,
       price: nightTotal,

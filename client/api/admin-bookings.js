@@ -7,6 +7,9 @@ import {
   supabaseRequest,
 } from "../server/shopShared.js";
 import { requirePermission } from "../server/adminShop/core.js";
+import { isValidGuestFee, isValidBasePriceOverride } from "../src/lib/bookings/guestBasePricing.js";
+import { calendarDiscountFields, inheritsCalendarDiscount, isValidCalendarDiscountRate } from "../server/bookingPricing/calendarDiscount.js";
+import { calculatePricingCalendarPreview } from "../server/bookingPricing/calendarPreview.js";
 import {
   adminCancelBooking,
   adminReviewCancellation,
@@ -1398,6 +1401,13 @@ function normalizePricingDayType(value) {
 }
 
 function normalizeRuleSetPayload(body) {
+  const discounts = {};
+  if (calendarDiscountFields.some(field => Object.hasOwn(body || {}, field))) {
+    for (const field of calendarDiscountFields) {
+      if (!isValidCalendarDiscountRate(body[field])) throw httpError(400, `${field} is invalid.`, "invalid_pricing_payload");
+      discounts[field] = Number(body[field]);
+    }
+  }
   const name = cleanText(body?.name, 120);
   const effectiveFrom = normalizeDate(body?.effective_from || body?.effectiveFrom);
   const effectiveTo = normalizeDate(body?.effective_to || body?.effectiveTo);
@@ -1406,8 +1416,13 @@ function normalizeRuleSetPayload(body) {
     throw httpError(400, "effective dates are invalid.", "invalid_pricing_payload");
   }
 
+  if (!isValidGuestFee(body?.guest_11_18_fee)) {
+    throw httpError(400, "guest_11_18_fee is required and must be a non-negative integer.", "invalid_pricing_payload");
+  }
   return {
     name,
+    guest_11_18_fee: Number(body.guest_11_18_fee),
+    ...discounts,
     effective_from: effectiveFrom,
     effective_to: effectiveTo,
     deposit_rate: parsePricingDepositRate(body?.deposit_rate ?? body?.depositRate ?? 0.3),
@@ -1436,8 +1451,9 @@ async function assertNoActiveRuleSetOverlap(payload, currentId = "") {
 function normalizePricingRateRow(row, fallbackRuleSetId) {
   const ruleSetId = cleanText(row?.rule_set_id || row?.ruleSetId || fallbackRuleSetId, 80);
   if (!ruleSetId) throw httpError(400, "rule_set_id is required.", "invalid_pricing_payload");
-  const guestCount = parsePricingInteger(row?.guest_count ?? row?.guestCount, "guest_count", 10, 18);
+  const guestCount = parsePricingInteger(row?.guest_count ?? row?.guestCount, "guest_count", 10, 10);
   const dayType = normalizePricingDayType(row?.day_type || row?.dayType);
+  if (!isValidGuestFee(row?.nightly_price ?? row?.nightlyPrice)) throw httpError(400, "nightly_price is required.", "invalid_pricing_payload");
   const nightlyPrice = parsePricingInteger(row?.nightly_price ?? row?.nightlyPrice, "nightly_price", 0, 10000000);
   return {
     rule_set_id: ruleSetId,
@@ -1452,14 +1468,36 @@ function normalizeSpecialDatePayload(body) {
   const ruleSetId = cleanText(body?.rule_set_id || body?.ruleSetId, 80);
   const date = normalizeDate(body?.date);
   if (!ruleSetId) throw httpError(400, "rule_set_id is required.", "invalid_pricing_payload");
-  if (!date) throw httpError(400, "date is invalid.", "invalid_pricing_payload");
+  if (!date || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) throw httpError(400, "date is invalid.", "invalid_pricing_payload");
+  const baseOverride = body?.base_price_override;
+  const discountOverride = body?.calendar_discount_rate_override;
+  if (!inheritsCalendarDiscount(discountOverride) && !isValidCalendarDiscountRate(discountOverride)) throw httpError(400, "calendar_discount_rate_override is invalid.", "invalid_pricing_payload");
+  if (baseOverride !== undefined && !isValidBasePriceOverride(baseOverride)) throw httpError(400, "base_price_override must be null or a positive integer.", "invalid_pricing_payload");
   return {
     rule_set_id: ruleSetId,
     date,
     day_type: normalizePricingDayType(body?.day_type || body?.dayType),
+    ...(baseOverride !== undefined ? { base_price_override: baseOverride === null ? null : Number(baseOverride) } : {}),
+    ...(discountOverride !== undefined ? { calendar_discount_rate_override: inheritsCalendarDiscount(discountOverride) ? null : Number(discountOverride) } : {}),
     label: cleanText(body?.label, 120) || null,
     is_active: parsePricingBoolean(body?.is_active ?? body?.isActive, true),
   };
+}
+
+async function handlePricingPreview(req, res, requestId) {
+  await requireAdmin(req);
+  const body = sanitizePayload(await readBody(req));
+  const month = cleanText(body?.month, 7);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !normalizeDate(`${month}-01`)) throw httpError(400, "month is invalid.", "invalid_pricing_payload");
+  const ruleSet = { ...normalizeRuleSetPayload(body.ruleSet), id: "admin-draft" };
+  if (!calendarDiscountFields.every(field => isValidCalendarDiscountRate(ruleSet[field]))) throw httpError(400, "Calendar defaults are required for preview.", "invalid_pricing_payload");
+  if (!Array.isArray(body.rates) || body.rates.length !== 3 || !Array.isArray(body.specialDates) || body.specialDates.length > 100) throw httpError(400, "Invalid calendar draft rows.", "invalid_pricing_payload");
+  const rates = body.rates.map(row => normalizePricingRateRow({ ...row, rule_set_id: ruleSet.id }, ruleSet.id));
+  const specialDates = body.specialDates.map(row => normalizeSpecialDatePayload({ ...row, rule_set_id: ruleSet.id }));
+  const activeDates = specialDates.filter(row => row.is_active).map(row => row.date);
+  if (new Set(rates.map(row => row.day_type)).size !== 3 || new Set(activeDates).size !== activeDates.length) throw httpError(400, "Duplicate calendar draft rows.", "invalid_pricing_payload");
+  const preview = await calculatePricingCalendarPreview({ month, ruleSet, rates, specialDates });
+  sendJson(res, 200, { ok: true, requestId, ...preview });
 }
 
 async function handlePricingGet(req, res, requestId) {
@@ -1473,7 +1511,7 @@ async function handlePricingGet(req, res, requestId) {
   const inFilter = ruleSetIds.length ? `in.(${ruleSetIds.join(",")})` : "";
   const rates = ruleSetIds.length
     ? await supabaseRequest(
-        `/booking_package_rates?rule_set_id=${inFilter}&select=*&order=guest_count.asc,day_type.asc`
+        `/booking_package_rates?rule_set_id=${inFilter}&guest_count=eq.10&select=*&order=guest_count.asc,day_type.asc`
       )
     : [];
   const specialDates = ruleSetIds.length
@@ -1532,6 +1570,9 @@ async function handlePricingRatesPost(req, res, requestId) {
     throw httpError(400, "rates are required.", "invalid_pricing_payload");
   }
   const payload = rows.map((row) => normalizePricingRateRow(row, ruleSetId));
+  if (payload.some(row => row.rule_set_id !== ruleSetId) || new Set(payload.map(row => row.day_type)).size !== payload.length) {
+    throw httpError(400, "Duplicate or mismatched base-price rows.", "invalid_pricing_payload");
+  }
   const savedRates = await supabaseRequest(
     "/booking_package_rates?on_conflict=rule_set_id,guest_count,day_type&select=*",
     {
@@ -1597,6 +1638,7 @@ async function dispatch(req, res, requestId) {
   if (req.method === "POST" && action === "email-detection") return handleEmailDetection(req, res, requestId);
   if (req.method === "POST" && action === "settings") return handleSettingsPost(req, res, requestId);
   if (req.method === "POST" && action === "pricing-rule-set") return handlePricingRuleSetPost(req, res, requestId);
+  if (req.method === "POST" && action === "pricing-preview") return handlePricingPreview(req, res, requestId);
   if (req.method === "POST" && action === "pricing-rates") return handlePricingRatesPost(req, res, requestId);
   if (req.method === "POST" && action === "pricing-special-date") return handlePricingSpecialDatePost(req, res, requestId);
   if (req.method === "POST" && action === "sync-ical") return handleSyncIcal(req, res, requestId);
@@ -1632,6 +1674,9 @@ export default async function handler(req, res) {
 }
 
 export const __testing = {
+  normalizeRuleSetPayload,
+  normalizePricingRateRow,
+  normalizeSpecialDatePayload,
   buildPartnerPointsEligibility,
   calculatePartnerRewardPoints,
   getCouponCodeKey,

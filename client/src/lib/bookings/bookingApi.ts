@@ -40,6 +40,14 @@ export type BookingCalendarResult = {
 
 export type BookingPricingBreakdownNight = {
   date: string;
+  guestPricingSource?: "base_plus_configured_fee";
+  guest11To18Fee?: number;
+  guest19To20Fee?: number;
+  base10GuestPriceOverride?: boolean;
+  calendarDiscountRate?: number;
+  calendarDiscountSource?: "daily_override" | "holiday" | "friday" | "saturday" | "weekday" | "legacy_no_calendar_discount";
+  calendarDiscountAmount?: number;
+  priceAfterCalendarDiscount?: number;
   dayType: "weekday" | "friday" | "holiday";
   dayTypeLabel: string;
   price: number;

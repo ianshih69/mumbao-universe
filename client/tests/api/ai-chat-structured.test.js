@@ -48,7 +48,7 @@ function jsonResponse(data, status = 200) {
   });
 }
 
-function createHandlerHarness(initialContext = {}, { qualityResponse, providerResponse, onResponse } = {}) {
+function createHandlerHarness(initialContext = {}, { qualityResponse, providerResponse, onResponse, guest11To18Fee = 1250, calendarDiscounts = {} } = {}) {
   let sequence = 0;
   let session = {
     id: sessionId,
@@ -139,7 +139,7 @@ function createHandlerHarness(initialContext = {}, { qualityResponse, providerRe
       }
     }
 
-    if (table === "booking_price_rule_sets") return jsonResponse([ruleSet]);
+    if (table === "booking_price_rule_sets") return jsonResponse([{ ...ruleSet, guest_11_18_fee: guest11To18Fee, ...calendarDiscounts }]);
     if (table === "booking_special_dates") return jsonResponse([]);
     if (table === "booking_package_rates") {
       const guests = Number(
@@ -1055,6 +1055,7 @@ describe("production AI chat structured authority", () => {
       .map(([url]) => new URL(String(url)))
       .filter((url) => url.pathname.endsWith("/booking_package_rates"));
     expect(rateRequests.length).toBeGreaterThan(0);
+    expect(rateRequests.every((url) => url.searchParams.get("guest_count") === "eq.10")).toBe(true);
     expect(rateRequests.every((url) => url.searchParams.get("day_type") === "eq.weekday")).toBe(true);
     expect(actual.payload.metadata).toMatchObject({
       final_result_category: "grounded_reply", total_price_amount: amount,
@@ -1065,6 +1066,22 @@ describe("production AI chat structured authority", () => {
       stay_nights: 1, adult_count: adults, child_count: 0, infant_count: 0,
       pet_count: 0, pet_weights_kg: [], breakfast_count: 0, pending_interaction: null });
     expect(harness.getStructuredProviderCalls()).toBe(1);
+    expect(harness.getNonFixtureCalls()).toBe(0);
+  });
+
+  it.each([[0.8,20000],[0.85,21250]])("uses configured calendar discount %s through the actual handler", async (rate, total) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-20T04:00:00Z"));
+    vi.stubEnv("AI_STRUCTURED_TURN_INTERPRETER_MODE", "active");
+    vi.stubEnv("AI_CONTEXT_SEMANTIC_RESOLVER_ENABLED", "true");
+    const harness = createHandlerHarness({}, { calendarDiscounts: { weekday_discount_rate: rate, friday_discount_rate: 0.9, saturday_discount_rate: 0.9, holiday_discount_rate: 0.9 } });
+    vi.stubGlobal("fetch", harness.fetchMock);
+    const response = await harness.send("2026/11/1 10人住一晚多少", "calendar-discount-quote");
+    expect(response.statusCode).toBe(200);
+    expect(response.payload.metadata.total_price_amount).toBe(total);
+    expect(response.payload.answer).toContain(`TWD ${total.toLocaleString("en-US")}`);
+    expect(harness.getSession().conversation_context).toMatchObject({ check_in:"2026-11-01", check_out:"2026-11-02", adult_count:10, stay_nights:1 });
+    expect(harness.getStructuredProviderCalls()).toBeLessThanOrEqual(1);
     expect(harness.getNonFixtureCalls()).toBe(0);
   });
 

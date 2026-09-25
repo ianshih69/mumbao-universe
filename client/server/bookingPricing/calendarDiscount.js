@@ -1,5 +1,5 @@
 export const calendarDiscountFields = [
-  "weekday_discount_rate", "friday_discount_rate", "saturday_discount_rate", "holiday_discount_rate",
+  "weekday_discount_rate", "friday_discount_rate",
 ];
 
 export function isValidCalendarDiscountRate(value) {
@@ -22,13 +22,12 @@ export function resolveCalendarDiscount({ date, ruleSet, specialDate, requestedD
   if (!calendarDiscountFields.every(field => isValidCalendarDiscountRate(ruleSet[field]))) return { ok: false };
   if (!inheritsCalendarDiscount(override)) return isValidCalendarDiscountRate(override)
     ? { ok: true, rate: Number(override), source: "daily_override" } : { ok: false };
-  let source;
-  if (requestedDayType) source = requestedDayType;
-  else if (daily?.day_type === "holiday") source = "holiday";
-  else {
-    const day = new Date(`${date}T00:00:00Z`).getUTCDay();
-    source = day === 5 ? "friday" : day === 6 ? "saturday" : "weekday";
-  }
-  const rate = ruleSet[`${source}_discount_rate`];
+  // Date-type-only quotes have no actual date; holiday denotes the Saturday base.
+  // Dated quotes use the weekday, never the special-date base category.
+  const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+  const source = requestedDayType
+    ? requestedDayType === "weekday" ? "weekday" : requestedDayType === "friday" ? "friday" : "saturday"
+    : day === 5 ? "friday" : day === 6 ? "saturday" : "weekday";
+  const rate = ruleSet[source === "weekday" ? "weekday_discount_rate" : "friday_discount_rate"];
   return isValidCalendarDiscountRate(rate) ? { ok: true, rate: Number(rate), source } : { ok: false };
 }

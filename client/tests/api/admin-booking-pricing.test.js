@@ -33,7 +33,19 @@ describe("admin calendar discounts and read-only draft preview",()=>{
   it("saves all default discounts through the authenticated existing action",async()=>{
     expect((await call("pricing-rule-set",{...rule,...discounts,weekday_discount_rate:0.85})).statusCode).toBe(200);
     const write=supabaseRequest.mock.calls.find(([p,o])=>p.startsWith("/booking_price_rule_sets")&&o);
-    expect(JSON.parse(write[1].body)).toMatchObject({...discounts,weekday_discount_rate:0.85});
+    expect(JSON.parse(write[1].body)).toMatchObject({weekday_discount_rate:0.85,friday_discount_rate:0.9,saturday_discount_rate:0.9});
+    expect(JSON.parse(write[1].body)).not.toHaveProperty("holiday_discount_rate");
+  });
+  it("synchronizes both weekend columns server-side and preserves the retired holiday field",async()=>{
+    const res=await call("pricing-rule-set",{...rule,weekday_discount_rate:0.8,friday_discount_rate:0.75,saturday_discount_rate:0.99,holiday_discount_rate:1});
+    expect(res.statusCode).toBe(200);
+    const write=supabaseRequest.mock.calls.find(([p,o])=>p.startsWith("/booking_price_rule_sets")&&o);
+    expect(JSON.parse(write[1].body)).toMatchObject({friday_discount_rate:0.75,saturday_discount_rate:0.75});
+    expect(JSON.parse(write[1].body)).not.toHaveProperty("holiday_discount_rate");
+  });
+  it("accepts just the two visible defaults, but never a Saturday-only update",()=>{
+    expect(__testing.normalizeRuleSetPayload({...rule,weekday_discount_rate:0.8,friday_discount_rate:0.9})).toMatchObject({saturday_discount_rate:0.9});
+    expect(()=>__testing.normalizeRuleSetPayload({...rule,saturday_discount_rate:0.7})).toThrow();
   });
   it.each([null,"",0,"0",0.0099,true,[],{},-0.1,1.1,0.12345])("rejects invalid discounts %s",value=>{
     expect(()=>__testing.normalizeRuleSetPayload({...rule,...discounts,weekday_discount_rate:value})).toThrow();

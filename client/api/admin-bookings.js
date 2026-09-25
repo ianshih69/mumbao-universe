@@ -1402,11 +1402,12 @@ function normalizePricingDayType(value) {
 
 function normalizeRuleSetPayload(body) {
   const discounts = {};
-  if (calendarDiscountFields.some(field => Object.hasOwn(body || {}, field))) {
+  if ([...calendarDiscountFields, "saturday_discount_rate"].some(field => Object.hasOwn(body || {}, field))) {
     for (const field of calendarDiscountFields) {
       if (!isValidCalendarDiscountRate(body[field])) throw httpError(400, `${field} is invalid.`, "invalid_pricing_payload");
       discounts[field] = Number(body[field]);
     }
+    discounts.saturday_discount_rate = discounts.friday_discount_rate;
   }
   const name = cleanText(body?.name, 120);
   const effectiveFrom = normalizeDate(body?.effective_from || body?.effectiveFrom);

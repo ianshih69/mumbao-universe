@@ -3,7 +3,7 @@ import { buildBookingPricingSnapshot, calculateBookingQuote, calculateBookingQuo
 
 function fixture() {
   const rule = { id:"calendar-test", name:"Synthetic calendar", effective_from:"2026-11-01", effective_to:"2027-02-01", deposit_rate:0.3, is_active:true, guest_11_18_fee:1250,
-    weekday_discount_rate:0.8, friday_discount_rate:0.9, saturday_discount_rate:0.9, holiday_discount_rate:0.9 };
+    weekday_discount_rate:0.8, friday_discount_rate:0.9, saturday_discount_rate:0.9, holiday_discount_rate:1 };
   const daily = new Map();
   const bases = { weekday:25000, friday:32000, holiday:39000 };
   const request = async path => {
@@ -29,17 +29,41 @@ describe("calendar discount through the shared quote engine",()=>{
     expect(q.pricing.total).toBe(total);
     expect(q.pricing.breakdown[0].calendarDiscountSource).toBe(source);
   });
-  it("prioritizes a holiday over weekday and a daily rate over both",async()=>{
+  it("uses the weekday discount even when the base category is holiday",async()=>{
     const f=fixture();f.daily.set("2026-12-31",{day_type:"holiday",is_active:true});
-    expect((await f.quote("2026-12-31")).pricing.breakdown[0]).toMatchObject({calendarDiscountSource:"holiday",calendarDiscountRate:0.9,price:35100});
+    expect((await f.quote("2026-12-31")).pricing.breakdown[0]).toMatchObject({calendarDiscountSource:"weekday",calendarDiscountRate:0.8,price:31200});
     f.daily.get("2026-12-31").calendar_discount_rate_override=0.85;
     expect((await f.quote("2026-12-31")).pricing.breakdown[0]).toMatchObject({calendarDiscountSource:"daily_override",calendarDiscountRate:0.85,price:33150});
   });
-  it("separates Saturday and special holiday settings",async()=>{
+  it("shares Friday's configured discount with Saturday, ignoring legacy fields",async()=>{
     const f=fixture();f.rule.saturday_discount_rate=0.88;
-    expect((await f.quote("2026-11-07")).pricing.total).toBe(34320);
+    expect((await f.quote("2026-11-07")).pricing.total).toBe(35100);
     f.daily.set("2026-11-07",{day_type:"holiday"});
     expect((await f.quote("2026-11-07")).pricing.total).toBe(35100);
+    f.rule.friday_discount_rate=0.85;
+    expect((await f.quote("2026-11-07")).pricing.total).toBe(33150);
+    expect((await f.quote("2026-11-06")).pricing.total).toBe(27200);
+  });
+  it("preserves Saturday inheritance through base-only edits and restoring defaults",async()=>{
+    const f=fixture();
+    expect((await f.quote("2026-11-07")).pricing.total).toBe(35100);
+    const row={day_type:"holiday",label:"Preserve existing classification",is_active:true,base_price_override:40000,calendar_discount_rate_override:null};
+    f.daily.set("2026-11-07",row);
+    expect((await f.quote("2026-11-07")).pricing.total).toBe(36000);
+    row.base_price_override=null;
+    expect((await f.quote("2026-11-07")).pricing.total).toBe(35100);
+    expect(row.label).toBe("Preserve existing classification");
+  });
+  it("restores a weekday override without mutating a previously persisted order",async()=>{
+    const f=fixture();
+    const old=buildBookingPricingSnapshot(await f.quote("2026-11-02",{adults:15,checkOut:"2026-11-04"}));
+    const before=JSON.stringify(old);
+    expect(old.quoted_total).toBe(48750);
+    f.daily.set("2026-11-02",{day_type:"weekday",base_price_override:null,calendar_discount_rate_override:0.9});
+    expect((await f.quote()).pricing.total).toBe(22500);
+    f.daily.get("2026-11-02").calendar_discount_rate_override=null;
+    expect((await f.quote()).pricing.total).toBe(20000);
+    expect(JSON.stringify(old)).toBe(before);
   });
   it("uses daily base and discount together",async()=>{
     const f=fixture();f.daily.set("2026-11-10",{day_type:"weekday",base_price_override:27000});
@@ -83,7 +107,7 @@ describe("calendar discount through the shared quote engine",()=>{
     const f=fixture();f.rule.saturday_discount_rate=0.5;
     const q=await calculateBookingQuoteForDayTypes({adults:10,dayTypes:["holiday"]},{supabaseRequest:f.request,referenceDate:"2026-11-01"});
     expect(q.pricing.total).toBe(35100);
-    expect(q.pricing.breakdown[0].calendarDiscountSource).toBe("holiday");
+    expect(q.pricing.breakdown[0].calendarDiscountSource).toBe("saturday");
   });
   it.each([0.01,0.8,0.9,1])("accepts explicit daily override %s",async rate=>{
     const f=fixture();f.daily.set("2026-11-02",{day_type:"weekday",calendar_discount_rate_override:rate});

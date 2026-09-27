@@ -81,6 +81,7 @@ export type BookingPricingBreakdownNight = {
   chargeableChildCount?: number;
   childFeeUnitPrice?: number;
   childFeeAmount?: number;
+  childFeeOriginalAmount?: number;
   petFeeOriginalAmount?: number;
   petFeeAmount?: number;
   petFeeDiscountRate?: number;

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { BookingDatePicker } from "@/components/bookings/BookingDatePicker";
 import { Button } from "@/components/ui/button";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import {
@@ -52,13 +53,8 @@ import {
 } from "@/lib/bookings/bookingPaymentView";
 import {
   getBookingRangeIssue,
-  isBookableStayNight,
-  isCalendarFilterMismatch,
   normalizeBookingCalendarDay,
-  saleModeToStayType,
   stayTypeToSaleMode,
-  type BookingCalendarDayView,
-  type BookingCalendarFilter,
   type BookingSaleMode,
 } from "@/lib/bookings/bookingCalendarView";
 import {
@@ -69,7 +65,6 @@ import {
 import {
   createDefaultBookingDateRange,
   MIN_BOOKING_DATE_LABEL,
-  MIN_BOOKING_MONTH_DAY_LABEL,
   resolveBookingDraftDateRange,
   resolveEarliestBookingDate,
 } from "@/lib/bookings/bookingDateRules";
@@ -131,11 +126,7 @@ function createDefaultBookingForm(today = todayText()): BookingForm {
 const bookingTestPassword = "123";
 const bookingTestStorageKey = "mumbao_booking_test_unlocked_v1";
 const bookingRecoveryStorageKey = "mumbao_booking_hold_recovery_v1";
-const calendarFilters: Array<{ value: BookingCalendarFilter; label: string }> = [
-  { value: "all", label: "全部" },
-  { value: "whole_house", label: "只看包棟" },
-  { value: "room", label: "只看單間" },
-];
+
 
 const bookingGalleryImages = [
   { src: "/images/Main/STime.JPG", alt: "慢慢蒔光住宿空間外觀" },
@@ -292,21 +283,6 @@ function addMonthsToDate(dateText: string, months: number) {
   return toDateText(target);
 }
 
-function addMonths(monthStart: string, months: number) {
-  const date = parseDate(monthStart);
-  date.setUTCMonth(date.getUTCMonth() + months);
-  return `${toDateText(date).slice(0, 7)}-01`;
-}
-
-function monthStart(dateText: string) {
-  return `${dateText.slice(0, 7)}-01`;
-}
-
-function monthLabel(month: string) {
-  const date = parseDate(month);
-  return new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "long" }).format(date);
-}
-
 function formatDate(dateText: string) {
   if (!dateText) return "-";
   return new Intl.DateTimeFormat("zh-TW", {
@@ -320,7 +296,7 @@ function formatSearchDate(dateText: string) {
   const date = parseDate(dateText);
   const month = date.getUTCMonth() + 1;
   const day = date.getUTCDate();
-  return `${month}/${day}（${weekdays[date.getUTCDay()]}）`;
+  return `${date.getUTCFullYear()}/${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}（${weekdays[date.getUTCDay()]}）`;
 }
 
 function formatCompactDate(dateText: string) {
@@ -407,24 +383,6 @@ function nightsBetween(checkIn: string, checkOut: string) {
   if (!checkIn || !checkOut || checkOut <= checkIn) return 0;
   const msPerDay = 24 * 60 * 60 * 1000;
   return Math.round((parseDate(checkOut).getTime() - parseDate(checkIn).getTime()) / msPerDay);
-}
-
-function daysInMonth(month: string) {
-  const start = parseDate(month);
-  const next = new Date(start);
-  next.setUTCMonth(next.getUTCMonth() + 1);
-  next.setUTCDate(0);
-  return next.getUTCDate();
-}
-
-function getMonthDates(month: string) {
-  const start = parseDate(month);
-  const leadingBlanks = start.getUTCDay();
-  const days = daysInMonth(month);
-  return [
-    ...Array.from({ length: leadingBlanks }, () => ""),
-    ...Array.from({ length: days }, (_, index) => `${month.slice(0, 7)}-${String(index + 1).padStart(2, "0")}`),
-  ];
 }
 
 function getDefaultStayType(settings: PublicBookingSettings): StayType {
@@ -582,45 +540,6 @@ function rangeIssueMessage(stayType: StayType, issue: string) {
   return "這段日期中有不可預約的日期，請重新選擇。";
 }
 
-function getCalendarDayLabels(day: BookingCalendarDayView, minDate: string, maxDate: string) {
-  if (day.date < minDate) {
-    return { modeLabel: "已過日期", statusLabel: "", mobileStatusLabel: "", unavailable: true };
-  }
-  if (day.date > maxDate || day.saleMode === "closed") {
-    return { modeLabel: "未開放", statusLabel: "", mobileStatusLabel: "", unavailable: true };
-  }
-  if (!day.isAvailable) {
-    return {
-      modeLabel: saleModeLabel(day.saleMode),
-      statusLabel: "已滿房",
-      mobileStatusLabel: "已滿",
-      unavailable: true,
-    };
-  }
-  if (day.saleMode === "room" && day.remainingRooms !== null) {
-    return {
-      modeLabel: "單間",
-      statusLabel: `剩 ${day.remainingRooms} 間`,
-      mobileStatusLabel: `${day.remainingRooms} 間`,
-      unavailable: false,
-    };
-  }
-  return {
-    modeLabel: saleModeLabel(day.saleMode),
-    statusLabel: "可預約",
-    mobileStatusLabel: "可訂",
-    unavailable: false,
-  };
-}
-
-function calendarDayAriaLabel(day: BookingCalendarDayView, minDate: string, maxDate: string) {
-  const labels = getCalendarDayLabels(day, minDate, maxDate);
-  const dateLabel = formatFullDate(day.date);
-  if (labels.modeLabel === "已過日期") return `${dateLabel}，已過日期`;
-  if (labels.modeLabel === "未開放") return `${dateLabel}，未開放`;
-  const availability = labels.statusLabel || (labels.unavailable ? "不可預約" : "可預約");
-  return `${dateLabel}，${labels.modeLabel}，${availability}`;
-}
 
 export default function Booking() {
   const { session } = useCustomerAuth();
@@ -630,10 +549,10 @@ export default function Booking() {
   const [nationality, setNationality] = useState("台灣");
   const [settings, setSettings] = useState<PublicBookingSettings>(() => ({ ...DEFAULT_BOOKING_SETTINGS }));
   const [bookingCopy, setBookingCopy] = useState<BookingCmsCopy>(fallbackBookingCopy);
-  const [visibleMonth, setVisibleMonth] = useState(() => monthStart(resolveEarliestBookingDate(todayText())));
+
   const [unavailableDates, setUnavailableDates] = useState<Set<string>>(new Set());
   const [calendarDaySources, setCalendarDaySources] = useState<NonNullable<BookingCalendarResult["days"]>>([]);
-  const [calendarFilter, setCalendarFilter] = useState<BookingCalendarFilter>("all");
+
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [otherNeedsOpen, setOtherNeedsOpen] = useState(false);
@@ -642,7 +561,7 @@ export default function Booking() {
   const [hasAgreedBookingTerms, setHasAgreedBookingTerms] = useState(false);
   const [dailyPriceDetailsOpen, setDailyPriceDetailsOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState<CalendarSelectionMode>("checkIn");
-  const [hoverPreviewDate, setHoverPreviewDate] = useState("");
+  const [calendarReady, setCalendarReady] = useState(false);
   const [selectedGalleryIndex, setSelectedGalleryIndex] = useState(0);
   const [maxDate, setMaxDate] = useState(() => addMonthsToDate(todayText(), DEFAULT_BOOKING_SETTINGS.bookingWindowMonths));
   const [message, setMessage] = useState("");
@@ -680,12 +599,11 @@ export default function Booking() {
   const [bookingTestError, setBookingTestError] = useState("");
   const bookingFlowRef = useRef<HTMLDivElement | null>(null);
   const bookingSearchRef = useRef<HTMLDivElement | null>(null);
-  const calendarPanelRef = useRef<HTMLElement | null>(null);
+
   const peoplePanelRef = useRef<HTMLElement | null>(null);
 
   const minDate = resolveEarliestBookingDate(todayText());
-  const maxMonth = monthStart(maxDate);
-  const earliestVisibleMonth = addMonths(monthStart(minDate), -1);
+
   const bookingIsOpen = settings.allowVillaBooking || settings.allowRoomBooking;
   const calendarDaySourceMap = useMemo(
     () => new Map(calendarDaySources.map((day) => [day.date, day])),
@@ -939,6 +857,7 @@ export default function Booking() {
     fetchBookingCalendar(minDate)
       .then((data) => {
         if (!isCurrent) return;
+        setCalendarReady(true);
         setUnavailableDates(new Set(data.unavailableDates));
         setCalendarDaySources(data.days || []);
         setMaxDate(data.maxDate);
@@ -1099,13 +1018,13 @@ export default function Booking() {
   ]);
 
   useEffect(() => {
-    if (!calendarOpen && !peopleOpen) return;
+    if (!peopleOpen) return;
 
     function handlePointerDown(event: MouseEvent | TouchEvent) {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (bookingSearchRef.current?.contains(target)) return;
-      if (calendarPanelRef.current?.contains(target)) return;
+
       if (peoplePanelRef.current?.contains(target)) return;
       setCalendarOpen(false);
       setPeopleOpen(false);
@@ -1126,7 +1045,7 @@ export default function Booking() {
       document.removeEventListener("touchstart", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [calendarOpen, peopleOpen]);
+  }, [peopleOpen]);
 
   function updateField<K extends keyof BookingForm>(field: K, value: BookingForm[K]) {
     setForm((current) => {
@@ -1164,46 +1083,12 @@ export default function Booking() {
     setError("");
   }
 
-  function clearDateSelection() {
-    setForm((current) => {
-      const stayType = getDefaultStayType(settings);
-      return {
-        ...current,
-        check_in: "",
-        check_out: "",
-        stay_type: stayType,
-        room_count: stayType === "villa" ? settings.totalRoomCount : clampRoomCount(current.room_count, settings.totalRoomCount),
-      };
-    });
-    setMessage("");
-    setError("");
-    setSubmittedRequestId("");
-    setSubmittedBookingSummary(null);
-    setSelectionMode("checkIn");
-    setBookingStep(1);
-  }
-
-  function handleCalendarFilterChange(nextFilter: BookingCalendarFilter) {
-    setCalendarFilter(nextFilter);
-    clearDateSelection();
-    setHoverPreviewDate("");
-    setCalendarOpen(true);
-  }
-
   function openCalendar(mode: CalendarSelectionMode) {
-    const nextMode = mode === "checkOut" && !form.check_in ? "checkIn" : mode;
-    setSelectionMode(nextMode);
+    if (!calendarReady || isCalendarLoading || !bookingIsOpen) return;
+    setSelectionMode(mode === "checkOut" && !form.check_in ? "checkIn" : mode);
     setCalendarOpen(true);
     setPeopleOpen(false);
-    setHoverPreviewDate("");
     setError("");
-    if (nextMode === "checkIn" && form.check_in) {
-      setVisibleMonth(monthStart(form.check_in));
-      return;
-    }
-    if (nextMode === "checkOut") {
-      setVisibleMonth(monthStart(form.check_out || form.check_in || minDate));
-    }
   }
 
   function togglePeoplePopover() {
@@ -1212,85 +1097,7 @@ export default function Booking() {
     setError("");
   }
 
-  function selectDate(date: string) {
-    setMessage("");
-    setError("");
-    setSubmittedRequestId("");
-    setSubmittedBookingSummary(null);
 
-    if (!bookingIsOpen || date < minDate || date > maxDate) return;
-
-    setForm((current) => {
-      const clickedDay = getCalendarDay(date);
-      const currentSaleMode = stayTypeToSaleMode(current.stay_type);
-      const selectingCheckout = selectionMode === "checkOut" || Boolean(current.check_in && !current.check_out);
-      const canUseAsCheckout =
-        selectingCheckout &&
-        current.check_in &&
-        date > current.check_in &&
-        getBookingRangeIssue({
-          checkIn: current.check_in,
-          checkOut: date,
-          saleMode: currentSaleMode,
-          minDate,
-          maxDate,
-          getDay: getCalendarDay,
-        }) === "ok";
-      const filteredOut = isCalendarFilterMismatch(clickedDay, calendarFilter) && !canUseAsCheckout;
-      const canUseAsStayNight = isBookableStayNight(clickedDay, minDate, maxDate) && !filteredOut;
-
-      if (selectionMode === "checkOut" && current.check_in) {
-        if (!canUseAsCheckout) {
-          setError(date <= current.check_in ? "退房日期需晚於入住日期。" : rangeIssueMessage(current.stay_type, "invalid_range"));
-          return current;
-        }
-        const nextForm = { ...current, check_out: date };
-        setMessage("");
-        setCalendarOpen(false);
-        setSelectionMode("checkIn");
-        setHoverPreviewDate("");
-        return nextForm;
-      }
-
-      if (!canUseAsStayNight && !canUseAsCheckout) return current;
-
-      if (!current.check_in || (current.check_in && current.check_out) || date < current.check_in) {
-        const stayType = saleModeToStayType(clickedDay.saleMode) || getDefaultStayType(settings);
-        setMessage(`您已選擇${stayType === "villa" ? "包棟" : "單間"}住宿，請選擇退房日期。`);
-        setSelectionMode("checkOut");
-        setCalendarOpen(true);
-        setHoverPreviewDate("");
-        return {
-          ...current,
-          check_in: date,
-          check_out: "",
-          stay_type: stayType,
-          room_count: stayType === "villa" ? settings.totalRoomCount : clampRoomCount(current.room_count, settings.totalRoomCount),
-        };
-      }
-
-      if (date === current.check_in) return { ...current, check_out: "" };
-
-      const nextForm = { ...current, check_out: date };
-      const rangeIssue = getBookingRangeIssue({
-        checkIn: nextForm.check_in,
-        checkOut: nextForm.check_out,
-        saleMode: currentSaleMode,
-        minDate,
-        maxDate,
-        getDay: getCalendarDay,
-      });
-      if (rangeIssue !== "ok") {
-        setError(rangeIssueMessage(current.stay_type, rangeIssue));
-        return { ...current, check_out: "" };
-      }
-      setMessage("");
-      setCalendarOpen(false);
-      setSelectionMode("checkIn");
-      setHoverPreviewDate("");
-      return nextForm;
-    });
-  }
 
   async function handleCheckAvailability() {
     if (!form.check_in || !form.check_out) {
@@ -1696,7 +1503,7 @@ export default function Booking() {
 
   function renderBookingStepper() {
     return (
-      <div ref={bookingFlowRef} className="mt-5 grid min-w-0 grid-cols-4 gap-0">
+      <div ref={bookingFlowRef} className="mb-5 mt-4 grid max-w-lg min-w-0 grid-cols-4 gap-0">
         {bookingSteps.map((step) => {
           const isCurrent = bookingStep === step.step;
           const isComplete = bookingStep > step.step;
@@ -1714,7 +1521,7 @@ export default function Booking() {
               )}
               <span
                 className={cn(
-                  "relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold sm:h-8 sm:w-8",
+                  "relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-medium",
                   isCurrent
                     ? "border-[#8b6f5b] bg-[#8b6f5b] text-white"
                     : isComplete
@@ -1726,7 +1533,7 @@ export default function Booking() {
               </span>
               <span
                 className={cn(
-                  "min-w-0 break-words text-[11px] font-medium leading-4 sm:text-sm sm:leading-5",
+                  "min-w-0 break-words text-[11px] font-medium leading-4 sm:text-xs",
                   isCurrent ? "text-stone-900" : isComplete ? "text-[#765d4a]" : "text-stone-400"
                 )}
               >
@@ -1937,100 +1744,7 @@ export default function Booking() {
     );
   }
 
-  function renderMonth(month: string) {
-    const dates = getMonthDates(month);
-    const previewCheckOut =
-      selectionMode === "checkOut" && form.check_in && hoverPreviewDate > form.check_in ? hoverPreviewDate : "";
-    const displayCheckOut = previewCheckOut || form.check_out;
-    const hasDisplayRange = Boolean(form.check_in && displayCheckOut && displayCheckOut > form.check_in);
-    const rangeBackgroundClass = previewCheckOut ? "before:bg-[#f8efe6]" : "before:bg-[#f3eadf]";
 
-    return (
-      <div>
-        <div className="grid grid-cols-7 text-center text-xs font-medium text-stone-400">
-          {weekdays.map((weekday) => (
-            <span key={weekday}>{weekday}</span>
-          ))}
-        </div>
-        <div className="mt-2 grid grid-cols-7 gap-y-1" onMouseLeave={() => setHoverPreviewDate("")}>
-          {dates.map((date, index) => {
-            if (!date) return <div key={`blank-${month}-${index}`} className="h-10" />;
-
-            const unavailable = unavailableDates.has(date);
-            const outOfRange = date < minDate || date > maxDate || !bookingIsOpen;
-            const day = getCalendarDay(date);
-            const currentSaleMode = stayTypeToSaleMode(form.stay_type);
-            const selectingCheckout = selectionMode === "checkOut" || Boolean(form.check_in && !form.check_out);
-            const canUseAsCheckout =
-              Boolean(form.check_in && selectingCheckout && date > form.check_in) &&
-              getBookingRangeIssue({
-                checkIn: form.check_in,
-                checkOut: date,
-                saleMode: currentSaleMode,
-                minDate,
-                maxDate,
-                getDay: getCalendarDay,
-              }) === "ok";
-            const isCheckIn = date === form.check_in;
-            const isCheckOut = date === form.check_out;
-            const isPreviewCheckOut = Boolean(previewCheckOut && date === previewCheckOut && !isCheckOut);
-            const rangeStart = Boolean(hasDisplayRange && date === form.check_in);
-            const rangeEnd = Boolean(hasDisplayRange && date === displayCheckOut);
-            const rangeMiddle = Boolean(hasDisplayRange && date > form.check_in && date < displayCheckOut);
-            const filteredOut = isCalendarFilterMismatch(day, calendarFilter) && !canUseAsCheckout;
-            const disabled =
-              outOfRange ||
-              filteredOut ||
-              (selectingCheckout && form.check_in
-                ? !canUseAsCheckout
-                : !isBookableStayNight(day, minDate, maxDate) && !canUseAsCheckout);
-            const muted = disabled || filteredOut || unavailable || !day.isAvailable || day.saleMode === "closed";
-            const isToday = date === minDate;
-
-            return (
-              <div
-                key={date}
-                className={cn(
-                  "relative flex h-10 items-center justify-center overflow-hidden",
-                  (rangeStart || rangeEnd || rangeMiddle) &&
-                    "before:absolute before:top-1/2 before:h-8 before:-translate-y-1/2",
-                  (rangeStart || rangeEnd || rangeMiddle) && rangeBackgroundClass,
-                  rangeStart && !rangeEnd && "before:left-1/2 before:right-0",
-                  rangeEnd && !rangeStart && "before:left-0 before:right-1/2",
-                  rangeMiddle && "before:left-0 before:right-0"
-                )}
-                onMouseEnter={() => {
-                  if (selectionMode === "checkOut" && canUseAsCheckout) setHoverPreviewDate(date);
-                }}
-                onFocus={() => {
-                  if (selectionMode === "checkOut" && canUseAsCheckout) setHoverPreviewDate(date);
-                }}
-              >
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => selectDate(date)}
-                  className={cn(
-                    "relative z-10 flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-[#eadfce]",
-                    muted && "text-stone-300",
-                    disabled && "cursor-not-allowed",
-                    !disabled && "text-stone-700 hover:bg-[#f7f1e9]",
-                    isToday && !isCheckIn && !isCheckOut && "ring-1 ring-[#d7c5b2]",
-                    rangeMiddle && !disabled && "text-[#765d4a]",
-                    isPreviewCheckOut && !disabled && "border border-[#d7c5b2] bg-[#fff8ea] text-[#765d4a]",
-                    (isCheckIn || isCheckOut) && "bg-[#8b6f5b] text-white shadow-sm hover:bg-[#765d4a]"
-                  )}
-                  aria-label={calendarDayAriaLabel(day, minDate, maxDate)}
-                >
-                  {Number(date.slice(8, 10))}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#fbf7f1] text-stone-900">
@@ -2077,7 +1791,7 @@ export default function Booking() {
             ref={bookingSearchRef}
             className="relative mt-2 w-full max-w-full min-w-0"
           >
-            <div className="grid min-w-0 grid-cols-2 overflow-hidden rounded-[16px] border border-[#eadfce] bg-white shadow-[0_8px_22px_rgba(120,90,65,0.035)] md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.85fr)]">
+            <div className="grid min-w-0 grid-cols-2 overflow-hidden rounded-lg border border-[#eadfce] bg-white md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.85fr)]">
               <button
                 type="button"
                 className={cn(
@@ -2124,80 +1838,41 @@ export default function Booking() {
               </button>
             </div>
             {isCalendarLoading && <p className="mt-3 text-sm text-stone-500">房況載入中...</p>}
+            {!calendarOpen && selectedIsAvailable && (
+              <p className="mt-3 text-sm text-[#765d4a]" aria-live="polite">
+                {nightCount} 晚{isQuoteLoading ? " · 房價讀取中…" : quoteTotal != null ? ` · NT$${quoteTotal.toLocaleString("zh-TW")}` : ""}
+              </p>
+            )}
 
-            {calendarOpen && (
-              <section
-                ref={calendarPanelRef}
-                className="absolute left-0 right-0 top-full z-40 mt-3 box-border w-full max-w-[calc(100vw-1.5rem)] min-w-0 rounded-[18px] border border-[#eadfce] bg-white p-3 shadow-xl sm:right-auto sm:w-[380px] sm:p-4"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 rounded-full"
-                    disabled={visibleMonth <= earliestVisibleMonth}
-                    onClick={() => {
-                      setHoverPreviewDate("");
-                      setVisibleMonth((current) => addMonths(current, -1));
-                    }}
-                    aria-label="上一個月"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <p className="font-serif text-xl text-stone-900">{monthLabel(visibleMonth)}</p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 rounded-full"
-                    disabled={visibleMonth >= maxMonth}
-                    onClick={() => {
-                      setHoverPreviewDate("");
-                      setVisibleMonth((current) => addMonths(current, 1));
-                    }}
-                    aria-label="下一個月"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-                <p className="mt-1 text-center text-xs text-stone-500">
-                  {selectionMode === "checkOut" ? "請選擇退房日期" : "請選擇入住日期"}
-                </p>
-                <p className="mt-1 text-center text-xs text-stone-500">{MIN_BOOKING_MONTH_DAY_LABEL} 起開放預約</p>
-
-                <div className="mt-3 grid grid-cols-3 gap-1 rounded-full bg-[#fbf7f1] p-1">
-                  {calendarFilters.map((filter) => (
-                    <button
-                      key={filter.value}
-                      type="button"
-                      onClick={() => handleCalendarFilterChange(filter.value)}
-                      className={cn(
-                        "rounded-full px-2 py-1.5 text-xs font-medium transition",
-                        calendarFilter === filter.value
-                          ? "bg-[#8b6f5b] text-white"
-                          : "text-stone-500 hover:bg-white hover:text-[#765d4a]"
-                      )}
-                    >
-                      {filter.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="mt-4">
-                  {renderMonth(visibleMonth)}
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-3 text-[11px] text-stone-500">
-                  <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[#8b6f5b]" />已選</span>
-                  <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[#f3eadf]" />住宿期間</span>
-                  <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full border border-[#d7c5b2]" />今天</span>
-                  <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-stone-200" />不可選</span>
-                </div>
-
-                {message && <div className="mt-3 rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-700">{message}</div>}
-                {error && <div className="mt-3 rounded-[8px] border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">{error}</div>}
-              </section>
+            {calendarOpen && calendarReady && (
+              <BookingDatePicker
+                initial={{ checkIn: form.check_in, checkOut: form.check_out, stayType: form.stay_type }}
+                mode={selectionMode}
+                minDate={minDate}
+                maxDate={maxDate}
+                today={todayText()}
+                getDay={getCalendarDay}
+                party={{
+                  packageType: automaticPackageType,
+                  adults: form.adults, children: form.children, infants: form.infants,
+                  dogUnder10kgCount: form.dog_under_10kg_count,
+                  dog10To20kgCount: form.dog_10_to_20kg_count,
+                  dogOver20kgCount: form.dog_over_20kg_count,
+                  selectedRoomOptionId,
+                  roomCount: form.stay_type === "villa" ? settings.totalRoomCount : form.room_count,
+                }}
+                onCancel={() => setCalendarOpen(false)}
+                onComplete={(selection) => {
+                  setForm((current) => ({
+                    ...current, check_in: selection.checkIn, check_out: selection.checkOut,
+                    stay_type: selection.stayType,
+                    room_count: selection.stayType === "villa" ? settings.totalRoomCount : clampRoomCount(current.room_count, settings.totalRoomCount),
+                  }));
+                  setCalendarOpen(false);
+                  setMessage("");
+                  setError("");
+                }}
+              />
             )}
 
             {peopleOpen && (

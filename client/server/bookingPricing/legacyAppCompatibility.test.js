@@ -202,17 +202,19 @@ describe(`legacy Production ${productionSha} across schema expansion`, () => {
     expect(savedRequest.pricing_breakdown).toEqual(before.payload.pricing);
     expect((await db.query("select pricing_breakdown,quoted_total from booking_requests where id=1")).rows[0]).toEqual({pricing_breakdown:before.payload.pricing,quoted_total:before.payload.pricing.total});
   });
-  it("new Admin reads and customizes DB defaults through its actual handler",async()=>{
+  it("new Admin shares the weekend discount and preserves the retired holiday default",async()=>{
     await expandSchema();
     const created=await call(admin,"pricing-rule-set",oldPayload);
     const id=created.payload.ruleSet.id;
     const before=await call(currentAdmin,"pricing",{},"GET");
     expect(before.statusCode).toBe(200);
-    expect(before.payload.ruleSets.find(row=>row.id===id).guest_11_18_fee).toBe(1250);
+    const previous=before.payload.ruleSets.find(row=>row.id===id);
+    expect(previous.guest_11_18_fee).toBe(1250);
     const custom={guest_11_18_fee:1500,weekday_discount_rate:0.85,friday_discount_rate:0.88,saturday_discount_rate:0.95,holiday_discount_rate:1};
     expect((await call(currentAdmin,"pricing-rule-set",{...oldPayload,id,...custom})).statusCode).toBe(200);
     const row=(await db.query("select * from booking_price_rule_sets where id=$1",[id])).rows[0];
-    expect(fields.map(field=>Number(row[field]))).toEqual(fields.map(field=>custom[field]));
+    const expected={...custom,saturday_discount_rate:custom.friday_discount_rate,holiday_discount_rate:Number(previous.holiday_discount_rate)};
+    expect(fields.map(field=>Number(row[field]))).toEqual(fields.map(field=>expected[field]));
   });
   it("only the new engine applies DB default discounts, using the same expanded DB",async()=>{
     const input={check_in:"2026-11-02",check_out:"2026-11-03",adults:15};

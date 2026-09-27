@@ -6,6 +6,7 @@ import {
   getAdminNavSectionLabelByPath,
   getAdminPageTitle,
   getVisibleAdminNavigation,
+  isAdminNavItemActive,
   parseStoredAdminExpandedSections,
   resolveAdminExpandedSections,
 } from "./adminNavigation";
@@ -25,6 +26,16 @@ function identity(overrides: Partial<AdminIdentity> = {}): AdminIdentity {
 }
 
 describe("admin unified navigation", () => {
+  it.each([
+    ["/admin/bookings/pricing", "booking-pricing"],
+    ["/admin/bookings/orders", "booking-orders"],
+    ["/admin/bookings/orders/test-order", "booking-orders"],
+    ["/admin/bookings", "bookings"],
+    ["/admin/shop/users", "users"],
+  ])("highlights only the most specific item for %s", (pathname, key) => {
+    expect(adminNavigationSections.flatMap(section => section.items)
+      .filter(item => isAdminNavItemActive(pathname, item)).map(item => item.key)).toEqual([key]);
+  });
   it("keeps only existing first-phase admin entries in the main menu", () => {
     const labels = adminNavigationSections.flatMap((section) =>
       section.items.map((item) => item.label)

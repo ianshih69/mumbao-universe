@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { calendarEditPayload, discountLabel, readCalendarInputs, type CalendarEdit } from "@/lib/bookings/calendarPriceEditor";
+import { calendarEditPayload, discountLabel, pricingMonths, readCalendarInputs, type CalendarEdit } from "@/lib/bookings/calendarPriceEditor";
 import {
   fetchBookingPricing, previewBookingPricingCalendar, saveBookingSpecialDate,
   type BookingPackageRate, type BookingPriceRuleSet, type BookingSpecialDate, type BookingPricingCalendarPreview,
@@ -14,6 +16,8 @@ type Props = {
   rates: BookingPackageRate[];
   specialDates: BookingSpecialDate[];
   hasUnsavedDefaults: boolean;
+  month: string;
+  onMonthChange: (month: string) => void;
   onSaved: (data: PricingData) => void;
 };
 const amount = (value: number) => value.toLocaleString("zh-TW");
@@ -30,8 +34,12 @@ function dayRevision(date: string, ruleSet: BookingPriceRuleSet, rates: BookingP
     rows: specialDates.filter(row => row.rule_set_id === ruleSet.id && row.date === date) });
 }
 
-export default function AdminPricingCalendar({ token, ruleSet, rates, specialDates, hasUnsavedDefaults, onSaved }: Props) {
-  const [month, setMonth] = useState(ruleSet.effective_from.slice(0, 7));
+export default function AdminPricingCalendar({ token, ruleSet, rates, specialDates, hasUnsavedDefaults, month, onMonthChange, onSaved }: Props) {
+  const months = pricingMonths(ruleSet.effective_from, ruleSet.effective_to);
+  const monthIndex = months.indexOf(month);
+  const year = month.slice(0, 4);
+  const monthLabel = `${year} 年 ${Number(month.slice(5))} 月`;
+  const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const [calendar, setCalendar] = useState<BookingPricingCalendarPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -43,7 +51,17 @@ export default function AdminPricingCalendar({ token, ruleSet, rates, specialDat
   const busy = useRef(false);
   const revision = useRef("");
 
+  function changeMonth(next: string) {
+    if (!months.includes(next) || saving || busy.current || edit) return;
+    if (next === month) return;
+    setCalendar(null);
+    setError("");
+    setNotice("");
+    onMonthChange(next);
+  }
+
   useEffect(() => {
+    if (!month) return;
     let cancelled = false;
     setLoading(true);
     setCalendar(null);
@@ -58,7 +76,7 @@ export default function AdminPricingCalendar({ token, ruleSet, rates, specialDat
   async function openDay(day: BookingPricingCalendarPreview["days"][number]) {
     if (!day.night || busy.current) return;
     setNotice("");
-    if (hasUnsavedDefaults) { setError("請先儲存上方尚未儲存的設定，或按「取消未儲存變更」。"); return; }
+    if (hasUnsavedDefaults) { setError("預設設定尚未儲存。請先展開設定並儲存，或按頁首「取消未儲存變更」。"); return; }
     busy.current = true;
     setLoading(true);
     setError("");
@@ -91,7 +109,7 @@ export default function AdminPricingCalendar({ token, ruleSet, rates, specialDat
     setEditError("");
     let sent = false;
     try {
-      if (hasUnsavedDefaults) throw new Error("請先儲存或取消上方尚未儲存的設定。");
+      if (hasUnsavedDefaults) throw new Error("請先儲存或取消尚未儲存的預設設定。");
       const payload = calendarEditPayload(edit);
       if (payload.base_price_override === (edit.row.base_price_override ?? null)
         && payload.calendar_discount_rate_override === (edit.row.calendar_discount_rate_override ?? null)) { setEdit(null); return; }
@@ -125,29 +143,74 @@ export default function AdminPricingCalendar({ token, ruleSet, rates, specialDat
     catch (e) { validation = (e as Error).message; }
   }
 
-  return <section className="grid min-w-0 gap-4 rounded-[20px] border border-[#eadfce] bg-white p-3 shadow-sm sm:p-5">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <h2 className="text-xl font-semibold text-stone-900">價格日曆 <span className="text-sm font-normal text-stone-500">10 人／1 晚</span></h2>
-      <input aria-label="價格日曆月份" className={`${inputClass} max-w-48`} type="month" value={month} disabled={saving || loading} onChange={event => setMonth(event.target.value)} />
+  return <section className="grid min-w-0 gap-4 rounded-lg border border-[#eadfce] bg-white p-2 sm:p-5" aria-label="價格日曆">
+    <div className="px-1">
+      <h2 className="text-xl font-semibold text-stone-900">價格日曆</h2>
+      <p className="mt-1 text-sm text-stone-600">金額皆為 NT$，10 人／晚</p>
+      <p className="mt-1 text-xs text-stone-500">點選日期可修改原價與折扣</p>
     </div>
-    {loading && <p role="status" className="text-sm text-stone-500">價格讀取中…</p>}
+    <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-md bg-[#fbf7f1] p-2" aria-label="月份導覽">
+      <span title={monthIndex <= 0 ? "已到房價期間第一個月" : "上個月"}>
+        <Button type="button" variant="outline" className="h-11 min-w-11 px-2 sm:px-3" aria-label="上個月"
+          aria-describedby={monthIndex <= 0 ? "pricing-month-range" : undefined}
+          disabled={monthIndex <= 0 || saving || Boolean(edit)} onClick={() => changeMonth(months[monthIndex - 1])}>
+          <ChevronLeft className="size-4" /><span className="hidden sm:inline">上個月</span>
+        </Button>
+      </span>
+      <Popover open={monthPickerOpen} onOpenChange={setMonthPickerOpen}>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="ghost" className="h-11 min-w-0 px-1 text-base font-semibold text-stone-900 sm:text-lg"
+            disabled={!month || saving || Boolean(edit)} aria-label={`選擇月份：${monthLabel}`}>
+            <span aria-live="polite">{monthLabel}</span><ChevronDown className="size-4 shrink-0" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 bg-white" align="center">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="grid gap-2 text-sm">年份
+              <select aria-label="年份" className={inputClass} value={year} onChange={event => {
+                const sameMonth = `${event.target.value}-${month.slice(5)}`;
+                changeMonth(months.includes(sameMonth) ? sameMonth : months.find(value => value.startsWith(`${event.target.value}-`))!);
+              }}>
+                {Array.from(new Set(months.map(value => value.slice(0, 4)))).map(value => <option key={value} value={value}>{value} 年</option>)}
+              </select>
+            </label>
+            <label className="grid gap-2 text-sm">月份
+              <select aria-label="月份" className={inputClass} value={month} onChange={event => { changeMonth(event.target.value); setMonthPickerOpen(false); }}>
+                {months.filter(value => value.startsWith(`${year}-`)).map(value => <option key={value} value={value}>{Number(value.slice(5))} 月</option>)}
+              </select>
+            </label>
+          </div>
+        </PopoverContent>
+      </Popover>
+      <span title={monthIndex >= months.length - 1 ? "已到房價期間最後一個月" : "下個月"}>
+        <Button type="button" variant="outline" className="h-11 min-w-11 px-2 sm:px-3" aria-label="下個月"
+          aria-describedby={monthIndex >= months.length - 1 ? "pricing-month-range" : undefined}
+          disabled={monthIndex < 0 || monthIndex >= months.length - 1 || saving || Boolean(edit)} onClick={() => changeMonth(months[monthIndex + 1])}>
+          <span className="hidden sm:inline">下個月</span><ChevronRight className="size-4" />
+        </Button>
+      </span>
+    </div>
+    <p id="pricing-month-range" className="text-xs text-stone-500">可查看 {ruleSet.effective_from} 至 {ruleSet.effective_to}；期間外不可切換。</p>
+    {(loading || !calendar || calendar.month !== month) && !error && <p role="status" className="py-10 text-center text-sm text-stone-500">{monthLabel} 價格讀取中…</p>}
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     {notice && <p role="status" className="text-sm text-emerald-700">{notice}</p>}
-    {calendar && <div className="max-w-full overflow-x-auto">
-      <div className="grid min-w-[700px] grid-cols-7" role="grid" aria-label="每日價格">
+    {calendar?.month === month && <div className="min-w-0">
+      <div className="grid min-w-0 grid-cols-7" role="grid" aria-label={`${monthLabel} 每日價格`} aria-busy={loading}>
         {["日", "一", "二", "三", "四", "五", "六"].map(day => <div key={day} role="columnheader" className="border-b border-[#eadfce] py-2 text-center text-sm text-stone-500">{day}</div>)}
         {Array.from({ length: calendar.startWeekday }, (_, index) => <div key={`blank-${index}`} role="gridcell" />)}
-        {calendar.days.map(day => {
+        {calendar.days.map((day, index) => {
           const custom = specialDates.some(row => row.rule_set_id === ruleSet.id && row.date === day.date && row.is_active
             && (row.base_price_override != null || row.calendar_discount_rate_override != null));
-          return <button key={day.date} type="button" role="gridcell" aria-label={`${day.date} 編輯價格`}
+          const weekend = (calendar.startWeekday + index) % 7 >= 5;
+          return <button key={day.date} type="button" role="gridcell" aria-label={`${day.date} 編輯價格`} aria-selected={edit?.row.date === day.date}
             disabled={!day.night || loading || saving} onClick={() => void openDay(day)}
-            className="min-h-36 border-b border-r border-[#eadfce] p-2 text-left text-xs leading-5 text-stone-600 transition enabled:cursor-pointer enabled:hover:bg-[#fbf7f1] focus-visible:outline-2 focus-visible:outline-[#8b6f5b] disabled:text-stone-400">
-            <span className="block text-base font-semibold text-stone-900">{Number(day.date.slice(-2))}</span>
-            {day.night ? <><span className="block">10 人原價 {amount(day.night.base10GuestRate!)}</span>
+            className={`min-h-28 min-w-0 border-b border-r border-[#eadfce] px-0.5 py-2 text-center text-[10px] leading-5 text-stone-600 transition sm:min-h-36 sm:p-3 sm:text-left sm:text-xs enabled:cursor-pointer enabled:hover:bg-[#eee3d5] focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#765d4a] aria-selected:bg-[#eadfce] disabled:text-stone-400 ${weekend ? "bg-[#fbf4e9]" : "bg-white"}`}>
+            <span className="block text-sm font-medium sm:text-base">{Number(day.date.slice(-2))}</span>
+            {day.night ? <><strong className={`mt-1 block font-semibold tabular-nums text-stone-950 ${day.night.price >= 1000000 ? "text-[8px]" : "text-[11px]"} sm:text-base lg:text-xl`}>
+              <span className="sr-only">售價 NT$</span>{amount(day.night.price)}</strong>
+              <span className="mt-1 hidden text-stone-500 sm:block">原價 {amount(day.night.base10GuestRate!)}</span>
               <span className="block">{discountLabel(day.night.calendarDiscountRate!)}</span>
-              <strong className="block text-sm text-stone-900">售價 NT${amount(day.night.price)}</strong>
-              {custom && <span className="text-xs text-[#8b6f5b]">已自訂</span>}</> : <span>不在適用期間</span>}
+              {custom && <span className="block text-[10px] font-medium text-[#765d4a] sm:text-xs">已自訂</span>}</> : <span className="block text-[10px] sm:text-xs">不適用</span>}
           </button>;
         })}
       </div>

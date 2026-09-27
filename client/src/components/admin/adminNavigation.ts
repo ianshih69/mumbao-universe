@@ -101,7 +101,12 @@ export function isAdminNavItemActive(pathname: string, item: AdminNavItem) {
   const candidates = item.match || [item.href];
   return candidates.some((candidate) => {
     if (candidate === "/admin") return pathname === "/admin";
-    return pathname === candidate || pathname.startsWith(`${candidate}/`);
+    if (pathname !== candidate && !pathname.startsWith(`${candidate}/`)) return false;
+    return !adminNavigationSections.flatMap(section => section.items).some(other =>
+      other.key !== item.key && (other.match || [other.href]).some(path =>
+        path.length > candidate.length && (pathname === path || pathname.startsWith(`${path}/`))
+      )
+    );
   });
 }
 

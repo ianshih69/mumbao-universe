@@ -23,7 +23,7 @@ function monthLabel(month: string) {
 const money = (value: number) => `NT$${value.toLocaleString("zh-TW")}`;
 const buttonClass = "inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-md px-2 text-sm text-[#765d4a] hover:bg-[#f3eadf] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#8b6f5b] disabled:cursor-not-allowed disabled:opacity-30";
 
-export function BookingDatePicker({ initial, mode, party, today, minDate, maxDate, getDay, onCancel, onComplete }: Props) {
+export function BookingDatePicker({ initial, mode, party, today, minDate, maxDate, getDay, allowModeSelection = false, onCancel, onComplete }: Props) {
   const [selection, setSelection] = useState(initial);
   const [selectingCheckout, setSelectingCheckout] = useState(mode === "checkOut" && Boolean(initial.checkIn));
   const [month, setMonth] = useState(() => {
@@ -37,13 +37,15 @@ export function BookingDatePicker({ initial, mode, party, today, minDate, maxDat
   const cache = useRef(new Map<string, Promise<BookingPriceQuoteResult>>());
   const partyKey = JSON.stringify(party);
   const stableParty = useMemo(() => JSON.parse(partyKey) as PickerParty, [partyKey]);
-  const bounds = useMemo(() => ({ minDate, maxDate, getDay }), [minDate, maxDate, getDay]);
+  const bounds = useMemo(() => ({ minDate, maxDate, getDay, allowModeSelection }), [minDate, maxDate, getDay, allowModeSelection]);
   const months = useMemo(() => desktop ? [month, shiftBookingMonth(month, 1)] : [month], [month, desktop]);
   const priceKey = `${partyKey}|${months.join(",")}`;
   const quoteKey = JSON.stringify([stableParty, selection]);
   const activeQuote = quoteState.key === quoteKey ? quoteState.quote : null;
-  const complete = Boolean(selection.checkIn && selection.checkOut) && getBookingRangeIssue({ ...bounds, ...selection, saleMode: stayTypeToSaleMode(selection.stayType) }) === "ok";
-  const resolved = activeQuote?.pricing.status === "resolved";
+  const complete = Boolean(selection.checkIn && selection.checkOut) && getBookingRangeIssue({ ...bounds, ...selection, saleMode: allowModeSelection && selection.stayType !== "room" ? "all" : stayTypeToSaleMode(selection.stayType) }) === "ok";
+  const roomRange = allowModeSelection && complete && getBookingRangeIssue({ ...bounds, ...selection, saleMode: "room" }) === "ok";
+  const roomDisplay = roomRange && selection.stayType === "room";
+  const resolved = !roomDisplay && activeQuote?.pricing.status === "resolved";
   const nights = complete ? Math.round((Date.parse(selection.checkOut) - Date.parse(selection.checkIn)) / 86_400_000) : 0;
   const displayedPrices = prices.key === priceKey ? prices.values : {};
 
@@ -93,7 +95,7 @@ export function BookingDatePicker({ initial, mode, party, today, minDate, maxDat
   }, [months, bounds, stableParty, priceKey]);
 
   useEffect(() => {
-    if (!complete) return;
+    if (!complete || roomDisplay) return;
     let cancelled = false;
     setQuoteState({ key: quoteKey, quote: null, error: "" });
     fetchBookingQuote({ ...stableParty, ...selection })
@@ -104,7 +106,7 @@ export function BookingDatePicker({ initial, mode, party, today, minDate, maxDat
         if (!cancelled) setQuoteState({ key: quoteKey, quote: null, error: "房價讀取失敗，請稍後重新開啟日曆。" });
       });
     return () => { cancelled = true; };
-  }, [complete, quoteKey, stableParty, selection]);
+  }, [complete, quoteKey, stableParty, selection, roomDisplay]);
 
   function moveMonth(offset: number) {
     setHoverDate("");
@@ -141,8 +143,10 @@ export function BookingDatePicker({ initial, mode, party, today, minDate, maxDat
                     const end = selectingCheckout && hoverDate > selection.checkIn ? hoverDate : selection.checkOut;
                     const inRange = Boolean(selection.checkIn && end && date >= selection.checkIn && date <= end);
                     const bookable = canSelectBookingDate(date, { ...selection, checkIn: "", checkOut: "" }, false, bounds);
-                    const amount = displayedPrices[date];
-                    const label = amount == null ? (amount === null ? "待確認" : "…") : formatCalendarPrice(amount);
+                    const day = getDay(date);
+                    const showRoomPrice = allowModeSelection && (selection.stayType === "room" || day.villaBookable === false);
+                    const amount = showRoomPrice ? day.roomFirstNightFrom : displayedPrices[date];
+                    const label = showRoomPrice ? amount == null ? "--" : `${formatCalendarPrice(amount)} 起` : amount == null ? (amount === null ? "待確認" : "…") : formatCalendarPrice(amount);
                     return (
                       <button type="button" key={date} disabled={!enabled} data-booking-date={date}
                         aria-label={`${date}${isIn ? " 入住" : isOut ? " 退房" : ""}${bookable ? `，首晚 ${amount == null ? label : money(amount)}` : enabled ? "，可退房" : "，不可入住"}`}
@@ -160,7 +164,7 @@ export function BookingDatePicker({ initial, mode, party, today, minDate, maxDat
                           enabled && "hover:bg-[#e9dccb]",
                           isIn && "rounded-l-lg", isOut && "rounded-r-lg") }>
                         <span className={cn("flex h-7 w-7 items-center justify-center rounded-full", date === today && "ring-1 ring-[#d7c5b2]", isIn && "bg-[#80614c] font-semibold text-white", isOut && "border border-[#80614c] bg-[#fffdf9] font-semibold text-[#765d4a]")}>{Number(date.slice(8))}</span>
-                        <span className={cn("text-[11px] leading-4 sm:text-xs", enabled ? "text-[#765d4a]" : "text-stone-300")}>{bookable ? label : enabled ? "退房" : "—"}</span>
+                        <span className={cn("text-[11px] leading-4 sm:text-xs", enabled ? "text-[#765d4a]" : "text-stone-300")}>{bookable ? label : enabled ? "退房" : showRoomPrice ? "--" : "—"}</span>
                       </button>
                     );
                   })}
@@ -171,13 +175,13 @@ export function BookingDatePicker({ initial, mode, party, today, minDate, maxDat
           {resolved && activeQuote && <details className="mt-4 border-t border-[#eadfce] pt-3 text-sm"><summary className="cursor-pointer py-2 text-[#765d4a]">價格明細</summary><div className="space-y-2 py-2">{activeQuote.pricing.breakdown.map((night) => <div key={night.date} className="flex justify-between"><span>{night.date}</span><span>{money(night.price)}</span></div>)}</div></details>}
         </div>
         <div className="shrink-0 border-t border-[#eadfce] bg-[#fffdf9] px-4 py-4 md:px-6" aria-live="polite">
-          {quoteState.key === quoteKey && quoteState.error && <p role="alert" className="mb-2 text-sm text-red-700">{quoteState.error}</p>}
+          {!roomRange && quoteState.key === quoteKey && quoteState.error && <p role="alert" className="mb-2 text-sm text-red-700">{quoteState.error}</p>}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm text-stone-600">{complete ? `${nights} 晚 · ${party.adults + party.children + party.infants} 位入住` : selection.checkIn ? "請選擇退房日期" : "請選擇入住日期"}</p>
-              {complete && <p className="mt-1 text-lg font-semibold text-[#765d4a]">{resolved && activeQuote?.pricing.total != null ? money(activeQuote.pricing.total) : quoteState.error ? "房價待確認" : "房價讀取中…"}</p>}
+              {complete && !roomDisplay && <p className="mt-1 text-lg font-semibold text-[#765d4a]">{resolved && activeQuote?.pricing.total != null ? money(activeQuote.pricing.total) : roomRange ? "請選擇住宿方式" : quoteState.error ? "房價待確認" : "房價讀取中…"}</p>}
             </div>
-            <div className="flex gap-2"><button type="button" className={buttonClass} onClick={onCancel}>取消</button><button type="button" disabled={!resolved || !complete} onClick={() => onComplete(selection)} className="min-h-11 rounded-md bg-[#80614c] px-6 text-sm font-medium text-white hover:bg-[#694d3b] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#80614c] disabled:opacity-40">完成</button></div>
+            <div className="flex gap-2"><button type="button" className={buttonClass} onClick={onCancel}>取消</button><button type="button" disabled={(!resolved && !roomRange) || !complete} onClick={() => onComplete(selection)} className="min-h-11 rounded-md bg-[#80614c] px-6 text-sm font-medium text-white hover:bg-[#694d3b] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#80614c] disabled:opacity-40">完成</button></div>
           </div>
         </div>
       </DialogContent>

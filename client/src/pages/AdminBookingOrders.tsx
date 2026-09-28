@@ -18,6 +18,7 @@ import {
   type BookingCancellationAudit,
 } from "@/lib/bookings/adminBookingsApi";
 import { getAdminToken, isAdminAuthError } from "@/lib/shop/adminAuth";
+import { adminBookingStayLabel } from "@/lib/bookings/bookingRoomDisplay";
 
 type Filters = {
   query: string;
@@ -325,7 +326,7 @@ export default function AdminBookingOrders() {
                     <p>{item.guest_name || "—"}</p>
                     <p className="text-xs text-stone-500">{item.guest_phone || item.guest_email || "—"}</p>
                   </td>
-                  <td className="px-4 py-3 text-stone-700">{item.check_in}<br />{item.check_out}</td>
+                  <td className="px-4 py-3 text-stone-700">{item.check_in}<br />{item.check_out}<p className="mt-1 max-w-64 break-words text-xs text-stone-500">{adminBookingStayLabel(item)}</p></td>
                   <td className="px-4 py-3">{statusBadge(bookingStatusLabels[item.status] || item.status, item.status === "confirmed" ? "success" : item.status === "payment_review" ? "warning" : "neutral")}</td>
                   <td className="px-4 py-3 text-stone-700">{paymentStatusLabels[item.payment_status] || item.payment_status}</td>
                   <td className="px-4 py-3">{statusBadge(cancellationStatusLabels[item.cancellation_status] || item.cancellation_status, item.cancellation_status === "pending" ? "warning" : "neutral")}</td>
@@ -365,7 +366,7 @@ export default function AdminBookingOrders() {
           <div className="grid gap-x-8 gap-y-5 border-y border-stone-200 py-5 sm:grid-cols-2 lg:grid-cols-4">
             <div><p className="text-xs text-stone-500">客人</p><p className="mt-1 font-medium text-stone-900">{order.guest_name || "—"}</p><p className="text-sm text-stone-600">{order.guest_email || "—"}<br />{order.guest_phone || "—"}</p></div>
             <div><p className="text-xs text-stone-500">入住／退房</p><p className="mt-1 font-medium text-stone-900">{order.check_in} 至 {order.check_out}</p><p className="text-sm text-stone-600">建立於 {formatDateTime(order.created_at)}</p></div>
-            <div><p className="text-xs text-stone-500">人數</p><p className="mt-1 font-medium text-stone-900">成人 {order.adults}／孩童 {order.children}</p><p className="text-sm text-stone-600">房間 {order.room_count || "—"}／寵物 {order.has_pets ? order.pet_count || 1 : 0}</p></div>
+            <div><p className="text-xs text-stone-500">人數</p><p className="mt-1 font-medium text-stone-900">成人 {order.adults}／孩童 {order.children}</p><p className="mt-1 break-words text-sm text-stone-600">{adminBookingStayLabel(order)}</p><p className="text-sm text-stone-600">{order.stay_type === "villa" ? `房間 ${order.room_count || "—"}／` : ""}寵物 {order.has_pets ? order.pet_count || 1 : 0}</p></div>
             <div><p className="text-xs text-stone-500">金額</p><p className="mt-1 font-medium text-stone-900">總額 {formatTwd(order.quoted_total)}</p><p className="text-sm text-stone-600">訂金 {formatTwd(order.deposit_amount)}／尾款 {formatTwd(order.balance_amount)}</p></div>
           </div>
 

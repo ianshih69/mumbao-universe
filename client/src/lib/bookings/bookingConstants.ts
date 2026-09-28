@@ -18,6 +18,7 @@ export type PublicBookingSettings = {
   bookingWindowLabel: string;
   allowVillaBooking: boolean;
   allowRoomBooking: boolean;
+  roomPricingPreviewEnabled?: boolean;
   totalRoomCount: number;
   allowPets: boolean;
 };

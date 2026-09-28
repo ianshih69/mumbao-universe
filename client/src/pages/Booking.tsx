@@ -14,6 +14,8 @@ import {
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { BookingDatePicker } from "@/components/bookings/BookingDatePicker";
+import { RoomPriceOptions, useRoomPriceAvailability } from "@/components/bookings/RoomPriceOptions";
+import { bookingRoomName } from "@/lib/bookings/bookingRoomDisplay";
 import { Button } from "@/components/ui/button";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import {
@@ -30,6 +32,8 @@ import {
 } from "@/lib/bookings/bookingGuestRules.js";
 import {
   BookingApiError,
+  bookingSubmitAttempt,
+  isRoomOptionEligible,
   checkBookingAvailability,
   fetchBookingCalendar,
   fetchBookingQuote,
@@ -37,6 +41,7 @@ import {
   reportBookingBankTransfer,
   submitBookingRequest,
   type BookingCalendarResult,
+  type BookingPublicSettings,
   type BookingPackageType,
   type BookingRoomOption,
   type BookingPricingBreakdownNight,
@@ -398,7 +403,7 @@ function clampRoomCount(value: number, max: number) {
 function reconcileFormWithSettings(form: BookingForm, settings: PublicBookingSettings): BookingForm {
   let stayType = form.stay_type;
   if (stayType === "villa" && !settings.allowVillaBooking) stayType = getDefaultStayType(settings);
-  if (stayType === "room" && !settings.allowRoomBooking) stayType = getDefaultStayType(settings);
+  // A disabled room checkout must not silently turn the guest's order into a villa order.
   const dogCount = settings.allowPets
     ? form.dog_under_10kg_count + form.dog_10_to_20kg_count + form.dog_over_20kg_count
     : 0;
@@ -547,7 +552,13 @@ export default function Booking() {
   const [form, setForm] = useState<BookingForm>(() => getInitialBookingForm());
   const [guestNameParts, setGuestNameParts] = useState(() => splitGuestName(form.guest_name));
   const [nationality, setNationality] = useState("台灣");
-  const [settings, setSettings] = useState<PublicBookingSettings>(() => ({ ...DEFAULT_BOOKING_SETTINGS }));
+  const [settings, setSettings] = useState<BookingPublicSettings>(() => ({ ...DEFAULT_BOOKING_SETTINGS }));
+  const [selectedRoom, setSelectedRoom] = useState<{ key: string; id: string } | null>(null);
+  const [inventoryRevision, setInventoryRevision] = useState(0);
+  const [calendarGuestCount, setCalendarGuestCount] = useState<number | null>(null);
+  const [priceQuoteKey, setPriceQuoteKey] = useState("");
+  const submitAttempt = useRef<{ key: string; id: string } | null>(null);
+  const submitInFlight = useRef(false);
   const [bookingCopy, setBookingCopy] = useState<BookingCmsCopy>(fallbackBookingCopy);
 
   const [unavailableDates, setUnavailableDates] = useState<Set<string>>(new Set());
@@ -603,6 +614,16 @@ export default function Booking() {
   const peoplePanelRef = useRef<HTMLElement | null>(null);
 
   const minDate = resolveEarliestBookingDate(todayText());
+  const isRoomStay = form.stay_type === "room";
+  const totalGuestCount = form.adults + form.children + form.infants;
+  const roomSelectionKey = JSON.stringify([form.check_in, form.check_out, totalGuestCount]);
+  const roomAvailability = useRoomPriceAvailability(form.check_in, form.check_out, totalGuestCount,
+    isBookingTestUnlocked && !submittedRequestId && settings.roomCheckoutEnabled === true, inventoryRevision);
+  const selectedRoomId = selectedRoom?.key === roomSelectionKey ? selectedRoom.id : "";
+  const selectedRoomOptionForStay = settings.roomCheckoutEnabled === true
+    ? roomAvailability.result?.availableRoomOptions.find(room => room.roomId === selectedRoomId) : undefined;
+  const roomCheckoutReady = settings.roomCheckoutEnabled === true && roomAvailability.result?.roomCheckoutEnabled === true &&
+    roomAvailability.result.roomBookingEnabled && Boolean(selectedRoomOptionForStay && isRoomOptionEligible(selectedRoomOptionForStay, totalGuestCount));
 
   const bookingIsOpen = settings.allowVillaBooking || settings.allowRoomBooking;
   const calendarDaySourceMap = useMemo(
@@ -626,9 +647,15 @@ export default function Booking() {
     [form.check_in, form.check_out, form.stay_type, getCalendarDay, maxDate, minDate]
   );
   const selectedIsAvailable = useMemo(
-    () => Boolean(!isCalendarLoading && bookingIsOpen && form.check_in && form.check_out && selectedRangeIssue === "ok"),
-    [bookingIsOpen, form.check_in, form.check_out, isCalendarLoading, selectedRangeIssue]
+    () => Boolean(calendarReady && calendarGuestCount === totalGuestCount && !isCalendarLoading && bookingIsOpen && form.check_in && form.check_out && selectedRangeIssue === "ok"),
+    [calendarReady, calendarGuestCount, totalGuestCount, bookingIsOpen, form.check_in, form.check_out, isCalendarLoading, selectedRangeIssue]
   );
+  const villaRangeAvailable = calendarReady && calendarGuestCount === totalGuestCount && !isCalendarLoading && getBookingRangeIssue({
+    checkIn: form.check_in, checkOut: form.check_out, minDate, maxDate, getDay: getCalendarDay, saleMode: "whole_house",
+  }) === "ok";
+  const roomRangeAvailable = calendarReady && calendarGuestCount === totalGuestCount && !isCalendarLoading && settings.roomCheckoutEnabled === true && getBookingRangeIssue({
+    checkIn: form.check_in, checkOut: form.check_out, minDate, maxDate, getDay: getCalendarDay, saleMode: "room",
+  }) === "ok";
   const nightCount = nightsBetween(form.check_in, form.check_out);
   const breakfastDates = useMemo(
     () => Array.from({ length: nightCount }, (_, index) => addDays(form.check_in, index + 1)),
@@ -679,13 +706,19 @@ export default function Booking() {
   const pricingDisplayGuestCount = form.adults + form.children;
   const searchGuestSummary = form.infants > 0 ? `${pricingDisplayGuestCount} 位・另有 ${form.infants} 位嬰幼兒` : `${pricingDisplayGuestCount} 位`;
   const guestLimitUnavailableReason = getGuestLimitUnavailableReason(guestPlan);
-  const capacityUnavailableReason = guestLimitUnavailableReason;
+  const capacityUnavailableReason = isRoomStay
+    ? !roomCheckoutReady ? "請選擇符合入住人數的可訂房間。" : ""
+    : guestLimitUnavailableReason;
   const canShowOrderSummary = canShowStayOptions && !capacityUnavailableReason;
   const guestCountExceedsLimit = !guestPlan.isAdultCountSupported || !guestPlan.isChildCountSupported;
   const adultIncrementDisabled = form.adults >= MAX_BOOKING_ADULTS;
   const childIncrementDisabled = form.children >= MAX_BOOKING_CHILDREN;
   const infantIncrementDisabled = false;
-  const quoteReady = priceQuote?.pricing.status === "resolved";
+  const quoteRequestKey = JSON.stringify([form.check_in, form.check_out, form.stay_type, form.adults, form.children, form.infants,
+    form.dog_under_10kg_count, form.dog_10_to_20kg_count, form.dog_over_20kg_count,
+    breakfastAddonEntries, selectedRoomId, automaticPackageType, selectedRoomOptionId]);
+  const quoteReady = priceQuoteKey === quoteRequestKey && priceQuote?.pricing.status === "resolved" &&
+    (!isRoomStay || roomCheckoutReady && priceQuote.pricing.room?.roomId === selectedRoomId);
   const quoteTotal = quoteReady ? priceQuote?.pricing.total ?? null : null;
   const quoteNights = priceQuote?.pricing.breakdown || [];
   const quoteDepositRatePercent =
@@ -722,8 +755,9 @@ export default function Booking() {
   const displayDoubleBedCount = quoteReady ? priceQuote?.pricing.doubleBedCount : guestPlan.doubleBedCount;
   const displaySingleBedCount = quoteReady ? priceQuote?.pricing.singleBedCount ?? guestPlan.singleBedCount : guestPlan.singleBedCount;
   const displaySleepCapacity = quoteReady ? priceQuote?.pricing.sleepCapacity : guestPlan.sleepCapacity;
-  const stayBedSummary = formatStayBedSummary(displayDoubleBedCount, displaySingleBedCount, displaySleepCapacity);
-  const canProceedToContact = canShowOrderSummary && !guestCountExceedsLimit && quoteReady && !isQuoteLoading && !priceQuoteError;
+  const stayBedSummary = isRoomStay ? selectedRoomOptionForStay ? `${bookingRoomName(selectedRoomOptionForStay)}｜最多 ${selectedRoomOptionForStay.capacity} 位` : ""
+    : formatStayBedSummary(displayDoubleBedCount, displaySingleBedCount, displaySleepCapacity);
+  const canProceedToContact = selectedIsAvailable && canShowOrderSummary && !guestCountExceedsLimit && quoteReady && !isQuoteLoading && !priceQuoteError;
   const breakfastAddonQuantity = quoteReady
     ? quoteBreakfastAddonQuantity
     : breakfastAddonEntries.reduce((total, item) => total + item.quantity, 0);
@@ -736,6 +770,8 @@ export default function Booking() {
   const submittedPricingBreakdown = submittedPricing?.pricingBreakdown || null;
   const submittedRequest = submittedBookingSummary?.request || null;
   const submittedSummary = submittedBookingSummary?.summary || null;
+  const submittedRoom = submittedSummary?.room || submittedPricingBreakdown?.room;
+  const submittedIsRoom = submittedSummary?.stayType === "room" || Boolean(submittedRoom);
   const submittedNightCount = submittedRequest ? nightsBetween(submittedRequest.check_in, submittedRequest.check_out) : nightCount;
   const submittedDogCount =
     submittedSummary?.dogCount ??
@@ -750,7 +786,7 @@ export default function Booking() {
         submittedDogCount > 0 ? `狗狗 ${submittedDogCount} 隻` : null,
       ].filter(Boolean).join("｜")
     : guestSummary;
-  const submittedStayBedSummary =
+  const submittedStayBedSummary = submittedIsRoom ? submittedRoom ? `${bookingRoomName(submittedRoom)}｜最多 ${submittedRoom.capacity} 位` : "單間住宿" :
     formatStayBedSummary(
       submittedPricingBreakdown?.doubleBedCount,
       submittedPricingBreakdown?.singleBedCount,
@@ -852,12 +888,14 @@ export default function Booking() {
 
     let isCurrent = true;
     setIsCalendarLoading(true);
-    setError("");
+    if (inventoryRevision === 0) setError("");
 
-    fetchBookingCalendar(minDate)
+    setCalendarReady(false);
+    fetchBookingCalendar(minDate, totalGuestCount)
       .then((data) => {
         if (!isCurrent) return;
         setCalendarReady(true);
+        setCalendarGuestCount(totalGuestCount);
         setUnavailableDates(new Set(data.unavailableDates));
         setCalendarDaySources(data.days || []);
         setMaxDate(data.maxDate);
@@ -875,7 +913,7 @@ export default function Booking() {
     return () => {
       isCurrent = false;
     };
-  }, [isBookingTestUnlocked, minDate]);
+  }, [isBookingTestUnlocked, minDate, totalGuestCount, inventoryRevision]);
 
   useEffect(() => {
     if (!isBookingTestUnlocked) return;
@@ -945,7 +983,7 @@ export default function Booking() {
   ]);
 
   useEffect(() => {
-    if (!canShowOrderSummary) {
+    if (!canShowOrderSummary || !selectedIsAvailable || isRoomStay && !roomCheckoutReady) {
       setIsQuoteLoading(false);
       setPriceQuote(null);
       setPriceQuoteError("");
@@ -967,6 +1005,7 @@ export default function Booking() {
       checkIn: form.check_in,
       checkOut: form.check_out,
       stayType: form.stay_type,
+      roomId: isRoomStay ? selectedRoomId : undefined,
       packageType: automaticPackageType,
       adults: form.adults,
       children: form.children,
@@ -976,11 +1015,12 @@ export default function Booking() {
       dogOver20kgCount: form.dog_over_20kg_count,
       breakfastAddons: breakfastAddonEntries,
       selectedRoomOptionId,
-      roomCount: form.stay_type === "villa" ? settings.totalRoomCount : form.room_count,
+      roomCount: form.stay_type === "villa" ? settings.totalRoomCount : 1,
     })
       .then((quote) => {
         if (controller.signal.aborted) return;
         setPriceQuote(quote);
+        setPriceQuoteKey(quoteRequestKey);
         if (quote.pricing.status !== "resolved") {
           setPriceQuoteError(getQuoteUnavailableMessage(quote.pricing.reason));
           return;
@@ -1015,6 +1055,11 @@ export default function Booking() {
     guestCountExceedsLimit,
     selectedRoomOptionId,
     settings.totalRoomCount,
+    selectedRoomId,
+    selectedIsAvailable,
+    roomCheckoutReady,
+    isRoomStay,
+    quoteRequestKey,
   ]);
 
   useEffect(() => {
@@ -1073,6 +1118,7 @@ export default function Booking() {
     field: "dog_under_10kg_count" | "dog_10_to_20kg_count" | "dog_over_20kg_count",
     nextCount: number
   ) {
+    if (isRoomStay) return;
     setForm((current) =>
       normalizePricingGuestLimit({
         ...current,
@@ -1138,6 +1184,16 @@ export default function Booking() {
     setError("");
   }
 
+  function selectStayType(stayType: StayType) {
+    if (stayType === "room" && !roomRangeAvailable || stayType === "villa" && !villaRangeAvailable) return;
+    if (stayType === "room" && (guestSummaryDogCount > 0 || breakfastAddonEntries.length > 0)) {
+      setError("單間住宿暫不提供犬隻入住及早餐加購，請先移除後再選擇。");
+      return;
+    }
+    setForm(current => ({ ...current, stay_type: stayType, room_count: stayType === "room" ? 1 : settings.totalRoomCount }));
+    setError("");
+  }
+
   function scrollToBookingFlow() {
     window.requestAnimationFrame(() => {
       bookingFlowRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1191,7 +1247,7 @@ export default function Booking() {
       setError(capacityUnavailableReason);
       return;
     }
-    if (!quoteReady || isQuoteLoading || priceQuoteError) {
+    if (!canProceedToContact) {
       setError("目前無法取得此住宿期間的房價，請重新選擇日期或聯絡我們。");
       return;
     }
@@ -1206,6 +1262,11 @@ export default function Booking() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitInFlight.current) return;
+    if (isRoomStay && (!roomCheckoutReady || guestSummaryDogCount > 0 || breakfastAddonEntries.length > 0)) {
+      setError("請重新確認單間房況與入住人數；單間不提供加購或犬隻入住。");
+      return;
+    }
     const guestName = combineGuestName(guestNameParts.lastName, guestNameParts.firstName);
     if (!guestNameParts.lastName.trim() || !guestNameParts.firstName.trim()) {
       setError("請填寫訂房人姓氏與名字。");
@@ -1235,10 +1296,11 @@ export default function Booking() {
       setError(capacityUnavailableReason);
       return;
     }
-    if (!quoteReady || isQuoteLoading || priceQuoteError) {
+    if (!canProceedToContact) {
       setError("目前無法取得此住宿期間的房價，請重新選擇日期或聯絡我們。");
       return;
     }
+    submitInFlight.current = true;
     setIsSubmitting(true);
     setMessage("");
     setError("");
@@ -1252,12 +1314,13 @@ export default function Booking() {
         check_in: form.check_in,
         check_out: form.check_out,
         stay_type: form.stay_type,
+        ...(isRoomStay ? { room_id: selectedRoomId, guest_count: totalGuestCount } : {}),
         selected_package_type: automaticPackageType,
-        selected_room_option_id: selectedRoomOptionId,
+        selected_room_option_id: isRoomStay ? "" : selectedRoomOptionId,
         adults: form.adults,
         children: form.children,
         infants: form.infants,
-        room_count: form.stay_type === "villa" ? settings.totalRoomCount : form.room_count,
+        room_count: form.stay_type === "villa" ? settings.totalRoomCount : 1,
         has_pets: petPlan.dogCount > 0,
         pet_count: petPlan.dogCount,
         pet_type: petPlan.dogCount > 0 ? "dog" : "",
@@ -1268,6 +1331,8 @@ export default function Booking() {
         breakfast_addons: breakfastAddonEntries,
         notes: buildBookingRequestNotes(form.notes, form.infants),
       };
+      submitAttempt.current = bookingSubmitAttempt(payload, submitAttempt.current);
+      payload.client_request_id = submitAttempt.current.id;
       const result = await submitBookingRequest(payload, session?.access_token || null);
       setSubmittedRequestId(result.request.id);
       setSubmittedBookingSummary(result);
@@ -1278,7 +1343,7 @@ export default function Booking() {
       setMessage(bookingCopy.successMessage);
       setBookingStep(4);
       scrollToBookingFlow();
-      setUnavailableDates((current) => {
+      if (!isRoomStay) setUnavailableDates((current) => {
         const next = new Set(current);
         let date = form.check_in;
         while (date < form.check_out) {
@@ -1288,12 +1353,17 @@ export default function Booking() {
         return next;
       });
     } catch (submitError) {
+      if (submitError instanceof BookingApiError && submitError.status === 409) {
+        setSelectedRoom(null);
+        setInventoryRevision(current => current + 1);
+      }
       if (submitError instanceof BookingApiError && submitError.code === "booking_temporarily_held") {
         setError(bookingHoldConflictMessage(submitError.retryAfterSeconds));
       } else {
         setError(submitError instanceof Error ? submitError.message : "預約申請送出失敗，請稍後再試。");
       }
     } finally {
+      submitInFlight.current = false;
       setIsSubmitting(false);
     }
   }
@@ -1537,7 +1607,7 @@ export default function Booking() {
                   isCurrent ? "text-stone-900" : isComplete ? "text-[#765d4a]" : "text-stone-400"
                 )}
               >
-                {step.label}
+                {isRoomStay && step.step === 2 ? "住宿確認" : step.label}
               </span>
             </div>
           );
@@ -1615,8 +1685,8 @@ export default function Booking() {
           {renderCompactSummaryRow("總價", formatTwd(displayTotal), true)}
           {renderCompactSummaryRow(`訂金 ${quoteDepositRatePercent ?? 30}%`, formatTwd(displayDepositAmount))}
           {renderCompactSummaryRow(`尾款 ${quoteBalanceRatePercent ?? 70}%`, formatTwd(displayBalanceAmount))}
-          {renderCompactSummaryRow("一般住宿押金（入住時另收）", formatTwd(generalAccommodationDepositAmount))}
-          <p className="text-xs leading-5 text-stone-500">{generalAccommodationDepositNotice}</p>
+          {!isRoomStay && renderCompactSummaryRow("一般住宿押金（入住時另收）", formatTwd(generalAccommodationDepositAmount))}
+          {!isRoomStay && <p className="text-xs leading-5 text-stone-500">{generalAccommodationDepositNotice}</p>}
         </div>
       </aside>
     );
@@ -1658,7 +1728,7 @@ export default function Booking() {
           )}
 
           <div className="grid gap-3 border-t border-[#f1e8dc] pt-4">
-            {renderStep3AmountRow("包棟住宿", compactLodgingTotal)}
+            {renderStep3AmountRow(isRoomStay ? "單間住宿" : "包棟住宿", compactLodgingTotal)}
             {quoteReady && quoteChildFeeTotal > 0 && renderStep3AmountRow("額外不佔床孩童", quoteChildFeeTotal)}
             {quoteReady && quotePetFeeTotal > 0 && renderStep3AmountRow("寵物住宿費", quotePetFeeTotal)}
             {quoteReady && breakfastAddonQuantity > 0 && renderStep3AmountRow(breakfastAddon.name, breakfastAddonTotal, `${breakfastAddonQuantity} 份`)}
@@ -1685,10 +1755,10 @@ export default function Booking() {
           {renderStep3AmountRow(`尾款 ${quoteBalanceRatePercent ?? 70}%`, displayBalanceAmount)}
         </div>
 
-        <div className="mt-4 border-t border-[#f1e8dc] pt-4 text-sm leading-6">
+        {!isRoomStay && <div className="mt-4 border-t border-[#f1e8dc] pt-4 text-sm leading-6">
           {renderStep3AmountRow("一般住宿押金（入住時另收）", generalAccommodationDepositAmount)}
           <p className="mt-2 text-xs leading-5 text-stone-500">{generalAccommodationDepositNotice}</p>
-        </div>
+        </div>}
 
         {quoteReady && quoteDogCount > 0 && quotePetDepositAmount > 0 && (
           <div className="mt-4 border-t border-[#f1e8dc] pt-4 text-sm leading-6">
@@ -1846,7 +1916,8 @@ export default function Booking() {
 
             {calendarOpen && calendarReady && (
               <BookingDatePicker
-                initial={{ checkIn: form.check_in, checkOut: form.check_out, stayType: form.stay_type }}
+                allowModeSelection={settings.roomCheckoutEnabled === true}
+                initial={{ checkIn: form.check_in, checkOut: form.check_out, stayType: settings.roomCheckoutEnabled === true ? form.stay_type : "villa" }}
                 mode={selectionMode}
                 minDate={minDate}
                 maxDate={maxDate}
@@ -1863,10 +1934,15 @@ export default function Booking() {
                 }}
                 onCancel={() => setCalendarOpen(false)}
                 onComplete={(selection) => {
+                  if (selection.stayType === "room" && (guestSummaryDogCount > 0 || breakfastAddonEntries.length > 0)) {
+                    setCalendarOpen(false);
+                    setError("單間住宿暫不提供犬隻入住及早餐加購，請先移除後再選擇。");
+                    return;
+                  }
                   setForm((current) => ({
                     ...current, check_in: selection.checkIn, check_out: selection.checkOut,
                     stay_type: selection.stayType,
-                    room_count: selection.stayType === "villa" ? settings.totalRoomCount : clampRoomCount(current.room_count, settings.totalRoomCount),
+                    room_count: selection.stayType === "villa" ? settings.totalRoomCount : 1,
                   }));
                   setCalendarOpen(false);
                   setMessage("");
@@ -1875,6 +1951,27 @@ export default function Booking() {
               />
             )}
 
+            {!calendarOpen && !peopleOpen && form.check_in && form.check_out && <>
+              {settings.roomCheckoutEnabled === true && <fieldset className="mt-5 border-t border-[#eadfce] pt-4">
+                <legend className="px-1 text-sm font-semibold text-stone-700">住宿方式</legend>
+                <div className="flex flex-wrap gap-4" role="radiogroup" aria-label="住宿方式">
+                  {(["room", "villa"] as const).map(stayType => <label key={stayType} className="inline-flex min-h-11 items-center gap-2 text-sm">
+                    <input type="radio" name="stay-type" value={stayType} checked={form.stay_type === stayType}
+                      disabled={stayType === "room" ? !roomRangeAvailable : !villaRangeAvailable}
+                      onChange={() => selectStayType(stayType)} />
+                    {stayType === "room" ? "單間入住" : "整棟包棟"}
+                  </label>)}
+                </div>
+              </fieldset>}
+              {settings.roomCheckoutEnabled === true && isRoomStay && <>
+                {roomAvailability.loading && <p role="status" className="mt-4 text-sm text-stone-500">單間房況讀取中…</p>}
+                {roomAvailability.error && <p role="alert" className="mt-4 text-sm text-red-700">{roomAvailability.error}</p>}
+                {roomAvailability.error && <button type="button" className="min-h-11 text-sm underline" onClick={() => setInventoryRevision(current => current + 1)}>重試</button>}
+                <RoomPriceOptions result={roomAvailability.result} guestCount={totalGuestCount}
+                  checkoutEnabled={settings.roomCheckoutEnabled === true && roomRangeAvailable}
+                  selectedRoomId={selectedRoomId} onSelect={id => setSelectedRoom({ key: roomSelectionKey, id })} />
+              </>}
+            </>}
             {peopleOpen && (
               <section
                 ref={peoplePanelRef}
@@ -1965,7 +2062,7 @@ export default function Booking() {
                     </div>
                   </div>
 
-                  {settings.allowPets && (
+                  {settings.allowPets && !isRoomStay && (
                     <div className="rounded-[12px] border border-[#f1e8dc] bg-white px-3 py-2.5">
                       <button
                         type="button"
@@ -2022,14 +2119,27 @@ export default function Booking() {
                     </div>
                   )}
                 </div>
-                <p className="mt-3 rounded-[10px] border border-[#eadfce] bg-[#fffaf3] px-3 py-2 text-xs leading-5 text-stone-500">
+                {!isRoomStay && <p className="mt-3 rounded-[10px] border border-[#eadfce] bg-[#fffaf3] px-3 py-2 text-xs leading-5 text-stone-500">
                   成人最多 {MAX_BOOKING_ADULTS} 位，孩童最多 {MAX_BOOKING_CHILDREN} 位；嬰幼兒不佔床免費。超過包棟內含人數後，不佔床孩童每位每晚 NT$500。
-                </p>
+                </p>}
               </section>
             )}
           </div>
 
-          {canRenderStepOneStayContent && (
+          {canRenderStepOneStayContent && settings.roomCheckoutEnabled === true && isRoomStay && <section className="mt-6 border-t border-[#eadfce] py-5">
+            <h2 className="text-xl font-semibold">單間住宿</h2>
+            <p className="mt-2 text-sm">{stayBedSummary || "請選擇房間"}</p>
+            <p className="mt-2 text-sm">{guestSummary} · {nightCount} 晚</p>
+            {isQuoteLoading && <p role="status" className="mt-2 text-sm">房價讀取中…</p>}
+            {priceQuoteError && <p role="alert" className="mt-2 text-sm text-red-700">{priceQuoteError}</p>}
+            {quoteReady && <div className="mt-4 grid max-w-md gap-2 text-sm">
+              {renderCompactSummaryRow("房價", formatTwd(quoteTotal), true)}
+              {renderCompactSummaryRow(`訂金 ${quoteDepositRatePercent}%`, formatTwd(displayDepositAmount))}
+              {renderCompactSummaryRow(`尾款 ${quoteBalanceRatePercent}%`, formatTwd(displayBalanceAmount))}
+            </div>}
+            <Button type="button" className="mt-5 h-11 bg-[#8b6f5b] hover:bg-[#765d4a]" disabled={!canProceedToContact} onClick={handleStartBooking}>下一步</Button>
+          </section>}
+          {canRenderStepOneStayContent && !isRoomStay && (
             <section className="mt-8 w-full max-w-full min-w-0 rounded-[18px] border border-[#efe5d8] bg-white/95">
               <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-0 min-[1000px]:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)]">
                 <div className="grid min-w-0 content-start grid-cols-[minmax(0,1fr)] gap-6 border-b border-[#efe5d8] p-4 sm:p-5 min-[1000px]:border-b-0 min-[1000px]:p-6">
@@ -2370,12 +2480,13 @@ export default function Booking() {
             <section className="mt-6 grid min-w-0 gap-5 min-[960px]:grid-cols-[minmax(0,1fr)_minmax(280px,0.42fr)]">
               <div className="min-w-0 rounded-[18px] border border-[#eadfce] bg-white/95 p-4 sm:p-6">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">ADD-ONS</p>
-                  <h2 className="mt-2 text-2xl font-semibold text-stone-900">加購商品</h2>
-                  <p className="mt-1 text-sm leading-6 text-stone-500">可依本次入住需求加入代訂服務。</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b08d73]">{isRoomStay ? "STAY" : "ADD-ONS"}</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-stone-900">{isRoomStay ? "住宿確認" : "加購商品"}</h2>
+                  {!isRoomStay && <p className="mt-1 text-sm leading-6 text-stone-500">可依本次入住需求加入代訂服務。</p>}
+                  {isRoomStay && <p className="mt-3 text-sm">{stayBedSummary}</p>}
                 </div>
 
-                <div className="mt-5 overflow-hidden rounded-[16px] border border-[#eadfce] bg-[#fffdf9]">
+                {!isRoomStay && <div className="mt-5 overflow-hidden rounded-[16px] border border-[#eadfce] bg-[#fffdf9]">
                   <img
                     src={breakfastAddon.image}
                     alt={breakfastAddon.name}
@@ -2427,8 +2538,7 @@ export default function Booking() {
                       </div>
                     </div>
                   </div>
-                </div>
-
+                </div>}
                 <div className="mt-5 grid gap-3 sm:grid-cols-[auto_1fr]">
                   <Button
                     type="button"
@@ -2814,16 +2924,16 @@ export default function Booking() {
                     </div>
                   )}
                   <div className="grid gap-3 border-t border-[#f1e8dc] pt-4">
-                    {renderStep3AmountRow("包棟住宿", submittedAdultLodgingTotal)}
+                    {renderStep3AmountRow(submittedIsRoom ? "單間住宿" : "包棟住宿", submittedAdultLodgingTotal)}
                     {submittedChildFeeTotal > 0 && renderStep3AmountRow("孩童費", submittedChildFeeTotal)}
                     {submittedPetFeeTotal > 0 && renderStep3AmountRow("寵物住宿費", submittedPetFeeTotal)}
                     {renderStep3AmountRow("總價", submittedTotal, undefined, true)}
                     {renderStep3AmountRow(`應付訂金 ${submittedDepositRatePercent ?? 30}%`, submittedDepositAmount)}
                     {renderStep3AmountRow(`尾款 ${submittedDepositRatePercent == null ? 70 : 100 - submittedDepositRatePercent}%`, submittedBalanceAmount)}
-                    {renderStep3AmountRow("一般住宿押金（入住時另收）", generalAccommodationDepositAmount)}
+                    {!submittedIsRoom && renderStep3AmountRow("一般住宿押金（入住時另收）", generalAccommodationDepositAmount)}
                     {submittedPetDepositAmount > 0 && renderStep3AmountRow("寵物押金（入住時另收）", submittedPetDepositAmount)}
                   </div>
-                  <p className="mt-3 text-xs leading-5 text-stone-500">{generalAccommodationDepositNotice}</p>
+                  {!submittedIsRoom && <p className="mt-3 text-xs leading-5 text-stone-500">{generalAccommodationDepositNotice}</p>}
                 </div>
               </section>
 

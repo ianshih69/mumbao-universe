@@ -28,6 +28,22 @@ function makeDay(date: string, saleMode: BookingCalendarDayView["saleMode"], isA
 }
 
 describe("booking calendar view helpers", () => {
+  it("requires the checkout flag and an API-priced capacity-eligible room day", () => {
+    const source = { date: "2026-11-02", roomBookingEnabled: true, roomBookable: true, villaBookable: false, roomFirstNightFrom: 3440 };
+    const settings = { ...villaSettings, allowRoomBooking: true, roomCheckoutEnabled: true };
+    expect(normalizeBookingCalendarDay(source.date, settings, new Set([source.date]), source)).toMatchObject({ isAvailable: true, roomBookable: true, roomFirstNightFrom: 3440 });
+    expect(normalizeBookingCalendarDay(source.date, villaSettings, new Set(), source).isAvailable).toBe(false);
+    expect(normalizeBookingCalendarDay(source.date, settings, new Set(), { ...source, roomFirstNightFrom: null }).isAvailable).toBe(false);
+    expect(normalizeBookingCalendarDay(source.date, settings, new Set(), { ...source, roomBookingEnabled: false }).isAvailable).toBe(false);
+  });
+  it("intersects supported modes across every stay night rather than mixing room and villa", () => {
+    const range = { checkIn: "2026-11-02", checkOut: "2026-11-04", minDate: "2026-11-01", maxDate: "2026-12-01", saleMode: "all" as const };
+    const getDay = (date: string) => ({ ...makeDay(date, "whole_house"), roomBookable: true, villaBookable: date === "2026-11-02" });
+    expect(getBookingRangeIssue({ ...range, getDay })).toBe("ok");
+    expect(getBookingRangeIssue({ ...range, getDay, saleMode: "room" })).toBe("ok");
+    expect(getBookingRangeIssue({ ...range, getDay, saleMode: "whole_house" })).toBe("mode_mismatch");
+    expect(getBookingRangeIssue({ ...range, getDay: date => ({ ...getDay(date), roomBookable: date !== "2026-11-02" }) })).toBe("mode_mismatch");
+  });
   it("normalizes existing unavailableDates and global villa settings into a whole-house day", () => {
     const availableDay = normalizeBookingCalendarDay("2026-11-14", villaSettings, new Set());
     const unavailableDay = normalizeBookingCalendarDay("2026-11-15", villaSettings, new Set(["2026-11-15"]));

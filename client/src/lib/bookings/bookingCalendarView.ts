@@ -6,6 +6,10 @@ export type BookingRangeIssue = "ok" | "invalid_range" | "unavailable" | "mode_m
 
 export type BookingCalendarDaySource = {
   date: string;
+  roomBookingEnabled?: boolean;
+  roomBookable?: boolean;
+  villaBookable?: boolean;
+  roomFirstNightFrom?: number | null;
   saleMode?: string | null;
   sale_mode?: string | null;
   isAvailable?: boolean | null;
@@ -18,6 +22,9 @@ export type BookingCalendarDaySource = {
 
 export type BookingCalendarDayView = {
   date: string;
+  roomBookable?: boolean;
+  villaBookable?: boolean;
+  roomFirstNightFrom?: number | null;
   saleMode: BookingSaleMode;
   isAvailable: boolean;
   remainingRooms: number | null;
@@ -72,6 +79,17 @@ export function normalizeBookingCalendarDay(
     (typeof sourceAvailable === "boolean" ? sourceAvailable : !isUnavailableByRange) &&
     !(saleMode === "room" && remainingRooms !== null && remainingRooms <= 0);
 
+  // Additive inventory fields are authoritative, including false.
+  if (source && (typeof source.villaBookable === "boolean" || typeof source.roomBookable === "boolean")) {
+    const roomBookable = settings.roomCheckoutEnabled === true && source.roomBookingEnabled === true &&
+      source.roomBookable === true && typeof source.roomFirstNightFrom === "number" &&
+      Number.isFinite(source.roomFirstNightFrom) && source.roomFirstNightFrom >= 0;
+    const villaBookable = settings.allowVillaBooking && source.villaBookable === true;
+    return { date, roomBookable, villaBookable, roomFirstNightFrom: roomBookable ? source.roomFirstNightFrom : null,
+      saleMode: villaBookable ? "whole_house" as const : roomBookable ? "room" as const : "closed" as const,
+      isAvailable: villaBookable || roomBookable, remainingRooms: null, unavailableReason: null };
+  }
+
   return {
     date,
     saleMode,
@@ -99,7 +117,7 @@ export function getBookingRangeIssue({
 }: {
   checkIn: string;
   checkOut: string;
-  saleMode: BookingSaleMode;
+  saleMode: BookingSaleMode | "all";
   minDate: string;
   maxDate: string;
   getDay: (date: string) => BookingCalendarDayView;
@@ -107,10 +125,15 @@ export function getBookingRangeIssue({
   if (!checkIn || !checkOut || checkOut <= checkIn) return "invalid_range";
 
   let current = checkIn;
+  let roomPossible = true;
+  let villaPossible = true;
   while (current < checkOut) {
     const day = getDay(current);
     if (!isBookableStayNight(day, minDate, maxDate)) return "unavailable";
-    if (day.saleMode !== saleMode) return "mode_mismatch";
+    roomPossible = roomPossible && (day.roomBookable ?? day.saleMode === "room");
+    villaPossible = villaPossible && (day.villaBookable ?? day.saleMode === "whole_house");
+    if (saleMode === "room" && !roomPossible || saleMode === "whole_house" && !villaPossible ||
+        saleMode === "all" && !roomPossible && !villaPossible || saleMode === "closed") return "mode_mismatch";
     current = addCalendarDays(current, 1);
   }
 

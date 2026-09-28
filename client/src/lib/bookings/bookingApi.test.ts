@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BookingApiError,
+  bookingSubmitAttempt,
+  fetchBookingCalendar,
+  fetchRoomPriceAvailability,
+  fetchBookingQuote,
+  isRoomOptionEligible,
   fetchBookingManageSession,
   lookupBookingOrder,
   recoverBookingRequest,
@@ -40,6 +45,48 @@ afterEach(() => {
 });
 
 describe("booking hold API contract", () => {
+  it("passes total guestCount to both inventory endpoints and roomId to the existing quote route", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ ok: true })));
+    vi.stubGlobal("fetch", fetchMock);
+    await fetchBookingCalendar("2026-11-01", 4);
+    await fetchRoomPriceAvailability("2026-11-02", "2026-11-04", 4);
+    await fetchBookingQuote({ checkIn: "2026-11-02", checkOut: "2026-11-04", stayType: "room", roomId: "room-521",
+      packageType: "villa_10", adults: 2, children: 1, infants: 1, dogUnder10kgCount: 0, dog10To20kgCount: 0, dogOver20kgCount: 0, selectedRoomOptionId: "", roomCount: 1 });
+    const queries = fetchMock.mock.calls.map(([url]) => new URL(url, "https://example.invalid").searchParams);
+    expect(queries[0].get("guestCount")).toBe("4"); expect(queries[1].get("guestCount")).toBe("4");
+    expect(queries[2].get("roomId")).toBe("room-521"); expect(queries[2].get("stayType")).toBe("room");
+    expect(queries[2].has("price")).toBe(false);
+  });
+
+  it("keeps a UUID stable for identical retries but rotates it for an edited request", () => {
+    const randomUUID = vi.fn().mockReturnValueOnce("11111111-1111-4111-8111-111111111111").mockReturnValueOnce("22222222-2222-4222-8222-222222222222");
+    vi.stubGlobal("crypto", { randomUUID });
+    const roomPayload = { ...payload, stay_type: "room" as const, room_id: "room-521", guest_count: 2 };
+    const first = bookingSubmitAttempt(roomPayload, null);
+    const retry = bookingSubmitAttempt({ ...roomPayload, client_request_id: first.id }, first);
+    expect(retry).toBe(first); expect(first.id).toMatch(/^[a-f0-9-]{36}$/);
+    expect(bookingSubmitAttempt({ ...roomPayload, room_id: "room-360" }, retry).id).not.toBe(first.id);
+    expect(randomUUID).toHaveBeenCalledTimes(2);
+  });
+
+  it("counts children and infants against capacity and honors backend ineligibility", () => {
+    const room = { roomId: "521", code: "S521", publicName: "Room", capacity: 2, guestCapacityEligible: true,
+      nights: 2, pricingStatus: "configured" as const, price: 5460, pricingBreakdown: { breakdown: [] } };
+    expect(isRoomOptionEligible(room, 2)).toBe(true);
+    expect(isRoomOptionEligible(room, 2 + 1 + 1)).toBe(false);
+    expect(isRoomOptionEligible({ ...room, guestCapacityEligible: false }, 1)).toBe(false);
+    expect(isRoomOptionEligible({ ...room, price: null }, 2)).toBe(false);
+  });
+
+  it("preserves room snapshot and structured duplicate rejection", async () => {
+    const room = { roomId: "521", code: "S521", publicName: "Room", capacity: 2 };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      ok: true, summary: { stayType: "room", room }, pricing: { quotedTotal: 11351, depositAmount: 3405, balanceAmount: 7946, pricingBreakdown: { room } },
+    }))).mockResolvedValueOnce(new Response(JSON.stringify({ code: "duplicate_client_request", message: "Duplicate" }), { status: 409 })));
+    const first = await submitBookingRequest(payload);
+    expect(first.summary?.room).toEqual(room); expect(first.pricing?.depositAmount).toBe(3405);
+    await expect(submitBookingRequest(payload)).rejects.toMatchObject({ status: 409, code: "duplicate_client_request" });
+  });
   it("preserves structured temporary-hold conflict details", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       ok: false,

@@ -16,6 +16,11 @@ import {
   createBookingPaymentClockSync,
   formatBookingPaymentCountdown,
 } from "@/lib/bookings/bookingPaymentView";
+import { bookingRoomLabel, type BookingRoomSnapshot } from "@/lib/bookings/bookingRoomDisplay";
+
+type DisplayBookingManageResult = BookingManageResult & {
+  booking: { room?: BookingRoomSnapshot | null };
+};
 
 const reasonOptions: Array<{ value: BookingCancellationReasonCode; label: string }> = [
   { value: "schedule_change", label: "行程變更" },
@@ -72,7 +77,8 @@ function row(label: string, value: string | number | null | undefined) {
   );
 }
 
-function roomLabel(order: BookingManageResult["booking"]) {
+function roomLabel(order: DisplayBookingManageResult["booking"]) {
+  if (order.stayType === "room") return bookingRoomLabel(order.room);
   const option = order.selectedRoomOption;
   if (option) {
     return `${option.roomCount} 間房｜雙人床 ${option.doubleBedCount} 張｜可睡 ${option.sleepCapacity} 人`;
@@ -86,7 +92,7 @@ function breakfastLabel(order: BookingManageResult["booking"]) {
 }
 
 export default function BookingManage() {
-  const [data, setData] = useState<BookingManageResult | null>(null);
+  const [data, setData] = useState<DisplayBookingManageResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [paymentOpen, setPaymentOpen] = useState(false);
@@ -245,7 +251,8 @@ export default function BookingManage() {
                   {row("入住 / 退房", `${formatDate(data.booking.checkIn)} - ${formatDate(data.booking.checkOut)}`)}
                   {row("晚數", `${data.booking.nights} 晚`)}
                   {row("人數", `成人 ${data.booking.adults}｜孩童 ${data.booking.children}｜嬰幼兒 ${data.booking.infants}`)}
-                  {row("房間配置", roomLabel(data.booking))}
+                  {data.booking.stayType === "room" && row("住宿方式", "單間住宿")}
+                  {row(data.booking.stayType === "room" ? "房間" : "房間配置", roomLabel(data.booking))}
                   {row("早餐", breakfastLabel(data.booking))}
                   {row("寵物", data.booking.hasPets ? `${data.booking.dogCount || 0} 隻` : "無")}
                   {row("訂房總額", formatTwd(data.booking.quotedTotal))}

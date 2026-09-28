@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import RoomSalesModeEditor from "./RoomSalesModeEditor";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -47,6 +48,7 @@ export default function AdminPricingCalendar({ token, ruleSet, rates, specialDat
   const [edit, setEdit] = useState<CalendarEdit | null>(null);
   const [editError, setEditError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [modeSaving, setModeSaving] = useState(false);
   const [writeCompleted, setWriteCompleted] = useState(false);
   const busy = useRef(false);
   const revision = useRef("");
@@ -215,8 +217,8 @@ export default function AdminPricingCalendar({ token, ruleSet, rates, specialDat
         })}
       </div>
     </div>}
-    <Dialog open={Boolean(edit)} onOpenChange={open => { if (!open && !saving) setEdit(null); }}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto bg-white" showCloseButton={!saving}>
+    <Dialog open={Boolean(edit)} onOpenChange={open => { if (!open && !saving && !modeSaving) setEdit(null); }}>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto bg-white" showCloseButton={!saving && !modeSaving}>
         <DialogHeader><DialogTitle className="pr-4 text-lg">編輯價格｜{edit?.row.date}</DialogTitle>
           <DialogDescription className="sr-only">10 人單晚價格</DialogDescription></DialogHeader>
         {edit && <form className="grid gap-5" onSubmit={event => { event.preventDefault(); void saveDay(); }}>
@@ -236,10 +238,11 @@ export default function AdminPricingCalendar({ token, ruleSet, rates, specialDat
             <Button type="button" variant="ghost" className="mr-auto" disabled={saving || writeCompleted} onClick={() => {
               setEdit({ ...edit, restoring: true, base: String(edit.defaultBase), percent: percent(edit.defaultRate) }); setEditError("");
             }}>恢復預設</Button>
-            <Button type="button" variant="outline" disabled={saving} onClick={() => setEdit(null)}>取消</Button>
-            <Button type="submit" disabled={saving || writeCompleted || Boolean(validation)} className="bg-[#8b6f5b] hover:bg-[#765d4a]">{saving ? "儲存中…" : "儲存"}</Button>
+            <Button type="button" variant="outline" disabled={saving || modeSaving} onClick={() => setEdit(null)}>取消</Button>
+            <Button type="submit" disabled={saving || modeSaving || writeCompleted || Boolean(validation)} className="bg-[#8b6f5b] hover:bg-[#765d4a]">{saving ? "儲存中…" : "儲存"}</Button>
           </div>
         </form>}
+        {edit && !saving && <RoomSalesModeEditor key={edit.row.date} token={token} date={edit.row.date} onBusyChange={setModeSaving} />}
       </DialogContent>
     </Dialog>
   </section>;

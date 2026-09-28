@@ -7,6 +7,8 @@ import {
   supabaseRequest,
 } from "../server/shopShared.js";
 import { requirePermission } from "../server/adminShop/core.js";
+import { roomPricingEnabled, loadRoomPricingData, saveRoomPricing } from "../server/bookingRoomPricing.js";
+import { roomInventoryEnabled, requireRoomInventory, roomDate, roomSalesDate } from "../server/bookingRoomInventory.js";
 import { isValidGuestFee, isValidBasePriceOverride } from "../src/lib/bookings/guestBasePricing.js";
 import { calendarDiscountFields, inheritsCalendarDiscount, isValidCalendarDiscountRate } from "../server/bookingPricing/calendarDiscount.js";
 import { calculatePricingCalendarPreview } from "../server/bookingPricing/calendarPreview.js";
@@ -1626,6 +1628,39 @@ async function handlePricingSpecialDatePost(req, res, requestId) {
 }
 async function dispatch(req, res, requestId) {
   const action = firstQueryValue(req.query?.action) || "dashboard";
+  if (action === "room-pricing" && ["GET", "POST"].includes(req.method)) {
+    const admin = await requireAdmin(req);
+    if (req.method === "GET") {
+      if (!roomPricingEnabled()) return sendJson(res, 200, { ok: true, enabled: false });
+      const from = roomDate(firstQueryValue(req.query?.from));
+      const to = roomDate(firstQueryValue(req.query?.to));
+      return sendJson(res, 200, { ok: true, enabled: true, ...(await loadRoomPricingData(from, to)) });
+    }
+    const body = await readBody(req);
+    if (!["defaults", "day"].includes(body?.mode)) throw httpError(400, "價格操作不正確。", "invalid_room_price_mode");
+    await saveRoomPricing(body, body.mode === "day");
+    await writeBookingAuditLog({ req, requestId, admin, action: "update_room_pricing", targetType: "booking_room_rates",
+      targetId: body.ruleSetId || null, description: "更新單間價格", beforeData: null, afterData: body });
+    return sendJson(res, 200, { ok: true });
+  }
+  if (action === "room-sales-mode" && ["GET", "POST"].includes(req.method)) {
+    const admin = await requireAdmin(req);
+    if (req.method === "GET") {
+      if (!roomInventoryEnabled()) return sendJson(res, 200, { ok: true, enabled: false });
+      return sendJson(res, 200, { ok: true, enabled: true, ...(await roomSalesDate(roomDate(firstQueryValue(req.query?.date)))) });
+    }
+    requireRoomInventory();
+    const body = await readBody(req);
+    const date = roomDate(body?.date);
+    const override = body?.roomBookingEnabledOverride;
+    if (override !== null && typeof override !== "boolean") throw httpError(400, "請選擇開啟、關閉或使用預設。", "invalid_room_mode");
+    const before = await roomSalesDate(date);
+    await supabaseRpc("set_booking_room_sales_date", { p_date: date, p_enabled: override });
+    const saved = await roomSalesDate(date);
+    await writeBookingAuditLog({ req, requestId, admin, action: "update_room_sales_mode", targetType: "booking_room_sales_dates",
+      targetId: null, description: "更新單日單間開放設定", beforeData: before, afterData: saved });
+    return sendJson(res, 200, { ok: true, enabled: true, ...saved });
+  }
   if (req.method === "GET" && action === "dashboard") return handleDashboard(req, res, requestId);
   if (req.method === "GET" && action === "calendar") return handleCalendar(req, res, requestId);
   if (req.method === "GET" && action === "settings") return handleSettingsGet(req, res, requestId);

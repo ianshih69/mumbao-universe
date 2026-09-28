@@ -1,4 +1,5 @@
 import { createAdminApiError } from "@/lib/shop/adminAuth";
+import type { BookingRoomSnapshot } from "./bookingRoomDisplay";
 
 export type BookingSeverity = "P0" | "P1" | "P2" | "review";
 
@@ -52,6 +53,10 @@ export type BookingRequest = {
   check_in: string;
   check_out: string;
   stay_type: "villa" | "room";
+  room_id?: string | null;
+  submitted_snapshot?: {
+    summary?: { room?: BookingRoomSnapshot | null } | null;
+  } | null;
   adults: number;
   children: number;
   room_count?: number | null;
@@ -71,6 +76,7 @@ export type BookingRequest = {
   deposit_amount?: number | null;
   balance_amount?: number | null;
   pricing_breakdown?: {
+    room?: BookingRoomSnapshot | null;
     chargeableChildCount?: number;
     childFeeUnitPrice?: number;
     childFeeTotal?: number;
@@ -471,6 +477,33 @@ export function fetchBookingPricing(token: string) {
     rates: BookingPackageRate[];
     specialDates: BookingSpecialDate[];
   }>(token, "?action=pricing");
+}
+
+export type RoomRate = { room_id: string; rule_set_id?: string; weekday_base_price: number | null; friday_base_price: number | null; saturday_base_price: number | null };
+export type RoomPricingData = {
+  enabled: boolean; periods: BookingPriceRuleSet[];
+  rooms: Array<{ id: string; code: string; public_name: string; is_fallback: boolean }>;
+  rates: RoomRate[];
+  settings: Array<{ rule_set_id: string; room_weekday_discount_rate: number; room_weekend_discount_rate: number }>;
+  overrides: Array<{ room_id: string; stay_date: string; base_price_override: number | null }>;
+  discounts: Array<{ stay_date: string; room_discount_rate_override: number | null }>;
+  sales: Array<{ date: string; room_booking_enabled_override: boolean | null }>;
+};
+export function fetchRoomPricing(token: string, from: string, to: string) {
+  return adminBookingRequest<RoomPricingData>(token, `?action=room-pricing&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+}
+export function saveRoomPriceSettings(token: string, payload: object) {
+  return adminBookingRequest<{ ok: true }>(token, "?action=room-pricing", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export type RoomSalesDate = { ok: true; enabled: boolean; date?: string; roomBookingEnabledOverride?: boolean | null; roomBookingEnabled?: boolean };
+export function fetchRoomSalesDate(token: string, date: string) {
+  return adminBookingRequest<RoomSalesDate>(token, `?action=room-sales-mode&date=${encodeURIComponent(date)}`);
+}
+export function saveRoomSalesDate(token: string, date: string, roomBookingEnabledOverride: boolean | null) {
+  return adminBookingRequest<RoomSalesDate>(token, "?action=room-sales-mode", {
+    method: "POST", body: JSON.stringify({ date, roomBookingEnabledOverride }),
+  });
 }
 
 export type BookingPricingCalendarPreview = {

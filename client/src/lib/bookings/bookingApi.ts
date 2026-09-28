@@ -8,6 +8,8 @@ export type BookingPublicSettings = {
   bookingWindowLabel: string;
   allowVillaBooking: boolean;
   allowRoomBooking: boolean;
+  roomPricingPreviewEnabled?: boolean;
+  roomCheckoutEnabled?: boolean;
   totalRoomCount: number;
   allowPets: boolean;
 };
@@ -26,6 +28,10 @@ export type BookingCalendarResult = {
   unavailableDates: string[];
   days?: Array<{
     date: string;
+    roomBookingEnabled?: boolean;
+    roomBookable?: boolean;
+    villaBookable?: boolean;
+    roomFirstNightFrom?: number | null;
     saleMode?: string | null;
     sale_mode?: string | null;
     isAvailable?: boolean | null;
@@ -146,6 +152,7 @@ export type BookingPetFeeBreakdownItem = {
 };
 
 export type BookingPricingResult = {
+  room?: BookingSelectedRoom;
   status: "resolved" | "unavailable";
   reason?: string;
   ruleSetId: string | null;
@@ -229,13 +236,16 @@ export type BookingPriceQuoteResult = {
   infants: number;
   guestCount: number;
   pricingGuestCount: number | null;
-  packageType: BookingPackageType;
-  packageLabel: string;
+  packageType: BookingPackageType | null;
+  packageLabel: string | null;
   nights: number;
   pricing: BookingPricingResult;
 };
 
 export type BookingRequestPayload = {
+  room_id?: string;
+  guest_count?: number;
+  client_request_id?: string;
   guest_name: string;
   email: string;
   phone: string;
@@ -282,6 +292,8 @@ export type BookingSubmitResult = {
     pricingBreakdown: BookingPricingResult;
   };
   summary?: {
+    stayType?: StayType;
+    room?: BookingSelectedRoom | null;
     adultCount: number;
     childCount: number;
     infantCount: number;
@@ -342,6 +354,7 @@ export type BookingManageResult = {
     checkOut: string;
     nights: number;
     stayType: StayType;
+    room?: BookingSelectedRoom | null;
     adults: number;
     children: number;
     infants: number;
@@ -437,9 +450,43 @@ export function checkBookingAvailability(checkIn: string, checkOut: string) {
   return bookingRequest<BookingAvailabilityResult & { ok: boolean }>(`?${params.toString()}`);
 }
 
-export function fetchBookingCalendar(from: string) {
+export function fetchBookingCalendar(from: string, guestCount?: number) {
   const params = new URLSearchParams({ action: "calendar", from });
+  if (guestCount !== undefined) params.set("guestCount", String(guestCount));
   return bookingRequest<BookingCalendarResult & { ok: boolean }>(`?${params.toString()}`);
+}
+
+export type BookingSelectedRoom = {
+  roomId: string; code: string; publicName: string; capacity: number;
+};
+export type PricedRoomOption = {
+  roomId: string; code: string; publicName: string; nights: number;
+  capacity?: number;
+  guestCapacityEligible?: boolean;
+  pricingStatus: "configured" | "not_configured"; price: number | null;
+  pricingBreakdown: { breakdown: { date: string; finalNightPrice: number; basePrice?: number; calendarDiscountRate?: number; priceAfterCalendarDiscount?: number; stayDiscountRate?: number }[] } | null;
+};
+export type RoomPriceAvailability = {
+  roomBookingEnabled: boolean; roomCheckoutEnabled: boolean;
+  availableRoomOptions: PricedRoomOption[];
+};
+export function fetchRoomPriceAvailability(checkIn: string, checkOut: string, guestCount?: number) {
+  const params = new URLSearchParams({ action: "room-availability", checkIn, checkOut });
+  if (guestCount !== undefined) params.set("guestCount", String(guestCount));
+  return bookingRequest<RoomPriceAvailability>(`?${params}`);
+}
+
+export function isRoomOptionEligible(room: PricedRoomOption, guestCount: number) {
+  return room.guestCapacityEligible === true && Number.isInteger(room.capacity) &&
+    guestCount > 0 && guestCount <= room.capacity! && room.pricingStatus === "configured" &&
+    typeof room.price === "number" && Number.isFinite(room.price) && room.price >= 0 &&
+    Boolean(room.pricingBreakdown);
+}
+
+export function bookingSubmitAttempt(payload: BookingRequestPayload, previous: { key: string; id: string } | null) {
+  const { client_request_id: _id, ...body } = payload;
+  const key = JSON.stringify(body);
+  return previous?.key === key ? previous : { key, id: crypto.randomUUID() };
 }
 
 export function fetchBookingQuote({
@@ -456,6 +503,7 @@ export function fetchBookingQuote({
   breakfastAddons = [],
   selectedRoomOptionId,
   roomCount,
+  roomId,
 }: {
   checkIn: string;
   checkOut: string;
@@ -470,6 +518,7 @@ export function fetchBookingQuote({
   breakfastAddons?: BookingBreakfastAddonInput[];
   selectedRoomOptionId: string;
   roomCount: number;
+  roomId?: string;
 }) {
   const params = new URLSearchParams({
     action: "quote",
@@ -487,6 +536,7 @@ export function fetchBookingQuote({
     selectedRoomOptionId,
     roomCount: String(roomCount),
   });
+  if (roomId) params.set("roomId", roomId);
   return bookingRequest<BookingPriceQuoteResult & { ok: boolean }>(`?${params.toString()}`);
 }
 

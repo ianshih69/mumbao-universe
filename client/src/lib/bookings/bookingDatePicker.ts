@@ -2,7 +2,7 @@ import type { BookingPricingBreakdownNight, StayType } from "./bookingApi";
 import { addCalendarDays, getBookingRangeIssue, isBookableStayNight, saleModeToStayType, stayTypeToSaleMode, type BookingCalendarDayView } from "./bookingCalendarView";
 
 export type DateSelection = { checkIn: string; checkOut: string; stayType: StayType };
-export type CalendarBounds = { minDate: string; maxDate: string; getDay: (date: string) => BookingCalendarDayView };
+export type CalendarBounds = { minDate: string; maxDate: string; getDay: (date: string) => BookingCalendarDayView; allowModeSelection?: boolean };
 
 export function shiftBookingMonth(month: string, offset: number) {
   const [year, number] = month.split("-").map(Number);
@@ -21,15 +21,21 @@ export function bookingMonthDates(month: string): Array<string | null> {
 export function canSelectBookingDate(date: string, selection: DateSelection, selectingCheckout: boolean, bounds: CalendarBounds) {
   if (date < bounds.minDate || date > bounds.maxDate) return false;
   if (selectingCheckout && selection.checkIn && date > selection.checkIn) {
-    return getBookingRangeIssue({ ...bounds, checkIn: selection.checkIn, checkOut: date, saleMode: stayTypeToSaleMode(selection.stayType) }) === "ok";
+    return getBookingRangeIssue({ ...bounds, checkIn: selection.checkIn, checkOut: date, saleMode: bounds.allowModeSelection && selection.stayType !== "room" ? "all" : stayTypeToSaleMode(selection.stayType) }) === "ok";
   }
+  if (bounds.allowModeSelection && selection.stayType === "room" && !bounds.getDay(date).roomBookable) return false;
   return date < bounds.maxDate && isBookableStayNight(bounds.getDay(date), bounds.minDate, bounds.maxDate);
 }
 
 export function selectBookingDate(date: string, selection: DateSelection, selectingCheckout: boolean, bounds: CalendarBounds): DateSelection {
   if (!canSelectBookingDate(date, selection, selectingCheckout, bounds)) return selection;
-  if (selectingCheckout && selection.checkIn && date > selection.checkIn) return { ...selection, checkOut: date };
-  return { checkIn: date, checkOut: "", stayType: saleModeToStayType(bounds.getDay(date).saleMode) || selection.stayType };
+  if (selectingCheckout && selection.checkIn && date > selection.checkIn) {
+    const stayType = bounds.allowModeSelection && getBookingRangeIssue({ ...bounds, checkIn: selection.checkIn, checkOut: date, saleMode: stayTypeToSaleMode(selection.stayType) }) !== "ok"
+      ? selection.stayType === "villa" ? "room" : "villa" : selection.stayType;
+    return { ...selection, stayType, checkOut: date };
+  }
+  const day = bounds.getDay(date);
+  return { checkIn: date, checkOut: "", stayType: bounds.allowModeSelection && selection.stayType === "room" && day.roomBookable ? "room" : saleModeToStayType(day.saleMode) || selection.stayType };
 }
 
 export function firstNightDisplayPrice(night: BookingPricingBreakdownNight): number | null {
@@ -48,6 +54,7 @@ export function calendarQuoteRanges(month: string, bounds: CalendarBounds) {
   for (const date of bookingMonthDates(month)) {
     if (!date || date >= bounds.maxDate || !isBookableStayNight(bounds.getDay(date), bounds.minDate, bounds.maxDate)) continue;
     const stayType = saleModeToStayType(bounds.getDay(date).saleMode);
+    if (stayType === "room" && bounds.allowModeSelection) continue;
     if (!stayType) continue;
     const last = ranges[ranges.length - 1];
     if (last?.checkOut === date && last.stayType === stayType) last.checkOut = addCalendarDays(date, 1);

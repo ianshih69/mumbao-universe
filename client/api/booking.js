@@ -1,4 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
+import { roomInventoryEnabled, roomAvailability, roomCalendar } from "../server/bookingRoomInventory.js";
+import { roomPricingEnabled, loadRoomPricingData } from "../server/bookingRoomPricing.js";
+import { priceAvailableRooms } from "../server/bookingPricing/roomPricing.js";
+import { roomCheckoutEnabled, roomGuestCount, pricedRoomAvailability, quoteRoomStay } from "../server/bookingRoomCheckout.js";
 import {
   firstQueryValue,
   getServerEnv,
@@ -184,7 +188,9 @@ function publicSettings(settings) {
     bookingWindowMonths: settings.bookingWindowMonths,
     bookingWindowLabel: bookingWindowLabel(settings.bookingWindowMonths),
     allowVillaBooking: settings.allowVillaBooking,
-    allowRoomBooking: settings.allowRoomBooking,
+    allowRoomBooking: roomCheckoutEnabled(settings),
+    roomCheckoutEnabled: roomCheckoutEnabled(settings),
+    roomPricingPreviewEnabled: roomCheckoutEnabled(settings),
     totalRoomCount: settings.totalRoomCount,
     allowPets: settings.allowPets,
   };
@@ -235,6 +241,8 @@ function buildSubmittedBookingSnapshot({ pricingSnapshot, stayDetails, quote, gu
       pricingBreakdown: pricingSnapshot.pricing_breakdown,
     },
     summary: {
+      stayType: stayDetails.stayType,
+      ...(quote.pricing.room ? { room: quote.pricing.room } : {}),
       adultCount: stayDetails.adults,
       childCount: stayDetails.children,
       infantCount: stayDetails.infants,
@@ -372,11 +380,11 @@ function validateStayDetails(body, settings) {
     throw httpError(400, "目前暫未開放包棟 villa 線上預約。", "villa_booking_disabled");
   }
 
-  if (selectedStayType === "room" && !settings.allowRoomBooking) {
+  if (selectedStayType === "room" && !roomCheckoutEnabled(settings)) {
     throw httpError(400, "目前暫未開放單間客房線上預約。", "room_booking_disabled");
   }
 
-  const adults = parseInteger(body.adults, 2);
+  const adults = parseInteger(body.adults, selectedStayType === "room" ? parseInteger(body.guest_count, 2) : 2);
   const children = parseInteger(body.children, 0);
   const infants = parseInteger(body.infants, 0);
   if (!Number.isInteger(adults) || adults < 1 || adults > 30) {
@@ -418,9 +426,9 @@ function validateStayDetails(body, settings) {
     dogOver20kgCount,
   });
 
-  let roomCount = selectedStayType === "villa" ? settings.totalRoomCount : parseInteger(body.room_count, null);
-  if (selectedStayType === "room" && (!Number.isInteger(roomCount) || roomCount < 1 || roomCount > settings.totalRoomCount)) {
-    throw httpError(400, `單間客房數需為 1 到 ${settings.totalRoomCount} 間。`, "invalid_room_count");
+  let roomCount = selectedStayType === "villa" ? settings.totalRoomCount : parseInteger(body.room_count, 1);
+  if (selectedStayType === "room" && roomCount !== 1) {
+    throw httpError(400, "每筆單間訂單僅能選擇 1 間房。", "invalid_room_count");
   }
 
   const hasPets = petPlan.dogCount > 0 || body.has_pets === true;
@@ -461,6 +469,12 @@ function validateStayDetails(body, settings) {
   };
 }
 
+async function calculateStayQuote(input, settings) {
+  return input.stayType === "room"
+    ? quoteRoomStay(input, settings)
+    : calculateBookingQuote(input, { supabaseRequest });
+}
+
 async function handleCalendar(req, res, requestId) {
   const settings = await loadBookingSettings();
   const from = normalizeDate(firstQueryValue(req.query?.from)) || todayText();
@@ -468,6 +482,26 @@ async function handleCalendar(req, res, requestId) {
   const maxDate = maxBookableDate(settings);
   const to = maxDate;
   const ranges = safeFrom > maxDate ? [] : await findUnavailableRanges(safeFrom, to);
+
+  // Opt-in Phase 1 inventory metadata does not enable public room checkout.
+  let inventory;
+  if (roomInventoryEnabled()) {
+    const days = await roomCalendar(safeFrom, to, settings.allowVillaBooking);
+    const enabled = roomCheckoutEnabled(settings);
+    let pricedDays = days.map(day => ({ date: day.date, villaBookable: day.villaBookable,
+      roomBookingEnabled: false, roomBookable: false, roomFirstNightFrom: null }));
+    if (enabled && days.length) {
+      const data = await loadRoomPricingData(safeFrom, to);
+      const guests = roomGuestCount(firstQueryValue(req.query?.guestCount));
+      pricedDays = days.map(day => {
+        const result = priceAvailableRooms(data, { ...day, availableRoomOptions: day.availableRoomOptions || [] }, day.date, addDays(day.date, 1), guests);
+        const eligible = result.availableRoomOptions.filter(r => r.guestCapacityEligible && r.pricingStatus === "configured");
+        return { ...day, availableRoomOptions: undefined, roomBookable: day.roomBookingEnabled && eligible.length > 0,
+          roomFirstNightFrom: day.roomBookingEnabled && eligible.length ? Math.min(...eligible.map(r => r.price)) : null };
+      });
+    }
+    inventory = { days: pricedDays, roomCheckoutEnabled: enabled };
+  }
 
   sendJson(res, 200, {
     ok: true,
@@ -477,6 +511,7 @@ async function handleCalendar(req, res, requestId) {
     maxDate,
     unavailableDates: buildUnavailableDates(ranges, safeFrom, to),
     settings: publicSettings(settings),
+    ...inventory,
   });
 }
 
@@ -496,6 +531,16 @@ async function handleAvailability(req, res, requestId) {
     checkOut,
     settings: publicSettings(settings),
   });
+}
+
+async function handleRoomAvailability(req, res, requestId) {
+  const settings = await loadBookingSettings();
+  const { checkIn, checkOut } = validateDateRange(firstQueryValue(req.query?.checkIn), firstQueryValue(req.query?.checkOut), settings);
+  const guests = roomGuestCount(firstQueryValue(req.query?.guestCount));
+  const result = roomPricingEnabled()
+    ? await pricedRoomAvailability(checkIn, checkOut, settings, guests)
+    : await roomAvailability(checkIn, checkOut, settings.allowVillaBooking);
+  sendJson(res, 200, { ok: true, requestId, ...result });
 }
 
 async function handleQuote(req, res, requestId) {
@@ -522,11 +567,12 @@ async function handleQuote(req, res, requestId) {
     settings
   );
 
-  const quote = await calculateBookingQuote(
+  const quote = await calculateStayQuote(
     {
       checkIn,
       checkOut,
       stayType: stayDetails.stayType,
+      roomId: firstQueryValue(req.query?.roomId || req.query?.room_id),
       adults: stayDetails.adults,
       children: stayDetails.children,
       infants: stayDetails.infants,
@@ -540,7 +586,7 @@ async function handleQuote(req, res, requestId) {
       selectedRoomOptionId: firstQueryValue(req.query?.selectedRoomOptionId || req.query?.selected_room_option_id),
       breakfastAddons: firstQueryValue(req.query?.breakfastAddons || req.query?.breakfast_addons),
     },
-    { supabaseRequest }
+    settings
   );
 
   if (quote.pricing?.status === "unavailable" && isBreakfastAddonError(quote.pricing.reason)) {
@@ -570,6 +616,14 @@ async function handleRequest(req, res, requestId) {
 
   const { checkIn, checkOut } = validateDateRange(body.check_in, body.check_out, settings);
   const stayDetails = validateStayDetails(body, settings);
+  if (stayDetails.stayType === "room") {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.client_request_id || "")) {
+      throw httpError(400, "請重新確認訂房資料後送出。", "invalid_client_request_id");
+    }
+    if (body.guest_count !== undefined && Number(body.guest_count) !== stayDetails.guestCount) {
+      throw httpError(400, "入住人數不一致。", "invalid_guest_count");
+    }
+  }
   const guestName = cleanText(body.guest_name, 80);
   const guestEmail = cleanText(body.email || body.guest_email, 160).toLowerCase();
   const guestPhone = cleanText(body.phone || body.guest_phone, 60);
@@ -583,11 +637,13 @@ async function handleRequest(req, res, requestId) {
     throw httpError(400, "Email 格式不正確。", "invalid_email");
   }
 
-  const quote = await calculateBookingQuote(
+  const quote = await calculateStayQuote(
     {
       checkIn,
       checkOut,
       stayType: stayDetails.stayType,
+      roomId: body.room_id,
+      hasPets: stayDetails.hasPets,
       adults: stayDetails.adults,
       children: stayDetails.children,
       infants: stayDetails.infants,
@@ -599,7 +655,7 @@ async function handleRequest(req, res, requestId) {
       selectedRoomOptionId: body.selected_room_option_id || body.selectedRoomOptionId,
       breakfastAddons: body.breakfast_addons ?? body.breakfastAddons,
     },
-    { supabaseRequest }
+    settings
   );
   const pricingSnapshot = buildBookingPricingSnapshot(quote);
   if (!pricingSnapshot) {
@@ -633,6 +689,7 @@ async function handleRequest(req, res, requestId) {
     guestPhone,
   });
   const bookingRequestPayload = {
+    ...(stayDetails.stayType === "room" ? { room_id: body.room_id, client_request_id: body.client_request_id } : {}),
     customer_profile_id: customerProfile?.id || null,
     guest_name: guestName,
     guest_email: guestEmail || null,
@@ -708,10 +765,15 @@ async function handleRequest(req, res, requestId) {
     },
   };
 
-  const holdResult = await supabaseRpc("acquire_villa_booking_hold", {
+  const holdResult = await supabaseRpc(stayDetails.stayType === "room" ? "acquire_room_booking_hold" : "acquire_villa_booking_hold", {
     p_request: bookingRequestPayload,
   });
   if (!holdResult?.ok) {
+    if (stayDetails.stayType === "room") {
+      return sendJson(res, 409, { ok: false, requestId, code: holdResult?.code || "room_unavailable",
+        error: holdResult?.code || "room_unavailable", message: holdResult?.code === "duplicate_booking_request"
+          ? "此筆申請已送出，請至訂單查詢確認。" : "此房間目前無法預約，請重新選擇。" });
+    }
     if (holdResult?.code === "booking_temporarily_held") {
       return sendJson(res, 409, {
         ok: false,
@@ -914,6 +976,7 @@ async function dispatch(req, res, requestId) {
   const action = firstQueryValue(req.query?.action) || "availability";
   if (req.method === "GET" && action === "calendar") return handleCalendar(req, res, requestId);
   if (req.method === "GET" && action === "availability") return handleAvailability(req, res, requestId);
+  if (req.method === "GET" && action === "room-availability") return handleRoomAvailability(req, res, requestId);
   if (req.method === "GET" && action === "quote") return handleQuote(req, res, requestId);
   if (req.method === "POST" && action === "request") return handleRequest(req, res, requestId);
   if (req.method === "POST" && action === "recover") return handleRecovery(req, res, requestId);

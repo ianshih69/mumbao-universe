@@ -77,6 +77,30 @@ beforeEach(() => {
 afterEach(() => { hooks.values.forEach(value => value?.cleanup?.()); vi.unstubAllGlobals(); });
 
 describe("BookingDatePicker component controls", () => {
+  it("checkout OFF keeps villa prices and hides room minimum prices even with stale room data", async () => {
+    props.allowModeSelection = false;
+    props.getDay = date => ({ ...getDay(date), roomBookable: true, villaBookable: date !== "2026-11-10", roomFirstNightFrom: 3440 });
+    api.quote.mockResolvedValue({ pricing: { status: "resolved", total: 48750, breakdown: [
+      { date: "2026-11-02", price: 31250, priceAfterCalendarDiscount: 25000, childFeeOriginalAmount: 0, petFeeOriginalAmount: 0 },
+      { date: "2026-11-03", price: 31250, priceAfterCalendarDiscount: 25000, finalNightPrice: 23750, childFeeOriginalAmount: 0, petFeeOriginalAmount: 0 },
+    ] } });
+    render(); await settle();
+    expect(JSON.stringify(day("2026-11-02").children)).toContain("2.5萬");
+    expect(JSON.stringify(day("2026-11-02").children)).not.toContain("起");
+    expect(api.quote.mock.calls.every(([input]) => input.stayType === "villa")).toBe(true);
+    expect(control("完成").disabled).toBe(false);
+  });
+  it("shows API room first-night prices without a room quote and disables missing-priced dates", async () => {
+    props.allowModeSelection = true;
+    props.initial = { ...props.initial, stayType: "room" };
+    props.getDay = date => ({ ...getDay(date), saleMode: "room", isAvailable: date !== "2026-11-10", roomBookable: date !== "2026-11-10", villaBookable: false, roomFirstNightFrom: date === "2026-11-10" ? null : 3440 });
+    render(); await settle();
+    expect(JSON.stringify(day("2026-11-02").children)).toContain("3,440 起");
+    expect(day("2026-11-10").disabled).toBe(true);
+    expect(control("完成").disabled).toBe(false);
+    expect(api.quote).not.toHaveBeenCalled();
+    control("完成").onClick(); expect(apply).toHaveBeenCalledWith(props.initial);
+  });
   it("shows two desktop months, one mobile month and crosses December/January with arrows", async () => {
     render(); await settle(); expect(monthNames()).toEqual(["2026-11", "2026-12"]);
     expect(control("上一月").disabled).toBe(true);

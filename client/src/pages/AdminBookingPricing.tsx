@@ -3,6 +3,7 @@ import { ChevronDown, RefreshCw, Save } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import AdminPricingCalendar from "@/components/bookings/AdminPricingCalendar";
+import AdminRoomPricing from "@/components/bookings/AdminRoomPricing";
 import { getAdminToken, isAdminAuthError } from "@/lib/shop/adminAuth";
 import { calculateGuestBasePrice, isValidGuestFee } from "@/lib/bookings/guestBasePricing.js";
 import { bookingGuestRules } from "@/lib/bookings/bookingGuestRules.js";
@@ -105,7 +106,7 @@ function formatTwd(value: string | number | null | undefined) {
   return `NT$${amount.toLocaleString("zh-TW")}`;
 }
 
-export default function AdminBookingPricing() {
+function VillaPricing() {
   const [, setLocation] = useLocation();
   const [token, setToken] = useState(() => getAdminToken());
   const [ruleSets, setRuleSets] = useState<BookingPriceRuleSet[]>([]);
@@ -413,4 +414,16 @@ export default function AdminBookingPricing() {
       </details>
     </div>
   );
+}
+
+export default function AdminBookingPricing() {
+  const [tab, setTab] = useState("villa");
+  const [visited, setVisited] = useState(false);
+  return <div className="grid min-w-0 gap-5">
+    <div role="tablist" aria-label="價格管理" className="flex border-b border-stone-200">
+      {[['villa', '包棟價格'], ['room', '單間價格']].map(([value, label]) => <button key={value} role="tab" aria-selected={tab === value} onClick={() => { setTab(value); if (value === 'room') setVisited(true); }} className={`min-h-11 border-b-2 px-5 text-sm ${tab === value ? 'border-[#8b6f5b] font-semibold text-[#765d4a]' : 'border-transparent text-stone-500'}`}>{label}</button>)}
+    </div>
+    <div role="tabpanel" aria-label="包棟價格" hidden={tab !== 'villa'}><VillaPricing /></div>
+    <div role="tabpanel" aria-label="單間價格" hidden={tab !== 'room'}>{visited && <AdminRoomPricing />}</div>
+  </div>;
 }

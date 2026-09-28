@@ -235,6 +235,15 @@ export function buildPublicBookingManageResponse({
   const effectiveNowMs = Number.isFinite(databaseNowMs) ? databaseNowMs : Date.now();
   const pricing = booking?.submitted_snapshot?.pricing || {};
   const summary = booking?.submitted_snapshot?.summary || {};
+  const roomSnapshot = summary.room ?? booking?.pricing_breakdown?.room;
+  const room = booking?.stay_type === "room" && roomSnapshot && typeof roomSnapshot === "object"
+    ? {
+        roomId: cleanText(roomSnapshot.roomId, 80) || booking.room_id || null,
+        code: cleanText(roomSnapshot.code, 80) || null,
+        publicName: cleanText(roomSnapshot.publicName, 200) || null,
+        capacity: toNumber(roomSnapshot.capacity) > 0 ? toNumber(roomSnapshot.capacity) : null,
+      }
+    : null;
   const rawPayload = booking?.raw_payload || {};
   const selectedRoomOption =
     summary.selectedRoomOption ||
@@ -259,6 +268,7 @@ export function buildPublicBookingManageResponse({
       checkOut: booking.check_out,
       nights: nightsBetween(booking.check_in, booking.check_out),
       stayType: booking.stay_type,
+      ...(booking.stay_type === "room" ? { roomId: booking.room_id || room?.roomId || null, room } : {}),
       adults: toNumber(booking.adults),
       children: toNumber(booking.children),
       infants: toNumber(summary.infantCount) || toNumber(rawPayload.infants),
@@ -530,6 +540,7 @@ function orderSelect() {
     "guest_count",
     "status",
     "stay_type",
+    "room_id",
     "adults",
     "children",
     "room_count",
@@ -540,6 +551,7 @@ function orderSelect() {
     "deposit_amount",
     "balance_amount",
     "pricing_breakdown",
+    "submitted_snapshot",
     "raw_payload",
     "hold_expires_at",
     "payment_reported_at",

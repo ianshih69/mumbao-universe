@@ -34,6 +34,7 @@ import {
   type BookingReservation,
 } from "@/lib/bookings/adminBookingsApi";
 import { formatRoomOptionLabel } from "@/lib/bookings/bookingGuestRules.js";
+import { adminBookingStayLabel } from "@/lib/bookings/bookingRoomDisplay";
 import { cn } from "@/lib/utils";
 
 type ManualReservationForm = {
@@ -205,8 +206,7 @@ function isPaymentReviewExpired(request: BookingRequest) {
 }
 
 function stayTypeLabel(request: BookingRequest) {
-  if (request.stay_type === "villa") return "包棟 villa";
-  return `${request.room_count || 1} 間客房`;
+  return adminBookingStayLabel(request);
 }
 
 function payloadNumber(payload: Record<string, unknown> | null | undefined, key: string) {
@@ -224,6 +224,7 @@ function guestSummary(request: BookingRequest) {
 }
 
 function bookingRoomPlanSummary(request: BookingRequest) {
+  if (request.stay_type === "room") return "";
   const pricing = request.pricing_breakdown;
   if (!pricing?.doubleBedCount) return "";
   return `${pricing.doubleBedCount} 張雙人床・可睡 ${pricing.sleepCapacity || "-"} 人`;
@@ -243,6 +244,7 @@ function normalizeRawRoomOption(value: unknown) {
 }
 
 function bookingRoomOptionSummary(request: BookingRequest) {
+  if (request.stay_type === "room") return "";
   const selectedRoomOption =
     normalizeRawRoomOption(request.pricing_breakdown?.selectedRoomOption) ||
     normalizeRawRoomOption(request.raw_payload?.selected_room_option);

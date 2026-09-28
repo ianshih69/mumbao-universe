@@ -42,7 +42,7 @@ export function BookingDatePicker({ initial, mode, party, today, minDate, maxDat
   const priceKey = `${partyKey}|${months.join(",")}`;
   const quoteKey = JSON.stringify([stableParty, selection]);
   const activeQuote = quoteState.key === quoteKey ? quoteState.quote : null;
-  const complete = Boolean(selection.checkIn && selection.checkOut) && getBookingRangeIssue({ ...bounds, ...selection, saleMode: allowModeSelection && selection.stayType !== "room" ? "all" : stayTypeToSaleMode(selection.stayType) }) === "ok";
+  const complete = Boolean(selection.checkIn && selection.checkOut) && getBookingRangeIssue({ ...bounds, ...selection, saleMode: allowModeSelection ? "all" : stayTypeToSaleMode(selection.stayType) }) === "ok";
   const roomRange = allowModeSelection && complete && getBookingRangeIssue({ ...bounds, ...selection, saleMode: "room" }) === "ok";
   const roomDisplay = roomRange && selection.stayType === "room";
   const resolved = !roomDisplay && activeQuote?.pricing.status === "resolved";

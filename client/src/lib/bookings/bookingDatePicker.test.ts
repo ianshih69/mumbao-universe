@@ -10,6 +10,14 @@ const bounds: CalendarBounds = {
 const empty: DateSelection = { checkIn: "", checkOut: "", stayType: "villa" };
 
 describe("booking date picker selections", () => {
+  it("can change a room draft to villa dates using backend availability without mixing stay modes", () => {
+    const both = { ...bounds, allowModeSelection: true, getDay: (date: string) => ({ ...bounds.getDay(date), villaBookable: true, roomBookable: date < "2026-11-06" }) };
+    const room: DateSelection = { checkIn: "2026-11-02", checkOut: "2026-11-04", stayType: "room" };
+    const friday = selectBookingDate("2026-11-06", room, false, both);
+    expect(friday).toEqual({ checkIn: "2026-11-06", checkOut: "", stayType: "villa" });
+    expect(selectBookingDate("2026-11-07", friday, true, both).stayType).toBe("villa");
+    expect(selectBookingDate("2026-11-07", { ...room, checkIn: "2026-11-05", checkOut: "" }, true, both).stayType).toBe("villa");
+  });
   it("moves one month and crosses years without carrying a day", () => {
     expect(shiftBookingMonth("2026-12", 1)).toBe("2027-01");
     expect(shiftBookingMonth("2027-01", -1)).toBe("2026-12");

@@ -21,9 +21,8 @@ export function bookingMonthDates(month: string): Array<string | null> {
 export function canSelectBookingDate(date: string, selection: DateSelection, selectingCheckout: boolean, bounds: CalendarBounds) {
   if (date < bounds.minDate || date > bounds.maxDate) return false;
   if (selectingCheckout && selection.checkIn && date > selection.checkIn) {
-    return getBookingRangeIssue({ ...bounds, checkIn: selection.checkIn, checkOut: date, saleMode: bounds.allowModeSelection && selection.stayType !== "room" ? "all" : stayTypeToSaleMode(selection.stayType) }) === "ok";
+    return getBookingRangeIssue({ ...bounds, checkIn: selection.checkIn, checkOut: date, saleMode: bounds.allowModeSelection ? "all" : stayTypeToSaleMode(selection.stayType) }) === "ok";
   }
-  if (bounds.allowModeSelection && selection.stayType === "room" && !bounds.getDay(date).roomBookable) return false;
   return date < bounds.maxDate && isBookableStayNight(bounds.getDay(date), bounds.minDate, bounds.maxDate);
 }
 

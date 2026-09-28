@@ -620,10 +620,11 @@ export default function Booking() {
   const roomAvailability = useRoomPriceAvailability(form.check_in, form.check_out, totalGuestCount,
     isBookingTestUnlocked && !submittedRequestId && settings.roomCheckoutEnabled === true, inventoryRevision);
   const selectedRoomId = selectedRoom?.key === roomSelectionKey ? selectedRoom.id : "";
+  const roomModeVisible = settings.roomCheckoutEnabled === true && Boolean(form.check_in && form.check_out && form.check_out > form.check_in) &&
+    !roomAvailability.loading && roomAvailability.result?.roomCheckoutEnabled === true && roomAvailability.result.roomBookingEnabled === true;
   const selectedRoomOptionForStay = settings.roomCheckoutEnabled === true
     ? roomAvailability.result?.availableRoomOptions.find(room => room.roomId === selectedRoomId) : undefined;
-  const roomCheckoutReady = settings.roomCheckoutEnabled === true && roomAvailability.result?.roomCheckoutEnabled === true &&
-    roomAvailability.result.roomBookingEnabled && Boolean(selectedRoomOptionForStay && isRoomOptionEligible(selectedRoomOptionForStay, totalGuestCount));
+  const roomCheckoutReady = roomModeVisible && Boolean(selectedRoomOptionForStay && isRoomOptionEligible(selectedRoomOptionForStay, totalGuestCount));
 
   const bookingIsOpen = settings.allowVillaBooking || settings.allowRoomBooking;
   const calendarDaySourceMap = useMemo(
@@ -949,6 +950,19 @@ export default function Booking() {
   }, [form]);
 
   useEffect(() => {
+    // Only reconcile the editable stay draft, never convert an in-flight checkout.
+    if (bookingStep !== 1 || submittedRequestId || !isRoomStay || !calendarReady || roomAvailability.loading) return;
+    if (settings.roomCheckoutEnabled === true && roomAvailability.result?.roomBookingEnabled !== false) return;
+    setForm(current => ({ ...current, stay_type: "villa", room_count: settings.totalRoomCount }));
+    setSelectedRoom(null);
+    setPriceQuote(null);
+    setPriceQuoteKey("");
+    setPriceQuoteError("");
+    submitAttempt.current = null;
+  }, [bookingStep, submittedRequestId, isRoomStay, calendarReady, roomAvailability.loading,
+    roomAvailability.result?.roomBookingEnabled, settings.roomCheckoutEnabled, settings.totalRoomCount]);
+
+  useEffect(() => {
     setBreakfastAddonsByDate((current) => {
       const nextEntries = Object.entries(current).filter(([date, quantity]) => breakfastDateSet.has(date) && quantity > 0);
       if (nextEntries.length === Object.keys(current).length) return current;
@@ -1185,7 +1199,7 @@ export default function Booking() {
   }
 
   function selectStayType(stayType: StayType) {
-    if (stayType === "room" && !roomRangeAvailable || stayType === "villa" && !villaRangeAvailable) return;
+    if (stayType === "room" && (!roomModeVisible || !roomRangeAvailable) || stayType === "villa" && !villaRangeAvailable) return;
     if (stayType === "room" && (guestSummaryDogCount > 0 || breakfastAddonEntries.length > 0)) {
       setError("單間住宿暫不提供犬隻入住及早餐加購，請先移除後再選擇。");
       return;
@@ -1934,16 +1948,26 @@ export default function Booking() {
                 }}
                 onCancel={() => setCalendarOpen(false)}
                 onComplete={(selection) => {
-                  if (selection.stayType === "room" && (guestSummaryDogCount > 0 || breakfastAddonEntries.length > 0)) {
+                  const stayType = selection.stayType === "room" && settings.roomCheckoutEnabled === true && getBookingRangeIssue({
+                    checkIn: selection.checkIn, checkOut: selection.checkOut, minDate, maxDate, getDay: getCalendarDay, saleMode: "room",
+                  }) === "ok" ? "room" : "villa";
+                  if (stayType === "room" && (guestSummaryDogCount > 0 || breakfastAddonEntries.length > 0)) {
                     setCalendarOpen(false);
                     setError("單間住宿暫不提供犬隻入住及早餐加購，請先移除後再選擇。");
                     return;
                   }
                   setForm((current) => ({
                     ...current, check_in: selection.checkIn, check_out: selection.checkOut,
-                    stay_type: selection.stayType,
-                    room_count: selection.stayType === "villa" ? settings.totalRoomCount : 1,
+                    stay_type: stayType,
+                    room_count: stayType === "villa" ? settings.totalRoomCount : 1,
                   }));
+                  if (selection.checkIn !== form.check_in || selection.checkOut !== form.check_out || stayType !== form.stay_type) {
+                    setSelectedRoom(null);
+                    setPriceQuote(null);
+                    setPriceQuoteKey("");
+                    setPriceQuoteError("");
+                    submitAttempt.current = null;
+                  }
                   setCalendarOpen(false);
                   setMessage("");
                   setError("");
@@ -1955,7 +1979,7 @@ export default function Booking() {
               {settings.roomCheckoutEnabled === true && <fieldset className="mt-5 border-t border-[#eadfce] pt-4">
                 <legend className="px-1 text-sm font-semibold text-stone-700">住宿方式</legend>
                 <div className="flex flex-wrap gap-4" role="radiogroup" aria-label="住宿方式">
-                  {(["room", "villa"] as const).map(stayType => <label key={stayType} className="inline-flex min-h-11 items-center gap-2 text-sm">
+                  {(roomModeVisible ? ["room", "villa"] as const : ["villa"] as const).map(stayType => <label key={stayType} className="inline-flex min-h-11 items-center gap-2 text-sm">
                     <input type="radio" name="stay-type" value={stayType} checked={form.stay_type === stayType}
                       disabled={stayType === "room" ? !roomRangeAvailable : !villaRangeAvailable}
                       onChange={() => selectStayType(stayType)} />
@@ -1963,7 +1987,7 @@ export default function Booking() {
                   </label>)}
                 </div>
               </fieldset>}
-              {settings.roomCheckoutEnabled === true && isRoomStay && <>
+              {roomModeVisible && isRoomStay && <>
                 {roomAvailability.loading && <p role="status" className="mt-4 text-sm text-stone-500">單間房況讀取中…</p>}
                 {roomAvailability.error && <p role="alert" className="mt-4 text-sm text-red-700">{roomAvailability.error}</p>}
                 {roomAvailability.error && <button type="button" className="min-h-11 text-sm underline" onClick={() => setInventoryRevision(current => current + 1)}>重試</button>}

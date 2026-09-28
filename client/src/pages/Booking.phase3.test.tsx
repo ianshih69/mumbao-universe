@@ -94,6 +94,59 @@ beforeEach(() => {
 afterEach(() => { hooks.values.forEach(value => value?.cleanup?.()); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("Booking Phase 3 public flow", () => {
+  it.each([
+    ["weekday", "2026-11-02", "2026-11-04", true],
+    ["Friday OFF", "2026-11-06", "2026-11-07", false],
+    ["Saturday OFF", "2026-11-07", "2026-11-08", false],
+    ["weekday override OFF", "2026-11-03", "2026-11-04", false],
+    ["Friday override ON", "2026-11-06", "2026-11-07", true],
+    ["mixed ON/OFF nights", "2026-11-05", "2026-11-07", false],
+  ])("uses backend full-range eligibility for %s", async (_label, checkIn, checkOut, enabled) => {
+    const draft = JSON.parse(storage.get("mumbao_booking_draft_v1")!);
+    storage.set("mumbao_booking_draft_v1", JSON.stringify({ ...draft, check_in: checkIn, check_out: checkOut }));
+    const calendar = await api.calendar();
+    calendar.unavailableDates = [];
+    calendar.days = [];
+    for (let date = String(checkIn); date < String(checkOut); date = new Date(Date.parse(date) + 86400000).toISOString().slice(0, 10)) {
+      const nightEnabled = enabled || _label === "mixed ON/OFF nights" && date === checkIn;
+      calendar.days.push({ date, roomBookingEnabled: nightEnabled, roomBookable: nightEnabled, villaBookable: true, roomFirstNightFrom: nightEnabled ? 3440 : null });
+    }
+    api.calendar.mockResolvedValue(calendar);
+    api.roomResult = { ...api.roomResult, roomBookingEnabled: enabled };
+    render(); await settle();
+    expect(all(node => node.type === "input" && node.props.value === "room")).toHaveLength(enabled ? 1 : 0);
+    expect(all(node => node.type === "input" && node.props.value === "villa")).toHaveLength(1);
+    expect(api.submit).not.toHaveBeenCalled();
+  });
+  it("does not expose room mode while full-range eligibility is pending", async () => {
+    api.roomResult = null; api.roomLoading = true;
+    render(); await settle();
+    expect(all(node => node.type === "input" && node.props.value === "room")).toHaveLength(0);
+  });
+  it("clears room selection and quote when changed dates are room OFF", async () => {
+    render(); await settle(); selectRoomMode(); await settle();
+    const quoteImplementation = api.quote.getMockImplementation()!;
+    api.quote.mockImplementation(() => new Promise(() => {}));
+    const openPicker = () => {
+      all(node => node.type === "button" && node.props.onClick && text(node).includes("入住") && text(node).includes("2026"))[0].props.onClick();
+      render(); return all(node => node.type === BookingDatePicker)[0].props;
+    };
+    api.roomResult = { ...api.roomResult, roomBookingEnabled: false };
+    openPicker().onComplete({ checkIn: "2026-11-06", checkOut: "2026-11-07", stayType: "room" });
+    render(); await settle();
+    expect(JSON.parse(storage.get("mumbao_booking_draft_v1")!).stay_type).toBe("villa");
+    expect(all(node => node.type === RoomPriceOptions)).toHaveLength(0);
+    expect(text()).not.toContain("晴光 S521");
+    expect(text()).not.toContain("11,351");
+    api.quote.mockImplementation(quoteImplementation);
+    api.roomResult = { ...api.roomResult, roomBookingEnabled: true };
+    openPicker().onComplete({ checkIn: "2026-11-02", checkOut: "2026-11-04", stayType: "villa" });
+    render(); await settle();
+    all(node => node.type === "input" && node.props.value === "room")[0].props.onChange();
+    render(); await settle();
+    expect(all(node => node.type === RoomPriceOptions)[0].props.selectedRoomId).toBe("");
+    expect(button("下一步").disabled).toBe(true);
+  });
   it.each([false, true])("checkout OFF ignores preview=%s and stale room data in public UI", async preview => {
     const calendar = await api.calendar();
     calendar.settings = { ...calendar.settings, allowRoomBooking: false, roomCheckoutEnabled: false, roomPricingPreviewEnabled: preview };

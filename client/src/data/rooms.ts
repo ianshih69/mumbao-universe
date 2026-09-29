@@ -9,6 +9,7 @@ export type RoomDetailContent = {
     alt: string;
   }>;
   image: string;
+  imagePosition?: string;
   alt: string;
   tagline: string;
   subtitle: string;
@@ -37,7 +38,8 @@ export const rooms: RoomDetailContent[] = [
         alt: "水瓶",
       },
     ],
-    image: "/images/Room/S521.jpg",
+    image: "/images/Room/S521/S521-3.webp",
+    imagePosition: "50% 45%",
     alt: "雲心 S521 雙子 × 水瓶主題房空間",
     tagline: "也許你的靈感，就藏在今晚的雲裡。",
     subtitle: "雙子 × 水瓶",
@@ -71,7 +73,7 @@ export const rooms: RoomDetailContent[] = [
         alt: "雙魚",
       },
     ],
-    image: "/images/Room/S360.jpg",
+    image: "/images/Room/S360/S360-1.webp",
     alt: "畫雲 S360 天蠍 × 雙魚主題房空間",
     tagline: "有些夢，不用急著醒。",
     subtitle: "天蠍 × 雙魚",
@@ -105,7 +107,8 @@ export const rooms: RoomDetailContent[] = [
         alt: "射手",
       },
     ],
-    image: "/images/Room/S530.jpg",
+    image: "/images/Room/S530/S530-8.webp",
+    imagePosition: "50% 70%",
     alt: "雲間 S530 處女 × 射手主題房空間",
     tagline: "也許你的下一段故事，就在雲與雲之間。",
     subtitle: "處女 × 射手",
@@ -172,7 +175,7 @@ export const rooms: RoomDetailContent[] = [
         alt: "金牛",
       },
     ],
-    image: "/images/Room/S888.jpg",
+    image: "/images/Room/S888/S888-2.webp",
     alt: "雲容 S888 天秤 × 金牛主題房空間",
     tagline: "美好的事物，都值得慢慢感受。",
     subtitle: "天秤 × 金牛",

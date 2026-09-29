@@ -128,6 +128,7 @@ export default function RoomsPage() {
                   <div className="aspect-[4/3] overflow-hidden bg-[#efe7dc]">
                     <img
                       src={room.image}
+                      style={{ objectPosition: room.imagePosition }}
                       alt={room.alt}
                       className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
                       loading="lazy"

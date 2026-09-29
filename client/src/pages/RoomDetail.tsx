@@ -5,6 +5,11 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { getRoomBySlug } from "@/data/rooms";
 import { getRoomSeo } from "@/lib/publicPageSeo";
+import { RoomGallery } from "@/components/rooms/RoomGallery";
+import { s521Gallery } from "@/data/s521Gallery";
+import { s888Gallery } from "@/data/s888Gallery";
+import { s360Gallery } from "@/data/s360Gallery";
+import { s530Gallery } from "@/data/s530Gallery";
 
 const sharedNotice = [
   "房型設備、入住人數、床型與實際配置，請以訂房頁與現場安排為準。",
@@ -97,6 +102,10 @@ function removeNewsArticleJsonLd() {
 export default function RoomDetail() {
   const [, params] = useRoute("/rooms/:slug");
   const room = getRoomBySlug(params?.slug || "");
+  const gallery = room?.slug === "room-521-yunxin" ? s521Gallery
+    : room?.slug === "room-888-xinghuo" ? s888Gallery
+    : room?.slug === "room-360-senguang" ? s360Gallery
+    : room?.slug === "room-530-nuanjin" ? s530Gallery : undefined;
 
   useEffect(() => {
     removeNewsArticleJsonLd();
@@ -199,13 +208,16 @@ export default function RoomDetail() {
             </p>
           </header>
 
-          <div className="mx-auto mt-12 flex aspect-[4/3] w-full max-w-[920px] items-center justify-center overflow-hidden rounded-[14px] bg-[#fbf7f1] shadow-[0_16px_44px_rgba(90,70,50,0.08)] md:mt-16">
+          {gallery ? (
+            <RoomGallery key={room.slug} images={gallery} roomName={room.name}
+              lightboxTheme={room.slug === "room-521-yunxin" ? "dark" : "cream"} />
+          ) : <div className="mx-auto mt-12 flex aspect-[4/3] w-full max-w-[920px] items-center justify-center overflow-hidden rounded-[14px] bg-[#fbf7f1] shadow-[0_16px_44px_rgba(90,70,50,0.08)] md:mt-16">
             <img
               src={room.image}
               alt={room.alt}
               className="block h-full w-full object-cover object-center"
             />
-          </div>
+          </div>}
 
           <div className="mx-auto mt-14 max-w-3xl space-y-9 md:mt-16">
             <div className="space-y-6 text-base leading-[2.05] text-[#75685d] md:text-lg md:leading-[2.15]">
@@ -254,11 +266,11 @@ export default function RoomDetail() {
               </p>
             )}
 
-            <section className="space-y-3 rounded-[12px] bg-white/55 p-5 text-sm leading-[2] text-[#7f7064] md:p-6 md:text-base">
+            {!gallery && <section className="space-y-3 rounded-[12px] bg-white/55 p-5 text-sm leading-[2] text-[#7f7064] md:p-6 md:text-base">
               {sharedNotice.map((paragraph) => (
                 <p key={paragraph}>{paragraph}</p>
               ))}
-            </section>
+            </section>}
 
             <a
               href="/#rooms"

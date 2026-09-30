@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type Poin
 import * as Dialog from "@radix-ui/react-dialog";
 import useEmblaCarousel from "embla-carousel-react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { RoomGalleryZoom } from "./RoomGalleryZoom";
 import "./RoomGallery.css";
 
 export type RoomGalleryImage = { src: string; alt: string; width: number; height: number };
@@ -36,7 +37,8 @@ export function RoomGallery({ images, roomName, lightboxTheme = "dark" }: Props)
     select(selected + (event.key === "ArrowRight" ? 1 : -1));
   }
   function start(event: PointerEvent<HTMLElement>) {
-    if (!event.isPrimary || event.button !== 0) return;
+    if (!event.isPrimary) { gesture.current = null; return; }
+    if (event.button !== 0) return;
     gesture.current = { x: event.clientX, y: event.clientY, id: event.pointerId };
     swiped.current = false;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -99,18 +101,14 @@ export function RoomGallery({ images, roomName, lightboxTheme = "dark" }: Props)
 
         <Dialog.Portal>
           <Dialog.Overlay className="room-gallery-overlay" data-theme={lightboxTheme} />
-          <Dialog.Content className="room-gallery-lightbox" data-theme={lightboxTheme} aria-describedby={undefined} onKeyDown={keys}
-            onClick={event => { if (event.target === event.currentTarget) setOpen(false); }}>
+          <Dialog.Content className="room-gallery-lightbox" data-theme={lightboxTheme} aria-describedby={undefined} onKeyDown={keys}>
             <div className="room-gallery-lightboxHeader">
               <Dialog.Title className="room-gallery-title">{roomName}</Dialog.Title>
               <Dialog.Close className="room-gallery-lightboxControl" aria-label="關閉照片" title="關閉照片">
                 <X aria-hidden="true" size={24} />
               </Dialog.Close>
             </div>
-            <div className="room-gallery-lightboxStage" {...swipeProps}>
-              <img key={active.src} src={active.src} alt={active.alt} width={active.width} height={active.height}
-                className="room-gallery-mainImage" decoding="async" draggable={false} />
-            </div>
+            <RoomGalleryZoom image={active} onSwipe={direction => select(selected + direction)} />
             <div className="room-gallery-lightboxFooter">
               <button type="button" className="room-gallery-lightboxControl" aria-label="上一張照片" title="上一張照片" onClick={() => select(selected - 1)}>
                 <ChevronLeft aria-hidden="true" size={24} />

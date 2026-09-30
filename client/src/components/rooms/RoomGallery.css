@@ -23,7 +23,14 @@
 .room-gallery-lightbox { position: fixed; inset: 0; z-index: 201; display: flex; flex-direction: column; height: 100dvh; padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); color: #fbf8f2; letter-spacing: 0; outline: none; }
 .room-gallery-lightboxHeader { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 52px; flex-shrink: 0; }
 .room-gallery-title { font-size: 16px; line-height: 1.5; font-weight: 400; }
-.room-gallery-lightboxStage { flex: 1; min-height: 0; width: 100%; touch-action: pan-y pinch-zoom; }
+.room-gallery-lightboxStage { position: relative; flex: 1; min-height: 0; width: 100%; overflow: hidden; }
+.room-gallery-zoomSurface { position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: grab; }
+.room-gallery-zoomSurface:active { cursor: grabbing; }
+.room-gallery-zoomImage { transform-origin: 0 0; pointer-events: none; }
+.room-gallery-zoomControls { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; border-radius: 8px; background: rgb(25 23 21 / 85%); color: #fbf8f2; }
+.room-gallery-zoomControls output { width: 52px; text-align: center; font: 13px/1.5 sans-serif; font-variant-numeric: tabular-nums; }
+.room-gallery-zoomControls button:disabled { opacity: .4; cursor: default; }
+.room-gallery-lightbox[data-theme="cream"] .room-gallery-zoomControls { background: rgb(251 248 242 / 92%); color: #665446; }
 .room-gallery-lightboxFooter { display: flex; flex-shrink: 0; align-items: center; justify-content: center; gap: 28px; padding-top: 8px; font: 14px/1.5 sans-serif; font-variant-numeric: tabular-nums; }
 .room-gallery-lightboxControl:hover { background: rgb(255 255 255 / 12%); }
 .room-gallery-overlay[data-theme="cream"] { background: #fbf8f2; }

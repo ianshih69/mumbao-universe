@@ -1,11 +1,14 @@
-import { useEffect, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { motion, useReducedMotion } from "framer-motion";
 import { Link } from "wouter";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Images } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { useMobileViewportHeight } from "@/hooks/useMobileViewportHeight";
 import { facilitiesContent as copy, type FacilityChapter, type FacilityFeature } from "@/data/facilitiesContent";
+import { facilitiesAlbums, facilitiesHero, facilitiesPhoto, facilitiesAlbumSelection, type FacilitiesAlbumId } from "@/data/facilitiesGallery";
+import { RoomGalleryLightbox } from "@/components/rooms/RoomGalleryLightbox";
 import styles from "./Facilities.module.css";
 
 function Reveal({ children, className }: { children: ReactNode; className?: string }) {
@@ -45,6 +48,29 @@ function Feature({ feature, id }: { feature: FacilityFeature; id?: string }) {
       <div className={styles.body}>
         {feature.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
       </div>
+    </div>
+  );
+}
+
+type OpenAlbum = (album: FacilitiesAlbumId, trigger: HTMLButtonElement, photoId?: number) => void;
+
+function AlbumLink({ album, onOpen }: { album: keyof typeof facilitiesAlbums; onOpen: OpenAlbum }) {
+  const data = facilitiesAlbums[album];
+  return <button type="button" className={styles.albumLink} onClick={event => onOpen(album, event.currentTarget)}>
+    <Images size={18} aria-hidden="true" />{data.label} · {data.ids.length}張
+  </button>;
+}
+
+function PhotoGroup({ album, onOpen }: { album: keyof typeof facilitiesAlbums; onOpen: OpenAlbum }) {
+  return (
+    <div className={album === "circulation" ? styles.singlePhoto : styles.photoGroup}>
+      {facilitiesAlbums[album].featured.map(id => {
+        const photo = facilitiesPhoto(id);
+        return <button type="button" key={id} className={styles.photoButton}
+          aria-label={`放大照片：${photo.alt}`} onClick={event => onOpen(album, event.currentTarget, id)}>
+          <img src={photo.src} alt={photo.alt} width={photo.width} height={photo.height} loading="lazy" decoding="async" />
+        </button>;
+      })}
     </div>
   );
 }
@@ -102,6 +128,19 @@ function useFacilitiesMetadata() {
 
 export default function Facilities() {
   useFacilitiesMetadata();
+  const [open, setOpen] = useState(false);
+  const [album, setAlbum] = useState<FacilitiesAlbumId>("all");
+  const [selected, setSelected] = useState(0);
+  const trigger = useRef<HTMLButtonElement | null>(null);
+  const albumData = facilitiesAlbumSelection(album);
+  const desktopHero = facilitiesPhoto(facilitiesHero.desktop);
+  const mobileHero = facilitiesPhoto(facilitiesHero.mobile);
+  const openAlbum: OpenAlbum = (nextAlbum, button, photoId) => {
+    trigger.current = button;
+    setAlbum(nextAlbum);
+    setSelected(facilitiesAlbumSelection(nextAlbum, photoId).index);
+    setOpen(true);
+  };
   const viewportHeight = useMobileViewportHeight();
   const heroStyle = viewportHeight === null ? undefined : {
     "--facilities-hero-height": `${viewportHeight * 0.8}px`,
@@ -109,24 +148,24 @@ export default function Facilities() {
   const [art, family, pets, summer, night] = copy.chapters;
 
   return (
+    <Dialog.Root open={open} onOpenChange={setOpen}>
     <div className={styles.page}>
       <Header />
       <main>
         <section className={styles.hero} style={heroStyle} aria-labelledby="facilities-title">
-          <img
-            className={styles.heroImage}
-            src="/images/aboutMe/aboutMe-4.jpg"
-            alt="慢慢蒔光館內拱門、玻璃磚與餐桌空間"
-            width="1086"
-            height="1448"
-            loading="eager"
-            fetchPriority="high"
-          />
+          <picture>
+            <source media="(max-width: 767px)" srcSet={mobileHero.src} width={mobileHero.width} height={mobileHero.height} />
+            <img className={styles.heroImage} src={desktopHero.src} alt={desktopHero.alt}
+              width={desktopHero.width} height={desktopHero.height} loading="eager" fetchPriority="high" />
+          </picture>
           <div className={styles.heroShade} aria-hidden="true" />
           <Reveal className={styles.heroContent}>
             <p className={styles.heroEyebrow}>STAY EXPERIENCE<span>{copy.label}</span></p>
             <p className={styles.brand}>{copy.brand}</p>
             <h1 id="facilities-title"><span>{copy.title.slice(0, 4)}</span><span>{copy.title.slice(4)}</span></h1>
+            <button type="button" className={styles.heroAlbum} onClick={event => openAlbum("all", event.currentTarget)}>
+              <Images size={18} aria-hidden="true" />查看公共空間照片 · 24張
+            </button>
           </Reveal>
         </section>
 
@@ -138,35 +177,47 @@ export default function Facilities() {
 
         <section className={`${styles.container} ${styles.chapter} ${styles.art}`} aria-labelledby="art-title">
           <Reveal><ChapterHeading chapter={art} /></Reveal>
-          <div className={styles.artLead}>
-            <Reveal>
-              <img className={styles.artImage} src="/images/aboutMumbao/aboutMumbao-1.jpg" alt="慢寶宇宙原創掛畫，兩個慢寶站在雲朵上" width="953" height="831" loading="lazy" />
+          <div className={styles.albumSection}>
+            <Reveal className={styles.albumCopy}>
+              <div className={styles.feature}>
+                <h3>{facilitiesAlbums.living.title}</h3>
+                <p className={styles.body}>在雲朵般的沙發裡坐下，把時間留給好好相處的人。</p>
+              </div>
+              <AlbumLink album="living" onOpen={openAlbum} />
             </Reveal>
-            <Reveal className={styles.artNarrative}>
+            <PhotoGroup album="living" onOpen={openAlbum} />
+          </div>
+          <div className={styles.albumSection}>
+            <Reveal className={styles.albumCopy}>
               <Feature feature={art.features[0]} />
               <Feature feature={art.features[1]} />
+              <AlbumLink album="art" onOpen={openAlbum} />
             </Reveal>
+            <PhotoGroup album="art" onOpen={openAlbum} />
           </div>
-          <div className={styles.artDetails}>
-            <Reveal className={styles.dining}>
-              <img className={styles.diningImage} src="/images/aboutMe/aboutMe-3.jpg" alt="慢慢蒔光餐廚空間的木質餐桌、曲線櫥櫃與吊燈" aria-describedby="facilities-dining" width="900" height="1200" loading="lazy" />
-            </Reveal>
-            <Reveal>
+          <div className={styles.albumSection}>
+            <Reveal className={styles.albumCopy}>
               <Feature feature={art.features[2]} id="facilities-dining" />
-              <div className={styles.entertainment}>
-                <Feature feature={art.features[3]} />
-                <Feature feature={art.features[4]} />
-              </div>
+              <AlbumLink album="dining" onOpen={openAlbum} />
             </Reveal>
+            <PhotoGroup album="dining" onOpen={openAlbum} />
+          </div>
+          <Reveal className={styles.entertainment}>
+            <Feature feature={art.features[3]} />
+            <Feature feature={art.features[4]} />
+          </Reveal>
+          <div className={styles.albumSection}>
+            <Reveal className={styles.albumCopy}>
+              <div className={styles.feature}><h3>{facilitiesAlbums.circulation.title}</h3></div>
+              <AlbumLink album="circulation" onOpen={openAlbum} />
+            </Reveal>
+            <PhotoGroup album="circulation" onOpen={openAlbum} />
           </div>
         </section>
 
         <section className={`${styles.chapter} ${styles.family}`} aria-labelledby="family-title">
-          <div className={`${styles.container} ${styles.familyGrid}`}>
-            <Reveal>
-              <ChapterHeading chapter={family} />
-              <img className={styles.roomImage} src="/images/Room/S530.jpg" alt="慢慢蒔光客房的床鋪、窗景與慢寶擺飾" width="1200" height="900" loading="lazy" />
-            </Reveal>
+          <div className={styles.container}>
+            <Reveal><ChapterHeading chapter={family} /></Reveal>
             <Reveal className={styles.familyFeatures}>
               {family.features.map((feature) => <Feature key={feature.title} feature={feature} />)}
             </Reveal>
@@ -228,5 +279,10 @@ export default function Facilities() {
       </main>
       <Footer />
     </div>
+    {open && <RoomGalleryLightbox key={album} image={albumData.images[selected]} title={albumData.title} theme="cream"
+      selected={selected} count={albumData.images.length}
+      onSelect={index => setSelected((index + albumData.images.length) % albumData.images.length)}
+      onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus({ preventScroll: true }); }} />}
+    </Dialog.Root>
   );
 }

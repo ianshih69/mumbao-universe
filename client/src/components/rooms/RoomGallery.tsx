@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import useEmblaCarousel from "embla-carousel-react";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { RoomGalleryZoom } from "./RoomGalleryZoom";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { RoomGalleryLightbox } from "./RoomGalleryLightbox";
 import "./RoomGallery.css";
 
 export type RoomGalleryImage = { src: string; alt: string; width: number; height: number };
@@ -99,27 +99,8 @@ export function RoomGallery({ images, roomName, lightboxTheme = "dark" }: Props)
           </button>
         </div>
 
-        <Dialog.Portal>
-          <Dialog.Overlay className="room-gallery-overlay" data-theme={lightboxTheme} />
-          <Dialog.Content className="room-gallery-lightbox" data-theme={lightboxTheme} aria-describedby={undefined} onKeyDown={keys}>
-            <div className="room-gallery-lightboxHeader">
-              <Dialog.Title className="room-gallery-title">{roomName}</Dialog.Title>
-              <Dialog.Close className="room-gallery-lightboxControl" aria-label="關閉照片" title="關閉照片">
-                <X aria-hidden="true" size={24} />
-              </Dialog.Close>
-            </div>
-            <RoomGalleryZoom image={active} onSwipe={direction => select(selected + direction)} />
-            <div className="room-gallery-lightboxFooter">
-              <button type="button" className="room-gallery-lightboxControl" aria-label="上一張照片" title="上一張照片" onClick={() => select(selected - 1)}>
-                <ChevronLeft aria-hidden="true" size={24} />
-              </button>
-              <span aria-live="polite" aria-atomic="true">{count}</span>
-              <button type="button" className="room-gallery-lightboxControl" aria-label="下一張照片" title="下一張照片" onClick={() => select(selected + 1)}>
-                <ChevronRight aria-hidden="true" size={24} />
-              </button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
+        <RoomGalleryLightbox image={active} title={roomName} selected={selected} count={images.length}
+          onSelect={select} theme={lightboxTheme} />
       </Dialog.Root>
     </section>
   );

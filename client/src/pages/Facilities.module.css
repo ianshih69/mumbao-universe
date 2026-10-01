@@ -45,7 +45,7 @@
 
 .heroImage { object-fit: cover; object-position: 50% 46%; }
 .heroShade {
-  background: linear-gradient(180deg, rgb(26 24 21 / 60%) 0%, rgb(26 24 21 / 60%) 54%, rgb(26 24 21 / 40%) 100%);
+  background: linear-gradient(180deg, rgb(26 24 21 / 8%) 0%, rgb(26 24 21 / 42%) 42%, rgb(26 24 21 / 44%) 72%, rgb(26 24 21 / 12%) 100%);
 }
 .heroContent {
   position: relative;
@@ -84,24 +84,33 @@
 .feature .body { max-width: 540px; }
 
 .art { padding-top: 0; padding-bottom: var(--space-section-large); }
-.artImage, .diningImage, .roomImage { display: block; width: 100%; height: auto; border-radius: 4px; }
-.artImage { aspect-ratio: 953 / 831; object-fit: contain; }
-.artLead, .artDetails, .familyGrid { display: grid; gap: var(--space-block); align-items: start; }
-.artNarrative { display: grid; gap: var(--space-block); }
-.artDetails { margin-top: var(--space-section); }
-.diningImage { aspect-ratio: 3 / 4; object-fit: cover; }
+.albumSection { display: grid; gap: var(--space-item); align-items: center; }
+.albumSection + .albumSection, .entertainment + .albumSection { margin-top: var(--space-section); }
+.albumCopy { display: grid; gap: var(--space-item); min-width: 0; }
+.photoGroup { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0; }
+.photoGroup .photoButton:first-child { grid-column: 1 / -1; }
+.photoButton { display: block; padding: 0; border: 0; border-radius: 4px; background: transparent; overflow: hidden; cursor: zoom-in; width: 100%; min-width: 0; }
+.photoButton img { display: block; width: 100%; height: auto; }
+.photoButton:focus-visible, .albumLink:focus-visible, .heroAlbum:focus-visible { outline: 2px solid #8b6f5b; outline-offset: 5px; }
+.heroAlbum:focus-visible { outline-color: white; }
+.singlePhoto { width: 100%; max-width: 420px; justify-self: center; }
+.albumLink, .heroAlbum { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; max-width: 100%; width: fit-content; padding: 10px 0; font-family: var(--font-sans); font-size: 14px; line-height: 1.6; cursor: pointer; }
+.albumLink { color: #66503d; border-bottom: 1px solid #b3a18f; }
+.albumLink:hover { color: #342920; border-color: currentColor; }
+.heroAlbum { margin-top: 28px; padding: 12px 18px; border: 1px solid rgb(255 255 255 / 65%); border-radius: 4px; background: rgb(30 25 20 / 15%); color: #fff; }
+.heroAlbum:hover { background: rgb(30 25 20 / 30%); }
+.albumLink svg, .heroAlbum svg { flex-shrink: 0; }
 .entertainment {
   display: grid;
   gap: var(--space-item);
-  margin-top: var(--space-block);
+  margin-top: var(--space-group);
   padding-top: var(--space-block);
   border-top: 1px solid var(--fine-rule);
 }
 
 .family { background: #f3f2ed; }
 .family .chapterHeading { margin-bottom: var(--space-block); }
-.roomImage { aspect-ratio: 4 / 3; object-fit: cover; }
-.familyFeatures { display: grid; align-content: center; }
+.familyFeatures { display: grid; gap: var(--space-item); }
 .familyFeatures .feature + .feature { margin-top: var(--space-item); border-top: 1px solid var(--fine-rule); padding-top: var(--space-item); }
 
 .pets .chapterHeading { margin-bottom: var(--space-group); }
@@ -154,11 +163,15 @@
   .intro .body > p:first-child { font-size: 21px; }
   .chapterHeading h2 { font-size: 36px; }
   .feature h3 { font-size: 22px; }
-  .artLead { grid-template-columns: 1fr 1fr; gap: var(--space-block); }
-  .artDetails { grid-template-columns: 0.9fr 1.1fr; gap: var(--space-group); }
-  .familyGrid { grid-template-columns: 1.2fr 1fr; gap: var(--space-block); align-items: center; }
+  .albumSection { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: var(--space-block); }
+  .photoGroup { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
+  .photoGroup .photoButton:first-child { grid-column: 1; grid-row: 1 / 3; }
+  .photoGroup .photoButton:not(:first-child) { align-self: stretch; }
+  .photoGroup .photoButton:not(:first-child) img { height: 100%; object-fit: cover; }
+  .entertainment { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-group); }
   .family .chapterHeading h2 { font-size: 32px; }
-  .familyFeatures { padding-top: var(--space-group); }
+  .familyFeatures { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .familyFeatures .feature + .feature { margin: 0; border: 0; padding: 0; }
   .petFeatures { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-group); row-gap: var(--space-block); }
   .petItem { grid-template-columns: 44px minmax(0, 1fr); gap: 20px; }
   .featureNumber { font-size: 34px; }
@@ -171,9 +184,7 @@
 }
 
 @media (min-width: 1024px) {
-  .artLead { grid-template-columns: 1.05fr 1fr; gap: var(--space-section); }
-  .artDetails { grid-template-columns: 0.95fr 1fr; gap: var(--space-section); }
-  .dining { padding-left: var(--space-block); }
+  .albumSection { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.6fr); gap: var(--space-group); }
   .summer .chapterHeading h2 { font-size: 48px; }
   .nightFeatures { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-block); }
   .nightFeatures .feature { display: block; }
@@ -182,7 +193,6 @@
 
 @media (min-width: 1200px) {
   .hero h1 { font-size: 60px; }
-  .familyGrid { grid-template-columns: 1.35fr 1fr; gap: var(--space-section); }
   .family .chapterHeading h2 { font-size: 36px; }
 }
 

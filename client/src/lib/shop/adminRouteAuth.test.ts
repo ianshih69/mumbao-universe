@@ -67,7 +67,7 @@ describe("Admin route session validation", () => {
 
   it("renders an authenticated Admin route only after the current session is verified", async () => {
     const ensureSession = vi.fn(async () => "fresh-token");
-    const fetchSession = vi.fn(async () => sessionResponse());
+    const fetchSession = vi.fn(async () => sessionResponse(identity({ permissions: ["booking.manage"] })));
 
     const result = await validateAdminRouteAuth({
       token: "stored-token",

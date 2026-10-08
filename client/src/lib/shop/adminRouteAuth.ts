@@ -7,6 +7,7 @@ import {
   type AdminIdentity,
 } from "./adminAuth";
 import { ensureFreshAdminSession, fetchAdminSession } from "./adminIdentityApi";
+import { readSharedAdminSession } from "./adminSharedSession";
 import {
   canViewAdminNavItem,
   findAdminNavItemByPath,
@@ -20,6 +21,7 @@ export type AdminRouteAuthResult =
 type AdminSessionResponse = Awaited<ReturnType<typeof fetchAdminSession>>;
 
 type ValidateAdminRouteAuthOptions = {
+  pathname?: string;
   token?: string;
   refreshToken?: string;
   expiresAt?: string | null;
@@ -28,6 +30,7 @@ type ValidateAdminRouteAuthOptions = {
     token: string,
     expiresAt?: string | null,
     refreshToken?: string,
+    requiredPermission?: string,
   ) => Promise<AdminSessionResponse>;
 };
 
@@ -42,19 +45,22 @@ export function adminRouteCanRender(pathname: string, identity: AdminIdentity | 
 export async function validateAdminRouteAuth(
   options: ValidateAdminRouteAuthOptions = {},
 ): Promise<AdminRouteAuthResult> {
-  const token = options.token ?? getAdminToken();
-  if (!token) return { status: "unauthenticated", reason: "missing" };
-
   const ensureSession = options.ensureSession || ensureFreshAdminSession;
   const fetchSession = options.fetchSession || fetchAdminSession;
 
   try {
+    if (options.token === undefined) await readSharedAdminSession();
+    const token = options.token ?? getAdminToken();
+    if (!token) return { status: "unauthenticated", reason: "missing" };
     const activeToken = await ensureSession(token);
     if (!activeToken) return { status: "unauthenticated", reason: "expired" };
 
     const activeExpiresAt = options.expiresAt ?? getAdminTokenExpiresAt();
     const activeRefreshToken = options.refreshToken ?? getAdminRefreshToken();
-    const session = await fetchSession(activeToken, activeExpiresAt, activeRefreshToken);
+    const permission = options.pathname ? findAdminNavItemByPath(options.pathname)?.permission : undefined;
+    const session = permission
+      ? await fetchSession(activeToken, activeExpiresAt, activeRefreshToken, permission)
+      : await fetchSession(activeToken, activeExpiresAt, activeRefreshToken);
     const identity: AdminIdentity = {
       ...session.user,
       permissions: session.permissions || session.user.permissions || [],

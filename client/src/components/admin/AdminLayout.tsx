@@ -35,6 +35,7 @@ import {
   adminRouteCanRender,
   validateAdminRouteAuth,
 } from "@/lib/shop/adminRouteAuth";
+import { signOutSharedAdminSession, subscribeSharedAdminSession } from "@/lib/shop/adminSharedSession";
 import {
   adminSidebarExpandedSectionsStorageKey,
   getAdminPageTitle,
@@ -246,7 +247,15 @@ export default function AdminLayout({
   const [validatedPathname, setValidatedPathname] = useState("");
   const [authError, setAuthError] = useState("");
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [sessionRevision, setSessionRevision] = useState(0);
   const pageTitle = title || getAdminPageTitle(pathname);
+
+  useEffect(() => subscribeSharedAdminSession(() => {
+    setIdentity(null);
+    setAuthStatus("checking");
+    setValidatedPathname("");
+    setSessionRevision((value) => value + 1);
+  }), []);
 
   useEffect(() => {
     let isCurrent = true;
@@ -255,7 +264,7 @@ export default function AdminLayout({
     setAuthError("");
     setIdentity(null);
 
-    void validateAdminRouteAuth().then((result) => {
+    void validateAdminRouteAuth({ pathname }).then((result) => {
       if (!isCurrent) return;
       if (result.status === "authenticated") {
         setIdentity(result.identity);
@@ -287,7 +296,7 @@ export default function AdminLayout({
     return () => {
       isCurrent = false;
     };
-  }, [pathname, setLocation]);
+  }, [pathname, setLocation, sessionRevision]);
 
   useEffect(
     () =>
@@ -325,7 +334,14 @@ export default function AdminLayout({
     return "/";
   }, [pathname]);
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await signOutSharedAdminSession();
+    } catch {
+      setAuthError("登出暫時無法完成，請重試。");
+      setAuthStatus("error");
+      return;
+    }
     clearAdminToken();
     setIdentity(null);
     setAuthStatus("checking");

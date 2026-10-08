@@ -2945,6 +2945,10 @@ async function handleAdminRefresh(req, res) {
 
 async function handleAdminSession(req, res, context) {
   if (req.method !== "GET") return sendJson(res, 405, { error: "Method not allowed." });
+  const requiredPermission = firstQueryValue(req.query?.requiredPermission);
+  if (requiredPermission && !hasAdminPermission(context, requiredPermission)) {
+    throw createHttpError(403, "Permission denied.");
+  }
   return sendJson(res, 200, {
     authMode: context.authMode,
     user: context.profile,

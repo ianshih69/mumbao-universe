@@ -1,4 +1,5 @@
 import {
+  AdminApiError,
   adminAuthExpiredMessage,
   createAdminApiError,
   getAdminIdentity,
@@ -8,6 +9,12 @@ import {
   setAdminSession,
   type AdminIdentity,
 } from "./adminAuth";
+import {
+  adoptSharedAdminSession,
+  getSharedAdminSessionRevision,
+  readSharedAdminSession,
+} from "./adminSharedSession";
+import { isCustomerAuthConfigError } from "./customerAuthClient";
 
 async function parseJson(response: Response) {
   return (await response.json().catch(() => ({}))) as Record<string, any>;
@@ -18,6 +25,7 @@ async function requestAdminIdentity<T>(
   token: string,
   options: RequestInit = {}
 ) {
+  const revision = getSharedAdminSessionRevision();
   const response = await fetch(url, {
     ...options,
     headers: {
@@ -27,6 +35,10 @@ async function requestAdminIdentity<T>(
     },
   });
   const data = (await parseJson(response)) as T & { error?: string };
+  if (revision !== getSharedAdminSessionRevision()) {
+    // A stale response must not expire the session that replaced it.
+    throw new AdminApiError("Auth session changed.", 401, "session_changed");
+  }
   if (!response.ok) {
     throw createAdminApiError(response.status, data, `Request failed: ${response.status}`);
   }
@@ -289,6 +301,13 @@ export async function loginAdminAccount(email: string, password: string) {
   });
   const data = await parseJson(response);
   if (!response.ok) throw new Error(data.error || "登入失敗，請確認 Email 與密碼。");
+  if (data.refreshToken) {
+    try {
+      await adoptSharedAdminSession(data.accessToken, data.refreshToken);
+    } catch (error) {
+      if (!isCustomerAuthConfigError(error)) throw error;
+    }
+  }
   setAdminSession({
     accessToken: data.accessToken,
     refreshToken: data.refreshToken,
@@ -335,6 +354,9 @@ export async function refreshAdminSession() {
 }
 
 export async function ensureFreshAdminSession(currentToken: string) {
+  const shared = await readSharedAdminSession();
+  if (shared) return shared.access_token;
+  if (getSharedAdminSessionRevision() > 0) return "";
   const storedToken = getAdminToken() || currentToken;
   if (!storedToken) return storedToken;
 
@@ -351,12 +373,18 @@ export async function ensureFreshAdminSession(currentToken: string) {
   return refreshed.accessToken;
 }
 
-export async function fetchAdminSession(token: string, expiresAt?: string | null, refreshToken?: string) {
+export async function fetchAdminSession(token: string, expiresAt?: string | null, refreshToken?: string, requiredPermission?: string) {
+  const revision = getSharedAdminSessionRevision();
+  const query = new URLSearchParams({ action: "admin-session" });
+  if (requiredPermission) query.set("requiredPermission", requiredPermission);
   const data = await requestAdminIdentity<{
     authMode: "account";
     user: AdminIdentity;
     permissions: string[];
-  }>("/api/admin-shop?action=admin-session", token);
+  }>(`/api/admin-shop?${query.toString()}`, token);
+  if (revision !== getSharedAdminSessionRevision()) {
+    throw new AdminApiError("Auth session changed.", 401, "session_changed");
+  }
   setAdminSession({
     accessToken: token,
     refreshToken,

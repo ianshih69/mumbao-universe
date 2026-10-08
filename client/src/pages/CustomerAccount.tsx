@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
+  ArrowRight,
   CheckCircle2,
   Gem,
   LockKeyhole,
@@ -40,6 +41,8 @@ import {
 } from "@/lib/shop/customerOrdersApi";
 import {
   createCustomerPointRedemption,
+  fetchCustomerAdminAccess,
+  type CustomerAdminAccess,
   type CustomerPointActivityRow,
   type CustomerProfile,
   type CustomerProfileUpdatePayload,
@@ -178,6 +181,30 @@ export default function CustomerAccount() {
     signOut,
     updateProfile,
   } = useCustomerAuth();
+  const [adminAccess, setAdminAccess] = useState<{
+    accessToken: string;
+    access: CustomerAdminAccess;
+  } | null>(null);
+  const accountAccessToken = isAuthenticated ? session?.access_token : undefined;
+  // Bind the server-verified role to this session, never to cached identity or email.
+  const adminRole = accountAccessToken && adminAccess?.accessToken === accountAccessToken
+    && adminAccess.access.isStaff === true ? adminAccess.access.role : null;
+
+  useEffect(() => {
+    let current = true;
+    setAdminAccess(null);
+    if (accountAccessToken) {
+      fetchCustomerAdminAccess(accountAccessToken)
+        .then(access => {
+          if (current) setAdminAccess({ accessToken: accountAccessToken, access });
+        })
+        .catch(() => {
+          if (current) setAdminAccess(null);
+        });
+    }
+    return () => { current = false; };
+  }, [accountAccessToken]);
+
   const [form, setForm] = useState<ProfileFormState>(EMPTY_FORM);
   const [isEditUnlocked, setIsEditUnlocked] = useState(false);
   const [unlockExpiresAt, setUnlockExpiresAt] = useState<number | null>(null);
@@ -543,12 +570,12 @@ export default function CustomerAccount() {
                         <p className="mt-1 break-all text-sm text-stone-500">{readonlyEmail}</p>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-end">
                       <span
-                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold ${getLevelBadgeClass(memberLevel)}`}
+                        className={`inline-flex max-w-full items-center gap-2 break-all rounded-full border px-3 py-1.5 text-sm font-semibold ${getLevelBadgeClass(adminRole ? "normal" : memberLevel)}`}
                       >
-                        <ShieldCheck className="h-4 w-4" />
-                        {memberLevelLabel}
+                        <ShieldCheck className="h-4 w-4 shrink-0" />
+                        {adminRole ? `Admin · ${adminRole}` : memberLevelLabel}
                       </span>
                       <span
                         className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold ${
@@ -560,6 +587,14 @@ export default function CustomerAccount() {
                         {emailVerified ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
                         Email {emailVerificationLabel}
                       </span>
+                      {adminRole && (
+                        <Button asChild className="min-h-11 w-full rounded-full bg-[#8b6f5b] text-white hover:bg-[#765d4a] sm:w-auto">
+                          <Link href="/admin/bookings/orders">
+                            進入管理後台
+                            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                          </Link>
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </section>

@@ -1,3 +1,5 @@
+import { getSharedAdminSession, subscribeSharedAdminSession } from "./adminSharedSession";
+
 export type AdminAuthStatus = "checking" | "loggedIn" | "loggedOut";
 
 export const adminShopTokenKey = "adminShopToken";
@@ -19,6 +21,12 @@ type AdminAuthExpiredListener = () => void;
 
 const adminAuthExpiredListeners = new Set<AdminAuthExpiredListener>();
 let hasNotifiedAdminAuthExpired = false;
+let sharedIdentity: AdminIdentity | null = null;
+
+subscribeSharedAdminSession(() => {
+  clearAdminToken();
+  hasNotifiedAdminAuthExpired = false;
+});
 
 function payloadText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -37,6 +45,8 @@ export class AdminApiError extends Error {
 }
 
 export function getAdminToken() {
+  const shared = getSharedAdminSession();
+  if (shared) return shared.access_token;
   try {
     return sessionStorage.getItem(adminShopTokenKey) || "";
   } catch {
@@ -63,6 +73,7 @@ export type AdminIdentity = {
 };
 
 export function getAdminRefreshToken() {
+  if (getSharedAdminSession()) return "";
   try {
     return sessionStorage.getItem(adminShopRefreshTokenKey) || "";
   } catch {
@@ -71,6 +82,8 @@ export function getAdminRefreshToken() {
 }
 
 export function getAdminTokenExpiresAt() {
+  const shared = getSharedAdminSession();
+  if (shared) return shared.expires_at ? new Date(shared.expires_at * 1000).toISOString() : "";
   try {
     return sessionStorage.getItem(adminShopTokenExpiresAtKey) || "";
   } catch {
@@ -92,6 +105,21 @@ export function setAdminSession({
   authMode?: "account";
 }) {
   hasNotifiedAdminAuthExpired = false;
+  const shared = getSharedAdminSession();
+  if (shared) {
+    if (shared.access_token === accessToken && user) {
+      sharedIdentity = {
+        authMode,
+        display_name: user.display_name || user.email || "Admin",
+        email: user.email || "",
+        role_code: user.role_code || "",
+        role_name: user.role_name || "",
+        permissions: Array.isArray(user.permissions) ? user.permissions : [],
+        is_active: user.is_active !== false,
+      };
+    }
+    return;
+  }
   setAdminToken(accessToken);
   sessionStorage.removeItem(adminAuthNoticeKey);
   if (refreshToken) sessionStorage.setItem(adminShopRefreshTokenKey, refreshToken);
@@ -115,6 +143,7 @@ export function setAdminSession({
 }
 
 export function getAdminIdentity(): AdminIdentity | null {
+  if (getSharedAdminSession()) return sharedIdentity;
   try {
     const raw = sessionStorage.getItem(adminShopIdentityKey);
     return raw ? (JSON.parse(raw) as AdminIdentity) : null;
@@ -134,6 +163,7 @@ export function hasAdminPermission(permission: string) {
 }
 
 export function clearAdminToken() {
+  sharedIdentity = null;
   try {
     sessionStorage.removeItem(adminShopTokenKey);
     sessionStorage.removeItem(adminShopRefreshTokenKey);

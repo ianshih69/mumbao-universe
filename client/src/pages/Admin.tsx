@@ -1,3 +1,4 @@
+import { logoutToHome } from "@/lib/shop/logout";
 import { FormEvent, useMemo, useState } from "react";
 import {
   Image,
@@ -112,7 +113,8 @@ export default function Admin({ embeddedInAdminLayout = false }: AdminProps = {}
     setLoginError("");
   };
 
-  const logout = () => {
+  const logout = async () => {
+    if (!await logoutToHome()) return;
     setAdminLoggedIn(false);
     setLoggedIn(false);
     setPassword("");

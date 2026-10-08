@@ -8,6 +8,7 @@ import { getNewsBySlug, type NewsItem } from "@/data/news";
 const siteOrigin = "https://www.mumbao.tw";
 const newsArticleJsonLdId = "news-article-json-ld";
 const newsArticleSlugs = new Set([
+  "mumbao-universe-goes-global",
   "private-event-and-production-venue",
   "mumbao-ip-copyright",
   "mumbao-line-stickers-coming-soon",
@@ -16,6 +17,7 @@ const newsArticleSlugs = new Set([
   "mumbao-universe-starry-fashion-exhibition-2026",
 ]);
 const unframedNewsSlugs = new Set([
+  "mumbao-universe-goes-global",
   "mumbao-ip-copyright",
   "private-event-and-production-venue",
 ]);
@@ -134,6 +136,22 @@ export default function NewsDetail() {
   const news = getNewsBySlug(params?.slug || "");
 
   useEffect(() => {
+    if (!news?.seoImage) return;
+    const imageUrl = getAbsoluteUrl(news.seoImage);
+    const previous = ["og", "twitter"].map((prefix) => {
+      const selector = `meta[property="${prefix}:image"]`;
+      const content = document.head.querySelector<HTMLMetaElement>(selector)?.content;
+      setMetaContent(selector, imageUrl);
+      // A direct prerendered visit already contains this article's image.
+      return { selector, content: content === imageUrl ? "/images/Hero.webp" : content };
+    });
+    return () => previous.forEach(({ selector, content }) => {
+      if (content === undefined) removeMetaElements(selector);
+      else setMetaContent(selector, content);
+    });
+  }, [news]);
+
+  useEffect(() => {
     if (!news) {
       const notFoundTitle = "找不到這篇最新消息｜慢慢蒔光 STime Villa";
       const notFoundDescription = "找不到這篇最新消息。";
@@ -207,7 +225,7 @@ export default function NewsDetail() {
       <img
         src={news.image}
         alt={news.alt}
-        className={`block h-full w-full object-contain ${unframedCover ? "rounded-[4px]" : "rounded-[10px]"}`}
+        className={`block h-full w-full object-contain ${news.id === 8 ? "" : unframedCover ? "rounded-[4px]" : "rounded-[10px]"}`}
       />
     </div>
   );
@@ -236,7 +254,7 @@ export default function NewsDetail() {
           {!imageFirst && cover}
 
           <div className={`mx-auto space-y-8 ${imageFirst ? "mt-10 max-w-2xl md:mt-12" : "mt-14 max-w-3xl md:mt-16"}`}>
-            {imageFirst ? (
+            {news.detailTitle && (imageFirst ? (
               <p className="text-xl font-light leading-[1.9] text-[#a57652] md:text-2xl">
                 {news.detailTitle}
               </p>
@@ -244,7 +262,7 @@ export default function NewsDetail() {
               <h2 className="text-2xl font-light leading-relaxed text-[#3d332b] md:text-3xl">
                 {news.detailTitle}
               </h2>
-            )}
+            ))}
             <div className="space-y-6 text-base leading-[2.05] text-[#75685d] md:text-lg md:leading-[2.15]">
               {news.content.map((paragraph) => (
                 <p key={paragraph}>{paragraph}</p>

@@ -35,7 +35,8 @@ import {
   adminRouteCanRender,
   validateAdminRouteAuth,
 } from "@/lib/shop/adminRouteAuth";
-import { signOutSharedAdminSession, subscribeSharedAdminSession } from "@/lib/shop/adminSharedSession";
+import { subscribeSharedAdminSession } from "@/lib/shop/adminSharedSession";
+import { isLogoutInProgress, logoutToHome } from "@/lib/shop/logout";
 import {
   adminSidebarExpandedSectionsStorageKey,
   getAdminPageTitle,
@@ -265,7 +266,7 @@ export default function AdminLayout({
     setIdentity(null);
 
     void validateAdminRouteAuth({ pathname }).then((result) => {
-      if (!isCurrent) return;
+      if (!isCurrent || isLogoutInProgress()) return;
       if (result.status === "authenticated") {
         setIdentity(result.identity);
         setValidatedPathname(pathname);
@@ -304,7 +305,9 @@ export default function AdminLayout({
         setIdentity(null);
         setAuthStatus("checking");
         setValidatedPathname("");
-        setLocation(buildAdminLoginPath(currentAdminPath(pathname), true));
+        if (!isLogoutInProgress()) {
+          setLocation(buildAdminLoginPath(currentAdminPath(pathname), true));
+        }
       }),
     [pathname, setLocation],
   );
@@ -335,19 +338,7 @@ export default function AdminLayout({
   }, [pathname]);
 
   const logout = async () => {
-    try {
-      await signOutSharedAdminSession();
-    } catch {
-      setAuthError("登出暫時無法完成，請重試。");
-      setAuthStatus("error");
-      return;
-    }
-    clearAdminToken();
-    setIdentity(null);
-    setAuthStatus("checking");
-    setValidatedPathname("");
-    setIsMobileOpen(false);
-    setLocation("/admin/shop/login");
+    await logoutToHome();
   };
 
   if (authStatus === "checking" || validatedPathname !== pathname) {
@@ -469,6 +460,7 @@ export default function AdminLayout({
                 </div>
                 <button
                   type="button"
+                  aria-label="登出"
                   onClick={logout}
                   className="inline-flex h-10 items-center gap-2 rounded-full border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-stone-50 md:px-4"
                 >

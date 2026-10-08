@@ -1,3 +1,4 @@
+import { logoutToHome } from "@/lib/shop/logout";
 import {
   KeyboardEvent,
   UIEvent,
@@ -832,7 +833,8 @@ export default function AdminChats() {
     });
   }, [messages, selectedSessionId]);
 
-  const logout = () => {
+  const logout = async () => {
+    if (!await logoutToHome()) return;
     clearStoredAdminToken();
     messagesCacheRef.current.clear();
     setFailedAvatarIds(new Set());
@@ -841,7 +843,6 @@ export default function AdminChats() {
     setSessions([]);
     setMessages([]);
     setSelectedSessionId("");
-    setLocation("/admin/shop/login?redirect=/admin/chats");
   };
 
   const loadNextSessionPage = () => {

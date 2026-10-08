@@ -6,6 +6,7 @@ export function renderPageHtml(template: string, page: {
   description: string;
   canonical: string;
   body: string;
+  image?: string;
 }): string;
 
 export function publicPagesPrerender(): Plugin;

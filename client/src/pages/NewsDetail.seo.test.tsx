@@ -8,6 +8,7 @@ import { getNewsBySlug, newsItems } from "@/data/news";
 import NewsDetail from "./NewsDetail";
 
 const effects = vi.hoisted(() => [] as Array<() => unknown>);
+const cleanups: Array<() => void> = [];
 vi.mock("react", async (importOriginal) => ({
   ...await importOriginal<typeof import("react")>(),
   useEffect: (effect: () => unknown) => { effects.push(effect); },
@@ -60,8 +61,12 @@ const targetUrl = `https://www.mumbao.tw/news/${target}`;
 let headDocument: ReturnType<typeof createHeadDocument>;
 
 function visit(slug: string) {
+  cleanups.splice(0).forEach(cleanup => cleanup());
   renderToStaticMarkup(<Router ssrPath={`/news/${slug}`}><NewsDetail /></Router>);
-  for (const effect of effects.splice(0)) effect();
+  for (const effect of effects.splice(0)) {
+    const cleanup = effect();
+    if (typeof cleanup === "function") cleanups.push(cleanup as () => void);
+  }
 }
 
 function expectArticleMetadata(slug: string) {
@@ -96,6 +101,7 @@ function expectNotFoundMetadata() {
 
 describe("News detail metadata transitions", () => {
   beforeEach(() => {
+    cleanups.length = 0;
     headDocument = createHeadDocument();
     effects.length = 0;
     vi.stubGlobal("React", React);
@@ -112,6 +118,28 @@ describe("News detail metadata transitions", () => {
     visit("nonexistent-seo-regression");
     expectNotFoundMetadata();
   });
+
+  it.each(["/images/Hero.webp", "https://www.mumbao.tw/images/News/News-8.jpg"])(
+    "uses News-8 social images without leaking into old articles from %s", (initialImage) => {
+      for (const prefix of ["og", "twitter"]) {
+        const meta = headDocument.createElement("meta");
+        meta.setAttribute("property", `${prefix}:image`);
+        meta.content = initialImage;
+        headDocument.head.appendChild(meta);
+      }
+      visit("mumbao-universe-goes-global");
+      expectArticleMetadata("mumbao-universe-goes-global");
+      for (const prefix of ["og", "twitter"]) {
+        expect(headDocument.head.querySelector(`meta[property="${prefix}:image"]`)?.content)
+          .toBe("https://www.mumbao.tw/images/News/News-8.jpg");
+      }
+      visit("mumbao-ip-copyright");
+      for (const prefix of ["og", "twitter"]) {
+        expect(headDocument.head.querySelector(`meta[property="${prefix}:image"]`)?.content)
+          .toBe("/images/Hero.webp");
+      }
+    },
+  );
 
   it("clears stale noindex on unknown -> valid routes", () => {
     visit("nonexistent-seo-regression");

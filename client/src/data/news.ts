@@ -5,12 +5,14 @@ export type NewsItem = {
   date: string;
   title: string;
   excerpt: string;
-  detailTitle: string;
+  detailTitle?: string;
   content: string[];
   image: string;
   alt: string;
   seoTitle?: string;
   seoDescription?: string;
+  seoImage?: string;
+  featured?: boolean;
   detailLayout?: "image-first";
   highlights?: {
     title: string;
@@ -28,6 +30,33 @@ export type NewsItem = {
 };
 
 export const newsItems: NewsItem[] = [
+  {
+    id: 8,
+    slug: "mumbao-universe-goes-global",
+    category: "NEWS",
+    date: "2026.10.09",
+    title: "從宜蘭出發，讓慢寶宇宙一步步走向世界",
+    excerpt:
+      "這幾天，慢慢蒔光又收到一份值得紀念的文件——來自日本文化廳的著作權登記。",
+    content: [
+      "這幾天，慢慢蒔光又收到一份值得紀念的文件——來自日本文化廳的著作權登記。",
+      "從美國、中國的著作權登記，到台灣公證，再到這次的日本，每一步，都是我們認真守護原創的足跡。",
+      "對我們來說，這些文件背後，是無數次的畫稿修改、角色調整，以及把想像一點一點變成現實的日子。",
+      "從慢寶頭上的小愛心，到陪你坐下的雲朵沙發；從畫裡的星座故事，到可以真正走進去的房間，我們一直努力把「慢寶宇宙」帶進現實。",
+      "慢慢蒔光顛覆傳統旅宿的想像，讓住宿也能成為一場走進原創藝術的美學體驗療癒旅程。",
+      "讓你在雲朵、色彩與故事之間，放下緊繃的肩膀，找回那個還會做夢、還會被小事感動的自己。",
+      "謝謝每一位喜歡慢寶、支持慢慢蒔光的人。",
+      "這個從宜蘭長出來的小小宇宙，正帶著你們的喜歡，慢慢走向更遠的地方。",
+    ],
+    image: "/images/News/News-8.jpg",
+    alt: "慢寶乘著飛機，帶著原創著作權登記足跡從宜蘭走向世界",
+    detailLayout: "image-first",
+    featured: true,
+    seoTitle: "從宜蘭出發，讓慢寶宇宙一步步走向世界｜慢慢蒔光 STime Villa",
+    seoDescription:
+      "這幾天，慢慢蒔光又收到一份值得紀念的文件——來自日本文化廳的著作權登記。",
+    seoImage: "/images/News/News-8.jpg",
+  },
   {
     id: 7,
     slug: "private-event-and-production-venue",

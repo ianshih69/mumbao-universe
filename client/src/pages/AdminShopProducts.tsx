@@ -1,3 +1,4 @@
+import { logoutToHome } from "@/lib/shop/logout";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -288,7 +289,8 @@ export default function AdminShopProducts() {
     window.location.href = "/admin/shop/login?redirect=/admin/shop/products";
   };
 
-  const logout = () => {
+  const logout = async () => {
+    if (!await logoutToHome()) return;
     clearAdminToken();
     setToken("");
     setProducts([]);

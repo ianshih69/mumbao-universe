@@ -1,4 +1,5 @@
 import { getRoomBySlug } from "@/data/rooms";
+import { getNewsBySlug } from "@/data/news";
 
 const origin = "https://www.mumbao.tw";
 
@@ -39,7 +40,7 @@ export function getRoomSeo(slug: string) {
   };
 }
 
-// Deliberately scoped: News and all other routes keep their existing SPA behavior.
+// Only the new article is added; older News routes retain their existing SEO.
 export const prerenderPaths = [
   "/mumbao",
   "/rooms",
@@ -47,9 +48,19 @@ export const prerenderPaths = [
   "/rooms/room-530-nuanjin",
   "/rooms/room-666-anhe",
   "/rooms/room-888-xinghuo",
+  "/news/mumbao-universe-goes-global",
 ] as const;
 
 export function getPublicPageSeo(pathname: string) {
+  if (pathname === "/news/mumbao-universe-goes-global") {
+    const news = getNewsBySlug("mumbao-universe-goes-global")!;
+    return {
+      title: news.seoTitle!,
+      description: news.seoDescription!,
+      canonical: `${origin}/news/${news.slug}`,
+      image: `${origin}${news.seoImage}`,
+    };
+  }
   if (pathname === "/mumbao") return mumbaoSeo;
   if (pathname === "/rooms") return roomsSeo;
   if (pathname.startsWith("/rooms/")) return getRoomSeo(pathname.slice(7));

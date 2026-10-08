@@ -77,8 +77,16 @@ export async function adoptSharedAdminSession(accessToken: string, refreshToken:
 }
 
 export async function signOutSharedAdminSession() {
-  if (!await readSharedAdminSession()) return;
-  const { error } = await sharedClient().auth.signOut({ scope: "local" });
+  let sdk: SupabaseClient;
+  try {
+    sdk = sharedClient();
+  } catch (error) {
+    if (!isCustomerAuthConfigError(error)) throw error;
+    receiveSession(null, true);
+    return;
+  }
+  // Logout must also clear an expired SDK session, without requiring restoration.
+  const { error } = await sdk.auth.signOut({ scope: "local" });
   if (error) throw error;
-  receiveSession(null);
+  receiveSession(null, true);
 }

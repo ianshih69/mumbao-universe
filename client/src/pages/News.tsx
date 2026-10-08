@@ -101,9 +101,10 @@ export default function NewsPage() {
   const sortedNewsItems = newsItems
     .map((item, index) => ({ item, index }))
     .sort((a, b) => {
+      const featuredDiff = Number(Boolean(b.item.featured)) - Number(Boolean(a.item.featured));
       const dateDiff = getNewsTimeValue(b.item.date) - getNewsTimeValue(a.item.date);
 
-      return dateDiff || a.index - b.index;
+      return featuredDiff || dateDiff || a.index - b.index;
     })
     .map(({ item }) => item);
   const pageCount = Math.max(1, Math.ceil(sortedNewsItems.length / newsItemsPerPage));

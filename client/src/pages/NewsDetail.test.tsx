@@ -23,7 +23,7 @@ describe("News exhibition article", () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
   it("adds exactly one article with unique IDs and slugs", () => {
-    expect(newsItems).toHaveLength(7);
+    expect(newsItems).toHaveLength(8);
     expect(newsItems.filter((item) => item.slug === slug)).toHaveLength(1);
     expect(new Set(newsItems.map((item) => item.id)).size).toBe(newsItems.length);
     expect(new Set(newsItems.map((item) => item.slug)).size).toBe(newsItems.length);
@@ -48,7 +48,7 @@ describe("News exhibition article", () => {
 
   it("renders the image, title, lead, three paragraphs and three highlights in order", () => {
     const html = renderDetail();
-    const parts = ["<img", `<h1`, title, article.detailTitle, ...article.content,
+    const parts = ["<img", `<h1`, title, article.detailTitle!, ...article.content,
       article.highlights!.title, ...article.highlights!.items];
     let previous = -1;
     for (const part of parts) {
@@ -56,7 +56,7 @@ describe("News exhibition article", () => {
       expect(position, part).toBeGreaterThan(previous);
       previous = position;
     }
-    for (const text of [title, article.detailTitle, ...article.content, ...article.highlights!.items]) {
+    for (const text of [title, article.detailTitle!, ...article.content, ...article.highlights!.items]) {
       expect(html.split(text)).toHaveLength(2);
     }
     expect(html.match(/<li\b/g)).toHaveLength(3);
@@ -81,7 +81,7 @@ describe("News exhibition article", () => {
     expect(html).toContain(article.excerpt);
     expect(html).toContain(`src="${article.image}"`);
     expect(html.match(/<article\b/g)).toHaveLength(6);
-    expect(html.indexOf(title)).toBeLessThan(html.indexOf(newsItems.find((item) => item.id === 1)!.title));
+    expect(html.indexOf(title)).toBeLessThan(html.indexOf(newsItems.find((item) => item.id === 6)!.title));
   });
 
   it.each(newsItems.filter((item) => item.id < 5))(
@@ -150,7 +150,7 @@ describe("News original IP article", () => {
     expect(html.indexOf("<img")).toBeLessThan(html.indexOf("<h1"));
   });
 
-  it.each(newsItems.filter((item) => ![6, 7].includes(item.id)))(
+  it.each(newsItems.filter((item) => item.id < 6))(
     "retains the original cover framing for $slug",
     (item) => {
       const html = renderDetail(item.slug);
@@ -222,7 +222,7 @@ describe("News private event and production venue article", () => {
   it("renders the lead, editorial copy, activity grid, venue facts, notice and official LINE link", () => {
     const html = renderDetail(venueSlug);
     const orderedContent = [
-      venueArticle.detailTitle,
+      venueArticle.detailTitle!,
       ...venueArticle.content,
       venueArticle.highlights!.title,
       ...activityItems,
@@ -271,7 +271,7 @@ describe("News private event and production venue article", () => {
     const html = renderToStaticMarkup(
       <Router ssrPath="/news" ssrSearch="?page=2"><NewsPage /></Router>,
     );
-    expect(html.match(/<article\b/g)).toHaveLength(1);
+    expect(html.match(/<article\b/g)).toHaveLength(2);
     expect(html).toContain("慢慢蒔光官網資訊陸續更新");
     expect(html).toContain("2 / 2");
   });

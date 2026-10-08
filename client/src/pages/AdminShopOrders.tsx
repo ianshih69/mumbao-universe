@@ -1,3 +1,4 @@
+import { logoutToHome } from "@/lib/shop/logout";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ClipboardList,
@@ -503,7 +504,8 @@ export default function AdminShopOrders() {
     window.location.href = "/admin/shop/login?redirect=/admin/shop/orders";
   };
 
-  const logout = () => {
+  const logout = async () => {
+    if (!await logoutToHome()) return;
     clearAdminToken();
     setToken("");
     setOrders([]);

@@ -33,6 +33,10 @@
       "destination": "/rooms/room-888-xinghuo/index.html"
     },
     {
+      "source": "/news/mumbao-universe-goes-global",
+      "destination": "/news/mumbao-universe-goes-global/index.html"
+    },
+    {
       "source": "/((?!api(?:/|$)).*)",
       "destination": "/index.html"
     }

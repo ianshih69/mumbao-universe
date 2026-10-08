@@ -4,6 +4,7 @@ import { Globe, X, LogOut, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { getCustomerLoginHref } from "@/lib/shop/customerAuthClient";
+import { logoutToHome } from "@/lib/shop/logout";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -119,16 +120,10 @@ export function Header() {
   const useDarkControls =
     isScrolled || isShopPage || isLegalPage || isAccountPage || isBookingManagementPage;
   const authLinkClass = cn(
-    "inline-flex h-9 items-center justify-center rounded-full px-3 text-sm font-medium transition-colors",
+    "inline-flex h-9 items-center justify-center px-3 text-sm font-medium underline-offset-4 transition-colors aria-[current=page]:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-current",
     useDarkControls
-      ? "text-[#8b6f5b] hover:bg-[#f3eadf]"
-      : "text-white hover:bg-white/15"
-  );
-  const registerLinkClass = cn(
-    "inline-flex h-9 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors",
-    useDarkControls
-      ? "bg-[#8b6f5b] text-white hover:bg-[#765d4a]"
-      : "bg-white/90 text-[#8b6f5b] hover:bg-white"
+      ? "text-[#8b6f5b] hover:text-[#765d4a]"
+      : "text-white hover:text-white/75"
   );
   const hamburgerLineClass = cn(
     "block h-[1.5px] w-6 rounded-full transition-colors duration-200",
@@ -139,7 +134,7 @@ export function Header() {
   const menuLinkClass =
     "font-serif text-[24px] font-normal leading-none tracking-[0.08em] text-[#3D332B] transition duration-[230ms] ease-out hover:translate-x-1 hover:text-[#C58A54] motion-safe:animate-[mumbao-menu-item-in_300ms_ease-out_both] md:text-[28px]";
   const memberLinkClass =
-    "inline-flex items-center gap-2.5 text-left font-serif text-[18px] font-normal leading-none tracking-[0.06em] text-[rgba(61,51,43,0.78)] transition duration-[230ms] ease-out hover:translate-x-1 hover:text-[#C58A54] md:text-[20px]";
+    "inline-flex items-center gap-2.5 text-left font-serif text-[18px] font-normal leading-none tracking-[0.06em] text-[rgba(61,51,43,0.78)] underline-offset-4 transition duration-[230ms] ease-out hover:translate-x-1 hover:text-[#C58A54] aria-[current=page]:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-current md:text-[20px]";
   const customerLoginHref = getCustomerLoginHref();
 
   const isMenuItemActive = (item: MenuItem) => {
@@ -150,8 +145,7 @@ export function Header() {
   };
 
   const handleCustomerSignOut = async () => {
-    await signOut();
-    setLocation("/shop");
+    await logoutToHome(signOut);
   };
 
   return (
@@ -236,9 +230,10 @@ export function Header() {
                   <SheetClose asChild>
                     <Link
                       href="/booking/lookup"
+                      aria-current={location === "/booking/lookup" ? "page" : undefined}
                       className={cn(
                         menuLinkClass,
-                        location.startsWith("/booking/lookup") && "!text-[#B77C4B]"
+                        location === "/booking/lookup" && "!text-[#B77C4B]"
                       )}
                       style={{ animationDelay: `${80 + menuItems.length * 30}ms` }}
                     >
@@ -276,6 +271,7 @@ export function Header() {
                       <SheetClose asChild>
                         <Link
                           href={customerLoginHref}
+                          aria-current={location === "/account/login" ? "page" : undefined}
                           className={memberLinkClass}
                         >
                           登入
@@ -284,6 +280,7 @@ export function Header() {
                       <SheetClose asChild>
                         <Link
                           href="/account/register"
+                          aria-current={location === "/account/register" ? "page" : undefined}
                           className={memberLinkClass}
                         >
                           註冊
@@ -312,7 +309,7 @@ export function Header() {
         {/* Right: Actions */}
         <div className="flex items-center gap-4 md:gap-6">
           <div className="hidden items-center gap-2 lg:flex">
-            <Link href="/booking/lookup" className={authLinkClass}>
+            <Link href="/booking/lookup" aria-current={location === "/booking/lookup" ? "page" : undefined} className={authLinkClass}>
               訂單查詢
             </Link>
             {!isLoading &&
@@ -336,10 +333,10 @@ export function Header() {
                 </>
               ) : (
                 <>
-                  <Link href={customerLoginHref} className={authLinkClass}>
+                  <Link href={customerLoginHref} aria-current={location === "/account/login" ? "page" : undefined} className={authLinkClass}>
                     登入
                   </Link>
-                  <Link href="/account/register" className={registerLinkClass}>
+                  <Link href="/account/register" aria-current={location === "/account/register" ? "page" : undefined} className={authLinkClass}>
                     註冊
                   </Link>
                 </>

@@ -1,3 +1,4 @@
+import { logoutToHome } from "@/lib/shop/logout";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import {
@@ -332,7 +333,8 @@ export default function AdminShopPos() {
     window.location.href = "/admin/shop/login?redirect=/admin/shop/pos";
   };
 
-  const logout = () => {
+  const logout = async () => {
+    if (!await logoutToHome()) return;
     stopScanner();
     clearAdminToken();
     setToken("");

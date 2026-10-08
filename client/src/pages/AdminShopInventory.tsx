@@ -1,3 +1,4 @@
+import { logoutToHome } from "@/lib/shop/logout";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownCircle,
@@ -345,7 +346,8 @@ export default function AdminShopInventory() {
     window.location.href = "/admin/shop/login?redirect=/admin/shop/inventory";
   };
 
-  const logout = () => {
+  const logout = async () => {
+    if (!await logoutToHome()) return;
     clearAdminToken();
     setToken("");
     setProducts([]);

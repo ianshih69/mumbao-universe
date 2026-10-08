@@ -1,3 +1,4 @@
+import { logoutToHome } from "@/lib/shop/logout";
 import { FormEvent, useState } from "react";
 import { Eye, EyeOff, KeyRound, LogOut, ShieldCheck } from "lucide-react";
 import { Link, useLocation } from "wouter";
@@ -109,9 +110,9 @@ export default function AdminShopAccount() {
     setLocation("/admin/shop/login?redirect=/admin/shop");
   };
 
-  const logout = () => {
+  const logout = async () => {
+    if (!await logoutToHome()) return;
     clearAdminToken();
-    redirectToLogin();
   };
 
   const toggleVisible = (field: PasswordField) => {

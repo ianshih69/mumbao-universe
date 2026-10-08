@@ -55,6 +55,13 @@ export function renderPageHtml(template, page) {
     node => node.tagName === "link" && attribute(node, "rel") === "canonical"
   );
   setAttribute(canonical, "href", page.canonical);
+  if (page.image) {
+    for (const key of ["og:image", "twitter:image"]) {
+      const meta = required(node => node.tagName === "meta" &&
+        (attribute(node, "name") === key || attribute(node, "property") === key));
+      setAttribute(meta, "content", page.image);
+    }
+  }
   const robots = find(
     document,
     node => node.tagName === "meta" && attribute(node, "name") === "robots"

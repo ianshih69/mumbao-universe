@@ -14,12 +14,13 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { getCustomerSupabaseClient, normalizeCustomerEmail } from "@/lib/shop/customerAuthClient";
+import { logoutToHome } from "@/lib/shop/logout";
 import {
   buildCustomerFullAddressUpdatePayload,
   customerAccountPointActivityPageSize,
@@ -168,7 +169,6 @@ function AccountField({ label, value }: { label: string; value: string }) {
 }
 
 export default function CustomerAccount() {
-  const [, setLocation] = useLocation();
   const {
     user,
     session,
@@ -316,8 +316,7 @@ export default function CustomerAccount() {
   }
 
   async function handleSignOut() {
-    await signOut();
-    setLocation("/");
+    await logoutToHome(signOut);
   }
 
   async function handlePasswordConfirm(event: FormEvent<HTMLFormElement>) {

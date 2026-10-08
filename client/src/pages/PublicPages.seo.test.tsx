@@ -41,6 +41,11 @@ const expected = [
     "雲容 S888｜ROOM S888｜慢慢蒔光 STime Villa",
     "雲容 S888",
   ],
+  [
+    "/news/mumbao-universe-goes-global",
+    "從宜蘭出發，讓慢寶宇宙一步步走向世界｜慢慢蒔光 STime Villa",
+    "從宜蘭出發，讓慢寶宇宙一步步走向世界",
+  ],
 ];
 let pages: ReturnType<typeof import("../prerender").renderPublicPages>;
 beforeAll(async () => {
@@ -70,7 +75,7 @@ describe.each(expected)("public HTML %s", (pathname, title, h1) => {
         expect(page.body).toContain(paragraph);
     }
     if (pathname === "/rooms") {
-      for (const [route] of expected.slice(2))
+      for (const [route] of expected.filter(([path]) => path.startsWith("/rooms/")))
         expect(page.body).toContain(`href="${route}"`);
     }
   });
@@ -92,7 +97,7 @@ describe.each(expected)("public HTML %s", (pathname, title, h1) => {
   });
 });
 
-it("only prerenders the six approved paths, not News, booking, or missing rooms", () => {
+it("prerenders the existing six paths plus News-8, not older News or booking", () => {
   expect([...prerenderPaths]).toEqual(expected.map(([pathname]) => pathname));
   expect(getPublicPageSeo("/rooms/not-a-room")).toBeUndefined();
   expect(
@@ -135,7 +140,7 @@ describe("Vercel nested prerender routing", () => {
       destination: "/index.html",
     });
     expect(rewrites.filter(route => route.source.startsWith("/rooms"))).toEqual(
-      expected.slice(2).map(([pathname]) => ({
+      expected.filter(([path]) => path.startsWith("/rooms/")).map(([pathname]) => ({
         source: pathname,
         destination: `${pathname}/index.html`,
       }))

@@ -1,3 +1,4 @@
+import { logoutToHome } from "@/lib/shop/logout";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
@@ -286,7 +287,8 @@ export default function AdminShopHome() {
     window.location.href = "/admin/shop/login?redirect=/admin/shop";
   };
 
-  const logout = () => {
+  const logout = async () => {
+    if (!await logoutToHome()) return;
     clearAdminToken();
     setTokenState("");
     setAuthStatus("loggedOut");

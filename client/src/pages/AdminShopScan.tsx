@@ -1,3 +1,4 @@
+import { logoutToHome } from "@/lib/shop/logout";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import {
@@ -161,7 +162,8 @@ export default function AdminShopScan() {
     window.location.href = "/admin/shop/login?redirect=/admin/shop/scan";
   };
 
-  const logout = () => {
+  const logout = async () => {
+    if (!await logoutToHome()) return;
     stopScanner();
     clearAdminToken();
     setToken("");

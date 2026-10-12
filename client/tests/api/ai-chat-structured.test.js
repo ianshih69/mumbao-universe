@@ -12,6 +12,8 @@ import { definitions as ownerRuntimeCases, fixtureContext as ownerFixture,
   loadRuntime as ownerRuntime, stateView as ownerStateView } from "../../scripts/ai/runOwnerSemanticProviderBenchmark.mjs";
 
 const sessionId = "00000000-0000-4000-8000-000000000777";
+// These existing engine regressions exercise the explicitly public mode.
+beforeEach(() => { vi.stubEnv("AI_CHAT_TEST_MODE", "false"); });
 const ruleSet = {
   id: "00000000-0000-4000-8000-000000000110",
   name: "production-handler-pricing",

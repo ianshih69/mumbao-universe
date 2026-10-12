@@ -1,4 +1,5 @@
 import { sendQualityJson } from "../server/aiQuality/http.js";
+import { requireChatTestAccess } from "../server/aiChat/testAccess.js";
 
 // Vercel rewrites select this function while preserving the original request path.
 // Query/body discriminators are never routing authority or authorization.
@@ -10,6 +11,7 @@ const routes = new Map([
 export default async function handler(req, res) {
   try {
     const pathname = typeof req.url === "string" ? req.url.split("?", 1)[0] : "";
+    if (pathname === "/api/ai-quality-feedback" && !requireChatTestAccess(req, res)) return;
     const loadHandler = routes.get(pathname);
     if (!loadHandler) return sendQualityJson(res, 404, { ok: false, code: "not_found" });
 

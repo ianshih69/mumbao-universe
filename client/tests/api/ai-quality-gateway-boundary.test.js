@@ -10,6 +10,7 @@ const response = () => ({ statusCode: 0, headers: {}, headersSent: false, writab
   end: vi.fn(function(body) { this.body = body; this.headersSent = true; this.writableEnded = true; }),
 });
 beforeEach(() => {
+  vi.stubEnv("AI_CHAT_TEST_MODE", "false");
   branches.commonjs = false;
   for (const branch of [branches.admin, branches.feedback]) branch.mockReset().mockImplementation(async (_req, res) => {
     res.statusCode = 200;

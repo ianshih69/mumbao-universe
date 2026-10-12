@@ -29,6 +29,7 @@ async function request(url, extra = {}, handler = gateway) {
 const vote = () => ({ method: "POST", body: { token, polarity: "positive" } });
 
 beforeEach(() => {
+  vi.stubEnv("AI_CHAT_TEST_MODE", "false");
   permission.mockReset().mockImplementation(async req => {
     if (!req.headers?.authorization) throw Object.assign(new Error("synthetic auth failure"), { status: 401 });
   });

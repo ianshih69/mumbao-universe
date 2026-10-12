@@ -1,3 +1,5 @@
+import { requireChatTestAccess } from "../server/aiChat/testAccess.js";
+
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
@@ -317,6 +319,7 @@ function isSessionAttachable(session, visitorId, lineVisitorId) {
 }
 
 export default async function handler(req, res) {
+  if (!requireChatTestAccess(req, res)) return;
   const requestStartedAt = getTimingNow();
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");

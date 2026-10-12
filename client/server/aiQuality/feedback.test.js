@@ -12,6 +12,7 @@ const snapshot = () => buildAiQualityTurnSnapshot({ conversationId:"synthetic-co
 const response = () => ({ statusCode:0,setHeader:vi.fn(),end(value){this.data=JSON.parse(value);} });
 let transport;
 beforeEach(() => {
+  vi.stubEnv("AI_CHAT_TEST_MODE", "false");
   vi.stubEnv("AI_QUALITY_HMAC_SECRET",randomBytes(32).toString("hex"));
   vi.stubEnv("AI_QUALITY_OBSERVER_ENABLED","true");
   vi.stubEnv("AI_QUALITY_FEEDBACK_ENABLED","true");

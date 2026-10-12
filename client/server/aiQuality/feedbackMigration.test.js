@@ -28,6 +28,7 @@ beforeAll(async()=>{
 },30000);
 afterAll(async()=>{await db?.close();});
 beforeEach(async()=>{
+  vi.stubEnv("AI_CHAT_TEST_MODE", "false");
   vi.stubEnv("AI_QUALITY_HMAC_SECRET",randomBytes(32).toString("hex"));
   vi.stubEnv("AI_QUALITY_OBSERVER_ENABLED","true");vi.stubEnv("AI_QUALITY_FEEDBACK_ENABLED","true");
   vi.stubEnv("SUPABASE_URL","https://quality.test");vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY","synthetic-service");

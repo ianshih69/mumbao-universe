@@ -6,6 +6,7 @@ import postcss from "postcss";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Facilities from "./Facilities";
 import { facilitiesContent as copy } from "@/data/facilitiesContent";
+import { facilitiesAlbums, facilitiesAlbumSelection, facilitiesPhoto } from "@/data/facilitiesGallery";
 import { parse } from "parse5";
 
 const viewport = vi.hoisted(() => ({ height: null as number | null }));
@@ -108,5 +109,28 @@ describe("Facilities hero viewport contract", () => {
     expect(source).toContain('const url = "https://www.mumbao.tw/facilities"');
     expect(source).toContain('const photo = "https://www.mumbao.tw/images/aboutMe/aboutMe-4.jpg"');
     expect(source).toContain('["name", "description", copy.intro[0]]');
+  });
+
+  it("puts one visible album hint inside the last existing photo button of each group", () => {
+    const buttons: any[] = [];
+    const visit = (node: any) => {
+      if (node.tagName === "button") buttons.push(node);
+      for (const child of node.childNodes ?? []) visit(child);
+    };
+    const attr = (node: any, name: string) => node.attrs?.find((item: any) => item.name === name)?.value;
+    const text = (node: any): string => node.nodeName === "#text" ? node.value : (node.childNodes ?? []).map(text).join("");
+    visit(parse(render()));
+    const photoButtons = buttons.filter(button => attr(button, "aria-label")?.includes("放大照片："));
+    expect(photoButtons).toHaveLength(10);
+    const hinted = photoButtons.filter(button => text(button).includes("查看全部"));
+    expect(hinted).toHaveLength(Object.keys(facilitiesAlbums).length);
+    Object.entries(facilitiesAlbums).forEach(([album, data], index) => {
+      const count = facilitiesAlbumSelection(album as keyof typeof facilitiesAlbums).images.length;
+      const photo = facilitiesPhoto(data.featured[data.featured.length - 1]);
+      expect(text(hinted[index])).toBe(`查看全部 ${count} 張照片`);
+      expect(attr(hinted[index], "aria-label")).toBe(`查看全部 ${count} 張照片；放大照片：${photo.alt}`);
+      expect(attr(hinted[index].childNodes.find((child: any) => child.tagName === "img"), "src")).toBe(photo.src);
+      expect(hinted[index].childNodes.some((child: any) => child.tagName === "button" || child.tagName === "a")).toBe(false);
+    });
   });
 });

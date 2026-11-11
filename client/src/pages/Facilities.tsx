@@ -62,13 +62,20 @@ function AlbumLink({ album, onOpen }: { album: keyof typeof facilitiesAlbums; on
 }
 
 function PhotoGroup({ album, onOpen }: { album: keyof typeof facilitiesAlbums; onOpen: OpenAlbum }) {
+  const data = facilitiesAlbums[album];
+  const count = facilitiesAlbumSelection(album).images.length;
   return (
     <div className={album === "circulation" ? styles.singlePhoto : styles.photoGroup}>
-      {facilitiesAlbums[album].featured.map(id => {
+      {data.featured.map((id, index) => {
         const photo = facilitiesPhoto(id);
+        const showHint = index === data.featured.length - 1;
         return <button type="button" key={id} className={styles.photoButton}
-          aria-label={`放大照片：${photo.alt}`} onClick={event => onOpen(album, event.currentTarget, id)}>
+          aria-label={`${showHint ? `查看全部 ${count} 張照片；` : ""}放大照片：${photo.alt}`} onClick={event => onOpen(album, event.currentTarget, id)}>
           <img src={photo.src} alt={photo.alt} width={photo.width} height={photo.height} loading="lazy" decoding="async" />
+          {showHint && <span className={styles.albumHint} aria-hidden="true">
+            <Images size={16} />
+            <span className={styles.albumHintLabel}><span>查看全部</span>{" "}<span>{count} 張照片</span></span>
+          </span>}
         </button>;
       })}
     </div>

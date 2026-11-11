@@ -1,6 +1,7 @@
 import historyHandler from "../server/aiChat/history.js";
 import messageHandler from "../server/aiChat/message.js";
 import deleteSessionHandler from "../server/aiChat/deleteSession.js";
+import { chatTestAccessHandler, requireChatTestAccess } from "../server/aiChat/testAccess.js";
 
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
@@ -18,6 +19,8 @@ function firstQueryValue(value) {
 
 export default async function handler(req, res) {
   const action = String(firstQueryValue(req.query?.action) || "").trim();
+  if (action === "test-access") return chatTestAccessHandler(req, res);
+  if (!requireChatTestAccess(req, res)) return;
 
   if (action === "history") {
     return historyHandler(req, res);

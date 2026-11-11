@@ -1,3 +1,4 @@
+import { ChatTestGate, chatTestLockedEvent, getChatTestAccess } from "./ChatTestGate";
 import type {
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
@@ -1365,6 +1366,9 @@ async function fetchJsonWithTimeout<T>(
       ChatApiErrorPayload;
 
     if (!response.ok) {
+      if (data.errorCode === "chat_test_access_required") {
+        window.dispatchEvent(new Event(chatTestLockedEvent));
+      }
       throw new ChatApiError(data, response.status, response.headers);
     }
 
@@ -1609,6 +1613,8 @@ function collectLatestHumanMessages(data: {
 }
 
 export async function fetchHumanUnreadState(accessToken = "") {
+  const access = await getChatTestAccess();
+  if (!access.authorized) return { hasUnread: false, sessionId: "", latestHumanMessage: null };
   const latestHumanMessages: Array<{
     sessionId: string;
     message: HumanMessageSummary | null;
@@ -1899,7 +1905,11 @@ function ChatDebugPanel({
   );
 }
 
-export function MumbaoChat({
+export function MumbaoChat(props: MumbaoChatProps) {
+  return <ChatTestGate active={props.isOpen !== false}><AuthorizedMumbaoChat {...props} /></ChatTestGate>;
+}
+
+function AuthorizedMumbaoChat({
   className,
   compact = false,
   isOpen = true,

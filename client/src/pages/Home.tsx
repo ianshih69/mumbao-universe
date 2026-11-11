@@ -4,7 +4,6 @@ import { Footer } from "@/components/layout/Footer";
 import { Hero } from "@/components/sections/Hero";
 import { About } from "@/components/sections/About";
 import { News } from "@/components/sections/News";
-import { Experience } from "@/components/sections/Experience";
 import { Rooms } from "@/components/sections/Rooms";
 import { BookingCTA } from "@/components/sections/BookingCTA";
 import FlyingMascot from "@/components/effects/FlyingMascot";
@@ -119,7 +118,6 @@ export default function Home() {
         <div id="news" className="scroll-mt-[120px]">
           <News />
         </div>
-        <Experience />
         <div id="rooms" className="scroll-mt-[120px]">
           <Rooms />
         </div>

@@ -3,7 +3,7 @@ import { useClientReady } from "@/hooks/useClientReady";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch, useLocation } from "wouter";
+import { Redirect, Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import AdminLayout from "@/components/admin/AdminLayout";
 import FixedViewport from "@/components/utils/FixedViewport";
@@ -15,8 +15,6 @@ import { ShopTestGate } from "./components/shop/ShopTestGate";
 import Home from "./pages/Home";
 import About from "./pages/About";
 import Facilities from "./pages/Facilities";
-import Breakfast from "./pages/Breakfast";
-import SlowGuide from "./pages/SlowGuide";
 import WholeHouse from "./pages/WholeHouse";
 import RoomsPage from "./pages/Rooms";
 import RoomDetail from "./pages/RoomDetail";
@@ -194,8 +192,8 @@ function Router() {
       <Route path={"/about"} component={About} />
       <Route path={"/facilities"} component={Facilities} />
       <Route path={"/stay/whole-house"} component={WholeHouse} />
-      <Route path={"/experience/breakfast"} component={Breakfast} />
-      <Route path={"/experience/slow-guide"} component={SlowGuide} />
+      <Route path={"/experience/breakfast"}><Redirect to="/" replace /></Route>
+      <Route path={"/experience/slow-guide"}><Redirect to="/" replace /></Route>
       <Route path={"/rooms/:slug"} component={RoomDetail} />
       <Route path={"/rooms"} component={RoomsPage} />
       <Route path={"/news/:slug"} component={NewsDetail} />

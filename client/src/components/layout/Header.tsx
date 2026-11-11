@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Globe, X, LogOut, UserRound } from "lucide-react";
+import { ChevronDown, Globe, X, LogOut, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { getCustomerLoginHref } from "@/lib/shop/customerAuthClient";
@@ -43,6 +43,7 @@ function resolveMenuItemHref(label: string, href: string) {
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [cmsMenuItems, setCmsMenuItems] = useState<MenuItem[] | null>(null);
   const [location, setLocation] = useLocation();
   const { isAuthenticated, isLoading, user, signOut } = useCustomerAuth();
@@ -74,7 +75,12 @@ export function Header() {
     { label: "宇宙碎品", href: "/shop", internal: true },
     { label: "媒體報導", href: "/#news", internal: false },
   ];
-  const menuItems = withFacilitiesNavigation(cmsMenuItems?.length ? cmsMenuItems : fallbackMenuItems);
+  const menuItems = withFacilitiesNavigation(cmsMenuItems?.length ? cmsMenuItems : fallbackMenuItems)
+    .filter((item) => ["關於我們", "最新消息", "房型介紹", "館內設施", "線上訂房", "宇宙碎品"].includes(item.label))
+    .map((item) => {
+      const original = fallbackMenuItems.find((entry) => entry.label === item.label);
+      return original ? { ...item, href: original.href, internal: original.internal } : item;
+    });
 
   useEffect(() => {
     let isCurrent = true;
@@ -204,6 +210,35 @@ export function Header() {
                       isMenuItemActive(item) && "!text-[#B77C4B]"
                     );
 
+                    if (item.label === "關於我們") {
+                      return (
+                        <div key={item.label}>
+                          <div className="flex items-center gap-3">
+                            <SheetClose asChild>
+                              <Link href={item.href} aria-current={isMenuItemActive(item) ? "page" : undefined} className={className} style={{ animationDelay: `${80 + index * 30}ms` }}>
+                                {item.label}
+                              </Link>
+                            </SheetClose>
+                            <button
+                              type="button"
+                              aria-label="展開認識慢寶"
+                              aria-expanded={isAboutOpen}
+                              aria-controls="about-submenu"
+                              className="flex h-6 w-8 items-center justify-center rounded-full text-[#3D332B] hover:bg-[#fff0df] focus-visible:outline-2 focus-visible:outline-offset-2"
+                              onClick={() => setIsAboutOpen(!isAboutOpen)}
+                            >
+                              <ChevronDown className={cn("h-4 w-4", isAboutOpen && "rotate-180")} />
+                            </button>
+                          </div>
+                          <div id="about-submenu" hidden={!isAboutOpen} className="pl-5 pt-5">
+                            <SheetClose asChild>
+                              <Link href="/mumbao" className={memberLinkClass}>認識慢寶</Link>
+                            </SheetClose>
+                          </div>
+                        </div>
+                      );
+                    }
+
                     return (
                       <SheetClose asChild key={item.label}>
                         {item.internal ? (
@@ -227,21 +262,13 @@ export function Header() {
                       </SheetClose>
                     );
                   })}
+                </div>
+                <div className="mt-10 space-y-5 border-t border-[rgba(120,95,70,0.16)] pt-7">
                   <SheetClose asChild>
-                    <Link
-                      href="/booking/lookup"
-                      aria-current={location === "/booking/lookup" ? "page" : undefined}
-                      className={cn(
-                        menuLinkClass,
-                        location === "/booking/lookup" && "!text-[#B77C4B]"
-                      )}
-                      style={{ animationDelay: `${80 + menuItems.length * 30}ms` }}
-                    >
+                    <Link href="/booking/lookup" aria-current={location === "/booking/lookup" ? "page" : undefined} className={memberLinkClass}>
                       訂單查詢
                     </Link>
                   </SheetClose>
-                </div>
-                <div className="mt-10 border-t border-[rgba(120,95,70,0.16)] pt-7">
                   {isLoading ? (
                     <p className="text-sm text-[rgba(61,51,43,0.58)]">會員狀態確認中...</p>
                   ) : isAuthenticated ? (
@@ -307,8 +334,14 @@ export function Header() {
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-4 md:gap-6">
-          <div className="hidden items-center gap-2 lg:flex">
+        <div
+          className={cn(
+            "flex items-center gap-4 md:gap-6",
+            // The 768px container cap cannot fit all signed-in tools beside the logo.
+            isAuthenticated && "min-[60rem]:max-lg:absolute min-[60rem]:max-lg:right-8 min-[60rem]:max-lg:top-1/2 min-[60rem]:max-lg:-translate-y-1/2 min-[60rem]:max-lg:gap-4"
+          )}
+        >
+          <div className={cn("hidden items-center gap-2", isAuthenticated ? "min-[60rem]:flex" : "md:flex")}>
             <Link href="/booking/lookup" aria-current={location === "/booking/lookup" ? "page" : undefined} className={authLinkClass}>
               訂單查詢
             </Link>
@@ -332,19 +365,28 @@ export function Header() {
                   </button>
                 </>
               ) : (
-                <>
-                  <Link href={customerLoginHref} aria-current={location === "/account/login" ? "page" : undefined} className={authLinkClass}>
-                    登入
-                  </Link>
-                  <Link href="/account/register" aria-current={location === "/account/register" ? "page" : undefined} className={authLinkClass}>
-                    註冊
-                  </Link>
-                </>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" className={authLinkClass} aria-label="會員選單">
+                      <UserRound className="h-5 w-5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="bg-white/95 backdrop-blur-xl border-none shadow-lg min-w-[150px]">
+                    <DropdownMenuItem asChild>
+                      <Link href={customerLoginHref} aria-current={location === "/account/login" ? "page" : undefined}>登入</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/account/register" aria-current={location === "/account/register" ? "page" : undefined}>註冊</Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               ))}
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <div
+              <button
+                type="button"
+                aria-label="語言選單，目前繁體中文"
                 className={cn(
                   "flex items-center gap-1 rounded-full px-2 py-1 text-sm font-medium tracking-wider cursor-pointer transition-colors",
                   useDarkControls
@@ -353,8 +395,8 @@ export function Header() {
                 )}
               >
                 <Globe className="w-4 h-4 mr-1" />
-                <span>TW</span>
-              </div>
+                <span>繁中</span>
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-white/95 backdrop-blur-xl border-none shadow-lg min-w-[150px]">
               {languages.map((lang) => (

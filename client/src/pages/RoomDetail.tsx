@@ -10,6 +10,7 @@ import { s521Gallery } from "@/data/s521Gallery";
 import { s888Gallery } from "@/data/s888Gallery";
 import { s360Gallery } from "@/data/s360Gallery";
 import { s530Gallery } from "@/data/s530Gallery";
+import { s666Gallery } from "@/data/s666Gallery";
 
 const sharedNotice = [
   "房型設備、入住人數、床型與實際配置，請以訂房頁與現場安排為準。",
@@ -105,7 +106,8 @@ export default function RoomDetail() {
   const gallery = room?.slug === "room-521-yunxin" ? s521Gallery
     : room?.slug === "room-888-xinghuo" ? s888Gallery
     : room?.slug === "room-360-senguang" ? s360Gallery
-    : room?.slug === "room-530-nuanjin" ? s530Gallery : undefined;
+    : room?.slug === "room-530-nuanjin" ? s530Gallery
+    : room?.slug === "room-666-anhe" ? s666Gallery : undefined;
 
   useEffect(() => {
     removeNewsArticleJsonLd();
@@ -266,7 +268,7 @@ export default function RoomDetail() {
               </p>
             )}
 
-            {!gallery && <section className="space-y-3 rounded-[12px] bg-white/55 p-5 text-sm leading-[2] text-[#7f7064] md:p-6 md:text-base">
+            {(!gallery || room.slug === "room-666-anhe") && <section className="space-y-3 rounded-[12px] bg-white/55 p-5 text-sm leading-[2] text-[#7f7064] md:p-6 md:text-base">
               {sharedNotice.map((paragraph) => (
                 <p key={paragraph}>{paragraph}</p>
               ))}

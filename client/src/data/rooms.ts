@@ -1,3 +1,5 @@
+import { s666Gallery } from "./s666Gallery";
+
 export type RoomDetailContent = {
   id: number;
   roomNumber: string;
@@ -141,7 +143,7 @@ export const rooms: RoomDetailContent[] = [
         alt: "獅子",
       },
     ],
-    image: "/images/Room/S666.jpg",
+    image: s666Gallery[0].src,
     alt: "牧雲 S666 牡羊 × 獅子主題房空間",
     tagline: "如果你想發光，那就勇敢地站在雲上。",
     subtitle: "牡羊 × 獅子",

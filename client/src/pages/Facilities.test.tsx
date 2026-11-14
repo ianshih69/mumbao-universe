@@ -5,8 +5,8 @@ import { Router } from "wouter";
 import postcss from "postcss";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Facilities from "./Facilities";
-import { facilitiesContent as copy } from "@/data/facilitiesContent";
-import { facilitiesAlbums, facilitiesAlbumSelection, facilitiesPhoto } from "@/data/facilitiesGallery";
+
+import { facilitiesAlbums, facilitiesAlbumSelection, facilitiesPhoto, facilitiesHero } from "@/data/facilitiesGallery";
 import { parse } from "parse5";
 
 const viewport = vi.hoisted(() => ({ height: null as number | null }));
@@ -54,83 +54,102 @@ describe("Facilities hero viewport contract", () => {
     ]);
   });
 
-  it("reserves hero image dimensions and loads only the hero eagerly", () => {
-    const images = render().match(/<img\b[^>]*>/g) ?? [];
-    expect(images).toHaveLength(11);
-    expect(images[0]).toContain('src="/images/public/pub-5.webp"');
-    expect(images[0]).toContain('width="3452" height="2847"');
+  it("renders the current cover and derived representatives, not closed-album images", () => {
+    const html = render(), images = html.match(/<img\b[^>]*>/g) ?? [];
+    const hero=facilitiesPhoto(facilitiesHero.desktop);
+    expect(images).toHaveLength(1+Object.values(facilitiesAlbums).reduce((n,a)=>n+a.featured.length,0));
+    expect(images[0]).toContain('src="'+hero.src+'"');
+    expect(images[0]).toContain('width="'+hero.width+'" height="'+hero.height+'"');
     expect(images[0]).toContain('loading="eager"');
-    expect(images[0]).toContain('fetchPriority="high"');
-    images.slice(1).forEach((image) => expect(image).toContain('loading="lazy"'));
-  });
-
-  it("uses one responsive hero, not two hidden images or unconditional image preloads", () => {
-    const html = render();
-    expect(html).toContain('<source media="(max-width: 767px)" srcSet="/images/public/pub-4.webp" width="3258" height="4344"');
-    expect(html.match(/<picture>/g)).toHaveLength(1);
-    expect(html).not.toContain('rel="preload"');
-  });
-
-  it("shows only the ten approved body photos, without closed album images or old content photos", () => {
-    const html = render();
-    const sources = Array.from(html.matchAll(/<img[^>]+src="([^"]+)"/g), match => match[1]);
-    expect(sources).toEqual([5, 2, 24, 8, 20, 23, 14, 1, 6, 3, 13].map(id => `/images/public/pub-${id}.webp`));
+    images.slice(1).forEach(image => expect(image).toContain('loading="lazy"'));
     expect(html).not.toContain('role="dialog"');
-    for (const old of ["aboutMe-4.jpg", "aboutMumbao-1.jpg", "aboutMe-3.jpg", "S530.jpg"]) expect(html).not.toContain(old);
+    expect(html).not.toContain("查看全部 1 張照片");
+    expect(html).not.toContain("立即預約");
     expect(readFileSync(new URL("./Facilities.module.css", import.meta.url), "utf8")).not.toContain("url(");
   });
-
-  it("renders every approved original copy block and condition, with all five chapters and the same booking destination", () => {
-    const html = render();
-    function text(node: any): string {
-      return node.nodeName === "#text" ? node.value : (node.childNodes ?? []).map(text).join("");
-    }
-    const body = text(parse(html));
-    for (const value of [copy.label, copy.brand, copy.title, ...copy.intro, copy.closing]) expect(body).toContain(value);
-    for (const chapter of copy.chapters) {
-      const title = chapter.title.slice(chapter.title.indexOf(" ") + 1);
-      expect(body).toContain(title);
-      expect(html).toContain(`aria-labelledby="${chapter.id}-title"`);
-      for (const feature of chapter.features) {
-        expect(body).toContain(feature.title);
-        for (const paragraph of feature.paragraphs) expect(body).toContain(paragraph);
-      }
-    }
-    expect(html.match(/<h1\b/g)).toHaveLength(1);
-    expect(html).toContain('href="/booking"');
-    expect(body).toContain("立即預約");
+  it("renders Appendix A once, with exact punctuation and reading order", () => {
+    const approved = readFileSync(new URL("../data/__fixtures__/facilities-approved-20261114.txt", import.meta.url), "utf8");
+    const nodes: any[] = [];
+    const walk = (n: any) => { if (n.attrs?.some((a: any) => a.name === "data-approved-copy")) nodes.push(n); (n.childNodes ?? []).forEach(walk); };
+    const text = (n: any): string => n.nodeName === "#text" ? n.value : (n.childNodes ?? []).map(text).join("");
+    walk(parse(render()));
+    expect(nodes.map(text).join("").replace(/\s/g, "")).toBe(approved.replace(/\s/g, ""));
+    expect(render().match(/<h1\b/g)).toHaveLength(1);
   });
-
-  it("offers all five album entries without changing metadata or the existing SEO share image", () => {
-    const html = render();
-    for (const label of ["查看公共空間照片 · 24張", "查看客廳照片 · 7張", "查看藝術與陳設 · 9張", "查看餐廚照片 · 4張", "查看館內角落 · 4張"]) expect(html).toContain(label);
+  it("renders the approved hero hierarchy and the live overview count", () => {
+    const nodes: any[]=[];
+    const walk=(n:any)=>{nodes.push(n);(n.childNodes??[]).forEach(walk);};
+    const text=(n:any):string=>n.nodeName==="#text"?n.value:(n.childNodes??[]).map(text).join("");
+    walk(parse(render()));
+    const hero=nodes.find(n=>n.tagName==="section"&&n.attrs?.some((a:any)=>a.name==="aria-labelledby"&&a.value==="facilities-title"));
+    const heroNodes:any[]=[];
+    const descend=(n:any)=>{heroNodes.push(n);(n.childNodes??[]).forEach(descend);};
+    descend(hero);
+    expect(heroNodes.filter(n=>n.tagName==="p").map(text)).toEqual(["STAY EXPERIENCE館內設施","慢慢蒔光｜館內藝術體驗與專屬禮遇"]);
+    expect(heroNodes.find(n=>n.tagName==="h1").childNodes.map(text)).toEqual(["住進一座","可以過夜的當代藝術館"]);
+    expect(text(heroNodes.find(n=>n.tagName==="button"))).toBe("查看公共空間照片 · "+facilitiesAlbumSelection("all").images.length+"張");
+  });
+  it("puts one persistent hint on the final representative without nested interactive elements", () => {
+    const buttons: any[] = [];
+    const walk = (n: any) => { if (n.tagName === "button") buttons.push(n); (n.childNodes ?? []).forEach(walk); };
+    const attr = (n: any, name: string) => n.attrs?.find((a: any) => a.name === name)?.value;
+    const text = (n: any): string => n.nodeName === "#text" ? n.value : (n.childNodes ?? []).map(text).join("");
+    walk(parse(render()));
+    const photos = buttons.filter(b => attr(b, "aria-label")?.includes("放大照片："));
+    expect(photos).toHaveLength(Object.values(facilitiesAlbums).reduce((n,a)=>n+a.featured.length,0));
+    const hinted = photos.filter(b => text(b).includes("查看全部") || text(b) === "點擊放大");
+    expect(hinted).toHaveLength(Object.values(facilitiesAlbums).filter(a=>a.ids.length).length);
+    Object.entries(facilitiesAlbums).filter(([,data])=>data.ids.length).forEach(([album, data], index) => {
+      const count = facilitiesAlbumSelection(album as keyof typeof facilitiesAlbums).images.length;
+      const photo = facilitiesPhoto(data.featured[data.featured.length - 1]);
+      const hint = count > 1 ? "查看全部 " + count + " 張照片" : "點擊放大";
+      expect(text(hinted[index])).toBe(hint);
+      expect(attr(hinted[index], "aria-label")).toBe(hint + "；放大照片：" + photo.alt);
+      expect(attr(hinted[index].childNodes.find((c: any) => c.tagName === "img"), "src")).toBe(photo.src);
+      expect(hinted[index].childNodes.some((c: any) => c.tagName === "button" || c.tagName === "a")).toBe(false);
+    });
+  });
+  it('keeps the dog copy without an empty frame or album hint when that folder is empty', () => {
+    const saved={...facilitiesAlbums.pets};
+    try {
+      facilitiesAlbums.pets.ids=[]; facilitiesAlbums.pets.featured=[];
+      const html=render();
+      expect(html).toContain('🐾 頂級寵物友善 ｜');
+      expect(html).not.toContain('data-album="pets"');
+    } finally { Object.assign(facilitiesAlbums.pets,saved); }
+  });
+  it('binds family and seasonal photos to their existing paragraphs without changing order or copy', () => {
+    const nodes: any[]=[];
+    const attr=(n:any,k:string)=>n.attrs?.find((a:any)=>a.name===k)?.value;
+    const walk=(n:any)=>{if(attr(n,'data-feature'))nodes.push(n);(n.childNodes??[]).forEach(walk);};
+    walk(parse(render()));
+    const ids=nodes.map(n=>attr(n,'data-feature'));
+    expect(ids.slice(ids.indexOf('dining'),ids.indexOf('collectors-gift')+1)).toEqual(['dining','family','mini-bar','collectors-gift']);
+    for(const id of ['family','summer-pools'] as const){
+      const node=nodes.find(n=>attr(n,'data-feature')===id);
+      const photoGroup=node.childNodes.find((n:any)=>attr(n,'data-album')===id);
+      expect(Boolean(photoGroup)).toBe(facilitiesAlbums[id].ids.length>0);
+    }
+  });
+  it.each(['family','summer-pools'] as const)('preserves %s text with no photo frame when empty', id => {
+    const saved={...facilitiesAlbums[id]};
+    try {
+      facilitiesAlbums[id].ids=[];facilitiesAlbums[id].featured=[];
+      const html=render();
+      expect(html).toContain('👶 親子與長輩的溫柔降落 ｜');
+      expect(html).toContain('💦 慢寶夏日水上藝術雙池 ｜ 5–10 月限定');
+      expect(html).toContain('每組住客入住前皆重新換水');
+      expect(html).toContain('慢寶宇宙專屬水上藝術備品');
+      expect(html).not.toContain('data-album="'+id+'"');
+      expect(html).not.toContain('照片準備中');
+    } finally {Object.assign(facilitiesAlbums[id],saved);}
+  });
+  it("keeps the URL and metadata lifecycle, sourcing description and image from this page", () => {
     const source = readFileSync(new URL("./Facilities.tsx", import.meta.url), "utf8");
     expect(source).toContain('const title = "館內設施｜慢慢蒔光 STime Villa"');
     expect(source).toContain('const url = "https://www.mumbao.tw/facilities"');
-    expect(source).toContain('const photo = "https://www.mumbao.tw/images/aboutMe/aboutMe-4.jpg"');
     expect(source).toContain('["name", "description", copy.intro[0]]');
-  });
-
-  it("puts one visible album hint inside the last existing photo button of each group", () => {
-    const buttons: any[] = [];
-    const visit = (node: any) => {
-      if (node.tagName === "button") buttons.push(node);
-      for (const child of node.childNodes ?? []) visit(child);
-    };
-    const attr = (node: any, name: string) => node.attrs?.find((item: any) => item.name === name)?.value;
-    const text = (node: any): string => node.nodeName === "#text" ? node.value : (node.childNodes ?? []).map(text).join("");
-    visit(parse(render()));
-    const photoButtons = buttons.filter(button => attr(button, "aria-label")?.includes("放大照片："));
-    expect(photoButtons).toHaveLength(10);
-    const hinted = photoButtons.filter(button => text(button).includes("查看全部"));
-    expect(hinted).toHaveLength(Object.keys(facilitiesAlbums).length);
-    Object.entries(facilitiesAlbums).forEach(([album, data], index) => {
-      const count = facilitiesAlbumSelection(album as keyof typeof facilitiesAlbums).images.length;
-      const photo = facilitiesPhoto(data.featured[data.featured.length - 1]);
-      expect(text(hinted[index])).toBe(`查看全部 ${count} 張照片`);
-      expect(attr(hinted[index], "aria-label")).toBe(`查看全部 ${count} 張照片；放大照片：${photo.alt}`);
-      expect(attr(hinted[index].childNodes.find((child: any) => child.tagName === "img"), "src")).toBe(photo.src);
-      expect(hinted[index].childNodes.some((child: any) => child.tagName === "button" || child.tagName === "a")).toBe(false);
-    });
+    expect(source).toContain("facilitiesPhoto(facilitiesHero.desktop).src");
+    expect(source).toContain("stale.forEach((node) => document.head.appendChild(node))");
   });
 });

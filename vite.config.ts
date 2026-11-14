@@ -6,8 +6,9 @@ import path from "path";
 import { defineConfig } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 import { publicPagesPrerender } from "./client/scripts/prerender.mjs";
+import { facilitiesPhotosPlugin } from "./client/scripts/facilities/plugin.mjs";
 
-const plugins = [react(), tailwindcss(), vitePluginManusRuntime(), publicPagesPrerender()];
+const plugins = [react(), tailwindcss(), vitePluginManusRuntime(), publicPagesPrerender(), facilitiesPhotosPlugin()];
 
 export default defineConfig({
   plugins,

@@ -105,3 +105,6 @@ temp/
 *.sqlite
 *.sqlite3
 .vercel
+
+# Local facilities photo sync journal/backups; never public or deployed.
+.local/facilities-photos/

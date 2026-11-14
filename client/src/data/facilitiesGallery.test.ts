@@ -1,52 +1,65 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-import { facilitiesPhotos, facilitiesAlbums, facilitiesFullAlbumIds, facilitiesHero, facilitiesAlbumSelection } from "./facilitiesGallery";
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { describe, expect, it } from 'vitest';
+import manifest from 'virtual:facilities-photos';
+import { createFacilitiesGallery, facilitiesAlbums, facilitiesFullAlbumIds, facilitiesHero, facilitiesAlbumSelection, facilitiesPhoto } from './facilitiesGallery';
 
-describe("facilities public space albums", () => {
-  it("contains every id from 1 to 24 exactly once, in the owner's editorial order", () => {
-    expect(facilitiesFullAlbumIds).toEqual([5,2,4,24,8,15,7,20,23,14,9,17,18,12,22,16,1,6,3,21,13,11,19,10]);
-    expect([...facilitiesFullAlbumIds].sort((a,b) => a-b)).toEqual(Array.from({length:24}, (_,i) => i+1));
-    expect(facilitiesPhotos.map(photo => photo.id)).toEqual(Array.from({length:24}, (_,i) => i+1));
-    expect(new Set(facilitiesPhotos.map(photo => photo.src)).size).toBe(24);
-  });
-  it("shares the responsive hero with the album data and preserves the ten body selections", () => {
-    expect(facilitiesHero).toEqual({desktop:5,mobile:4});
-    expect(Object.values(facilitiesAlbums).map(album => [...album.featured])).toEqual([[2,24,8],[20,23,14],[1,6,3],[13]]);
-    expect(Object.values(facilitiesAlbums).map(album => album.ids.length)).toEqual([7,9,4,4]);
-  });
-  for (const [id, album] of Object.entries(facilitiesAlbums)) {
-    const key = id as keyof typeof facilitiesAlbums;
-    it(`starts ${key} at its own first photo and count`, () => {
-      const selection = facilitiesAlbumSelection(key);
-      expect(selection.index).toBe(0);
-      expect(selection.images.map(photo => photo.id)).toEqual(album.ids);
-    });
-    it.each(album.featured)(`opens clicked body photo %i inside ${key}`, photoId => {
-      const selection = facilitiesAlbumSelection(key, photoId);
-      expect(selection.images[selection.index].id).toBe(photoId);
-      expect(selection.images).toHaveLength(album.ids.length);
-    });
-  }
-  it("opens pub-24 at 4/7, not at the beginning or in the full album", () => {
-    expect(facilitiesAlbumSelection("living",24).index).toBe(3);
-    expect(facilitiesAlbumSelection("all").images[0].id).toBe(5);
-    expect(facilitiesAlbumSelection("all").images).toHaveLength(24);
-    expect(() => facilitiesAlbumSelection("living",20)).toThrow();
-  });
-  it.each(facilitiesPhotos)("uses actual WebP dimensions and exact-case source for photo $id", photo => {
-    expect(photo.src).toBe(`/images/public/pub-${photo.id}.webp`);
-    const bytes = readFileSync(new URL(`../../public${photo.src}`, import.meta.url));
-    expect(bytes.toString("ascii",0,4)).toBe("RIFF");
-    expect(bytes.toString("ascii",8,12)).toBe("WEBP");
-    let dimensions: number[] = [];
-    for (let offset=12; offset+8<=bytes.length;) {
-      const type=bytes.toString("ascii",offset,offset+4), size=bytes.readUInt32LE(offset+4), start=offset+8;
-      if (type==="VP8X") { dimensions=[1+bytes.readUIntLE(start+4,3),1+bytes.readUIntLE(start+7,3)]; break; }
-      if (type==="VP8 ") { dimensions=[bytes.readUInt16LE(start+6)&16383,bytes.readUInt16LE(start+8)&16383]; break; }
-      if (type==="VP8L") { const value=bytes.readUInt32LE(start+1); dimensions=[(value&16383)+1,((value>>>14)&16383)+1]; break; }
-      offset=start+size+size%2;
+describe('directory-managed facilities albums', () => {
+  it('derives every representative, cover, count and overview from the same inventory', () => {
+    expect(Object.values(manifest.albums).map(a => a.directory)).toEqual(['01-brand','02-zodiac','03-afternoon-tea','04-ktv','05-mahjong','06-dining','07-child','08-mini-bar','09-gift','10-swim','11-dog']);
+    for (const [id, album] of Object.entries(manifest.albums)) {
+      const key = id as keyof typeof facilitiesAlbums;
+      expect(facilitiesAlbums[key].ids).toEqual(album.images.map(p => p.id));
+      expect(facilitiesAlbums[key].featured).toEqual(album.images.slice(0, album.displayCount).map(p => p.id));
+      const sequence = album.images.map(p => BigInt(p.sequence));
+      expect(sequence).toEqual([...sequence].sort((a,b) => a < b ? -1 : 1));
+      for (const p of album.images) expect(facilitiesAlbumSelection(key,p.id).images[facilitiesAlbumSelection(key,p.id).index]).toEqual(p);
     }
-    expect(dimensions).toEqual([photo.width,photo.height]);
-    expect(photo.alt.length).toBeGreaterThan(8);
+    expect(facilitiesFullAlbumIds).toEqual(Object.values(manifest.albums).flatMap(a => a.images.map(p => p.id)));
+    expect(facilitiesFullAlbumIds).not.toContain(manifest.cover.id);
+    expect(facilitiesHero.desktop).toBe(manifest.cover.id);
+  });
+  it('matches deployed-file bytes and content-versioned URLs, without hardcoded photo names', () => {
+    for (const p of [manifest.cover, ...Object.values(manifest.albums).flatMap(a => a.images)]) {
+      const u = new URL(p.src, 'http://local');
+      const bytes = readFileSync(new URL('../../public' + decodeURIComponent(u.pathname), import.meta.url));
+      expect(createHash('sha256').update(bytes).digest('hex')).toBe(p.sha256);
+      expect(u.searchParams.get('v')).toBe(p.sha256);
+      expect(p.width).toBeGreaterThan(0); expect(p.height).toBeGreaterThan(0);
+    }
+  });
+  it('rejects cross-album identities and unknown photos', () => {
+    expect(() => facilitiesAlbumSelection('mahjong', manifest.cover.id)).toThrow();
+    expect(() => facilitiesPhoto('not-a-photo')).toThrow();
+  });
+  it.each([0,1,2,4])('handles %i dog photos and Mini-bar growth without another photo list', count => {
+    const data = structuredClone(manifest);
+    const images = Array.from({length:count}, (_,i) => ({...manifest.cover,id:'test/'+i,filename:i+'.webp',sequence:String(i)}));
+    data.albums.pets.images = images;
+    data.albums['mini-bar'].images = images.map(p => ({...p,id:'mini/'+p.id}));
+    const gallery = createFacilitiesGallery(data);
+    expect(gallery.albums.pets.featured).toHaveLength(Math.min(2,count));
+    expect(gallery.albums['mini-bar'].featured).toHaveLength(Math.min(1,count));
+    expect(gallery.selection('pets').images).toHaveLength(count);
+    expect(gallery.selection('mini-bar').images).toHaveLength(count);
+    expect(gallery.fullAlbumIds).toEqual(Object.values(data.albums).flatMap(a=>a.images.map(p=>p.id)));
+  });
+  it('preserves equal-content photos in separate owner-selected albums', () => {
+    const data=structuredClone(manifest);
+    data.albums.pets.images=[{...data.cover,id:'pets/test.webp'}];
+    data.albums['mini-bar'].images=[{...data.cover,id:'mini/test.webp'}];
+    const gallery=createFacilitiesGallery(data);
+    expect(gallery.fullAlbumIds).toContain('pets/test.webp');
+    expect(gallery.fullAlbumIds).toContain('mini/test.webp');
+  });
+  it.each([0,1,2,5])('derives family and seasonal representatives and overview order for %i photos', count => {
+    const data=structuredClone(manifest);
+    for(const id of ['family','summer-pools'] as const) data.albums[id].images=Array.from({length:count},(_,i)=>({...data.cover,id:id+'/'+i,sequence:String(i)}));
+    const gallery=createFacilitiesGallery(data);
+    expect(gallery.albums.family.featured).toHaveLength(Math.min(2,count));
+    expect(gallery.albums['summer-pools'].featured).toHaveLength(Math.min(3,count));
+    expect(gallery.fullAlbumIds).toEqual(Object.values(data.albums).flatMap(a=>a.images.map(p=>p.id)));
+    expect(gallery.selection('summer-pools').images).toHaveLength(count);
+    expect(gallery.selection('family').images).toHaveLength(count);
   });
 });

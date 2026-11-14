@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { parse, parseFragment, serialize } from "parse5";
+import { scanPhotos } from "./facilities/photos.mjs";
 
 function find(node, predicate) {
   if (predicate(node)) return node;
@@ -116,6 +117,16 @@ async function prerender(root, outDir) {
     define: { "import.meta.env": "{}" },
     loader: { ".css": "empty", ".module.css": "empty" },
     plugins: [
+      {
+        name: "facilities-folder-photos",
+        setup(build) {
+          build.onResolve({ filter: /^virtual:facilities-photos$/ }, () => ({ path: "photos", namespace: "facilities-photos" }));
+          build.onLoad({ filter: /.*/, namespace: "facilities-photos" }, () => ({
+            contents: "export default " + JSON.stringify(scanPhotos(path.join(root, "public/images/public"))) + ";",
+            loader: "js",
+          }));
+        },
+      },
       {
         name: "prerender-external-packages",
         setup(build) {

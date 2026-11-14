@@ -11,6 +11,7 @@ import { s521Gallery } from "@/data/s521Gallery";
 import { s888Gallery } from "@/data/s888Gallery";
 import { s360Gallery } from "@/data/s360Gallery";
 import { s530Gallery } from "@/data/s530Gallery";
+import { s666Gallery } from "@/data/s666Gallery";
 import { rooms } from "@/data/rooms";
 import { RoomGallery } from "./RoomGallery";
 import RoomDetail from "@/pages/RoomDetail";
@@ -39,7 +40,7 @@ describe("Room editorial photo collections", () => {
       .map(n => `/images/Room/S521/S521-${n}.webp`));
     expect(new Set(s521Gallery.map(image => image.alt)).size).toBe(12);
   });
-  it.each([...s521Gallery, ...s888Gallery, ...s360Gallery, ...s530Gallery])("matches actual WebP dimensions for $src", image => {
+  it.each([...s521Gallery, ...s888Gallery, ...s360Gallery, ...s530Gallery, ...s666Gallery])("matches actual WebP dimensions for $src", image => {
     const bytes = readFileSync(new URL(`../../../public${image.src}`, import.meta.url));
     expect(bytes.toString("ascii", 0, 4)).toBe("RIFF");
     expect(bytes.toString("ascii", 8, 12)).toBe("WEBP");
@@ -96,13 +97,46 @@ describe("Room detail isolation", () => {
     expect(elements(html, "section").some(section => section.class?.includes("bg-white/55"))).toBe(false);
     expect(html).toContain("Back / 回房型介紹");
   });
-  it.each(rooms.filter(room => !["S521", "S888", "S360", "S530"].includes(room.roomNumber)))("leaves $roomNumber on its original photo", room => {
+  it.each(rooms.filter(room => !["S521", "S888", "S360", "S530"].includes(room.roomNumber)))("preserves $roomNumber story and existing notices", room => {
     const html = renderToStaticMarkup(<Router ssrPath={`/rooms/${room.slug}`}><RoomDetail /></Router>);
     expect(html).toContain(`src="${room.image}"`);
     expect(html).not.toContain("/images/Room/S521/");
     expect(html).toContain("房型設備、入住人數、床型與實際配置");
     for (const paragraph of room.intro) expect(html).toContain(paragraph);
   });
+});
+
+describe("S666 replacement collection", () => {
+  it("uses the nine owner-provided photos once in numeric order", () => {
+    expect(s666Gallery.map(image => image.src)).toEqual(
+      Array.from({ length: 9 }, (_, i) => "/images/Room/S666/S666-" + (i + 1) + ".webp"),
+    );
+    expect(new Set(s666Gallery.map(image => image.src)).size).toBe(9);
+    expect(rooms.find(room => room.roomNumber === "S666")!.image).toBe(s666Gallery[0].src);
+  });
+
+  it("connects the detail to the existing gallery with nine controls and unchanged notices", () => {
+    const room = rooms.find(room => room.roomNumber === "S666")!;
+    const html = renderToStaticMarkup(<Router ssrPath={"/rooms/" + room.slug}><RoomDetail /></Router>);
+    expect(html).not.toContain("/images/Room/S666.jpg");
+    expect(html).toContain("1 / 9");
+    const thumbs = elements(html, "button").filter(button => button["aria-label"]?.startsWith("第 "));
+    expect(thumbs.map(button => button["aria-label"])).toEqual(
+      s666Gallery.map((image, i) => "第 " + (i + 1) + " 張：" + image.alt),
+    );
+    expect(html).toContain("房型設備、入住人數、床型與實際配置");
+    expect(html).toContain("慢慢蒔光每一間房都有不同主題與氛圍");
+    for (const paragraph of room.intro) expect(html).toContain(paragraph);
+    expect(html).toContain('href="/#rooms"');
+  });
+
+  it.each([["homepage", HomeRooms], ["listing", RoomsPage]] as const)(
+    "uses photo one for the %s cover", (_, Component) => {
+      const html = renderToStaticMarkup(<Router ssrPath="/rooms"><Component /></Router>);
+      expect(elements(html, "img").filter(image => image.src === s666Gallery[0].src)).toHaveLength(1);
+      expect(html).not.toContain("/images/Room/S666.jpg");
+    },
+  );
 });
 
 describe("S521 card previews", () => {

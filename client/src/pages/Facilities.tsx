@@ -1,85 +1,56 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { motion, useReducedMotion } from "framer-motion";
-import { Link } from "wouter";
-import { ArrowRight, Images } from "lucide-react";
+import { Images, ZoomIn } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { useMobileViewportHeight } from "@/hooks/useMobileViewportHeight";
-import { facilitiesContent as copy, type FacilityChapter, type FacilityFeature } from "@/data/facilitiesContent";
-import { facilitiesAlbums, facilitiesHero, facilitiesPhoto, facilitiesAlbumSelection, type FacilitiesAlbumId } from "@/data/facilitiesGallery";
+import { facilitiesContent as copy, type FacilityFeature } from "@/data/facilitiesContent";
+import { facilitiesAlbums, facilitiesHero, facilitiesPhoto, facilitiesAlbumSelection, type FacilitiesAlbumId, type FacilitiesGroupId } from "@/data/facilitiesGallery";
 import { RoomGalleryLightbox } from "@/components/rooms/RoomGalleryLightbox";
 import styles from "./Facilities.module.css";
 
 function Reveal({ children, className }: { children: ReactNode; className?: string }) {
   const reducedMotion = useReducedMotion();
-  return (
-    <motion.div
-      className={className}
-      initial={reducedMotion ? false : { opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.12 }}
-      transition={{ duration: reducedMotion ? 0 : 0.65, ease: "easeOut" }}
-    >
-      {children}
-    </motion.div>
-  );
+  return <motion.div className={className} initial={reducedMotion ? false : { opacity: 0, y: 20 }}
+    whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.12 }}
+    transition={{ duration: reducedMotion ? 0 : 0.65, ease: "easeOut" }}>{children}</motion.div>;
 }
+type OpenAlbum = (album: FacilitiesAlbumId, trigger: HTMLButtonElement, photoId?: string) => void;
 
-function ChapterHeading({ chapter, seasonal = false }: { chapter: FacilityChapter; seasonal?: boolean }) {
-  const title = chapter.title.slice(chapter.title.indexOf(" ") + 1);
-  return (
-    <div className={styles.chapterHeading}>
-      <div className={styles.chapterMeta}>
-        <p className={styles.eyebrow}><span>{chapter.number}</span>{chapter.eyebrow}</p>
-        {seasonal && <p className={styles.season} aria-hidden="true">MAY — OCT</p>}
-      </div>
-      <h2 id={`${chapter.id}-title`}>
-        {title.split("｜").map((part, index) => <span className={styles.titlePhrase} key={part}>{index > 0 ? "｜" : ""}{part}</span>)}
-      </h2>
-    </div>
-  );
-}
-
-function Feature({ feature, id }: { feature: FacilityFeature; id?: string }) {
-  return (
-    <div className={styles.feature} id={id}>
-      <h3>{feature.title}</h3>
-      <div className={styles.body}>
-        {feature.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-      </div>
-    </div>
-  );
-}
-
-type OpenAlbum = (album: FacilitiesAlbumId, trigger: HTMLButtonElement, photoId?: number) => void;
-
-function AlbumLink({ album, onOpen }: { album: keyof typeof facilitiesAlbums; onOpen: OpenAlbum }) {
-  const data = facilitiesAlbums[album];
-  return <button type="button" className={styles.albumLink} onClick={event => onOpen(album, event.currentTarget)}>
-    <Images size={18} aria-hidden="true" />{data.label} · {data.ids.length}張
-  </button>;
-}
-
-function PhotoGroup({ album, onOpen }: { album: keyof typeof facilitiesAlbums; onOpen: OpenAlbum }) {
+function PhotoGroup({ album, onOpen }: { album: FacilitiesGroupId; onOpen: OpenAlbum }) {
   const data = facilitiesAlbums[album];
   const count = facilitiesAlbumSelection(album).images.length;
-  return (
-    <div className={album === "circulation" ? styles.singlePhoto : styles.photoGroup}>
-      {data.featured.map((id, index) => {
-        const photo = facilitiesPhoto(id);
-        const showHint = index === data.featured.length - 1;
-        return <button type="button" key={id} className={styles.photoButton}
-          aria-label={`${showHint ? `查看全部 ${count} 張照片；` : ""}放大照片：${photo.alt}`} onClick={event => onOpen(album, event.currentTarget, id)}>
-          <img src={photo.src} alt={photo.alt} width={photo.width} height={photo.height} loading="lazy" decoding="async" />
-          {showHint && <span className={styles.albumHint} aria-hidden="true">
-            <Images size={16} />
-            <span className={styles.albumHintLabel}><span>查看全部</span>{" "}<span>{count} 張照片</span></span>
-          </span>}
-        </button>;
-      })}
-    </div>
-  );
+  if (!count) return null;
+  return <div className={styles.photoGroup + " " + styles[data.layout]} data-album={album}>
+    {data.featured.map((id, index) => {
+      const photo = facilitiesPhoto(id);
+      const showHint = index === data.featured.length - 1;
+      const hint = count > 1 ? "查看全部 " + count + " 張照片" : "點擊放大";
+      return <button type="button" key={id} className={styles.photoButton}
+        aria-label={(showHint ? hint + "；" : "") + "放大照片：" + photo.alt}
+        onClick={event => onOpen(album, event.currentTarget, id)}>
+        <img src={photo.src} alt={photo.alt} width={photo.width} height={photo.height} loading="lazy" decoding="async" />
+        {showHint && <span className={styles.albumHint} aria-hidden="true">
+          {count > 1 ? <Images size={16} /> : <ZoomIn size={16} />}
+          <span className={styles.albumHintLabel}>{count > 1 ? <><span>查看全部</span>{" "}<span>{count} 張照片</span></> : hint}</span>
+        </span>}
+      </button>;
+    })}
+  </div>;
+}
+function Feature({ feature, onOpen }: { feature: FacilityFeature; onOpen: OpenAlbum }) {
+  const hasPhotos = feature.album && facilitiesAlbums[feature.album].ids.length > 0;
+  return <div id={"facilities-" + feature.id} data-feature={feature.id}
+    className={hasPhotos ? styles.albumSection : styles.textFeature}>
+    <Reveal className={styles.feature}>
+      <h3 data-approved-copy>{feature.title}</h3>
+      <div className={styles.body}>
+        {feature.paragraphs.map(paragraph => <p data-approved-copy key={paragraph}>{paragraph}</p>)}
+      </div>
+    </Reveal>
+    {feature.album && <PhotoGroup album={feature.album} onOpen={onOpen} />}
+  </div>;
 }
 
 function useFacilitiesMetadata() {
@@ -87,7 +58,7 @@ function useFacilitiesMetadata() {
     const previousTitle = document.title;
     const title = "館內設施｜慢慢蒔光 STime Villa";
     const url = "https://www.mumbao.tw/facilities";
-    const photo = "https://www.mumbao.tw/images/aboutMe/aboutMe-4.jpg";
+    const photo = "https://www.mumbao.tw" + facilitiesPhoto(facilitiesHero.desktop).src;
     const restore: (() => void)[] = [];
     document.title = title;
 
@@ -140,9 +111,10 @@ export default function Facilities() {
   const [selected, setSelected] = useState(0);
   const trigger = useRef<HTMLButtonElement | null>(null);
   const albumData = facilitiesAlbumSelection(album);
-  const desktopHero = facilitiesPhoto(facilitiesHero.desktop);
-  const mobileHero = facilitiesPhoto(facilitiesHero.mobile);
+  const overviewCount = facilitiesAlbumSelection("all").images.length;
+  const hero = facilitiesPhoto(facilitiesHero.desktop);
   const openAlbum: OpenAlbum = (nextAlbum, button, photoId) => {
+    if (!facilitiesAlbumSelection(nextAlbum).images.length) return;
     trigger.current = button;
     setAlbum(nextAlbum);
     setSelected(facilitiesAlbumSelection(nextAlbum, photoId).index);
@@ -150,139 +122,45 @@ export default function Facilities() {
   };
   const viewportHeight = useMobileViewportHeight();
   const heroStyle = viewportHeight === null ? undefined : {
-    "--facilities-hero-height": `${viewportHeight * 0.8}px`,
+    "--facilities-hero-height": (viewportHeight * 0.8) + "px",
   } as CSSProperties;
-  const [art, family, pets, summer, night] = copy.chapters;
-
-  return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
+  return <Dialog.Root open={open} onOpenChange={setOpen}>
     <div className={styles.page}>
       <Header />
       <main>
         <section className={styles.hero} style={heroStyle} aria-labelledby="facilities-title">
-          <picture>
-            <source media="(max-width: 767px)" srcSet={mobileHero.src} width={mobileHero.width} height={mobileHero.height} />
-            <img className={styles.heroImage} src={desktopHero.src} alt={desktopHero.alt}
-              width={desktopHero.width} height={desktopHero.height} loading="eager" fetchPriority="high" />
-          </picture>
+          <img className={styles.heroImage} src={hero.src} alt={hero.alt}
+            width={hero.width} height={hero.height} loading="eager" fetchPriority="high" />
           <div className={styles.heroShade} aria-hidden="true" />
           <Reveal className={styles.heroContent}>
-            <p className={styles.heroEyebrow}>STAY EXPERIENCE<span>{copy.label}</span></p>
-            <p className={styles.brand}>{copy.brand}</p>
-            <h1 id="facilities-title"><span>{copy.title.slice(0, 4)}</span><span>{copy.title.slice(4)}</span></h1>
-            <button type="button" className={styles.heroAlbum} onClick={event => openAlbum("all", event.currentTarget)}>
-              <Images size={18} aria-hidden="true" />查看公共空間照片 · 24張
-            </button>
+            <p className={styles.heroEyebrow}><span>STAY EXPERIENCE</span><span className={styles.heroDivider} aria-hidden="true" /><span>館內設施</span></p>
+            <p className={styles.heroSubtitle}>慢慢蒔光｜館內藝術體驗與專屬禮遇</p>
+            <h1 id="facilities-title"><span>住進一座</span><span>可以過夜的當代藝術館</span></h1>
+            {overviewCount > 0 && <button type="button" className={styles.heroAlbum} onClick={event => openAlbum("all", event.currentTarget)}>
+              <Images size={18} aria-hidden="true" />查看公共空間照片 · {overviewCount}張
+            </button>}
           </Reveal>
         </section>
-
-        <div className={`${styles.container} ${styles.intro}`}>
-          <Reveal className={styles.body}>
-            {copy.intro.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-          </Reveal>
-        </div>
-
-        <section className={`${styles.container} ${styles.chapter} ${styles.art}`} aria-labelledby="art-title">
-          <Reveal><ChapterHeading chapter={art} /></Reveal>
-          <div className={styles.albumSection}>
-            <Reveal className={styles.albumCopy}>
-              <div className={styles.feature}>
-                <h3>{facilitiesAlbums.living.title}</h3>
-                <p className={styles.body}>在雲朵般的沙發裡坐下，把時間留給好好相處的人。</p>
-              </div>
-              <AlbumLink album="living" onOpen={openAlbum} />
-            </Reveal>
-            <PhotoGroup album="living" onOpen={openAlbum} />
-          </div>
-          <div className={styles.albumSection}>
-            <Reveal className={styles.albumCopy}>
-              <Feature feature={art.features[0]} />
-              <Feature feature={art.features[1]} />
-              <AlbumLink album="art" onOpen={openAlbum} />
-            </Reveal>
-            <PhotoGroup album="art" onOpen={openAlbum} />
-          </div>
-          <div className={styles.albumSection}>
-            <Reveal className={styles.albumCopy}>
-              <Feature feature={art.features[2]} id="facilities-dining" />
-              <AlbumLink album="dining" onOpen={openAlbum} />
-            </Reveal>
-            <PhotoGroup album="dining" onOpen={openAlbum} />
-          </div>
-          <Reveal className={styles.entertainment}>
-            <Feature feature={art.features[3]} />
-            <Feature feature={art.features[4]} />
-          </Reveal>
-          <div className={styles.albumSection}>
-            <Reveal className={styles.albumCopy}>
-              <div className={styles.feature}><h3>{facilitiesAlbums.circulation.title}</h3></div>
-              <AlbumLink album="circulation" onOpen={openAlbum} />
-            </Reveal>
-            <PhotoGroup album="circulation" onOpen={openAlbum} />
-          </div>
-        </section>
-
-        <section className={`${styles.chapter} ${styles.family}`} aria-labelledby="family-title">
-          <div className={styles.container}>
-            <Reveal><ChapterHeading chapter={family} /></Reveal>
-            <Reveal className={styles.familyFeatures}>
-              {family.features.map((feature) => <Feature key={feature.title} feature={feature} />)}
-            </Reveal>
-          </div>
-        </section>
-
-        <section className={`${styles.container} ${styles.chapter} ${styles.pets}`} aria-labelledby="pets-title">
-          <Reveal><ChapterHeading chapter={pets} /></Reveal>
-          <ol className={styles.petFeatures}>
-            {pets.features.map((feature, index) => (
-              <li key={feature.title}>
-                <Reveal className={styles.petItem}>
-                  <span className={styles.featureNumber} aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
-                  <Feature feature={feature} />
-                </Reveal>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        <section className={`${styles.chapter} ${styles.summer}`} aria-labelledby="summer-title">
-          <div className={styles.container}>
-            <Reveal>
-              <ChapterHeading chapter={summer} seasonal />
-            </Reveal>
-            <div className={styles.summerFeatures}>
-              {summer.features.map((feature, index) => (
-                <Reveal key={feature.title} className={index === 0 ? styles.summerLead : undefined}>
-                  <Feature feature={feature} />
-                </Reveal>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className={`${styles.container} ${styles.chapter} ${styles.night}`} aria-labelledby="night-title">
-          <Reveal><ChapterHeading chapter={night} /></Reveal>
-          <div className={styles.nightFeatures}>
-            {night.features.map((feature, index) => (
-              <Reveal key={feature.title}>
-                <p className={styles.featureLabel} aria-hidden="true">
-                  <span>{String(index + 1).padStart(2, "0")}</span>
-                  {["AFTER DARK", "GARDEN", "PRIVATE TABLE"][index]}
-                </p>
-                <Feature feature={feature} />
+        <article data-facilities-copy>
+          {copy.chapters.map(chapter => <section key={chapter.id} data-chapter={chapter.id}
+            className={styles.chapter + " " + styles[chapter.id]} aria-labelledby={chapter.id + "-title"}>
+            <div className={styles.container}>
+              <Reveal className={styles.chapterHeading}>
+                <h2 id={chapter.id + "-title"} data-approved-copy>{chapter.title}</h2>
               </Reveal>
-            ))}
+              {chapter.intro.length > 0 && <Reveal className={styles.intro}>
+                {chapter.intro.map((paragraph, index) => <p data-approved-copy key={paragraph}
+                  className={chapter.id === "brand" && index === 1 ? styles.artistQuote : undefined}>{paragraph}</p>)}
+              </Reveal>}
+              <div className={styles.features}>
+                {chapter.features.map(feature => <Feature key={feature.id} feature={feature} onOpen={openAlbum} />)}
+              </div>
+            </div>
+          </section>)}
+          <div className={styles.closing}>
+            <Reveal className={styles.container}><p className={styles.closingQuote} data-approved-copy>{copy.closing}</p></Reveal>
           </div>
-        </section>
-
-        <section className={styles.closing} aria-label="慢慢蒔光">
-          <Reveal className={styles.container}>
-            <p className={styles.closingQuote}>{copy.closing}</p>
-            <Link href="/booking" className={styles.bookingLink}>
-              立即預約<ArrowRight size={17} aria-hidden="true" />
-            </Link>
-          </Reveal>
-        </section>
+        </article>
       </main>
       <Footer />
     </div>
@@ -290,6 +168,5 @@ export default function Facilities() {
       selected={selected} count={albumData.images.length}
       onSelect={index => setSelected((index + albumData.images.length) % albumData.images.length)}
       onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus({ preventScroll: true }); }} />}
-    </Dialog.Root>
-  );
+  </Dialog.Root>;
 }

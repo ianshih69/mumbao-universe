@@ -1,27 +1,18 @@
-import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { facilitiesContent as copy } from "./facilitiesContent";
 import { withFacilitiesNavigation } from "../lib/site/facilitiesNavigation";
 
-describe("facilities approved content", () => {
-  it("preserves all 47 owner-provided copy blocks verbatim, including punctuation and quantities", () => {
-    const blocks = [
-      copy.label, copy.brand, copy.title, ...copy.intro,
-      ...copy.chapters.flatMap((chapter) => [
-        chapter.title,
-        ...chapter.features.flatMap((feature) => [feature.title, ...feature.paragraphs]),
-      ]),
-      copy.closing,
-    ];
-    expect(blocks).toHaveLength(47);
-    // Fingerprint independently calculated from the owner's complete approved copy block.
-    expect(createHash("sha256").update(blocks.join("\n\n")).digest("hex"))
-      .toBe("b9e7a028706bd08206b8b3026d76a1c7c1c46967fbd1dec3ba5d3b4efbd1108d");
+describe("facilities approved content 2026-11-14", () => {
+  it("preserves Appendix A verbatim in reading order, ignoring only layout whitespace", () => {
+    const approved = readFileSync(new URL("./__fixtures__/facilities-approved-20261114.txt", import.meta.url), "utf8");
+    const actual = [...copy.chapters.flatMap(c => [c.title, ...c.intro, ...c.features.flatMap(f => [f.title, ...f.paragraphs])]), copy.closing].join("\n");
+    expect(actual.replace(/\s/g, "")).toBe(approved.replace(/\s/g, ""));
   });
-
-  it("keeps five uniquely addressable chapters in reading order", () => {
-    expect(copy.chapters.map((chapter) => chapter.id)).toEqual(["art", "family", "pets", "summer", "night"]);
-    expect(copy.chapters.map((chapter) => chapter.features.length)).toEqual([5, 3, 4, 2, 3]);
+  it("keeps five chapters and nine core features in the approved order", () => {
+    expect(copy.chapters.map(c => c.id)).toEqual(["brand", "core", "summer", "pets", "night"]);
+    expect(copy.chapters[1].features.map(f => f.id)).toEqual(["zodiac-space", "afternoon-tea", "living-ktv", "mahjong", "barbecue", "dining", "family", "mini-bar", "collectors-gift"]);
+    expect(copy.chapters[1].features[8].title).toBe("🎁 宇宙的雙向奔赴｜專屬藏家禮 ｜");
   });
 });
 

@@ -62,6 +62,8 @@ import ResetPassword from "./pages/ResetPassword";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import DataDeletion from "./pages/DataDeletion";
+import StayGuide from "./pages/StayGuide";
+import Contact from "./pages/Contact";
 
 function AdminPage({
   title,
@@ -191,6 +193,8 @@ function Router() {
       </Route>
       <Route path={"/about"} component={About} />
       <Route path={"/facilities"} component={Facilities} />
+      <Route path={"/stay-guide"} component={StayGuide} />
+      <Route path={"/contact"} component={Contact} />
       <Route path={"/stay/whole-house"} component={WholeHouse} />
       <Route path={"/experience/breakfast"}><Redirect to="/" replace /></Route>
       <Route path={"/experience/slow-guide"}><Redirect to="/" replace /></Route>

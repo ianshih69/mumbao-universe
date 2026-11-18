@@ -1,36 +1,13 @@
 import { Link } from "wouter";
+import { contact, socialLinks } from "@/data/contact";
 
 const policyLinks = [
+  { href: "/stay-guide", label: "入住須知" },
+  { href: "/contact", label: "聯絡我們" },
   { href: "/booking/lookup", label: "訂單查詢" },
   { href: "/privacy", label: "隱私權政策" },
   { href: "/terms", label: "服務條款" },
   { href: "/data-deletion", label: "資料刪除說明" },
-];
-
-const socialLinks = [
-  {
-    href: "https://www.facebook.com/STimeVilla",
-    label: "Facebook",
-    src: "/images/social/brand/facebook.svg",
-  },
-  {
-    href: "https://www.instagram.com/mumbao.tw/",
-    label: "Instagram",
-    src: "/images/social/brand/instagram.svg",
-  },
-  {
-    href: "https://lin.ee/u3JpTa6",
-    label: "LINE",
-    src: "/images/social/brand/line.svg",
-  },
-  {
-    label: "Threads",
-    src: "/images/social/brand/threads.svg",
-  },
-  {
-    label: "X",
-    src: "/images/social/brand/x.svg",
-  },
 ];
 
 const googleMapsLink = {
@@ -58,7 +35,7 @@ export function Footer() {
             <span className="font-medium tracking-[0.08em] text-[#3D332B]">
               ADD :
             </span>{" "}
-            宜蘭縣員山鄉深洲二路158號{" "}
+            {contact.address}{" "}
             <a
               href={googleMapsLink.href}
               target="_blank"

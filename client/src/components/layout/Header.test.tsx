@@ -2,7 +2,7 @@ import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Header } from "./Header";
 
-const state = vi.hoisted(() => ({ path: "/", scrolled: false, authenticated: false, stateIndex: 0 }));
+const state = vi.hoisted(() => ({ path: "/", scrolled: false, authenticated: false, loading: false, stateIndex: 0 }));
 const logout = vi.hoisted(() => ({ toHome: vi.fn(), signOut: vi.fn() }));
 vi.mock("react", async original => ({
   ...await original<typeof import("react")>(),
@@ -11,7 +11,7 @@ vi.mock("react", async original => ({
 }));
 vi.mock("wouter", () => ({ Link: "a", useLocation: () => [state.path, vi.fn()] }));
 vi.mock("@/contexts/CustomerAuthContext", () => ({
-  useCustomerAuth: () => ({ isAuthenticated: state.authenticated, isLoading: false, user: null, signOut: logout.signOut }),
+  useCustomerAuth: () => ({ isAuthenticated: state.authenticated, isLoading: state.loading, user: null, signOut: logout.signOut }),
 }));
 vi.mock("@/lib/shop/customerAuthClient", () => ({
   getCustomerLoginHref: () => `/account/login?returnTo=${encodeURIComponent(state.path)}`,
@@ -33,13 +33,35 @@ function links() {
   return elements().filter(node => node.type === "a").map(node => node.props);
 }
 beforeEach(() => {
-  state.path = "/"; state.scrolled = false; state.authenticated = false;
+  state.path = "/"; state.scrolled = false; state.authenticated = false; state.loading = false;
   logout.toHome.mockReset();
   vi.stubGlobal("React", React);
 });
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Header authentication navigation", () => {
+  it("keeps six primary entries, the about submenu and secondary original destinations", () => {
+    expect(links().slice(0, 9).map(link => [link.children, link.href])).toEqual([
+      ["關於我們", "/about"], ["認識慢寶", "/mumbao"], ["房型介紹", "/#rooms"],
+      ["館內設施", "/facilities"], ["入住須知", "/stay-guide"], ["線上訂房", "/booking"],
+      ["聯絡我們", "/contact"], ["最新消息", "/#news"], ["宇宙碎品", "/shop"],
+    ]);
+  });
+
+  it.each(["/stay-guide", "/contact"])("%s uses readable controls before scrolling", path => {
+    state.path = path;
+    const trigger = elements().find(node => node.props["aria-label"] === "會員選單")!;
+    expect(trigger.props.className).toContain("text-[#8b6f5b]");
+    expect(links().filter(link => link.href.startsWith("/account/login?")).map(link => link.href))
+      .toEqual([`/account/login?returnTo=${encodeURIComponent(path)}`, `/account/login?returnTo=${encodeURIComponent(path)}`]);
+  });
+
+  it("loading does not incorrectly show guest login or authenticated actions", () => {
+    state.loading = true;
+    expect(links().some(link => link.href.startsWith("/account/login") || link.href === "/account/register" || link.href === "/account")).toBe(false);
+    expect(links().filter(link => link.href === "/booking/lookup")).toHaveLength(2);
+    expect(elements().some(node => node.props.children === "會員狀態確認中...")).toBe(true);
+  });
   it.each(["/", "/shop", "/booking", "/account/login", "/account/register", "/booking/lookup"])(
     "%s keeps drawer links and moves guest actions into the member dropdown", path => {
       state.path = path;

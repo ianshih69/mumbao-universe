@@ -37,6 +37,14 @@
       "destination": "/news/mumbao-universe-goes-global/index.html"
     },
     {
+      "source": "/stay-guide",
+      "destination": "/stay-guide/index.html"
+    },
+    {
+      "source": "/contact",
+      "destination": "/contact/index.html"
+    },
+    {
       "source": "/((?!api(?:/|$)).*)",
       "destination": "/index.html"
     }

@@ -46,6 +46,8 @@ const expected = [
     "從宜蘭出發，讓慢寶宇宙一步步走向世界｜慢慢蒔光 STime Villa",
     "從宜蘭出發，讓慢寶宇宙一步步走向世界",
   ],
+  ["/stay-guide", "慢慢蒔光 STime Villa ｜ 入住須知", "慢慢蒔光 STime Villa ｜ 入住須知"],
+  ["/contact", "聯絡我們｜慢慢蒔光 STime Villa", "聯絡我們"],
 ];
 let pages: ReturnType<typeof import("../prerender").renderPublicPages>;
 beforeAll(async () => {
@@ -97,7 +99,7 @@ describe.each(expected)("public HTML %s", (pathname, title, h1) => {
   });
 });
 
-it("prerenders the existing six paths plus News-8, not older News or booking", () => {
+it("prerenders the existing paths and two new visitor pages, not older News or booking", () => {
   expect([...prerenderPaths]).toEqual(expected.map(([pathname]) => pathname));
   expect(getPublicPageSeo("/rooms/not-a-room")).toBeUndefined();
   expect(

@@ -1,7 +1,21 @@
 import { getRoomBySlug } from "@/data/rooms";
 import { getNewsBySlug } from "@/data/news";
+import { stayGuideTitle, stayGuideIntroduction } from "@/data/stayGuide";
+import { contact } from "@/data/contact";
 
 const origin = "https://www.mumbao.tw";
+
+export const stayGuideSeo = {
+  title: stayGuideTitle,
+  description: stayGuideIntroduction,
+  canonical: `${origin}/stay-guide`,
+};
+
+export const contactSeo = {
+  title: "聯絡我們｜慢慢蒔光 STime Villa",
+  description: `慢慢蒔光 STime Villa｜官方 LINE ${contact.lineId}｜${contact.phone}｜${contact.email}｜${contact.address}`,
+  canonical: `${origin}/contact`,
+};
 
 export const mumbaoSeo = {
   title: "認識慢寶｜MUMBAO",
@@ -40,7 +54,7 @@ export function getRoomSeo(slug: string) {
   };
 }
 
-// Only the new article is added; older News routes retain their existing SEO.
+// Older News routes retain their existing SEO.
 export const prerenderPaths = [
   "/mumbao",
   "/rooms",
@@ -49,9 +63,13 @@ export const prerenderPaths = [
   "/rooms/room-666-anhe",
   "/rooms/room-888-xinghuo",
   "/news/mumbao-universe-goes-global",
+  "/stay-guide",
+  "/contact",
 ] as const;
 
 export function getPublicPageSeo(pathname: string) {
+  if (pathname === "/stay-guide") return stayGuideSeo;
+  if (pathname === "/contact") return contactSeo;
   if (pathname === "/news/mumbao-universe-goes-global") {
     const news = getNewsBySlug("mumbao-universe-goes-global")!;
     return {

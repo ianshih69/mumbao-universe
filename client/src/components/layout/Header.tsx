@@ -74,13 +74,18 @@ export function Header() {
     { label: "線上訂房", href: "/booking", internal: true },
     { label: "宇宙碎品", href: "/shop", internal: true },
     { label: "媒體報導", href: "/#news", internal: false },
+    { label: "入住須知", href: "/stay-guide", internal: true },
+    { label: "聯絡我們", href: "/contact", internal: true },
   ];
-  const menuItems = withFacilitiesNavigation(cmsMenuItems?.length ? cmsMenuItems : fallbackMenuItems)
-    .filter((item) => ["關於我們", "最新消息", "房型介紹", "館內設施", "線上訂房", "宇宙碎品"].includes(item.label))
+  const resolvedItems = withFacilitiesNavigation(cmsMenuItems?.length ? cmsMenuItems : fallbackMenuItems)
     .map((item) => {
       const original = fallbackMenuItems.find((entry) => entry.label === item.label);
       return original ? { ...item, href: original.href, internal: original.internal } : item;
     });
+  const itemFor = (label: string) => resolvedItems.find(item => item.label === label)
+    || withFacilitiesNavigation(fallbackMenuItems).find(item => item.label === label)!;
+  const menuItems = ["關於我們", "房型介紹", "館內設施", "入住須知", "線上訂房", "聯絡我們"].map(itemFor);
+  const secondaryItems = ["最新消息", "宇宙碎品"].map(itemFor);
 
   useEffect(() => {
     let isCurrent = true;
@@ -120,7 +125,7 @@ export function Header() {
   const isAccountPage = location.startsWith("/account");
   const isBookingManagementPage =
     location === "/booking/lookup" || location === "/booking/manage";
-  const isLegalPage = ["/privacy", "/terms", "/data-deletion"].includes(
+  const isLegalPage = ["/privacy", "/terms", "/data-deletion", "/stay-guide", "/contact"].includes(
     location
   );
   const useDarkControls =
@@ -263,7 +268,16 @@ export function Header() {
                     );
                   })}
                 </div>
-                <div className="mt-10 space-y-5 border-t border-[rgba(120,95,70,0.16)] pt-7">
+                <div className="mt-10 flex flex-wrap gap-x-6 gap-y-1 border-t border-[rgba(120,95,70,0.16)] pt-5" aria-label="更多內容">
+                  {secondaryItems.map(item => (
+                    <SheetClose asChild key={item.label}>
+                      <a href={item.href} className={cn(memberLinkClass, "min-h-11 !text-base")}>
+                        {item.label}
+                      </a>
+                    </SheetClose>
+                  ))}
+                </div>
+                <div className="mt-5 space-y-5 border-t border-[rgba(120,95,70,0.16)] pt-7">
                   <SheetClose asChild>
                     <Link href="/booking/lookup" aria-current={location === "/booking/lookup" ? "page" : undefined} className={memberLinkClass}>
                       訂單查詢

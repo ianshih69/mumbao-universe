@@ -2,5 +2,9 @@
   "installCommand": "npm ci",
   "buildCommand": "npm run build && (rm -rf public || true) && ( [ -d ./dist/public ] && cp -r ./dist/public ./public || cp -r ../dist/public ./public )",
   "outputDirectory": "public",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/stay-guide", "destination": "/stay-guide/index.html" },
+    { "source": "/contact", "destination": "/contact/index.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }

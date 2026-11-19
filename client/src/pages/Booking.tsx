@@ -155,9 +155,9 @@ const breakfastAddon = {
   image: "/images/Main/breakfaset.JPG",
   note: "於早餐日 08:30 送達。",
 };
-const generalAccommodationDepositAmount = 10_000;
+const generalAccommodationDepositAmount = 5_000;
 const generalAccommodationDepositNotice =
-  "入住時另收，不計入住宿總價、訂金 30% 或尾款 70%；退房檢查無損壞、污損或違規後全額退還。";
+  "入住押金： 為維護雙方權益，入住時將酌收 NT$5,000 押金。退房時經管家清潔檢查無誤後，將全額退還。";
 
 const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
 function fieldClassName() {

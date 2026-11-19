@@ -4,6 +4,7 @@ import Booking from "./Booking";
 import { RoomPriceOptions } from "@/components/bookings/RoomPriceOptions";
 import { BookingDatePicker } from "@/components/bookings/BookingDatePicker";
 import { BookingApiError } from "@/lib/bookings/bookingApi";
+import { stayGuideSections } from "@/data/stayGuide";
 
 const hooks = vi.hoisted(() => ({ values: [] as any[], cursor: 0, pending: [] as Array<() => void> }));
 const api = vi.hoisted(() => ({ calendar: vi.fn(), quote: vi.fn(), submit: vi.fn(), roomAvailability: vi.fn(), roomResult: null as any, roomLoading: false }));
@@ -94,6 +95,31 @@ beforeEach(() => {
 afterEach(() => { hooks.values.forEach(value => value?.cleanup?.()); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("Booking Phase 3 public flow", () => {
+  it("shows the approved accommodation security deposit without changing the quote or collecting it", async () => {
+    const approvedNotice = stayGuideSections.find(section => section.id === "deposit")!
+      .paragraphs[0].split("\n")[0].replace(/^• /, "");
+    const calendar = await api.calendar();
+    api.calendar.mockResolvedValue({ ...calendar, unavailableDates: [] });
+    const draft = JSON.parse(storage.get("mumbao_booking_draft_v1")!);
+    storage.set("mumbao_booking_draft_v1", JSON.stringify({ ...draft, adults: 10 }));
+    render(); await settle();
+    for (let step = 1; step <= 3; step++) {
+      expect(text()).toContain(approvedNotice);
+      expect(text()).toContain("5,000");
+      expect(text()).not.toContain("10,000");
+      if (step < 3) {
+        expect(button("下一步").disabled).toBeFalsy();
+        button("下一步").onClick(); render();
+      }
+    }
+    expect(text()).toContain("11,351");
+    expect(api.submit).not.toHaveBeenCalled();
+    expect(api.quote).toHaveBeenCalled();
+    for (const [input] of api.quote.mock.calls) {
+      expect(input).not.toHaveProperty("generalAccommodationDepositAmount");
+    }
+  });
+
   it.each([
     ["weekday", "2026-11-02", "2026-11-04", true],
     ["Friday OFF", "2026-11-06", "2026-11-07", false],
